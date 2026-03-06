@@ -1,0 +1,51 @@
+name: 更新律師儀表板
+
+on:
+  # 手動觸發（手機按按鈕用）
+  workflow_dispatch:
+    inputs:
+      months:
+        description: '更新幾個月的資料（預設 2）'
+        required: false
+        default: '2'
+
+  # 每天台灣時間 08:00 自動執行（可視需求關掉）
+  schedule:
+    - cron: '0 0 * * *'  # UTC 00:00 = 台灣 08:00
+
+jobs:
+  update-dashboard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 取出程式碼
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: 設定 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝套件
+        run: |
+          pip install requests beautifulsoup4 openpyxl pandas
+
+      - name: 執行爬蟲更新資料
+        env:
+          CRM_EMAIL: ${{ secrets.CRM_EMAIL }}
+          CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
+          UPDATE_MONTHS: ${{ github.event.inputs.months || '2' }}
+        run: |
+          python crm_updater_ci.py
+
+      - name: 提交並推送更新
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add dashboard.html consultation_all_data.xlsx dashboard_data.json || true
+          git diff --staged --quiet || git commit -m "🔄 自動更新儀表板 $(date '+%Y-%m-%d %H:%M') (台灣時間)"
+          git push
