@@ -22,11 +22,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // 網路優先：先嘗試網路，失敗才用快取
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 更新快取
         const responseClone = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
           if (event.request.method === 'GET') {
