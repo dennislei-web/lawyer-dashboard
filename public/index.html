@@ -1325,7 +1325,7 @@
     <!-- Existing data summary -->
     <div id="uploadDataSummary" class="section" style="margin-bottom:20px;">
       <div class="section-header">
-        <div class="section-title">已匯入諮詢案件總覽</div>
+        <div class="section-title">已匯入會議紀錄 / 逐字稿總覽</div>
       </div>
       <div id="uploadSummaryContent"></div>
     </div>
@@ -2884,15 +2884,17 @@ async function renderSyncStatus() {
 function renderUploadSummary() {
   const el = document.getElementById('uploadSummaryContent');
   if (!el) return;
-  if (!allCases || allCases.length === 0) {
-    el.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">尚未匯入任何諮詢案件資料</div>';
+  // 只統計有會議紀錄或逐字稿的案件
+  const docCases = allCases.filter(c => c.meeting_record || c.transcript);
+  if (!docCases || docCases.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">尚未匯入任何會議紀錄或逐字稿</div>';
     return;
   }
 
   // Group by year-month
   const monthMap = {};
-  allCases.forEach(c => {
-    const ym = c.case_date.substring(0, 7); // "2026-03"
+  docCases.forEach(c => {
+    const ym = c.case_date.substring(0, 7);
     if (!monthMap[ym]) monthMap[ym] = { total: 0, signed: 0, unsigned: 0 };
     monthMap[ym].total++;
     if (c.is_signed) monthMap[ym].signed++;
@@ -2900,12 +2902,12 @@ function renderUploadSummary() {
   });
 
   const months = Object.keys(monthMap).sort().reverse();
-  const totalSigned = allCases.filter(c => c.is_signed).length;
-  const totalUnsigned = allCases.length - totalSigned;
-  const signRate = allCases.length > 0 ? (totalSigned / allCases.length * 100).toFixed(1) : '0';
+  const totalSigned = docCases.filter(c => c.is_signed).length;
+  const totalUnsigned = docCases.length - totalSigned;
+  const signRate = docCases.length > 0 ? (totalSigned / docCases.length * 100).toFixed(1) : '0';
 
   let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">';
-  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">案件總數</span><div style="font-size:1.3rem;font-weight:700;">${allCases.length}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">案件總數</span><div style="font-size:1.3rem;font-weight:700;">${docCases.length}</div></div>`;
   html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--green);">${totalSigned}</div></div>`;
   html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">未成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--red);">${totalUnsigned}</div></div>`;
   html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案率</span><div style="font-size:1.3rem;font-weight:700;">${signRate}%</div></div>`;
