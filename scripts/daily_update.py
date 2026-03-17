@@ -418,16 +418,18 @@ def update_supabase(target_months):
     print(f"  Supabase 已更新：{success}/{len(rows)} 筆月統計")
 
     # ── 同步個別案件到 consultation_cases ──
-    case_rows = []
+    # 處理重複案件編號：同一案件可能被不同律師諮詢，保留已簽約/金額最高的
+    case_map = {}  # case_number -> best row
+    auto_idx = 0
     for _, row in df.iterrows():
         lawyer_id = lawyer_map.get(row["諮詢律師"])
         if not lawyer_id:
             continue
         case_number = str(row.get("案件編號", "")).strip() if "案件編號" in df.columns else ""
         if not case_number or case_number == "nan":
-            # 自動產生唯一編號：CRM_律師ID_日期_序號
             case_date_str = row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10]
-            case_number = f"CRM_{lawyer_id[:8]}_{case_date_str}_{len(case_rows)}"
+            case_number = f"CRM_{lawyer_id[:8]}_{case_date_str}_{auto_idx}"
+            auto_idx += 1
         sign_status = str(row.get("簽約狀態", "")).strip()
         is_signed = sign_status != "" and sign_status != "nan" and "未" not in sign_status
         client_name = str(row.get("當事人", "")).strip() if "當事人" in df.columns else ""
@@ -439,7 +441,7 @@ def update_supabase(target_months):
             case_type = ""
         case_revenue = int(float(row.get("revenue", 0) or 0)) if "revenue" in df.columns else 0
         case_collected = int(float(row.get("collected", 0) or 0)) if "collected" in df.columns else 0
-        case_rows.append({
+        case_row = {
             "lawyer_id": lawyer_id,
             "case_date": row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10],
             "case_type": case_type,
@@ -448,11 +450,23 @@ def update_supabase(target_months):
             "is_signed": is_signed,
             "revenue": case_revenue,
             "collected": case_collected,
-        })
+        }
+        # 重複案件編號：優先保留已簽約、金額最高的
+        if case_number in case_map:
+            existing = case_map[case_number]
+            if case_row["is_signed"] and not existing["is_signed"]:
+                case_map[case_number] = case_row
+            elif case_row["is_signed"] == existing["is_signed"]:
+                if case_row["collected"] > existing["collected"]:
+                    case_map[case_number] = case_row
+        else:
+            case_map[case_number] = case_row
+
+    case_rows = list(case_map.values())
 
     # Debug: 統計金額
     cases_with_amount = [r for r in case_rows if r.get("collected", 0) > 0 or r.get("revenue", 0) > 0]
-    print(f"  consultation_cases 準備寫入：{len(case_rows)} 筆，其中有金額 {len(cases_with_amount)} 筆")
+    print(f"  consultation_cases 準備寫入：{len(case_rows)} 筆（去重後），其中有金額 {len(cases_with_amount)} 筆")
     if cases_with_amount:
         print(f"    金額範例：{cases_with_amount[0]}")
     elif case_rows:
@@ -468,7 +482,7 @@ def update_supabase(target_months):
             for i in range(0, len(case_rows), 50):
                 batch = case_rows[i:i + 50]
                 resp = client.post(
-                    f"{SUPABASE_URL}/rest/v1/consultation_cases",
+                    f"{SUPABASE_URL}/rest/v1/consultation_cases?on_conflict=case_number",
                     json=batch,
                     headers=case_headers,
                 )
