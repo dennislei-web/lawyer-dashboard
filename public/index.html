@@ -1283,32 +1283,45 @@
     </div>
 
     <div class="section">
-      <div class="section-header">
-        <div class="section-title">每月明細</div>
+      <div class="section-header" style="cursor:pointer;" onclick="toggleDetailMonthly()">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px;">
+          <span id="detailMonthlyToggleIcon" style="font-size:12px;transition:transform 0.2s;">&#9654;</span>
+          每月明細
+        </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>月份</th>
-              <th class="num">諮詢數</th>
-              <th class="num">簽約數</th>
-              <th class="num">簽約率</th>
-              <th class="num">已收金額</th>
-              <th class="num">平均簽約收款</th>
-            </tr>
-          </thead>
-          <tbody id="detailTableBody">
-            <tr><td colspan="6" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
-          </tbody>
-        </table>
+      <div id="detailMonthlyContent" style="display:none;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th class="num">諮詢數</th>
+                <th class="num">簽約數</th>
+                <th class="num">簽約率</th>
+                <th class="num">已收金額</th>
+                <th class="num">平均簽約收款</th>
+              </tr>
+            </thead>
+            <tbody id="detailTableBody">
+              <tr><td colspan="6" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <!-- Year-over-Year Comparison (from quality detail) -->
+    <!-- Year-over-Year Comparison -->
     <div class="section" id="detailYoySection">
       <div class="section-header">
-        <div class="section-title" id="detailYoyTitle">年度同期比較</div>
+        <div class="section-title">年度比較</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="yoyYearA" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailYoy(detailLawyerId)"></select>
+        <span style="color:var(--text-muted);">vs</span>
+        <select id="yoyYearB" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailYoy(detailLawyerId)"></select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.8rem;color:var(--text-muted);margin-left:8px;">
+          <input type="checkbox" id="yoySamePeriod" checked onchange="renderDetailYoy(detailLawyerId)"> 僅比較同期月份
+        </label>
       </div>
       <div id="detailYoyContent"></div>
     </div>
@@ -1942,6 +1955,13 @@ function renderSelfTable(stats) {
 
 // ===================== RESIGNED LAWYERS SECTION =====================
 let resignedOpen = false;
+let detailMonthlyOpen = false;
+
+function toggleDetailMonthly() {
+  detailMonthlyOpen = !detailMonthlyOpen;
+  document.getElementById('detailMonthlyContent').style.display = detailMonthlyOpen ? 'block' : 'none';
+  document.getElementById('detailMonthlyToggleIcon').style.transform = detailMonthlyOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+}
 
 function toggleResigned() {
   resignedOpen = !resignedOpen;
@@ -3370,45 +3390,76 @@ function renderDetailInsights(lawyerId) {
   content.innerHTML = renderInsightsHtml(insights);
 }
 
+let yoyYearsInitialized = false;
+
 function renderDetailYoy(lawyerId) {
-  const section = document.getElementById('detailYoySection');
   const content = document.getElementById('detailYoyContent');
-  const titleEl = document.getElementById('detailYoyTitle');
+  const selectA = document.getElementById('yoyYearA');
+  const selectB = document.getElementById('yoyYearB');
+  const samePeriod = document.getElementById('yoySamePeriod').checked;
 
   const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
-  const currentYear = new Date().getFullYear().toString();
-  const prevYear = (parseInt(currentYear) - 1).toString();
-  const currStats = lawyerStats.filter(s => s.month && s.month.startsWith(currentYear));
-  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
-  const prevStats = lawyerStats.filter(s => s.month && s.month.startsWith(prevYear) && currMonths.has(s.month.slice(5, 7)));
-  const currT = aggregateStats(currStats);
-  const prevT = aggregateStats(prevStats);
 
-  titleEl.textContent = currentYear + ' vs ' + prevYear + ' 同期比較';
+  // Build available years
+  const yearsSet = new Set();
+  lawyerStats.forEach(s => { if (s.month) yearsSet.add(s.month.slice(0, 4)); });
+  const years = Array.from(yearsSet).sort().reverse();
 
-  if (currStats.length === 0 && prevStats.length === 0) {
-    content.innerHTML = '<div class="empty-state">暫無年度比較資料</div>';
+  if (years.length < 2) {
+    content.innerHTML = '<div class="empty-state">需要至少兩個年度的資料才能比較</div>';
+    selectA.innerHTML = '';
+    selectB.innerHTML = '';
     return;
   }
 
+  // Initialize or refresh dropdowns (preserve selection if valid)
+  const prevA = selectA.value;
+  const prevB = selectB.value;
+  const defaultA = years[0];
+  const defaultB = years[1];
+
+  selectA.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  selectB.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+  selectA.value = years.includes(prevA) ? prevA : defaultA;
+  selectB.value = years.includes(prevB) ? prevB : defaultB;
+
+  const yearA = selectA.value;
+  const yearB = selectB.value;
+
+  const statsA = lawyerStats.filter(s => s.month && s.month.startsWith(yearA));
+  let statsB = lawyerStats.filter(s => s.month && s.month.startsWith(yearB));
+
+  // Same period filtering
+  if (samePeriod) {
+    const monthsA = new Set(statsA.map(s => s.month.slice(5, 7)));
+    statsB = statsB.filter(s => monthsA.has(s.month.slice(5, 7)));
+  }
+
+  const tA = aggregateStats(statsA);
+  const tB = aggregateStats(statsB);
+
+  const periodNote = samePeriod ? `（同期 ${statsA.length > 0 ? statsA.map(s => s.month.slice(5,7)).sort()[0] : '?'}~${statsA.length > 0 ? statsA.map(s => s.month.slice(5,7)).sort().pop() : '?'} 月）` : '';
+
   content.innerHTML = `
+    ${samePeriod && statsA.length > 0 ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">比較範圍：${yearA} 有 ${statsA.length} 個月資料，${yearB} 取同期 ${statsB.length} 個月${periodNote}</div>` : ''}
     <div style="overflow-x:auto;">
       <table class="detail-table">
         <thead>
           <tr>
             <th>指標</th>
-            <th class="num">${currentYear}</th>
-            <th class="num">${prevYear}</th>
+            <th class="num">${yearA}</th>
+            <th class="num">${yearB}</th>
             <th class="num">變化</th>
           </tr>
         </thead>
         <tbody>
-          ${renderYoyRow('諮詢數', currT.consult_count, prevT.consult_count, false)}
-          ${renderYoyRow('簽約數', currT.signed_count, prevT.signed_count, false)}
-          ${renderYoyRow('簽約率', currT.sign_rate, prevT.sign_rate, true)}
-          ${renderYoyRow('已收金額', currT.collected, prevT.collected, false)}
-          ${renderYoyRow('平均成案金額', currT.avg_collected, prevT.avg_collected, false)}
-          ${renderYoyRow('諮詢效益', currT.consult_eff, prevT.consult_eff, false)}
+          ${renderYoyRow('諮詢數', tA.consult_count, tB.consult_count, false)}
+          ${renderYoyRow('簽約數', tA.signed_count, tB.signed_count, false)}
+          ${renderYoyRow('簽約率', tA.sign_rate, tB.sign_rate, true)}
+          ${renderYoyRow('已收金額', tA.collected, tB.collected, false)}
+          ${renderYoyRow('平均成案金額', tA.avg_collected, tB.avg_collected, false)}
+          ${renderYoyRow('諮詢效益', tA.consult_eff, tB.consult_eff, false)}
         </tbody>
       </table>
     </div>
