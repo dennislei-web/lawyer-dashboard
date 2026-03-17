@@ -1,0 +1,8 @@
+.env
+scripts/.env
+*.xlsx
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/

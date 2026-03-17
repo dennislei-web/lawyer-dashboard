@@ -1,0 +1,43 @@
+name: 每日更新諮詢統計
+
+on:
+  # 每天台灣時間中午 12 點自動執行（UTC 4:00）
+  schedule:
+    - cron: '0 4 * * *'
+  # 手動觸發
+  workflow_dispatch:
+    inputs:
+      month:
+        description: '指定月份 (例: 2026-03)，留空則更新本月'
+        required: false
+      months:
+        description: '最近 N 個月 (例: 3)，留空則只更新本月'
+        required: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝依賴
+        run: pip install -r scripts/requirements.txt
+
+      - name: 爬取 CRM + 更新 Supabase
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.month }}" ]; then
+            ARGS="--month ${{ github.event.inputs.month }}"
+          elif [ -n "${{ github.event.inputs.months }}" ]; then
+            ARGS="--months ${{ github.event.inputs.months }}"
+          fi
+          python scripts/daily_update.py $ARGS
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CRM_USERNAME: ${{ secrets.CRM_USERNAME }}
+          CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
