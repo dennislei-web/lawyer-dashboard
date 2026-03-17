@@ -31,6 +31,11 @@
       --brand-color: #e8c97a;
       --header-bg:  rgba(10,22,40,0.95);
       --login-shadow: rgba(0,0,0,0.5);
+      --tab-active-bg: rgba(201,168,76,0.12);
+      --tab-active-border: rgba(201,168,76,0.2);
+      --tab-active-color: var(--gold-light);
+      --ghost-bg: rgba(255,255,255,0.07);
+      --ghost-hover-bg: rgba(255,255,255,0.12);
     }
 
     [data-theme="light"] {
@@ -55,6 +60,11 @@
       --brand-color: #1a1a2e;
       --header-bg:  rgba(255,255,255,0.95);
       --login-shadow: rgba(0,0,0,0.12);
+      --tab-active-bg: rgba(37,99,235,0.1);
+      --tab-active-border: rgba(37,99,235,0.25);
+      --tab-active-color: #2563eb;
+      --ghost-bg: rgba(0,0,0,0.04);
+      --ghost-hover-bg: rgba(0,0,0,0.08);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -189,12 +199,12 @@
     }
 
     .btn-ghost {
-      background: rgba(255,255,255,0.07);
+      background: var(--ghost-bg);
       color: var(--text);
       border: 1px solid var(--border);
     }
 
-    .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+    .btn-ghost:hover { background: var(--ghost-hover-bg); }
 
     .btn-outline {
       background: transparent;
@@ -268,9 +278,9 @@
     .tab-btn:hover { color: var(--text); background: var(--bg-row); }
 
     .tab-btn.active {
-      color: var(--gold-light);
-      background: rgba(201,168,76,0.12);
-      border: 1px solid rgba(201,168,76,0.2);
+      color: var(--tab-active-color);
+      background: var(--tab-active-bg);
+      border: 1px solid var(--tab-active-border);
     }
 
     .header-right {
