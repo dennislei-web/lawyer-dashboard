@@ -329,13 +329,25 @@ def update_supabase(target_months):
 
     df["已簽約"] = df["簽約狀態"].apply(is_signed)
 
-    # 欄位名稱相容
+    # 欄位名稱相容（清除逗號、空白等格式）
     rev_col = next((c for c in df.columns if "應收" in c), None)
     col_col = next((c for c in df.columns if "已收" in c), None)
     if rev_col:
-        df["revenue"] = pd.to_numeric(df[rev_col], errors="coerce").fillna(0)
+        df["revenue"] = pd.to_numeric(
+            df[rev_col].astype(str).str.replace(",", "").str.replace(" ", "").str.strip(),
+            errors="coerce"
+        ).fillna(0)
+        print(f"  應收金額欄位: {rev_col}, 非零筆數: {(df['revenue'] > 0).sum()}, 合計: {df['revenue'].sum():,.0f}")
+    else:
+        print("  ⚠ 找不到應收金額欄位")
     if col_col:
-        df["collected"] = pd.to_numeric(df[col_col], errors="coerce").fillna(0)
+        df["collected"] = pd.to_numeric(
+            df[col_col].astype(str).str.replace(",", "").str.replace(" ", "").str.strip(),
+            errors="coerce"
+        ).fillna(0)
+        print(f"  已收金額欄位: {col_col}, 非零筆數: {(df['collected'] > 0).sum()}, 合計: {df['collected'].sum():,.0f}")
+    else:
+        print("  ⚠ 找不到已收金額欄位")
 
     grouped = df.groupby(["諮詢律師", "month"]).agg(
         consult_count=("諮詢律師", "count"),
@@ -424,6 +436,8 @@ def update_supabase(target_months):
         case_type = str(row.get(case_type_col, "")).strip() if case_type_col else ""
         if case_type == "nan":
             case_type = ""
+        case_revenue = int(float(row.get("revenue", 0) or 0)) if "revenue" in df.columns else 0
+        case_collected = int(float(row.get("collected", 0) or 0)) if "collected" in df.columns else 0
         case_rows.append({
             "lawyer_id": lawyer_id,
             "case_date": row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10],
@@ -431,6 +445,8 @@ def update_supabase(target_months):
             "case_number": case_number,
             "client_name": client_name,
             "is_signed": is_signed,
+            "revenue": case_revenue,
+            "collected": case_collected,
         })
 
     if case_rows:

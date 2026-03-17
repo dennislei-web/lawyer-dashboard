@@ -1119,6 +1119,7 @@
         <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">總覽</button>
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
         <button class="tab-btn" onclick="showTab('quality')" id="tab-quality">諮詢品質分析</button>
+        <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
       </div>
     </div>
@@ -1183,6 +1184,14 @@
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- Amount Range Analysis -->
+    <div class="section" id="amountRangeSection">
+      <div class="section-header">
+        <div class="section-title">成案金額區間分析</div>
+      </div>
+      <div id="amountRangeContent"></div>
     </div>
   </div>
 
@@ -1315,12 +1324,40 @@
     <div id="qualityContent">
       <div class="loading"><span class="loading-spinner"></span>載入中...</div>
     </div>
+
   </div>
 
   <!-- ===== QUALITY DETAIL PAGE ===== -->
   <div class="page" id="pageQualityDetail">
     <button class="back-btn" id="qualityBackBtn" onclick="showTab('quality')">← 返回品質分析</button>
     <div id="qualityDetailContent"></div>
+  </div>
+
+  <!-- ===== UNSIGNED CASES TRACKING PAGE ===== -->
+  <div id="pageUnsigned" class="page">
+    <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-title" style="font-size:1.1rem;">未成案追蹤</div>
+    </div>
+    <div class="year-filter-bar" id="unsignedFilterBar" style="margin-bottom:16px;">
+      <span class="filter-label">時間範圍</span>
+      <button class="year-btn active" onclick="setUnsignedRange(1)">近1個月</button>
+      <button class="year-btn" onclick="setUnsignedRange(3)">近3個月</button>
+      <button class="year-btn" onclick="setUnsignedRange(6)">近6個月</button>
+      <span class="filter-label" id="unsignedLawyerFilterLabel" style="margin-left:20px;display:none;">律師</span>
+      <select id="unsignedLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
+      </select>
+    </div>
+    <div id="unsignedSummary" style="margin-bottom:16px;"></div>
+    <div class="section">
+      <div class="table-wrap">
+        <table id="unsignedTable">
+          <thead><tr id="unsignedTableHead"></tr></thead>
+          <tbody id="unsignedTableBody">
+            <tr><td colspan="5"><div class="empty-state">暫無資料</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- ===== UPLOAD PAGE (admin only) ===== -->
@@ -1476,6 +1513,7 @@ let detailChart   = null;
 let allCases      = [];      // all consultation_cases rows visible to this user
 
 let overviewYear = 'all';
+let qualityAmountYear = 'all';
 let detailYear   = 'all';
 
 // Ranking table sort
@@ -1563,10 +1601,16 @@ async function loadDashboard(user) {
     let casesFetched = [];
     let from = 0;
     const pageSize = 1000;
+    // Try with revenue/collected columns; fall back if not yet migrated
+    let selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript';
+    const testRes = await sb.from('consultation_cases').select(selectCols).limit(1);
+    if (testRes.error) {
+      selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
+    }
     while (true) {
       const { data: page } = await sb
         .from('consultation_cases')
-        .select('id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript')
+        .select(selectCols)
         .order('case_date', { ascending: false })
         .range(from, from + pageSize - 1);
       if (!page || page.length === 0) break;
@@ -1595,7 +1639,7 @@ async function loadDashboard(user) {
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'quality', 'upload'].forEach(t => {
+  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -1606,16 +1650,18 @@ function showTab(tab) {
   document.getElementById('pageQuality').classList.toggle('active', tab === 'quality');
   document.getElementById('pageQualityDetail').classList.toggle('active', tab === 'qualityDetail');
   document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
+  document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
   if (tab === 'quality')   renderQualityPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
+  if (tab === 'unsigned')  renderUnsignedPage();
 }
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  ['overview', 'tracking', 'quality', 'upload'].forEach(t => {
+  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -1624,12 +1670,13 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageQuality').classList.remove('active');
   document.getElementById('pageQualityDetail').classList.remove('active');
   document.getElementById('pageUpload').classList.remove('active');
+  document.getElementById('pageUnsigned').classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
   renderDetailPage();
 }
 
 function showQualityDetail(lawyerId) {
-  ['overview', 'tracking', 'quality', 'upload'].forEach(t => {
+  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -1638,6 +1685,7 @@ function showQualityDetail(lawyerId) {
   document.getElementById('pageTracking').classList.remove('active');
   document.getElementById('pageDetail').classList.remove('active');
   document.getElementById('pageQuality').classList.remove('active');
+  document.getElementById('pageUnsigned').classList.remove('active');
   document.getElementById('pageQualityDetail').classList.add('active');
   document.getElementById('pageUpload').classList.remove('active');
   renderQualityDetailPage(lawyerId);
@@ -1707,6 +1755,9 @@ function renderOverviewPage() {
     document.getElementById('overviewTableTitle').textContent = '我的統計';
     renderSelfTable(filtered);
   }
+
+  // Amount range analysis
+  renderAmountRange(overviewYear);
 }
 
 function aggregateStats(stats) {
@@ -1827,6 +1878,361 @@ function renderSelfTable(stats) {
     <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
     <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
   </tr>`;
+}
+
+// ===================== AMOUNT RANGE ANALYSIS =====================
+function renderAmountRange(year) {
+  const container = document.getElementById('amountRangeContent');
+  // Filter signed cases by year
+  let signedCases = allCases.filter(c => c.is_signed && (c.collected > 0 || c.revenue > 0));
+  if (year !== 'all') {
+    signedCases = signedCases.filter(c => c.case_date && c.case_date.startsWith(year));
+  }
+
+  // Non-admin: only own cases
+  if (currentLawyer.role !== 'admin') {
+    signedCases = signedCases.filter(c => c.lawyer_id === currentLawyer.id);
+  }
+
+  if (signedCases.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
+    return;
+  }
+
+  // Define ranges
+  const ranges = [
+    { label: '5萬以下',       min: 0,       max: 50000 },
+    { label: '5-10萬',        min: 50000,   max: 100000 },
+    { label: '10-20萬',       min: 100000,  max: 200000 },
+    { label: '20-50萬',       min: 200000,  max: 500000 },
+    { label: '50-100萬',      min: 500000,  max: 1000000 },
+    { label: '100萬以上',     min: 1000000, max: Infinity },
+  ];
+
+  // Count cases per range using collected amount
+  const rangeCounts = ranges.map(r => ({
+    label: r.label,
+    count: 0,
+    totalCollected: 0,
+  }));
+
+  signedCases.forEach(c => {
+    const amt = Number(c.collected) || 0;
+    for (let i = 0; i < ranges.length; i++) {
+      if (amt >= ranges[i].min && amt < ranges[i].max) {
+        rangeCounts[i].count++;
+        rangeCounts[i].totalCollected += amt;
+        break;
+      }
+    }
+  });
+
+  const totalCases = signedCases.length;
+  const maxCount = Math.max(...rangeCounts.map(r => r.count), 1);
+
+  // Bar colors
+  const barColors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
+
+  container.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">成案總數</div>
+        <div class="kpi-value">${totalCases}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">總收款金額</div>
+        <div class="kpi-value gold">$${Math.round(signedCases.reduce((s, c) => s + (Number(c.collected) || 0), 0)).toLocaleString()}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">平均成案金額</div>
+        <div class="kpi-value">$${Math.round(signedCases.reduce((s, c) => s + (Number(c.collected) || 0), 0) / totalCases).toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:320px;">
+        <table style="width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">金額區間</th>
+              <th class="num">案件數</th>
+              <th class="num">佔比</th>
+              <th class="num">區間收款</th>
+              <th style="min-width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rangeCounts.map((r, i) => {
+              const pct = totalCases > 0 ? (r.count / totalCases * 100) : 0;
+              const barW = maxCount > 0 ? (r.count / maxCount * 100) : 0;
+              return `<tr>
+                <td>${r.label}</td>
+                <td class="num">${r.count}</td>
+                <td class="num">${pct.toFixed(1)}%</td>
+                <td class="num">$${Math.round(r.totalCollected).toLocaleString()}</td>
+                <td><div style="background:${barColors[i]};height:16px;border-radius:3px;width:${barW}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ===================== QUALITY AMOUNT RANGE =====================
+function renderQualityAmountRange() {
+  // Build year buttons from allCases
+  const caseYears = new Set();
+  allCases.forEach(c => { if (c.case_date) caseYears.add(c.case_date.slice(0, 4)); });
+  const years = ['all', ...Array.from(caseYears).sort().reverse()];
+  buildYearButtons('qualityAmountYearBar', years, qualityAmountYear, (y) => {
+    qualityAmountYear = y;
+    renderQualityAmountRangeContent(y);
+  });
+  renderQualityAmountRangeContent(qualityAmountYear);
+}
+
+function renderQualityAmountRangeContent(year) {
+  const container = document.getElementById('qualityAmountRangeContent');
+
+  // Use monthly_stats (has actual collected amounts) combined with consultation_cases for signed counts
+  let stats = allStats.filter(s => s.collected > 0 && s.signed_count > 0);
+  if (year !== 'all') {
+    stats = stats.filter(s => s.month && s.month.startsWith(year));
+  }
+  if (currentLawyer.role !== 'admin') {
+    stats = stats.filter(s => s.lawyer_id === currentLawyer.id);
+  }
+
+  // Aggregate per lawyer: total signed_count, total collected → compute avg per signed case
+  const byLawyer = {};
+  stats.forEach(s => {
+    if (!byLawyer[s.lawyer_id]) byLawyer[s.lawyer_id] = { signed: 0, collected: 0 };
+    byLawyer[s.lawyer_id].signed += s.signed_count || 0;
+    byLawyer[s.lawyer_id].collected += s.collected || 0;
+  });
+
+  // Build per-lawyer average amounts for range analysis
+  const lawyerAvgs = Object.entries(byLawyer).map(([id, d]) => ({
+    id,
+    name: allLawyersMap[id] ? allLawyersMap[id].name : id.slice(0, 8),
+    signed: d.signed,
+    collected: d.collected,
+    avg: d.signed > 0 ? d.collected / d.signed : 0,
+  })).filter(l => l.signed > 0);
+
+  if (lawyerAvgs.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
+    return;
+  }
+
+  const totalSigned = lawyerAvgs.reduce((s, l) => s + l.signed, 0);
+  const totalCollected = lawyerAvgs.reduce((s, l) => s + l.collected, 0);
+  const overallAvg = totalSigned > 0 ? totalCollected / totalSigned : 0;
+
+  // Define ranges for average signed case amount
+  const ranges = [
+    { label: '3萬以下',   min: 0,       max: 30000 },
+    { label: '3-5萬',     min: 30000,   max: 50000 },
+    { label: '5-8萬',     min: 50000,   max: 80000 },
+    { label: '8-12萬',    min: 80000,   max: 120000 },
+    { label: '12-20萬',   min: 120000,  max: 200000 },
+    { label: '20萬以上',   min: 200000,  max: Infinity },
+  ];
+
+  const rangeCounts = ranges.map(r => ({ label: r.label, count: 0, totalSigned: 0, totalCollected: 0 }));
+  lawyerAvgs.forEach(l => {
+    for (let i = 0; i < ranges.length; i++) {
+      if (l.avg >= ranges[i].min && l.avg < ranges[i].max) {
+        rangeCounts[i].count++;
+        rangeCounts[i].totalSigned += l.signed;
+        rangeCounts[i].totalCollected += l.collected;
+        break;
+      }
+    }
+  });
+
+  const maxCount = Math.max(...rangeCounts.map(r => r.count), 1);
+  const barColors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
+
+  // Per-lawyer breakdown table (admin)
+  let lawyerBreakdownHtml = '';
+  if (currentLawyer.role === 'admin') {
+    const sorted = [...lawyerAvgs].sort((a, b) => b.avg - a.avg);
+    lawyerBreakdownHtml = `
+      <div style="margin-top:20px;">
+        <div style="font-size:0.9rem;font-weight:600;color:var(--gold-light);margin-bottom:8px;">各律師平均簽約收款排行</div>
+        <table style="width:100%;">
+          <thead><tr>
+            <th style="text-align:left;">律師</th>
+            <th class="num">成案數</th>
+            <th class="num">總收款</th>
+            <th class="num">平均簽約收款</th>
+          </tr></thead>
+          <tbody>${sorted.map(r => `<tr>
+            <td>${escHtml(r.name)}</td>
+            <td class="num">${r.signed}</td>
+            <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+            <td class="num">$${Math.round(r.avg).toLocaleString()}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">總成案數</div>
+        <div class="kpi-value">${totalSigned.toLocaleString()}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">總收款金額</div>
+        <div class="kpi-value gold">$${Math.round(totalCollected).toLocaleString()}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">整體平均簽約收款</div>
+        <div class="kpi-value">$${Math.round(overallAvg).toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">以各律師「平均簽約收款」分佈統計</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:320px;">
+        <table style="width:100%;">
+          <thead><tr>
+            <th style="text-align:left;">平均收款區間</th>
+            <th class="num">律師數</th>
+            <th class="num">佔比</th>
+            <th class="num">合計收款</th>
+            <th style="min-width:120px;"></th>
+          </tr></thead>
+          <tbody>
+            ${rangeCounts.map((r, i) => {
+              const pct = lawyerAvgs.length > 0 ? (r.count / lawyerAvgs.length * 100) : 0;
+              const barW = maxCount > 0 ? (r.count / maxCount * 100) : 0;
+              return `<tr>
+                <td>${r.label}</td>
+                <td class="num">${r.count}</td>
+                <td class="num">${pct.toFixed(1)}%</td>
+                <td class="num">$${Math.round(r.totalCollected).toLocaleString()}</td>
+                <td><div style="background:${barColors[i]};height:16px;border-radius:3px;width:${barW}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ${lawyerBreakdownHtml}
+  `;
+}
+
+// ===================== LAWYER DETAIL AMOUNT RANGE =====================
+let lawyerAmountYear = 'all';
+
+function renderLawyerAmountRange(lawyerId) {
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+  const years = new Set();
+  lawyerStats.forEach(s => { if (s.month) years.add(s.month.slice(0, 4)); });
+  const yearList = ['all', ...Array.from(years).sort().reverse()];
+  lawyerAmountYear = 'all';
+  buildYearButtons('lawyerAmountYearBar', yearList, lawyerAmountYear, (y) => {
+    lawyerAmountYear = y;
+    renderLawyerAmountContent(lawyerId, y);
+  });
+  renderLawyerAmountContent(lawyerId, lawyerAmountYear);
+}
+
+function renderLawyerAmountContent(lawyerId, year) {
+  const container = document.getElementById('lawyerAmountRangeContent');
+
+  // 優先使用個案金額（精確模式）
+  let casesWithAmount = allCases.filter(c => c.lawyer_id === lawyerId && c.is_signed && (c.collected > 0 || c.revenue > 0));
+  if (year !== 'all') casesWithAmount = casesWithAmount.filter(c => c.case_date && c.case_date.startsWith(year));
+
+  if (casesWithAmount.length > 0) {
+    // ===== 個案金額模式 =====
+    const ranges = [
+      { label: '3萬以下',   min: 0,       max: 30000 },
+      { label: '3-5萬',     min: 30000,   max: 50000 },
+      { label: '5-10萬',    min: 50000,   max: 100000 },
+      { label: '10-20萬',   min: 100000,  max: 200000 },
+      { label: '20-50萬',   min: 200000,  max: 500000 },
+      { label: '50萬以上',   min: 500000,  max: Infinity },
+    ];
+    const rangeCounts = ranges.map(r => ({ label: r.label, count: 0, total: 0 }));
+    casesWithAmount.forEach(c => {
+      const amt = Number(c.collected) || Number(c.revenue) || 0;
+      for (let i = 0; i < ranges.length; i++) {
+        if (amt >= ranges[i].min && amt < ranges[i].max) {
+          rangeCounts[i].count++;
+          rangeCounts[i].total += amt;
+          break;
+        }
+      }
+    });
+    const total = casesWithAmount.length;
+    const totalAmt = casesWithAmount.reduce((s, c) => s + (Number(c.collected) || Number(c.revenue) || 0), 0);
+    const maxC = Math.max(...rangeCounts.map(r => r.count), 1);
+    const colors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
+
+    container.innerHTML = `
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">成案總數</div><div class="kpi-value">${total}</div></div>
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總收款金額</div><div class="kpi-value gold">$${Math.round(totalAmt).toLocaleString()}</div></div>
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">平均成案金額</div><div class="kpi-value">$${Math.round(totalAmt / total).toLocaleString()}</div></div>
+      </div>
+      <div style="flex:1;min-width:320px;">
+        <table style="width:100%;"><thead><tr>
+          <th style="text-align:left;">成案金額區間</th><th class="num">案件數</th><th class="num">佔比</th><th class="num">區間收款</th><th style="min-width:120px;"></th>
+        </tr></thead><tbody>
+          ${rangeCounts.map((r, i) => {
+            const pct = total > 0 ? (r.count / total * 100) : 0;
+            const bw = maxC > 0 ? (r.count / maxC * 100) : 0;
+            return `<tr><td>${r.label}</td><td class="num">${r.count}</td><td class="num">${pct.toFixed(1)}%</td><td class="num">$${Math.round(r.total).toLocaleString()}</td>
+              <td><div style="background:${colors[i]};height:16px;border-radius:3px;width:${bw}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td></tr>`;
+          }).join('')}
+        </tbody></table>
+      </div>`;
+    return;
+  }
+
+  // ===== Fallback: 月度彙總估算 =====
+  let stats = allStats.filter(s => s.lawyer_id === lawyerId && s.signed_count > 0 && s.collected > 0);
+  if (year !== 'all') stats = stats.filter(s => s.month && s.month.startsWith(year));
+
+  if (stats.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
+    return;
+  }
+
+  const totalSigned = stats.reduce((s, r) => s + r.signed_count, 0);
+  const totalCollected = stats.reduce((s, r) => s + r.collected, 0);
+  const overallAvg = totalSigned > 0 ? totalCollected / totalSigned : 0;
+  const monthEntries = stats.map(s => ({
+    month: s.month, signed: s.signed_count, collected: s.collected,
+    avg: s.signed_count > 0 ? s.collected / s.signed_count : 0,
+  }));
+  const sortedMonths = [...monthEntries].sort((a, b) => b.month.localeCompare(a.month));
+
+  container.innerHTML = `
+    <div style="padding:8px 12px;background:var(--orange-dim);border:1px solid var(--orange);border-radius:8px;margin-bottom:16px;font-size:0.82rem;color:var(--orange);">
+      ⚠ 個案金額資料尚未匯入，以下為各月收款彙總。重新執行 daily_update.py --months 75 後將顯示精確個案金額分佈。
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總成案數</div><div class="kpi-value">${totalSigned}</div></div>
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總收款金額</div><div class="kpi-value gold">$${Math.round(totalCollected).toLocaleString()}</div></div>
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">平均簽約收款</div><div class="kpi-value">$${Math.round(overallAvg).toLocaleString()}</div></div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-size:0.9rem;font-weight:600;color:var(--gold-light);margin-bottom:8px;">各月成案收款明細</div>
+      <table style="width:100%;"><thead><tr>
+        <th style="text-align:left;">月份</th><th class="num">成案數</th><th class="num">收款金額</th><th class="num">平均簽約收款</th>
+      </tr></thead><tbody>${sortedMonths.map(m => `<tr>
+        <td>${m.month}</td><td class="num">${m.signed}</td>
+        <td class="num">$${Math.round(m.collected).toLocaleString()}</td>
+        <td class="num">$${Math.round(m.avg).toLocaleString()}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>
+  `;
 }
 
 // Column header click → sort
@@ -2394,9 +2800,23 @@ function renderQualityDetailPage(lawyerId) {
       </div>
     </div>
 
+    <!-- 成案金額區間分析 -->
+    <div class="section" style="margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">成案金額區間分析</div>
+      </div>
+      <div class="year-filter-bar" id="lawyerAmountYearBar" style="margin-bottom:12px;">
+        <span class="filter-label">篩選年度</span>
+      </div>
+      <div id="lawyerAmountRangeContent"></div>
+    </div>
+
     <!-- Case Cards Section -->
     ${renderCaseCardsSection(lawyerId)}
   `;
+
+  // Render amount range for this lawyer
+  renderLawyerAmountRange(lawyerId);
 
   // Render chart
   renderQualityChart(lawyerStats);
@@ -3094,6 +3514,8 @@ async function parseUploadedFiles() {
       if (r['成案與否']) {
         signed = (r['成案與否'] || '').includes('成案') && !(r['成案與否'] || '').includes('未');
       }
+      var revKey = Object.keys(r).find(function(k) { return k.includes('應收'); });
+      var colKey = Object.keys(r).find(function(k) { return k.includes('已收'); });
       return {
         lawyer_name: r['律師姓名'] || r['諮詢律師'] || '',
         case_date: parseExcelDate(r['諮詢日期']),
@@ -3101,6 +3523,8 @@ async function parseUploadedFiles() {
         case_number: (r['案件編號'] || '').toString().trim(),
         client_name: (r['當事人'] || '').toString().trim(),
         is_signed: signed,
+        revenue: revKey ? (parseInt(r[revKey]) || 0) : 0,
+        collected: colKey ? (parseInt(r[colKey]) || 0) : 0,
         mr_filename: r['會議記錄檔名'] || '',
         ts_filename: r['逐字稿檔名'] || '',
       };
@@ -3246,6 +3670,8 @@ async function submitUploadedCases() {
         case_number: c.case_number || null,
         client_name: c.client_name || null,
         is_signed: c.is_signed,
+        revenue: c.revenue || 0,
+        collected: c.collected || 0,
         meeting_record: c.meeting_record || null,
         transcript: c.transcript || null,
       };
@@ -3359,6 +3785,143 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
 document.getElementById('passwordModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closePasswordModal();
 });
+
+// ===================== UNSIGNED CASES TRACKING =====================
+var unsignedRange = 1;
+var unsignedSortCol = 'case_date';
+var unsignedSortDir = 'desc';
+
+function setUnsignedRange(months) {
+  unsignedRange = months;
+  document.querySelectorAll('#unsignedFilterBar .year-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.includes(months + '個月'));
+  });
+  renderUnsignedPage();
+}
+
+function renderUnsignedPage() {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - unsignedRange);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  // Filter unsigned cases within date range
+  let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+
+  // Admin: show lawyer filter
+  const isAdmin = currentLawyer.role === 'admin';
+  const filterLabel = document.getElementById('unsignedLawyerFilterLabel');
+  const filterSelect = document.getElementById('unsignedLawyerSelect');
+  if (isAdmin) {
+    filterLabel.style.display = '';
+    filterSelect.style.display = '';
+    // Build options if empty
+    if (filterSelect.options.length <= 1) {
+      filterSelect.innerHTML = '<option value="">全部律師</option>';
+      const lawyers = Object.values(allLawyersMap).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+      lawyers.forEach(l => {
+        filterSelect.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
+      });
+    }
+    const selectedLawyer = filterSelect.value;
+    if (selectedLawyer) {
+      cases = cases.filter(c => c.lawyer_id === selectedLawyer);
+    }
+  } else {
+    filterLabel.style.display = 'none';
+    filterSelect.style.display = 'none';
+    cases = cases.filter(c => c.lawyer_id === currentLawyer.id);
+  }
+
+  // Summary
+  const totalCount = cases.length;
+  const lawyerSet = new Set(cases.map(c => c.lawyer_id));
+  document.getElementById('unsignedSummary').innerHTML =
+    `<div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${totalCount}</div></div>
+      ${isAdmin ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
+    </div>`;
+
+  // Sort
+  cases = sortUnsignedRows(cases, unsignedSortCol, unsignedSortDir);
+
+  // Table header
+  const headRow = document.getElementById('unsignedTableHead');
+  const cols = [
+    { key: 'case_date', label: '諮詢日期' },
+    { key: 'case_number', label: '案件編號' },
+    { key: 'client_name', label: '當事人' },
+    { key: 'case_type', label: '案件類型' },
+  ];
+  if (isAdmin) cols.push({ key: 'lawyer_name', label: '諮詢律師' });
+  cols.push({ key: 'days_ago', label: '距今天數' });
+
+  headRow.innerHTML = cols.map(c => {
+    const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;">${c.label}${arrow}</th>`;
+  }).join('');
+
+  // Bind sort
+  headRow.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (unsignedSortCol === col) {
+        unsignedSortDir = unsignedSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        unsignedSortCol = col;
+        unsignedSortDir = col === 'case_date' || col === 'days_ago' ? 'desc' : 'asc';
+      }
+      renderUnsignedPage();
+    });
+  });
+
+  // Table body
+  const tbody = document.getElementById('unsignedTableBody');
+  if (cases.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" style="text-align:center;color:#aaa;padding:32px;">此期間無未成案案件</td></tr>`;
+    return;
+  }
+
+  const todayMs = now.getTime();
+  tbody.innerHTML = cases.map(c => {
+    const daysAgo = Math.floor((todayMs - new Date(c.case_date).getTime()) / 86400000);
+    const lawyerName = allLawyersMap[c.lawyer_id] ? allLawyersMap[c.lawyer_id].name : '—';
+    const daysClass = daysAgo > 90 ? 'sign-rate-red' : daysAgo > 30 ? 'sign-rate-orange' : '';
+    return `<tr>
+      <td>${c.case_date}</td>
+      <td>${escHtml(c.case_number || '')}</td>
+      <td>${escHtml(c.client_name || '—')}</td>
+      <td>${escHtml(c.case_type || '—')}</td>
+      ${isAdmin ? `<td>${escHtml(lawyerName)}</td>` : ''}
+      <td class="num ${daysClass}">${daysAgo}</td>
+    </tr>`;
+  }).join('');
+}
+
+function sortUnsignedRows(cases, col, dir) {
+  const todayMs = Date.now();
+  return [...cases].sort((a, b) => {
+    let va, vb;
+    if (col === 'days_ago') {
+      va = new Date(a.case_date).getTime();
+      vb = new Date(b.case_date).getTime();
+      // days_ago desc = date asc
+      return dir === 'desc' ? va - vb : vb - va;
+    }
+    if (col === 'lawyer_name') {
+      va = allLawyersMap[a.lawyer_id] ? allLawyersMap[a.lawyer_id].name : '';
+      vb = allLawyersMap[b.lawyer_id] ? allLawyersMap[b.lawyer_id].name : '';
+    } else {
+      va = a[col] || '';
+      vb = b[col] || '';
+    }
+    if (typeof va === 'string') {
+      const cmp = va.localeCompare(vb, 'zh');
+      return dir === 'asc' ? cmp : -cmp;
+    }
+    return dir === 'asc' ? va - vb : vb - va;
+  });
+}
 
 // ===================== HELPERS =====================
 function setText(id, val) {

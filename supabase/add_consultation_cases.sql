@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.consultation_cases (
   case_number TEXT NOT NULL,
   client_name TEXT,
   is_signed BOOLEAN NOT NULL DEFAULT false,
+  revenue NUMERIC(12,0) DEFAULT 0,
+  collected NUMERIC(12,0) DEFAULT 0,
   meeting_record TEXT,
   transcript TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
