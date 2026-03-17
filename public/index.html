@@ -2099,6 +2099,7 @@ function renderMonthCards(stats, year) {
         <td class="num">${r.signed_count}</td>
         <td class="num ${rc}">${r.sign_rate.toFixed(1)}%</td>
         <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+        <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
       </tr>`;
     }).join('');
 
@@ -2125,6 +2126,7 @@ function renderMonthCards(stats, year) {
               <th class="num">簽約</th>
               <th class="num">簽約率</th>
               <th class="num">已收</th>
+              <th class="num">諮詢效益</th>
             </tr>
           </thead>
           <tbody>${bodyRows}</tbody>
