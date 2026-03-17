@@ -1228,7 +1228,7 @@
 
   <!-- ===== DETAIL PAGE ===== -->
   <div class="page" id="pageDetail">
-    <button class="back-btn" onclick="showTab('overview')">← 返回總覽</button>
+    <button class="back-btn" id="detailBackBtn" onclick="goBackFromDetail()">← 返回總覽</button>
 
     <div class="detail-profile">
       <div class="detail-avatar" id="detailAvatar">律</div>
@@ -1265,6 +1265,14 @@
       </div>
     </div>
 
+    <!-- Insights section -->
+    <div class="section" id="detailInsightsSection" style="display:none;">
+      <div class="section-header">
+        <div class="section-title">分析建議</div>
+      </div>
+      <div id="detailInsightsContent"></div>
+    </div>
+
     <div class="section">
       <div class="section-header">
         <div class="section-title">每月趨勢</div>
@@ -1297,13 +1305,27 @@
       </div>
     </div>
 
-    <!-- Insights section for detail page -->
-    <div class="section" id="detailInsightsSection" style="display:none;">
+    <!-- Year-over-Year Comparison (from quality detail) -->
+    <div class="section" id="detailYoySection">
       <div class="section-header">
-        <div class="section-title">分析建議</div>
+        <div class="section-title" id="detailYoyTitle">年度同期比較</div>
       </div>
-      <div id="detailInsightsContent"></div>
+      <div id="detailYoyContent"></div>
     </div>
+
+    <!-- 成案金額區間分析 (from quality detail) -->
+    <div class="section" style="margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">成案金額區間分析</div>
+      </div>
+      <div class="year-filter-bar" id="lawyerAmountYearBar" style="margin-bottom:12px;">
+        <span class="filter-label">篩選年度</span>
+      </div>
+      <div id="lawyerAmountRangeContent"></div>
+    </div>
+
+    <!-- Case Cards (from quality detail) -->
+    <div id="detailCaseCardsContainer"></div>
   </div>
 
   <!-- ===== YEAR TRACKING PAGE ===== -->
@@ -1356,12 +1378,6 @@
       <div class="loading"><span class="loading-spinner"></span>載入中...</div>
     </div>
 
-  </div>
-
-  <!-- ===== QUALITY DETAIL PAGE ===== -->
-  <div class="page" id="pageQualityDetail">
-    <button class="back-btn" id="qualityBackBtn" onclick="showTab('quality')">← 返回品質分析</button>
-    <div id="qualityDetailContent"></div>
   </div>
 
   <!-- ===== UNSIGNED CASES TRACKING PAGE ===== -->
@@ -1541,6 +1557,7 @@ let allLawyersMap = {};      // id -> lawyer record (active)
 let resignedLawyersMap = {}; // id -> lawyer record (resigned)
 let detailLawyerId = null;
 let detailChart   = null;
+let detailBackTarget = 'overview';
 
 let allCases      = [];      // all consultation_cases rows visible to this user
 
@@ -1685,7 +1702,6 @@ function showTab(tab) {
   document.getElementById('pageDetail').classList.toggle('active',   tab === 'detail');
   document.getElementById('pageTracking').classList.toggle('active', tab === 'tracking');
   document.getElementById('pageQuality').classList.toggle('active', tab === 'quality');
-  document.getElementById('pageQualityDetail').classList.toggle('active', tab === 'qualityDetail');
   document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
   document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
 
@@ -1698,6 +1714,7 @@ function showTab(tab) {
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
+  detailBackTarget = 'overview';
   ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
@@ -1705,7 +1722,6 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageOverview').classList.remove('active');
   document.getElementById('pageTracking').classList.remove('active');
   document.getElementById('pageQuality').classList.remove('active');
-  document.getElementById('pageQualityDetail').classList.remove('active');
   document.getElementById('pageUpload').classList.remove('active');
   document.getElementById('pageUnsigned').classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
@@ -1713,6 +1729,8 @@ function showDetailPage(lawyerId) {
 }
 
 function showQualityDetail(lawyerId) {
+  detailLawyerId = lawyerId;
+  detailBackTarget = 'quality';
   ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
@@ -1720,12 +1738,15 @@ function showQualityDetail(lawyerId) {
   document.getElementById('tab-quality').classList.add('active');
   document.getElementById('pageOverview').classList.remove('active');
   document.getElementById('pageTracking').classList.remove('active');
-  document.getElementById('pageDetail').classList.remove('active');
   document.getElementById('pageQuality').classList.remove('active');
-  document.getElementById('pageUnsigned').classList.remove('active');
-  document.getElementById('pageQualityDetail').classList.add('active');
   document.getElementById('pageUpload').classList.remove('active');
-  renderQualityDetailPage(lawyerId);
+  document.getElementById('pageUnsigned').classList.remove('active');
+  document.getElementById('pageDetail').classList.add('active');
+  renderDetailPage();
+}
+
+function goBackFromDetail() {
+  showTab(detailBackTarget);
 }
 
 function showDashboard() {
@@ -2358,6 +2379,7 @@ function renderDetailPage() {
   document.getElementById('detailName').textContent   = name;
   document.getElementById('detailAvatar').textContent = initials;
   document.getElementById('detailMeta').textContent   = lawyer ? (lawyer.office || '') : '';
+  document.getElementById('detailBackBtn').textContent = detailBackTarget === 'quality' ? '← 返回品質分析' : '← 返回總覽';
 
   const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
   const years       = getAvailableYears(lawyerStats);
@@ -2382,6 +2404,14 @@ function renderDetailContent() {
   renderDetailTable(filtered);
   renderDetailChart(filtered);
   renderDetailInsights(detailLawyerId);
+  renderDetailYoy(detailLawyerId);
+  renderLawyerAmountRange(detailLawyerId);
+
+  // Case cards
+  const caseCardsContainer = document.getElementById('detailCaseCardsContainer');
+  if (caseCardsContainer) {
+    caseCardsContainer.innerHTML = renderCaseCardsSection(detailLawyerId);
+  }
 }
 
 function renderDetailTable(stats) {
@@ -3338,6 +3368,51 @@ function renderDetailInsights(lawyerId) {
 
   section.style.display = 'block';
   content.innerHTML = renderInsightsHtml(insights);
+}
+
+function renderDetailYoy(lawyerId) {
+  const section = document.getElementById('detailYoySection');
+  const content = document.getElementById('detailYoyContent');
+  const titleEl = document.getElementById('detailYoyTitle');
+
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+  const currentYear = new Date().getFullYear().toString();
+  const prevYear = (parseInt(currentYear) - 1).toString();
+  const currStats = lawyerStats.filter(s => s.month && s.month.startsWith(currentYear));
+  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
+  const prevStats = lawyerStats.filter(s => s.month && s.month.startsWith(prevYear) && currMonths.has(s.month.slice(5, 7)));
+  const currT = aggregateStats(currStats);
+  const prevT = aggregateStats(prevStats);
+
+  titleEl.textContent = currentYear + ' vs ' + prevYear + ' 同期比較';
+
+  if (currStats.length === 0 && prevStats.length === 0) {
+    content.innerHTML = '<div class="empty-state">暫無年度比較資料</div>';
+    return;
+  }
+
+  content.innerHTML = `
+    <div style="overflow-x:auto;">
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th class="num">${currentYear}</th>
+            <th class="num">${prevYear}</th>
+            <th class="num">變化</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderYoyRow('諮詢數', currT.consult_count, prevT.consult_count, false)}
+          ${renderYoyRow('簽約數', currT.signed_count, prevT.signed_count, false)}
+          ${renderYoyRow('簽約率', currT.sign_rate, prevT.sign_rate, true)}
+          ${renderYoyRow('已收金額', currT.collected, prevT.collected, false)}
+          ${renderYoyRow('平均成案金額', currT.avg_collected, prevT.avg_collected, false)}
+          ${renderYoyRow('諮詢效益', currT.consult_eff, prevT.consult_eff, false)}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ===================== UPLOAD (admin only) =====================
