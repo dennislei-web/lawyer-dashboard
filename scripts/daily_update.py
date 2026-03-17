@@ -403,6 +403,54 @@ def update_supabase(target_months):
                 print(f"  upsert 失敗：{resp.status_code} {resp.text[:200]}")
 
     print(f"  Supabase 已更新：{success}/{len(rows)} 筆月統計")
+
+    # ── 同步個別案件到 consultation_cases ──
+    case_rows = []
+    for _, row in df.iterrows():
+        lawyer_id = lawyer_map.get(row["諮詢律師"])
+        if not lawyer_id:
+            continue
+        case_number = str(row.get("案件編號", "")).strip() if "案件編號" in df.columns else ""
+        if not case_number or case_number == "nan":
+            continue
+        sign_status = str(row.get("簽約狀態", "")).strip()
+        is_signed = sign_status != "" and sign_status != "nan" and "未" not in sign_status
+        client_name = str(row.get("當事人", "")).strip() if "當事人" in df.columns else ""
+        if client_name == "nan":
+            client_name = ""
+        case_type_col = next((c for c in df.columns if "服務項目" in c), None)
+        case_type = str(row.get(case_type_col, "")).strip() if case_type_col else ""
+        if case_type == "nan":
+            case_type = ""
+        case_rows.append({
+            "lawyer_id": lawyer_id,
+            "case_date": row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10],
+            "case_type": case_type,
+            "case_number": case_number,
+            "client_name": client_name,
+            "is_signed": is_signed,
+        })
+
+    if case_rows:
+        with httpx.Client(timeout=30) as client:
+            case_headers = {
+                **headers,
+                "Prefer": "resolution=merge-duplicates,return=minimal",
+            }
+            case_success = 0
+            for i in range(0, len(case_rows), 50):
+                batch = case_rows[i:i + 50]
+                resp = client.post(
+                    f"{SUPABASE_URL}/rest/v1/consultation_cases",
+                    json=batch,
+                    headers=case_headers,
+                )
+                if resp.status_code in (200, 201):
+                    case_success += len(batch)
+                else:
+                    print(f"  consultation_cases upsert 失敗：{resp.status_code} {resp.text[:200]}")
+        print(f"  consultation_cases 已更新：{case_success}/{len(case_rows)} 筆")
+
     return success
 
 

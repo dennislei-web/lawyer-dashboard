@@ -6,12 +6,14 @@ CREATE TABLE IF NOT EXISTS public.consultation_cases (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lawyer_id UUID NOT NULL REFERENCES public.lawyers(id) ON DELETE CASCADE,
   case_date DATE NOT NULL,
-  case_type TEXT NOT NULL,
+  case_type TEXT NOT NULL DEFAULT '',
+  case_number TEXT NOT NULL,
+  client_name TEXT,
   is_signed BOOLEAN NOT NULL DEFAULT false,
   meeting_record TEXT,
   transcript TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(lawyer_id, case_date, case_type)
+  UNIQUE(case_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cases_lawyer ON public.consultation_cases(lawyer_id);

@@ -1344,9 +1344,9 @@
         <div class="section-title">上傳諮詢案件</div>
       </div>
 
-      <!-- Step 1: ZIP file (required) -->
+      <!-- Step 1: ZIP file (optional) -->
       <div class="upload-step">
-        <div class="upload-step-label">步驟 1：上傳案件檔案 (ZIP)</div>
+        <div class="upload-step-label">步驟 1：上傳案件檔案 (ZIP，選填)</div>
         <div class="upload-step-desc">將會議記錄與逐字稿打包成 ZIP 上傳。檔名格式：律師名_成案/未成案_日期_案件類型(會議記錄/逐字稿).docx</div>
         <div class="upload-dropzone" id="zipDropzone">
           <div class="upload-icon">📁</div>
@@ -1356,10 +1356,10 @@
         </div>
       </div>
 
-      <!-- Step 2: Excel (optional) -->
+      <!-- Step 2: Excel (optional, or standalone for CRM data) -->
       <div class="upload-step">
-        <div class="upload-step-label">步驟 2：上傳案件清單 (選填)</div>
-        <div class="upload-step-desc">如果檔名已按規則命名，可跳過此步。若有 Excel 名單可提供更精確的對應。</div>
+        <div class="upload-step-label">步驟 2：上傳案件清單 Excel（可單獨上傳 CRM 匯出檔）</div>
+        <div class="upload-step-desc">支援 CRM 匯出的 xlsx（含案件編號、當事人等欄位）。只上傳 Excel 不上傳 ZIP 也可以匯入案件資料。</div>
         <div class="upload-dropzone" id="xlsxDropzone">
           <div class="upload-icon">📊</div>
           <div>拖拉 Excel 檔案到此處，或<label class="upload-browse" for="xlsxInput">點擊選擇</label></div>
@@ -1561,7 +1561,7 @@ async function loadDashboard(user) {
     while (true) {
       const { data: page } = await sb
         .from('consultation_cases')
-        .select('id,lawyer_id,case_date,case_type,is_signed,meeting_record,transcript')
+        .select('id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript')
         .order('case_date', { ascending: false })
         .range(from, from + pageSize - 1);
       if (!page || page.length === 0) break;
@@ -2804,6 +2804,8 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   setupDropzone('xlsxDropzone', 'xlsxInput', 'xlsxFileName', function(file) {
     uploadXlsxFile = file;
+    // 只有 Excel 也可以解析（CRM 資料匯入）
+    document.getElementById('parseBtn').disabled = false;
   });
 });
 
@@ -3037,64 +3039,85 @@ async function parseUploadedFiles() {
     const wb = XLSX.read(ab);
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws);
-    xlsxCases = rows.map(function(r) {
+    // 過濾「是否列入計算=否」
+    var filtered = rows.filter(function(r) {
+      var v = (r['是否列入計算'] || '').toString().trim();
+      return v !== '否';
+    });
+    xlsxCases = filtered.map(function(r) {
+      // 支援 CRM xlsx 格式：簽約狀態 → is_signed
+      var signStatus = (r['簽約狀態'] || r['成案與否'] || '').toString().trim();
+      var signed = signStatus !== '' && signStatus !== 'nan' && !signStatus.includes('未');
+      // 如果有「成案與否」欄位，用原本邏輯
+      if (r['成案與否']) {
+        signed = (r['成案與否'] || '').includes('成案') && !(r['成案與否'] || '').includes('未');
+      }
       return {
         lawyer_name: r['律師姓名'] || r['諮詢律師'] || '',
         case_date: parseExcelDate(r['諮詢日期']),
-        case_type: r['案件類型'] || '',
-        is_signed: (r['成案與否'] || '').includes('成案') && !(r['成案與否'] || '').includes('未'),
+        case_type: r['案件類型'] || r['服務項目'] || '',
+        case_number: (r['案件編號'] || '').toString().trim(),
+        client_name: (r['當事人'] || '').toString().trim(),
+        is_signed: signed,
         mr_filename: r['會議記錄檔名'] || '',
         ts_filename: r['逐字稿檔名'] || '',
       };
     });
   }
 
-  // 2. Extract ZIP
-  const zip = await JSZip.loadAsync(uploadZipFile);
+  // 2. Extract ZIP (if provided)
   const fileEntries = {};
+  if (uploadZipFile) {
+    const zip = await JSZip.loadAsync(uploadZipFile);
 
-  for (const path of Object.keys(zip.files)) {
-    const zipEntry = zip.files[path];
-    if (zipEntry.dir) continue;
-    const filename = path.split('/').pop();
-    if (!filename) continue;
+    for (const path of Object.keys(zip.files)) {
+      const zipEntry = zip.files[path];
+      if (zipEntry.dir) continue;
+      const filename = path.split('/').pop();
+      if (!filename) continue;
 
-    const ext = filename.split('.').pop().toLowerCase();
-    if (!['docx', 'txt'].includes(ext)) continue;
+      const ext = filename.split('.').pop().toLowerCase();
+      if (!['docx', 'txt'].includes(ext)) continue;
 
-    const parsed = parseUploadFilename(filename);
-    if (!parsed) continue;
+      const parsed = parseUploadFilename(filename);
+      if (!parsed) continue;
 
-    let content = '';
-    if (ext === 'txt') {
-      const blob = await zipEntry.async('blob');
-      content = await readTextBlob(blob);
-    } else if (ext === 'docx') {
-      const ab = await zipEntry.async('arraybuffer');
-      content = await readDocxFromArrayBuffer(ab);
-    }
+      let content = '';
+      if (ext === 'txt') {
+        const blob = await zipEntry.async('blob');
+        content = await readTextBlob(blob);
+      } else if (ext === 'docx') {
+        const ab = await zipEntry.async('arraybuffer');
+        content = await readDocxFromArrayBuffer(ab);
+      }
 
-    const key = parsed.lawyer + '_' + parsed.date + '_' + parsed.caseType + '_' + parsed.isSigned;
-    if (!fileEntries[key]) {
-      fileEntries[key] = {
-        lawyer_name: parsed.lawyer,
-        case_date: parsed.date,
-        case_type: parsed.caseType,
-        is_signed: parsed.isSigned,
-        meeting_record: '',
-        transcript: '',
-      };
-    }
+      const key = parsed.lawyer + '_' + parsed.date + '_' + parsed.caseType + '_' + parsed.isSigned;
+      if (!fileEntries[key]) {
+        fileEntries[key] = {
+          lawyer_name: parsed.lawyer,
+          case_date: parsed.date,
+          case_type: parsed.caseType,
+          is_signed: parsed.isSigned,
+          meeting_record: '',
+          transcript: '',
+        };
+      }
 
-    if (parsed.contentType === 'meeting') {
-      fileEntries[key].meeting_record = content;
-    } else {
-      fileEntries[key].transcript = content;
+      if (parsed.contentType === 'meeting') {
+        fileEntries[key].meeting_record = content;
+      } else {
+        fileEntries[key].transcript = content;
+      }
     }
   }
 
-  // 3. Use file data
-  parsedCases = Object.values(fileEntries);
+  // 3. Merge: xlsx-only mode (CRM data) or ZIP + xlsx
+  if (xlsxCases && Object.keys(fileEntries).length === 0) {
+    // 純 xlsx 模式（CRM 資料匯入，不需要會議記錄）
+    parsedCases = xlsxCases;
+  } else {
+    parsedCases = Object.values(fileEntries);
+  }
 
   // 4. Check lawyer names against allLawyersMap
   const nameToId = {};
@@ -3105,7 +3128,8 @@ async function parseUploadedFiles() {
   parsedCases.forEach(function(c) {
     c.lawyer_id = nameToId[c.lawyer_name] || null;
     c.status = c.lawyer_id ? 'ready' : 'no_lawyer';
-    if (!c.meeting_record && !c.transcript) c.status = 'no_content';
+    // 純 xlsx 模式不要求會議記錄
+    if (!xlsxCases && !c.meeting_record && !c.transcript) c.status = 'no_content';
   });
 
   // 5. Show preview
@@ -3173,19 +3197,26 @@ async function submitUploadedCases() {
   for (var i = 0; i < readyCases.length; i += batchSize) {
     var batch = readyCases.slice(i, i + batchSize);
     var rows = batch.map(function(c) {
-      return {
+      var row = {
         lawyer_id: c.lawyer_id,
         case_date: c.case_date,
         case_type: c.case_type,
+        case_number: c.case_number || null,
+        client_name: c.client_name || null,
         is_signed: c.is_signed,
         meeting_record: c.meeting_record || null,
         transcript: c.transcript || null,
       };
+      // 沒有 case_number 時自動產生
+      if (!row.case_number) {
+        row.case_number = 'UP_' + c.lawyer_id + '_' + c.case_date + '_' + (c.case_type || '').replace(/\s/g,'') + '_' + i + '_' + batch.indexOf(c);
+      }
+      return row;
     });
 
     var result = await sb
       .from('consultation_cases')
-      .upsert(rows, { onConflict: 'lawyer_id,case_date,case_type' });
+      .upsert(rows, { onConflict: 'case_number' });
 
     if (result.error) {
       console.error('Upsert error:', result.error);
