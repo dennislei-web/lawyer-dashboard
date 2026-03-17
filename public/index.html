@@ -30,6 +30,27 @@
       --orange-dim: rgba(224,149,74,0.15);
     }
 
+    [data-theme="light"] {
+      --bg-main:    #f5f6fa;
+      --bg-card:    #ffffff;
+      --bg-row:     #f0f2f5;
+      --bg-hover:   #e8eaf0;
+      --border:     #d0d5dd;
+      --border-light: #e0e4eb;
+      --gold:       #a3842a;
+      --gold-light: #8b6f1e;
+      --text:       #1a1a2e;
+      --text-muted: #6b7280;
+      --blue:       #2563eb;
+      --blue-dim:   rgba(37,99,235,0.1);
+      --green:      #16a34a;
+      --green-dim:  rgba(22,163,74,0.1);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.1);
+      --orange:     #d97706;
+      --orange-dim: rgba(217,119,6,0.1);
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
@@ -1125,6 +1146,7 @@
     </div>
     <div class="header-right">
       <span class="user-name" id="userName"></span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeToggleBtn" title="切換明暗主題">🌙</button>
       <button class="btn btn-ghost btn-sm" onclick="handleChangePassword()">修改密碼</button>
       <button class="btn btn-ghost btn-sm" onclick="handleLogout()">登出</button>
     </div>
@@ -1571,6 +1593,44 @@ let resignedLawyersMap = {}; // id -> lawyer record (resigned)
 let detailLawyerId = null;
 let detailChart   = null;
 let detailBackTarget = 'overview';
+
+// ===================== THEME TOGGLE =====================
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  html.setAttribute('data-theme', next === 'dark' ? '' : 'light');
+  document.getElementById('themeToggleBtn').textContent = next === 'light' ? '☀️' : '🌙';
+  localStorage.setItem('theme', next);
+  // 重新渲染圖表以套用新主題色
+  if (detailLawyerId && document.getElementById('pageDetail').classList.contains('active')) {
+    const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
+    const filtered = filterByYear(lawyerStats, detailYear);
+    renderDetailChart(filtered);
+  }
+}
+
+// Apply saved theme on load
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+  // Button text will be set when DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.textContent = saved === 'light' ? '☀️' : '🌙';
+  });
+})();
+
+function getChartColors() {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    text: style.getPropertyValue('--text-muted').trim() || '#8899aa',
+    grid: style.getPropertyValue('--border').trim() || 'rgba(30,48,80,0.5)',
+    gold: style.getPropertyValue('--gold-light').trim() || '#e8c97a',
+  };
+}
 
 let allCases      = [];      // all consultation_cases rows visible to this user
 
@@ -2530,35 +2590,35 @@ function renderDetailChart(stats) {
       interaction: { intersect: false, mode: 'index' },
       plugins: {
         legend: {
-          labels: { color: '#8899aa', font: { size: 12 } },
+          labels: { color: getChartColors().text, font: { size: 12 } },
         },
         tooltip: {
-          backgroundColor: '#0a1628',
-          borderColor: '#1e3050',
+          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#0a1628',
+          borderColor: getChartColors().grid,
           borderWidth: 1,
-          titleColor: '#e8c97a',
-          bodyColor: '#e0e0e0',
+          titleColor: getChartColors().gold,
+          bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0e0e0',
         },
       },
       scales: {
         x: {
-          ticks:  { color: '#8899aa', font: { size: 11 } },
-          grid:   { color: 'rgba(30,48,80,0.5)' },
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
         },
         y: {
           beginAtZero: true,
           position: 'left',
-          ticks:  { color: '#8899aa', font: { size: 11 } },
-          grid:   { color: 'rgba(30,48,80,0.5)' },
-          title:  { display: true, text: '件數', color: '#8899aa', font: { size: 11 } },
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
+          title:  { display: true, text: '件數', color: getChartColors().text, font: { size: 11 } },
         },
         y1: {
           beginAtZero: true,
           max: 100,
           position: 'right',
-          ticks:  { color: '#e8c97a', font: { size: 11 } },
+          ticks:  { color: getChartColors().gold, font: { size: 11 } },
           grid:   { drawOnChartArea: false },
-          title:  { display: true, text: '簽約率 (%)', color: '#e8c97a', font: { size: 11 } },
+          title:  { display: true, text: '簽約率 (%)', color: getChartColors().gold, font: { size: 11 } },
         },
       },
     },
@@ -3258,15 +3318,18 @@ function renderYoyRow(label, curr, prev, isPercent) {
 
   let changeText = '—';
   let changeClass = '';
+  let arrow = '';
   if (prev > 0) {
     if (isPercent) {
       const diff = curr - prev;
       changeText = (diff >= 0 ? '+' : '') + diff.toFixed(1) + 'pp';
       changeClass = diff > 0 ? 'green' : diff < 0 ? 'red' : '';
+      arrow = diff > 0 ? '▲ ' : diff < 0 ? '▼ ' : '';
     } else {
       const pct = ((curr - prev) / prev * 100);
       changeText = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
       changeClass = pct > 0 ? 'green' : pct < 0 ? 'red' : '';
+      arrow = pct > 0 ? '▲ ' : pct < 0 ? '▼ ' : '';
     }
   }
 
@@ -3274,7 +3337,7 @@ function renderYoyRow(label, curr, prev, isPercent) {
     <td>${escHtml(label)}</td>
     <td class="num">${fmtVal(curr)}</td>
     <td class="num">${fmtVal(prev)}</td>
-    <td class="num ${changeClass}">${changeText}</td>
+    <td class="num" style="color:var(--${changeClass || 'text-muted'});font-weight:${changeClass ? '600' : '400'};">${arrow}${changeText}</td>
   </tr>`;
 }
 
@@ -3341,35 +3404,35 @@ function renderQualityChart(stats) {
       interaction: { intersect: false, mode: 'index' },
       plugins: {
         legend: {
-          labels: { color: '#8899aa', font: { size: 12 } },
+          labels: { color: getChartColors().text, font: { size: 12 } },
         },
         tooltip: {
-          backgroundColor: '#0a1628',
-          borderColor: '#1e3050',
+          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#0a1628',
+          borderColor: getChartColors().grid,
           borderWidth: 1,
-          titleColor: '#e8c97a',
-          bodyColor: '#e0e0e0',
+          titleColor: getChartColors().gold,
+          bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0e0e0',
         },
       },
       scales: {
         x: {
-          ticks:  { color: '#8899aa', font: { size: 11 } },
-          grid:   { color: 'rgba(30,48,80,0.5)' },
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
         },
         y: {
           beginAtZero: true,
           position: 'left',
-          ticks:  { color: '#8899aa', font: { size: 11 } },
-          grid:   { color: 'rgba(30,48,80,0.5)' },
-          title:  { display: true, text: '件數', color: '#8899aa', font: { size: 11 } },
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
+          title:  { display: true, text: '件數', color: getChartColors().text, font: { size: 11 } },
         },
         y1: {
           beginAtZero: true,
           max: 100,
           position: 'right',
-          ticks:  { color: '#e8c97a', font: { size: 11 } },
+          ticks:  { color: getChartColors().gold, font: { size: 11 } },
           grid:   { drawOnChartArea: false },
-          title:  { display: true, text: '簽約率 (%)', color: '#e8c97a', font: { size: 11 } },
+          title:  { display: true, text: '簽約率 (%)', color: getChartColors().gold, font: { size: 11 } },
         },
       },
     },
