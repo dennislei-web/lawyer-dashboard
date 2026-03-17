@@ -206,6 +206,13 @@
 
     .btn-ghost:hover { background: var(--ghost-hover-bg); }
 
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      border: 1px solid var(--blue);
+    }
+    .btn-primary:hover { opacity: 0.85; }
+
     .btn-outline {
       background: transparent;
       border: 1px solid var(--border);
@@ -1011,6 +1018,7 @@
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
+        <button class="tab-btn" onclick="showTab('admin')" id="tab-admin" style="display:none;">帳號管理</button>
       </div>
     </div>
     <div class="header-right">
@@ -1294,6 +1302,37 @@
           <thead><tr id="unsignedTableHead"></tr></thead>
           <tbody id="unsignedTableBody">
             <tr><td colspan="5"><div class="empty-state">暫無資料</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ADMIN PAGE (admin only) ===== -->
+  <div id="pageAdmin" class="page">
+    <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-title" style="font-size:1.1rem;">帳號管理</div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">律師權限設定</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+        控制每位律師登入後看到「全部律師資料」或「僅自己的資料」
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">律師</th>
+              <th style="text-align:left;">所屬事務所</th>
+              <th style="text-align:left;">Email</th>
+              <th style="text-align:center;">資料範圍</th>
+              <th style="text-align:center;">狀態</th>
+            </tr>
+          </thead>
+          <tbody id="adminLawyerTableBody">
+            <tr><td colspan="5"><div class="loading"><span class="loading-spinner"></span>載入中...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1600,11 +1639,11 @@ async function loadDashboard(user) {
     allCases = casesFetched;
   }
 
-  // If admin, load all lawyer records for name mapping
-  if (currentLawyer.role === 'admin') {
+  // If admin or can_view_all, load all lawyer records for name mapping
+  if (canViewAll()) {
     const { data: allL } = await sb
       .from('lawyers')
-      .select('id, name, office, role, is_active')
+      .select('id, name, office, role, is_active, can_view_all')
       .order('name');
     (allL || []).forEach(l => {
       if (l.is_active === false) {
@@ -1623,7 +1662,7 @@ async function loadDashboard(user) {
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'upload', 'unsigned'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -1633,16 +1672,18 @@ function showTab(tab) {
   document.getElementById('pageTracking').classList.toggle('active', tab === 'tracking');
   document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
   document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
+  document.getElementById('pageAdmin').classList.toggle('active', tab === 'admin');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
   if (tab === 'unsigned')  renderUnsignedPage();
+  if (tab === 'admin')     renderAdminPage();
 }
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  ['overview', 'tracking', 'upload', 'unsigned'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -1650,6 +1691,7 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageTracking').classList.remove('active');
   document.getElementById('pageUpload').classList.remove('active');
   document.getElementById('pageUnsigned').classList.remove('active');
+  document.getElementById('pageAdmin').classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
   renderDetailPage();
 }
@@ -1658,12 +1700,20 @@ function goBackFromDetail() {
   showTab('overview');
 }
 
+// 判斷當前使用者是否可以看全部資料（admin 或 can_view_all）
+function canViewAll() {
+  return currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.can_view_all === true);
+}
+
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
-  // Show upload tab only for admin
+  // Show upload/admin tabs only for admin
+  const isAdmin = currentLawyer && currentLawyer.role === 'admin';
   const uploadTab = document.getElementById('tab-upload');
-  if (uploadTab) uploadTab.style.display = currentLawyer && currentLawyer.role === 'admin' ? '' : 'none';
+  if (uploadTab) uploadTab.style.display = isAdmin ? '' : 'none';
+  const adminTab = document.getElementById('tab-admin');
+  if (adminTab) adminTab.style.display = isAdmin ? '' : 'none';
 
   // Build year filter options from data
   const years = getAvailableYears(allStats);
@@ -1715,7 +1765,7 @@ function renderOverviewPage() {
   renderKpiCards(totals, 'ov');
 
   // Build lawyer rows
-  if (currentLawyer.role === 'admin') {
+  if (canViewAll()) {
     document.getElementById('overviewTableTitle').textContent = '律師排名';
     renderRankingTable(filtered);
     renderResignedSection(filtered);
@@ -1915,8 +1965,8 @@ function renderAmountRange(year) {
     signedCases = signedCases.filter(c => c.case_date && c.case_date.startsWith(year));
   }
 
-  // Non-admin: only own cases
-  if (currentLawyer.role !== 'admin') {
+  // Non-admin and non-view-all: only own cases
+  if (!canViewAll()) {
     signedCases = signedCases.filter(c => c.lawyer_id === currentLawyer.id);
   }
 
@@ -3496,6 +3546,71 @@ function setUnsignedRange(months) {
   renderUnsignedPage();
 }
 
+// ===================== ADMIN PAGE =====================
+function renderAdminPage() {
+  const tbody = document.getElementById('adminLawyerTableBody');
+  if (!tbody) return;
+
+  // Collect all active lawyers
+  const lawyers = Object.values(allLawyersMap)
+    .filter(l => l.id !== currentLawyer.id) // 不顯示自己（管理員）
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+
+  if (lawyers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暫無律師資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lawyers.map(l => {
+    const viewAll = l.can_view_all === true;
+    return `<tr>
+      <td style="font-weight:600;">${escHtml(l.name)}</td>
+      <td style="color:var(--text-muted);">${escHtml(l.office || '-')}</td>
+      <td style="color:var(--text-muted);font-size:0.82rem;">${escHtml(l.email || '-')}</td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm ${viewAll ? 'btn-primary' : 'btn-ghost'}"
+                style="min-width:120px;font-size:0.82rem;"
+                onclick="toggleViewAll('${l.id}', ${!viewAll})">
+          ${viewAll ? '👁 全部資料' : '🔒 僅自己'}
+        </button>
+      </td>
+      <td style="text-align:center;">
+        <span style="font-size:0.78rem;color:var(--${l.is_active ? 'green' : 'text-muted'});">
+          ${l.is_active ? '在職' : '離職'}
+        </span>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleViewAll(lawyerId, newValue) {
+  const lawyer = allLawyersMap[lawyerId];
+  if (!lawyer) return;
+
+  const confirmMsg = newValue
+    ? `確定讓「${lawyer.name}」看到全部律師的資料嗎？`
+    : `確定將「${lawyer.name}」改為僅看自己的資料嗎？`;
+
+  if (!confirm(confirmMsg)) return;
+
+  // Update in Supabase
+  const { error } = await sb
+    .from('lawyers')
+    .update({ can_view_all: newValue })
+    .eq('id', lawyerId);
+
+  if (error) {
+    alert('更新失敗：' + error.message);
+    return;
+  }
+
+  // Update local state
+  allLawyersMap[lawyerId].can_view_all = newValue;
+
+  // Re-render
+  renderAdminPage();
+}
+
 function renderUnsignedPage() {
   const now = new Date();
   const cutoff = new Date(now);
@@ -3506,10 +3621,10 @@ function renderUnsignedPage() {
   let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
 
   // Admin: show lawyer filter
-  const isAdmin = currentLawyer.role === 'admin';
+  const showAllData = canViewAll();
   const filterLabel = document.getElementById('unsignedLawyerFilterLabel');
   const filterSelect = document.getElementById('unsignedLawyerSelect');
-  if (isAdmin) {
+  if (showAllData) {
     filterLabel.style.display = '';
     filterSelect.style.display = '';
     // Build options if empty
