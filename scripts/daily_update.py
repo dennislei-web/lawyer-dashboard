@@ -304,6 +304,7 @@ def update_supabase(target_months):
     df = pd.read_excel(XLSX_PATH)
     df.columns = df.columns.str.strip()
     print(f"  讀取 xlsx：{len(df)} 筆")
+    print(f"  xlsx 欄位：{list(df.columns)}")
 
     # 篩選列入計算
     if "是否列入計算" in df.columns:
@@ -448,6 +449,14 @@ def update_supabase(target_months):
             "revenue": case_revenue,
             "collected": case_collected,
         })
+
+    # Debug: 統計金額
+    cases_with_amount = [r for r in case_rows if r.get("collected", 0) > 0 or r.get("revenue", 0) > 0]
+    print(f"  consultation_cases 準備寫入：{len(case_rows)} 筆，其中有金額 {len(cases_with_amount)} 筆")
+    if cases_with_amount:
+        print(f"    金額範例：{cases_with_amount[0]}")
+    elif case_rows:
+        print(f"    ⚠ 全部金額為 0，範例：{case_rows[0]}")
 
     if case_rows:
         with httpx.Client(timeout=30) as client:
