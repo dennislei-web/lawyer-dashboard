@@ -1294,6 +1294,11 @@
         <div class="yoy-value" id="yoy-rate">—</div>
         <div class="yoy-change flat" id="yoy-rate-change">vs 上一年</div>
       </div>
+      <div class="yoy-card">
+        <div class="yoy-label">諮詢效益</div>
+        <div class="yoy-value" id="yoy-eff">—</div>
+        <div class="yoy-change flat" id="yoy-eff-change">vs 上一年</div>
+      </div>
     </div>
 
     <!-- Monthly expand cards -->
@@ -2039,6 +2044,7 @@ function renderTrackingPage() {
   setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false,  currT.signed_count.toLocaleString());
   setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, '$' + Math.round(currT.collected).toLocaleString());
   setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  currT.sign_rate.toFixed(1) + '%');
+  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, '$' + Math.round(currT.consult_eff).toLocaleString());
 
   // Month cards
   renderMonthCards(currStats, currentYear);
@@ -2105,6 +2111,7 @@ function renderMonthCards(stats, year) {
             <div class="month-stat">簽約 <span>${t.signed_count}</span></div>
             <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
             <div class="month-stat">簽約率 <span class="${rateClass}">${t.sign_rate.toFixed(1)}%</span></div>
+            <div class="month-stat">諮詢效益 <span>$${Math.round(t.consult_eff).toLocaleString()}</span></div>
           </div>
         </div>
         <div class="expand-icon">▼</div>
