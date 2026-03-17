@@ -2087,32 +2087,19 @@ function renderMonthCards(stats, year) {
     const t = aggregateStats(ms);
     const rateClass = t.sign_rate >= 45 ? 'sign-rate-green' : t.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
 
-    // Per-lawyer rows for this month
+    // Per-lawyer rows for this month (store for sorting)
     const lawyerRows = buildLawyerRows(ms);
-    lawyerRows.sort((a, b) => b.collected - a.collected);
 
-    const bodyRows = lawyerRows.map((r, i) => {
-      const rc = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
-      return `<tr>
-        <td>${i + 1}. ${escHtml(r.name)}</td>
-        <td class="num">${r.consult_count}</td>
-        <td class="num">${r.signed_count}</td>
-        <td class="num ${rc}">${r.sign_rate.toFixed(1)}%</td>
-        <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-        <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
-      </tr>`;
-    }).join('');
-
-    return `<div class="month-expand-card" id="mcard-${key}">
+    return `<div class="month-expand-card" id="mcard-${key}" data-month="${key}">
       <div class="month-card-header" onclick="toggleMonthCard('${key}')">
         <div>
           <div class="month-card-name">${year}年 ${mLabel}</div>
           <div class="month-card-stats">
+            <div class="month-stat">諮詢效益 <span>$${Math.round(t.consult_eff).toLocaleString()}</span></div>
             <div class="month-stat">諮詢 <span>${t.consult_count}</span></div>
             <div class="month-stat">簽約 <span>${t.signed_count}</span></div>
-            <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
             <div class="month-stat">簽約率 <span class="${rateClass}">${t.sign_rate.toFixed(1)}%</span></div>
-            <div class="month-stat">諮詢效益 <span>$${Math.round(t.consult_eff).toLocaleString()}</span></div>
+            <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
           </div>
         </div>
         <div class="expand-icon">▼</div>
@@ -2122,17 +2109,59 @@ function renderMonthCards(stats, year) {
           <thead>
             <tr>
               <th>律師</th>
-              <th class="num">諮詢</th>
-              <th class="num">簽約</th>
-              <th class="num">簽約率</th>
-              <th class="num">已收</th>
-              <th class="num">諮詢效益</th>
+              <th class="sortable num" data-col="consult_eff" data-month="${key}">諮詢效益</th>
+              <th class="sortable num" data-col="consult_count" data-month="${key}">諮詢數</th>
+              <th class="sortable num" data-col="signed_count" data-month="${key}">簽約數</th>
+              <th class="sortable num" data-col="sign_rate" data-month="${key}">簽約率</th>
+              <th class="sortable num" data-col="collected" data-month="${key}">已收金額</th>
+              <th class="sortable num" data-col="avg_collected" data-month="${key}">平均簽約收款</th>
             </tr>
           </thead>
-          <tbody>${bodyRows}</tbody>
+          <tbody>${renderMonthBodyRows(lawyerRows, 'collected', 'desc')}</tbody>
         </table>
       </div>
     </div>`;
+  }).join('');
+
+  // Bind sort events for month card tables
+  document.querySelectorAll('.month-body-table th.sortable').forEach(th => {
+    th.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const col = th.dataset.col;
+      const monthKey = th.dataset.month;
+      const card = document.getElementById('mcard-' + monthKey);
+      const tbody = card.querySelector('tbody');
+      const table = th.closest('table');
+
+      // Toggle sort direction
+      let dir = 'desc';
+      if (th.classList.contains('sort-desc')) dir = 'asc';
+
+      // Clear sort indicators in this table
+      table.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+
+      // Re-sort data
+      const monthStats = allStats.filter(s => s.month === monthKey);
+      const rows = buildLawyerRows(monthStats);
+      tbody.innerHTML = renderMonthBodyRows(rows, col, dir);
+    });
+  });
+}
+
+function renderMonthBodyRows(lawyerRows, sortCol, sortDir) {
+  const sorted = sortRows(lawyerRows, sortCol, sortDir);
+  return sorted.map((r, i) => {
+    const rc = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    return `<tr>
+      <td>${i + 1}. ${escHtml(r.name)}</td>
+      <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+      <td class="num">${r.consult_count}</td>
+      <td class="num">${r.signed_count}</td>
+      <td class="num ${rc}">${r.sign_rate.toFixed(1)}%</td>
+      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    </tr>`;
   }).join('');
 }
 
