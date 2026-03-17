@@ -412,7 +412,9 @@ def update_supabase(target_months):
             continue
         case_number = str(row.get("案件編號", "")).strip() if "案件編號" in df.columns else ""
         if not case_number or case_number == "nan":
-            continue
+            # 自動產生唯一編號：CRM_律師ID_日期_序號
+            case_date_str = row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10]
+            case_number = f"CRM_{lawyer_id[:8]}_{case_date_str}_{len(case_rows)}"
         sign_status = str(row.get("簽約狀態", "")).strip()
         is_signed = sign_status != "" and sign_status != "nan" and "未" not in sign_status
         client_name = str(row.get("當事人", "")).strip() if "當事人" in df.columns else ""
