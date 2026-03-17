@@ -2405,7 +2405,7 @@ function setYoy(id, curr, prev, isPercent, display) {
   }
   const diff   = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
   const sign   = diff > 0 ? '+' : '';
-  const label  = isPercent ? (sign + diff.toFixed(1) + ' pp') : (sign + diff.toFixed(1) + '%');
+  const label  = isPercent ? (sign + diff.toFixed(1) + '%') : (sign + diff.toFixed(1) + '%');
   changeEl.textContent = 'vs 上一年 ' + label;
   changeEl.className   = 'yoy-change ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
 }
