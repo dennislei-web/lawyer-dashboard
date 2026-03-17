@@ -51,8 +51,8 @@
       --text-muted: #6b7280;
       --blue:       #2563eb;
       --blue-dim:   rgba(37,99,235,0.1);
-      --green:      #16a34a;
-      --green-dim:  rgba(22,163,74,0.1);
+      --green:      #15803d;
+      --green-dim:  rgba(21,128,61,0.12);
       --red:        #dc2626;
       --red-dim:    rgba(220,38,38,0.1);
       --orange:     #d97706;
@@ -710,150 +710,6 @@
       color: var(--text-muted);
     }
 
-    /* ===================== QUALITY TAB ===================== */
-    .quality-lawyer-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .quality-lawyer-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 18px 20px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .quality-lawyer-card:hover {
-      border-color: var(--gold);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    }
-
-    .ql-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-
-    .ql-card-name {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .ql-card-avg {
-      font-size: 1.2rem;
-      font-weight: 700;
-      padding: 2px 10px;
-      border-radius: 6px;
-    }
-
-    .ql-score-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-
-    .ql-score-label {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      width: 60px;
-      flex-shrink: 0;
-      text-align: right;
-    }
-
-    .ql-score-bar-bg {
-      flex: 1;
-      height: 8px;
-      background: var(--bg-row);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .ql-score-bar {
-      height: 100%;
-      border-radius: 4px;
-      transition: width 0.4s ease;
-    }
-
-    .ql-score-val {
-      font-size: 0.78rem;
-      font-weight: 600;
-      width: 28px;
-      text-align: right;
-    }
-
-    .score-green { color: var(--green); }
-    .score-gold { color: var(--gold-light); }
-    .score-red { color: var(--red); }
-
-    .bar-green { background: var(--green); }
-    .bar-gold { background: var(--gold); }
-    .bar-red { background: var(--red); }
-
-    .avg-green { background: var(--green-dim); color: var(--green); }
-    .avg-gold { background: rgba(201,168,76,0.15); color: var(--gold-light); }
-    .avg-red { background: var(--red-dim); color: var(--red); }
-
-    /* Quality detail page */
-    .quality-detail-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 20px;
-    }
-
-    .quality-detail-grid .section {
-      margin-bottom: 0;
-    }
-
-    .radar-chart-wrap {
-      position: relative;
-      height: 280px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .benchmark-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .benchmark-name {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      width: 70px;
-      flex-shrink: 0;
-      text-align: right;
-    }
-
-    .benchmark-bar-bg {
-      flex: 1;
-      height: 10px;
-      background: var(--bg-row);
-      border-radius: 5px;
-      overflow: hidden;
-    }
-
-    .benchmark-bar {
-      height: 100%;
-      border-radius: 5px;
-      transition: width 0.4s ease;
-    }
-
-    .benchmark-bar.is-self {
-      box-shadow: 0 0 6px rgba(201,168,76,0.5);
-    }
-
     .benchmark-val {
       font-size: 0.78rem;
       font-weight: 600;
@@ -1102,7 +958,6 @@
     @media (max-width: 900px) {
       .kpi-grid { grid-template-columns: repeat(3, 1fr); }
       .yoy-grid  { grid-template-columns: repeat(2, 1fr); }
-      .quality-detail-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 640px) {
@@ -1114,7 +969,6 @@
       .kpi-card:first-child { grid-column: 1 / -1; }
       .yoy-grid { grid-template-columns: 1fr 1fr; }
       .month-cards-grid { grid-template-columns: 1fr; }
-      .quality-lawyer-grid { grid-template-columns: 1fr; }
       .case-cards-grid { grid-template-columns: 1fr; }
       .login-card { padding: 30px 24px; }
     }
@@ -1419,8 +1273,6 @@
     </div>
   </div>
 
-  <!-- pageQuality removed - merged into pageDetail -->
-
   <!-- ===== UNSIGNED CASES TRACKING PAGE ===== -->
   <div id="pageUnsigned" class="page">
     <div class="section-header" style="margin-bottom:20px;">
@@ -1641,7 +1493,6 @@ function getChartColors() {
 let allCases      = [];      // all consultation_cases rows visible to this user
 
 let overviewYear = 'all';
-let qualityAmountYear = 'all';
 let detailYear   = 'all';
 
 // Ranking table sort
@@ -2154,152 +2005,6 @@ function renderAmountRange(year) {
   `;
 }
 
-// ===================== QUALITY AMOUNT RANGE =====================
-function renderQualityAmountRange() {
-  // Build year buttons from allCases
-  const caseYears = new Set();
-  allCases.forEach(c => { if (c.case_date) caseYears.add(c.case_date.slice(0, 4)); });
-  const years = ['all', ...Array.from(caseYears).sort().reverse()];
-  buildYearButtons('qualityAmountYearBar', years, qualityAmountYear, (y) => {
-    qualityAmountYear = y;
-    renderQualityAmountRangeContent(y);
-  });
-  renderQualityAmountRangeContent(qualityAmountYear);
-}
-
-function renderQualityAmountRangeContent(year) {
-  const container = document.getElementById('qualityAmountRangeContent');
-
-  // Use monthly_stats (has actual collected amounts) combined with consultation_cases for signed counts
-  let stats = allStats.filter(s => s.collected > 0 && s.signed_count > 0);
-  if (year !== 'all') {
-    stats = stats.filter(s => s.month && s.month.startsWith(year));
-  }
-  if (currentLawyer.role !== 'admin') {
-    stats = stats.filter(s => s.lawyer_id === currentLawyer.id);
-  }
-
-  // Aggregate per lawyer: total signed_count, total collected → compute avg per signed case
-  const byLawyer = {};
-  stats.forEach(s => {
-    if (!byLawyer[s.lawyer_id]) byLawyer[s.lawyer_id] = { signed: 0, collected: 0 };
-    byLawyer[s.lawyer_id].signed += s.signed_count || 0;
-    byLawyer[s.lawyer_id].collected += s.collected || 0;
-  });
-
-  // Build per-lawyer average amounts for range analysis
-  const lawyerAvgs = Object.entries(byLawyer).map(([id, d]) => ({
-    id,
-    name: allLawyersMap[id] ? allLawyersMap[id].name : id.slice(0, 8),
-    signed: d.signed,
-    collected: d.collected,
-    avg: d.signed > 0 ? d.collected / d.signed : 0,
-  })).filter(l => l.signed > 0);
-
-  if (lawyerAvgs.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
-    return;
-  }
-
-  const totalSigned = lawyerAvgs.reduce((s, l) => s + l.signed, 0);
-  const totalCollected = lawyerAvgs.reduce((s, l) => s + l.collected, 0);
-  const overallAvg = totalSigned > 0 ? totalCollected / totalSigned : 0;
-
-  // Define ranges for average signed case amount
-  const ranges = [
-    { label: '3萬以下',   min: 0,       max: 30000 },
-    { label: '3-5萬',     min: 30000,   max: 50000 },
-    { label: '5-8萬',     min: 50000,   max: 80000 },
-    { label: '8-12萬',    min: 80000,   max: 120000 },
-    { label: '12-20萬',   min: 120000,  max: 200000 },
-    { label: '20萬以上',   min: 200000,  max: Infinity },
-  ];
-
-  const rangeCounts = ranges.map(r => ({ label: r.label, count: 0, totalSigned: 0, totalCollected: 0 }));
-  lawyerAvgs.forEach(l => {
-    for (let i = 0; i < ranges.length; i++) {
-      if (l.avg >= ranges[i].min && l.avg < ranges[i].max) {
-        rangeCounts[i].count++;
-        rangeCounts[i].totalSigned += l.signed;
-        rangeCounts[i].totalCollected += l.collected;
-        break;
-      }
-    }
-  });
-
-  const maxCount = Math.max(...rangeCounts.map(r => r.count), 1);
-  const barColors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
-
-  // Per-lawyer breakdown table (admin)
-  let lawyerBreakdownHtml = '';
-  if (currentLawyer.role === 'admin') {
-    const sorted = [...lawyerAvgs].sort((a, b) => b.avg - a.avg);
-    lawyerBreakdownHtml = `
-      <div style="margin-top:20px;">
-        <div style="font-size:0.9rem;font-weight:600;color:var(--gold-light);margin-bottom:8px;">各律師平均簽約收款排行</div>
-        <table style="width:100%;">
-          <thead><tr>
-            <th style="text-align:left;">律師</th>
-            <th class="num">成案數</th>
-            <th class="num">總收款</th>
-            <th class="num">平均簽約收款</th>
-          </tr></thead>
-          <tbody>${sorted.map(r => `<tr>
-            <td>${escHtml(r.name)}</td>
-            <td class="num">${r.signed}</td>
-            <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-            <td class="num">$${Math.round(r.avg).toLocaleString()}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>`;
-  }
-
-  container.innerHTML = `
-    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
-      <div class="kpi-card" style="min-width:140px;">
-        <div class="kpi-label">總成案數</div>
-        <div class="kpi-value">${totalSigned.toLocaleString()}</div>
-      </div>
-      <div class="kpi-card" style="min-width:140px;">
-        <div class="kpi-label">總收款金額</div>
-        <div class="kpi-value gold">$${Math.round(totalCollected).toLocaleString()}</div>
-      </div>
-      <div class="kpi-card" style="min-width:140px;">
-        <div class="kpi-label">整體平均簽約收款</div>
-        <div class="kpi-value">$${Math.round(overallAvg).toLocaleString()}</div>
-      </div>
-    </div>
-    <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">以各律師「平均簽約收款」分佈統計</div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:320px;">
-        <table style="width:100%;">
-          <thead><tr>
-            <th style="text-align:left;">平均收款區間</th>
-            <th class="num">律師數</th>
-            <th class="num">佔比</th>
-            <th class="num">合計收款</th>
-            <th style="min-width:120px;"></th>
-          </tr></thead>
-          <tbody>
-            ${rangeCounts.map((r, i) => {
-              const pct = lawyerAvgs.length > 0 ? (r.count / lawyerAvgs.length * 100) : 0;
-              const barW = maxCount > 0 ? (r.count / maxCount * 100) : 0;
-              return `<tr>
-                <td>${r.label}</td>
-                <td class="num">${r.count}</td>
-                <td class="num">${pct.toFixed(1)}%</td>
-                <td class="num">$${Math.round(r.totalCollected).toLocaleString()}</td>
-                <td><div style="background:${barColors[i]};height:16px;border-radius:3px;width:${barW}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    ${lawyerBreakdownHtml}
-  `;
-}
-
 // ===================== LAWYER DETAIL AMOUNT RANGE =====================
 let lawyerAmountYear = 'all';
 
@@ -2761,9 +2466,6 @@ function toggleMonthCard(key) {
   if (el) el.classList.toggle('open');
 }
 
-// ===================== QUALITY ANALYSIS PAGE =====================
-let qualityChart = null;
-
 function generateInsights(lawyerId) {
   const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
   const totals = aggregateStats(lawyerStats);
@@ -2833,177 +2535,6 @@ function renderInsightsHtml(insights) {
       <span>${escHtml(i.text)}</span>
     </div>`
   ).join('');
-}
-
-function renderQualityPage() {
-  const container = document.getElementById('qualityContent');
-  const lawyerIds = currentLawyer.role === 'admin'
-    ? Object.keys(allLawyersMap)
-    : [currentLawyer.id];
-
-  // Calculate metrics for each lawyer
-  const lawyerMetrics = lawyerIds.map(id => {
-    const stats = allStats.filter(s => s.lawyer_id === id);
-    const totals = aggregateStats(stats);
-    return { id, name: allLawyersMap[id].name, totals };
-  }).filter(m => m.totals.consult_count > 0);
-
-  // Sort by consult_eff descending
-  lawyerMetrics.sort((a, b) => b.totals.consult_eff - a.totals.consult_eff);
-
-  // Find max values for normalization
-  const maxEff = Math.max(...lawyerMetrics.map(m => m.totals.consult_eff), 1);
-  const maxRate = 100;
-  const maxAvg = Math.max(...lawyerMetrics.map(m => m.totals.avg_collected), 1);
-
-  if (lawyerMetrics.length === 0) {
-    container.innerHTML = '<div class="empty-state">暫無資料</div>';
-    return;
-  }
-
-  container.innerHTML = '<div class="quality-lawyer-grid">' + lawyerMetrics.map((m, idx) => {
-    const eff = m.totals.consult_eff;
-    const rate = m.totals.sign_rate;
-    const avg = m.totals.avg_collected;
-
-    // Score color
-    const avgScore = Math.round((eff / maxEff * 100 + rate + avg / maxAvg * 100) / 3);
-    let avgClass, barEffClass, barRateClass, barAvgClass;
-
-    if (avgScore >= 65) avgClass = 'avg-green';
-    else if (avgScore >= 40) avgClass = 'avg-gold';
-    else avgClass = 'avg-red';
-
-    barEffClass = eff >= 45000 ? 'bar-green' : eff >= 25000 ? 'bar-gold' : 'bar-red';
-    barRateClass = rate >= 45 ? 'bar-green' : rate >= 35 ? 'bar-gold' : 'bar-red';
-    barAvgClass = avg >= 80000 ? 'bar-green' : avg >= 45000 ? 'bar-gold' : 'bar-red';
-
-    const effPct = Math.min(100, eff / maxEff * 100);
-    const ratePct = Math.min(100, rate);
-    const avgPct = Math.min(100, avg / maxAvg * 100);
-
-    return `<div class="quality-lawyer-card" onclick="showQualityDetail('${m.id}')">
-      <div class="ql-card-header">
-        <div class="ql-card-name">${escHtml(m.name)}</div>
-        <div class="ql-card-avg ${avgClass}">${avgScore}</div>
-      </div>
-      <div class="ql-score-row">
-        <span class="ql-score-label">諮詢效益</span>
-        <div class="ql-score-bar-bg"><div class="ql-score-bar ${barEffClass}" style="width:${effPct.toFixed(1)}%"></div></div>
-        <span class="ql-score-val">$${Math.round(eff / 1000)}k</span>
-      </div>
-      <div class="ql-score-row">
-        <span class="ql-score-label">成案率</span>
-        <div class="ql-score-bar-bg"><div class="ql-score-bar ${barRateClass}" style="width:${ratePct.toFixed(1)}%"></div></div>
-        <span class="ql-score-val">${rate.toFixed(0)}%</span>
-      </div>
-      <div class="ql-score-row">
-        <span class="ql-score-label">成案金額</span>
-        <div class="ql-score-bar-bg"><div class="ql-score-bar ${barAvgClass}" style="width:${avgPct.toFixed(1)}%"></div></div>
-        <span class="ql-score-val">$${Math.round(avg / 1000)}k</span>
-      </div>
-    </div>`;
-  }).join('') + '</div>';
-}
-
-function renderQualityDetailPage(lawyerId) {
-  const container = document.getElementById('qualityDetailContent');
-  const lawyer = allLawyersMap[lawyerId] || resignedLawyersMap[lawyerId];
-  if (!lawyer) {
-    container.innerHTML = '<div class="empty-state">找不到律師資料</div>';
-    return;
-  }
-
-  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
-  const totals = aggregateStats(lawyerStats);
-  const insights = generateInsights(lawyerId);
-
-  // Year-over-year data
-  const currentYear = new Date().getFullYear().toString();
-  const prevYear = (parseInt(currentYear) - 1).toString();
-  const currStats = lawyerStats.filter(s => s.month && s.month.startsWith(currentYear));
-  // 只比較同期月份（例如 2026 有 1~3 月資料，2025 也只取 1~3 月）
-  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
-  const prevStats = lawyerStats.filter(s => s.month && s.month.startsWith(prevYear) && currMonths.has(s.month.slice(5, 7)));
-  const currT = aggregateStats(currStats);
-  const prevT = aggregateStats(prevStats);
-
-  // Build HTML
-  const initials = lawyer.name.slice(-1);
-  container.innerHTML = `
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;">
-      <div class="avatar" style="width:48px;height:48px;font-size:1.2rem;">${escHtml(initials)}</div>
-      <div>
-        <div style="font-size:1.15rem;font-weight:700;color:var(--text);">${escHtml(lawyer.name)}</div>
-        <div style="font-size:0.85rem;color:var(--text-muted);">${escHtml(lawyer.office || '')}</div>
-      </div>
-    </div>
-
-    <!-- KPI Insights -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="section-title">分析建議</div>
-      </div>
-      ${renderInsightsHtml(insights)}
-    </div>
-
-    <!-- Monthly Trend Chart -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="section-title">月度趨勢</div>
-      </div>
-      <div style="position:relative;height:320px;">
-        <canvas id="qualityDetailChart"></canvas>
-      </div>
-    </div>
-
-    <!-- Year-over-Year Comparison -->
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">${currentYear} vs ${prevYear} 同期比較</div>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="detail-table">
-          <thead>
-            <tr>
-              <th>指標</th>
-              <th class="num">${currentYear}</th>
-              <th class="num">${prevYear}</th>
-              <th class="num">變化</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderYoyRow('諮詢數', currT.consult_count, prevT.consult_count, false)}
-            ${renderYoyRow('簽約數', currT.signed_count, prevT.signed_count, false)}
-            ${renderYoyRow('簽約率', currT.sign_rate, prevT.sign_rate, true)}
-            ${renderYoyRow('已收金額', currT.collected, prevT.collected, false)}
-            ${renderYoyRow('平均成案金額', currT.avg_collected, prevT.avg_collected, false)}
-            ${renderYoyRow('諮詢效益', currT.consult_eff, prevT.consult_eff, false)}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 成案金額區間分析 -->
-    <div class="section" style="margin-top:20px;">
-      <div class="section-header">
-        <div class="section-title">成案金額區間分析</div>
-      </div>
-      <div class="year-filter-bar" id="lawyerAmountYearBar" style="margin-bottom:12px;">
-        <span class="filter-label">篩選年度</span>
-      </div>
-      <div id="lawyerAmountRangeContent"></div>
-    </div>
-
-    <!-- Case Cards Section -->
-    ${renderCaseCardsSection(lawyerId)}
-  `;
-
-  // Render amount range for this lawyer
-  renderLawyerAmountRange(lawyerId);
-
-  // Render chart
-  renderQualityChart(lawyerStats);
 }
 
 // 從會議記錄分析諮詢品質
@@ -3324,104 +2855,6 @@ function renderYoyRow(label, curr, prev, isPercent) {
     <td class="num">${fmtVal(prev)}</td>
     <td class="num" style="color:var(--${changeClass || 'text-muted'});font-weight:${changeClass ? '600' : '400'};">${arrow}${changeText}</td>
   </tr>`;
-}
-
-function renderQualityChart(stats) {
-  const months = [...new Set(stats.map(s => s.month))].sort();
-  const byMonth = {};
-  stats.forEach(s => {
-    if (!byMonth[s.month]) byMonth[s.month] = { c: 0, sig: 0, col: 0 };
-    byMonth[s.month].c   += s.consult_count || 0;
-    byMonth[s.month].sig += s.signed_count  || 0;
-    byMonth[s.month].col += s.collected     || 0;
-  });
-
-  const consultData = months.map(m => byMonth[m].c);
-  const signedData  = months.map(m => byMonth[m].sig);
-  const rateData    = months.map(m =>
-    byMonth[m].c > 0 ? +(byMonth[m].sig / byMonth[m].c * 100).toFixed(1) : 0
-  );
-
-  if (qualityChart) qualityChart.destroy();
-
-  const ctx = document.getElementById('qualityDetailChart').getContext('2d');
-  qualityChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: months,
-      datasets: [
-        {
-          label: '諮詢數',
-          data: consultData,
-          backgroundColor: 'rgba(79,142,247,0.55)',
-          borderColor: 'rgba(79,142,247,0.85)',
-          borderWidth: 1,
-          borderRadius: 5,
-          yAxisID: 'y',
-        },
-        {
-          label: '簽約數',
-          data: signedData,
-          backgroundColor: 'rgba(76,175,130,0.55)',
-          borderColor: 'rgba(76,175,130,0.85)',
-          borderWidth: 1,
-          borderRadius: 5,
-          yAxisID: 'y',
-        },
-        {
-          label: '簽約率 (%)',
-          data: rateData,
-          type: 'line',
-          borderColor: '#e8c97a',
-          backgroundColor: 'rgba(232,201,122,0.12)',
-          borderWidth: 2,
-          pointRadius: 4,
-          pointBackgroundColor: '#e8c97a',
-          tension: 0.3,
-          fill: true,
-          yAxisID: 'y1',
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { intersect: false, mode: 'index' },
-      plugins: {
-        legend: {
-          labels: { color: getChartColors().text, font: { size: 12 } },
-        },
-        tooltip: {
-          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#0a1628',
-          borderColor: getChartColors().grid,
-          borderWidth: 1,
-          titleColor: getChartColors().gold,
-          bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0e0e0',
-        },
-      },
-      scales: {
-        x: {
-          ticks:  { color: getChartColors().text, font: { size: 11 } },
-          grid:   { color: getChartColors().grid },
-        },
-        y: {
-          beginAtZero: true,
-          position: 'left',
-          ticks:  { color: getChartColors().text, font: { size: 11 } },
-          grid:   { color: getChartColors().grid },
-          title:  { display: true, text: '件數', color: getChartColors().text, font: { size: 11 } },
-        },
-        y1: {
-          beginAtZero: true,
-          max: 100,
-          position: 'right',
-          ticks:  { color: getChartColors().gold, font: { size: 11 } },
-          grid:   { drawOnChartArea: false },
-          title:  { display: true, text: '簽約率 (%)', color: getChartColors().gold, font: { size: 11 } },
-        },
-      },
-    },
-  });
 }
 
 function renderDetailInsights(lawyerId) {
