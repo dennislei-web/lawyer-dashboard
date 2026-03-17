@@ -28,6 +28,9 @@
       --red-dim:    rgba(224,92,92,0.15);
       --orange:     #e0954a;
       --orange-dim: rgba(224,149,74,0.15);
+      --brand-color: #e8c97a;
+      --header-bg:  rgba(10,22,40,0.95);
+      --login-shadow: rgba(0,0,0,0.5);
     }
 
     [data-theme="light"] {
@@ -49,6 +52,9 @@
       --red-dim:    rgba(220,38,38,0.1);
       --orange:     #d97706;
       --orange-dim: rgba(217,119,6,0.1);
+      --brand-color: #1a1a2e;
+      --header-bg:  rgba(255,255,255,0.95);
+      --login-shadow: rgba(0,0,0,0.12);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -87,7 +93,7 @@
       padding: 44px 40px;
       width: 100%;
       max-width: 420px;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      box-shadow: 0 24px 64px var(--login-shadow);
     }
 
     .login-logo {
@@ -217,7 +223,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(10,22,40,0.95);
+      background: var(--header-bg);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
@@ -236,7 +242,7 @@
     .header-brand {
       font-size: 1rem;
       font-weight: 700;
-      color: var(--gold-light);
+      color: var(--brand-color, var(--gold-light));
       letter-spacing: 1px;
       white-space: nowrap;
     }
@@ -1139,7 +1145,6 @@
       <div class="tab-nav" id="tabNav">
         <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">總覽</button>
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
-        <button class="tab-btn" onclick="showTab('quality')" id="tab-quality">諮詢品質分析</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
       </div>
@@ -1404,16 +1409,7 @@
     </div>
   </div>
 
-  <!-- ===== QUALITY ANALYSIS PAGE ===== -->
-  <div class="page" id="pageQuality">
-    <div class="section-header" style="margin-bottom:20px;">
-      <div class="section-title" style="font-size:1.1rem;">諮詢品質分析</div>
-    </div>
-    <div id="qualityContent">
-      <div class="loading"><span class="loading-spinner"></span>載入中...</div>
-    </div>
-
-  </div>
+  <!-- pageQuality removed - merged into pageDetail -->
 
   <!-- ===== UNSIGNED CASES TRACKING PAGE ===== -->
   <div id="pageUnsigned" class="page">
@@ -1766,7 +1762,7 @@ async function loadDashboard(user) {
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -1774,44 +1770,23 @@ function showTab(tab) {
   document.getElementById('pageOverview').classList.toggle('active', tab === 'overview');
   document.getElementById('pageDetail').classList.toggle('active',   tab === 'detail');
   document.getElementById('pageTracking').classList.toggle('active', tab === 'tracking');
-  document.getElementById('pageQuality').classList.toggle('active', tab === 'quality');
   document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
   document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
-  if (tab === 'quality')   renderQualityPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
   if (tab === 'unsigned')  renderUnsignedPage();
 }
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  detailBackTarget = 'overview';
-  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
   document.getElementById('pageOverview').classList.remove('active');
   document.getElementById('pageTracking').classList.remove('active');
-  document.getElementById('pageQuality').classList.remove('active');
-  document.getElementById('pageUpload').classList.remove('active');
-  document.getElementById('pageUnsigned').classList.remove('active');
-  document.getElementById('pageDetail').classList.add('active');
-  renderDetailPage();
-}
-
-function showQualityDetail(lawyerId) {
-  detailLawyerId = lawyerId;
-  detailBackTarget = 'quality';
-  ['overview', 'tracking', 'quality', 'upload', 'unsigned'].forEach(t => {
-    const el = document.getElementById('tab-' + t);
-    if (el) el.classList.remove('active');
-  });
-  document.getElementById('tab-quality').classList.add('active');
-  document.getElementById('pageOverview').classList.remove('active');
-  document.getElementById('pageTracking').classList.remove('active');
-  document.getElementById('pageQuality').classList.remove('active');
   document.getElementById('pageUpload').classList.remove('active');
   document.getElementById('pageUnsigned').classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
@@ -1819,7 +1794,7 @@ function showQualityDetail(lawyerId) {
 }
 
 function goBackFromDetail() {
-  showTab(detailBackTarget);
+  showTab('overview');
 }
 
 function showDashboard() {
@@ -2459,7 +2434,7 @@ function renderDetailPage() {
   document.getElementById('detailName').textContent   = name;
   document.getElementById('detailAvatar').textContent = initials;
   document.getElementById('detailMeta').textContent   = lawyer ? (lawyer.office || '') : '';
-  document.getElementById('detailBackBtn').textContent = detailBackTarget === 'quality' ? '← 返回品質分析' : '← 返回總覽';
+  document.getElementById('detailBackBtn').textContent = '← 返回總覽';
 
   const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
   const years       = getAvailableYears(lawyerStats);
