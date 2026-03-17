@@ -2100,6 +2100,7 @@ function renderMonthCards(stats, year) {
             <div class="month-stat">簽約 <span>${t.signed_count}</span></div>
             <div class="month-stat">簽約率 <span class="${rateClass}">${t.sign_rate.toFixed(1)}%</span></div>
             <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
+            <div class="month-stat">平均收款 <span>$${Math.round(t.avg_collected).toLocaleString()}</span></div>
           </div>
         </div>
         <div class="expand-icon">▼</div>
