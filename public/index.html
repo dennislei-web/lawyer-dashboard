@@ -2524,14 +2524,15 @@ function analyzeMeetingRecord(text, isSigned) {
 }
 
 function renderCaseCardsSection(lawyerId) {
-  const cases = allCases.filter(c => c.lawyer_id === lawyerId);
+  // 只顯示有會議紀錄或逐字稿的案件
+  const cases = allCases.filter(c => c.lawyer_id === lawyerId && (c.meeting_record || c.transcript));
   if (cases.length === 0) {
     return `
       <div class="section" style="margin-top:20px;">
         <div class="section-header">
-          <div class="section-title">諮詢案件記錄</div>
+          <div class="section-title">諮詢案件評比</div>
         </div>
-        <div class="empty-state">尚無案件記錄</div>
+        <div class="empty-state">尚無已上傳會議紀錄或逐字稿的案件</div>
       </div>`;
   }
 
