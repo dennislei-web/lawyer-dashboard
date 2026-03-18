@@ -406,7 +406,7 @@ def update_supabase(target_months):
         for i in range(0, len(rows), batch_size):
             batch = rows[i:i + batch_size]
             resp = client.post(
-                f"{SUPABASE_URL}/rest/v1/monthly_stats",
+                f"{SUPABASE_URL}/rest/v1/monthly_stats?on_conflict=lawyer_id,month",
                 json=batch,
                 headers=upsert_headers,
             )
