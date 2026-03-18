@@ -1622,21 +1622,25 @@ async function loadDashboard(user) {
     // Try with revenue/collected columns; fall back if not yet migrated
     let selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript';
     const testRes = await sb.from('consultation_cases').select(selectCols).limit(1);
+    console.log('[DEBUG] consultation_cases test:', testRes.error ? 'ERROR: ' + testRes.error.message : 'OK', testRes.data?.length);
     if (testRes.error) {
       selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
     }
     while (true) {
-      const { data: page } = await sb
+      const { data: page, error: pageErr } = await sb
         .from('consultation_cases')
         .select(selectCols)
         .order('case_date', { ascending: false })
         .range(from, from + pageSize - 1);
+      if (pageErr) { console.error('[DEBUG] cases fetch error at offset', from, pageErr.message); break; }
       if (!page || page.length === 0) break;
       casesFetched = casesFetched.concat(page);
+      console.log('[DEBUG] cases fetched page:', from, 'rows:', page.length, 'total:', casesFetched.length);
       if (page.length < pageSize) break;
       from += pageSize;
     }
     allCases = casesFetched;
+    console.log('[DEBUG] allCases total:', allCases.length);
   }
 
   // If admin or can_view_all, load all lawyer records for name mapping
@@ -3612,6 +3616,7 @@ async function toggleViewAll(lawyerId, newValue) {
 }
 
 function renderUnsignedPage() {
+  console.log('[DEBUG] renderUnsignedPage called, allCases.length=', allCases.length);
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - unsignedRange);
@@ -3619,6 +3624,7 @@ function renderUnsignedPage() {
 
   // Filter unsigned cases within date range
   let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+  console.log('[DEBUG] unsigned cases in range:', cases.length, 'cutoff:', cutoffStr);
 
   // Admin: show lawyer filter
   const showAllData = canViewAll();
