@@ -1585,8 +1585,9 @@ async function loadDashboard(user) {
     .select('*')
     .eq('auth_user_id', user.id);
 
+  console.log('[DEBUG] lawyers query:', { error: error?.message, data: lawyers?.length, uid: user.id });
   if (error || !lawyers || lawyers.length === 0) {
-    showErr('loginError', '找不到律師資料，請聯繫管理員');
+    showErr('loginError', '找不到律師資料，請聯繫管理員 (err=' + (error?.message || 'no data') + ')');
     await sb.auth.signOut();
     return;
   }
