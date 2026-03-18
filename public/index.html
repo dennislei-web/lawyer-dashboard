@@ -1050,6 +1050,10 @@
         <div class="kpi-value" id="ov-sign-rate">—</div>
       </div>
       <div class="kpi-card">
+        <div class="kpi-label">諮詢效益</div>
+        <div class="kpi-value" id="ov-consult-eff">—</div>
+      </div>
+      <div class="kpi-card">
         <div class="kpi-label">累計已收金額</div>
         <div class="kpi-value gold" id="ov-collected">—</div>
       </div>
@@ -1800,6 +1804,7 @@ function renderKpiCards(totals, prefix) {
 
   setText(prefix + '-consults',     totals.consult_count.toLocaleString());
   setText(prefix + '-signed',       totals.signed_count.toLocaleString());
+  setText(prefix + '-consult-eff',  '$' + Math.round(totals.consult_eff).toLocaleString());
   setText(prefix + '-collected',    '$' + Math.round(totals.collected).toLocaleString());
   setText(prefix + '-avg-collected','$' + Math.round(totals.avg_collected).toLocaleString());
 
