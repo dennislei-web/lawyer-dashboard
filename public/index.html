@@ -1585,9 +1585,8 @@ async function loadDashboard(user) {
     .select('*')
     .eq('auth_user_id', user.id);
 
-  console.log('[DEBUG] lawyers query:', { error: error?.message, data: lawyers?.length, uid: user.id });
   if (error || !lawyers || lawyers.length === 0) {
-    showErr('loginError', '找不到律師資料，請聯繫管理員 (err=' + (error?.message || 'no data') + ')');
+    showErr('loginError', '找不到律師資料，請聯繫管理員');
     await sb.auth.signOut();
     return;
   }
@@ -1623,7 +1622,6 @@ async function loadDashboard(user) {
     // Try with revenue/collected columns; fall back if not yet migrated
     let selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript';
     const testRes = await sb.from('consultation_cases').select(selectCols).limit(1);
-    console.log('[DEBUG] consultation_cases test:', testRes.error ? 'ERROR: ' + testRes.error.message : 'OK', testRes.data?.length);
     if (testRes.error) {
       selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
     }
@@ -1633,15 +1631,13 @@ async function loadDashboard(user) {
         .select(selectCols)
         .order('case_date', { ascending: false })
         .range(from, from + pageSize - 1);
-      if (pageErr) { console.error('[DEBUG] cases fetch error at offset', from, pageErr.message); break; }
+      if (pageErr) { console.error('cases fetch error at offset', from, pageErr.message); break; }
       if (!page || page.length === 0) break;
       casesFetched = casesFetched.concat(page);
-      console.log('[DEBUG] cases fetched page:', from, 'rows:', page.length, 'total:', casesFetched.length);
       if (page.length < pageSize) break;
       from += pageSize;
     }
     allCases = casesFetched;
-    console.log('[DEBUG] allCases total:', allCases.length);
   }
 
   // If admin or can_view_all, load all lawyer records for name mapping
@@ -3617,7 +3613,6 @@ async function toggleViewAll(lawyerId, newValue) {
 }
 
 function renderUnsignedPage() {
-  console.log('[DEBUG] renderUnsignedPage called, allCases.length=', allCases.length);
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - unsignedRange);
@@ -3625,7 +3620,6 @@ function renderUnsignedPage() {
 
   // Filter unsigned cases within date range
   let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
-  console.log('[DEBUG] unsigned cases in range:', cases.length, 'cutoff:', cutoffStr);
 
   // Admin: show lawyer filter
   const showAllData = canViewAll();
@@ -3658,7 +3652,7 @@ function renderUnsignedPage() {
   document.getElementById('unsignedSummary').innerHTML =
     `<div style="display:flex;gap:24px;flex-wrap:wrap;">
       <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${totalCount}</div></div>
-      ${isAdmin ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
+      ${showAllData ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
     </div>`;
 
   // Sort
@@ -3672,7 +3666,7 @@ function renderUnsignedPage() {
     { key: 'client_name', label: '當事人' },
     { key: 'case_type', label: '案件類型' },
   ];
-  if (isAdmin) cols.push({ key: 'lawyer_name', label: '諮詢律師' });
+  if (showAllData) cols.push({ key: 'lawyer_name', label: '諮詢律師' });
   cols.push({ key: 'days_ago', label: '距今天數' });
 
   headRow.innerHTML = cols.map(c => {
@@ -3711,7 +3705,7 @@ function renderUnsignedPage() {
       <td>${escHtml(c.case_number || '')}</td>
       <td>${escHtml(c.client_name || '—')}</td>
       <td>${escHtml(c.case_type || '—')}</td>
-      ${isAdmin ? `<td>${escHtml(lawyerName)}</td>` : ''}
+      ${showAllData ? `<td>${escHtml(lawyerName)}</td>` : ''}
       <td class="num ${daysClass}">${daysAgo}</td>
     </tr>`;
   }).join('');
