@@ -1350,10 +1350,11 @@
 
     <!-- Existing data summary -->
     <div id="uploadDataSummary" class="section" style="margin-bottom:20px;">
-      <div class="section-header">
+      <div class="section-header" style="cursor:pointer;" onclick="const c=document.getElementById('uploadSummaryContent');const a=this.querySelector('.collapse-arrow');if(c.style.display==='none'){c.style.display='';a.style.transform='rotate(0deg)';}else{c.style.display='none';a.style.transform='rotate(-90deg)';}">
         <div class="section-title">已匯入會議紀錄 / 逐字稿總覽</div>
+        <span class="collapse-arrow" style="transition:transform 0.2s;display:inline-block;">▼</span>
       </div>
-      <div id="uploadSummaryContent"></div>
+      <div id="uploadSummaryContent" style="display:none;"></div>
     </div>
 
     <!-- Sync Status -->
