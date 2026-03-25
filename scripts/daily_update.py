@@ -52,8 +52,11 @@ SIGNED_MAP = {
     "initial": "未填寫",
     "unsigned": "未簽約",
     "signed_and_paid_in_full": "已簽約已付清",
-    "signed_with_office_installment": "已簽約事務所分期付款",
+    "signed_with_office_installment": "已簽約事務所分期",
     "signed_unpaid": "已簽約未付款",
+    "signed_and_unpaid": "已簽約未付款",
+    "signed_and_installment": "已簽約分期",
+    "signed_with_loan_installment": "已簽約貸款分期",
 }
 
 CONSULT_HEADERS = [
