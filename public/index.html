@@ -1303,6 +1303,9 @@
       <span class="filter-label" id="unsignedLawyerFilterLabel" style="margin-left:20px;display:none;">律師</span>
       <select id="unsignedLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
       </select>
+      <span class="filter-label" id="unsignedStaffFilterLabel" style="margin-left:20px;display:none;">法務</span>
+      <select id="unsignedStaffSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
+      </select>
     </div>
     <div id="unsignedSummary" style="margin-bottom:16px;"></div>
     <div class="section">
@@ -1630,7 +1633,7 @@ async function loadDashboard(user) {
     let from = 0;
     const pageSize = 1000;
     // Try with revenue/collected columns; fall back if not yet migrated
-    let selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript';
+    let selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status';
     const testRes = await sb.from('consultation_cases').select(selectCols).limit(1);
     if (testRes.error) {
       selectCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
@@ -3661,10 +3664,14 @@ function renderUnsignedPage() {
   const showAllData = canViewAll();
   const filterLabel = document.getElementById('unsignedLawyerFilterLabel');
   const filterSelect = document.getElementById('unsignedLawyerSelect');
+  const staffLabel = document.getElementById('unsignedStaffFilterLabel');
+  const staffSelect = document.getElementById('unsignedStaffSelect');
   if (showAllData) {
     filterLabel.style.display = '';
     filterSelect.style.display = '';
-    // Build options if empty
+    staffLabel.style.display = '';
+    staffSelect.style.display = '';
+    // Build lawyer options if empty
     if (filterSelect.options.length <= 1) {
       filterSelect.innerHTML = '<option value="">全部律師</option>';
       const lawyers = Object.values(allLawyersMap).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
@@ -3672,13 +3679,30 @@ function renderUnsignedPage() {
         filterSelect.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
       });
     }
+    // Build staff filter from tracking_staff data
+    if (staffSelect.options.length <= 1) {
+      staffSelect.innerHTML = '<option value="">全部法務</option>';
+      const staffSet = new Set();
+      allCases.forEach(c => {
+        if (c.tracking_staff) c.tracking_staff.split(',').forEach(s => { const t = s.trim(); if (t) staffSet.add(t); });
+      });
+      [...staffSet].sort((a, b) => a.localeCompare(b, 'zh')).forEach(s => {
+        staffSelect.innerHTML += `<option value="${s}">${escHtml(s)}</option>`;
+      });
+    }
     const selectedLawyer = filterSelect.value;
     if (selectedLawyer) {
       cases = cases.filter(c => c.lawyer_id === selectedLawyer);
     }
+    const selectedStaff = staffSelect.value;
+    if (selectedStaff) {
+      cases = cases.filter(c => c.tracking_staff && c.tracking_staff.includes(selectedStaff));
+    }
   } else {
     filterLabel.style.display = 'none';
     filterSelect.style.display = 'none';
+    staffLabel.style.display = 'none';
+    staffSelect.style.display = 'none';
     cases = cases.filter(c => c.lawyer_id === currentLawyer.id);
   }
 
@@ -3703,7 +3727,10 @@ function renderUnsignedPage() {
     { key: 'case_type', label: '案件類型' },
   ];
   if (showAllData) cols.push({ key: 'lawyer_name', label: '諮詢律師' });
+  cols.push({ key: 'tracking_staff', label: '負責法務' });
+  cols.push({ key: 'tracking_status', label: '追蹤狀態' });
   cols.push({ key: 'days_ago', label: '距今天數' });
+  cols.push({ key: 'tracking_notes', label: '備註' });
 
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
@@ -3736,13 +3763,21 @@ function renderUnsignedPage() {
     const daysAgo = Math.floor((todayMs - new Date(c.case_date).getTime()) / 86400000);
     const lawyerName = allLawyersMap[c.lawyer_id] ? allLawyersMap[c.lawyer_id].name : '—';
     const daysClass = daysAgo > 90 ? 'sign-rate-red' : daysAgo > 30 ? 'sign-rate-orange' : '';
+    const notes = c.tracking_notes || '';
+    const shortNotes = notes.length > 60 ? notes.slice(0, 60) + '…' : notes;
+    const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
       <td>${c.case_date}</td>
       <td>${escHtml(c.case_number || '')}</td>
       <td>${escHtml(c.client_name || '—')}</td>
       <td>${escHtml(c.case_type || '—')}</td>
       ${showAllData ? `<td>${escHtml(lawyerName)}</td>` : ''}
+      <td>${escHtml(c.tracking_staff || '—')}</td>
+      <td style="color:${statusColor};font-size:0.82rem;">${escHtml(c.tracking_status || '—')}</td>
       <td class="num ${daysClass}">${daysAgo}</td>
+      <td style="max-width:300px;font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;${notes.length > 60 ? 'cursor:pointer;' : ''}"
+          ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
+          >${escHtml(shortNotes) || '—'}</td>
     </tr>`;
   }).join('');
 }

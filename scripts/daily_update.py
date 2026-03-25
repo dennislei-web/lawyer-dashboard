@@ -517,7 +517,133 @@ def update_supabase(target_months):
 
 
 # ═══════════════════════════════════════════════════════════
-#  Step 3: 寫入同步狀態
+#  Step 3: 爬取客戶關係追蹤表
+# ═══════════════════════════════════════════════════════════
+
+# 追蹤表負責法務人員
+TRACKING_STAFF = [
+    "江欣柔", "方浚煜", "黃逸庭", "謝依璇",
+    "李音忻", "賴佳瑩", "曾靖雯", "董沐穎",
+]
+
+
+def scrape_tracking_table(session, target_months):
+    """透過 JSON API 爬取客戶關係追蹤表。"""
+    print(f"\n{'='*50}")
+    print("  Step 3: 爬取客戶關係追蹤表")
+    print(f"{'='*50}")
+
+    sorted_months = sorted(target_months)
+    first_y, first_m = sorted_months[0]
+    last_y, last_m = sorted_months[-1]
+
+    import calendar
+    start_date = f"{first_y}-{first_m:02d}-01"
+    last_day = calendar.monthrange(last_y, last_m)[1]
+    end_date = f"{last_y}-{last_m:02d}-{last_day}"
+
+    users_str = ",".join(TRACKING_STAFF)
+    url = f"{CRM_BASE_URL}/api/consultation_trackings"
+    params = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "users": users_str,
+    }
+
+    print(f"  日期範圍：{start_date} ~ {end_date}")
+    print(f"  法務人員：{users_str}")
+    print(f"  爬取中...", end=" ", flush=True)
+
+    resp = session.get(url, params=params)
+    if resp.status_code != 200:
+        print(f"失敗 (HTTP {resp.status_code})")
+        return []
+
+    try:
+        data = resp.json()
+    except Exception:
+        print("回應非 JSON")
+        return []
+
+    if not isinstance(data, list):
+        print(f"預期陣列，得到 {type(data)}")
+        return []
+
+    rows = []
+    for r in data:
+        try:
+            cases = r.get("cases", [])
+            case = cases[0] if cases else {}
+            case_number = case.get("serial_number", "")
+            if not case_number:
+                continue
+
+            # 備註（HTML → 純文字）
+            desc = r.get("description", "") or ""
+            notes = re.sub(r"<[^>]+>", "", desc).strip()
+
+            # 負責法務（sales 欄位）
+            sales = r.get("sales", [])
+            staff = ", ".join(s.get("name", "") for s in sales if isinstance(s, dict) and s.get("name"))
+
+            # 簽約狀態
+            signed_state = r.get("signed_state", "")
+            tracking_status = SIGNED_MAP.get(signed_state, signed_state)
+
+            rows.append({
+                "case_number": case_number,
+                "tracking_staff": staff,
+                "tracking_notes": notes,
+                "tracking_status": tracking_status,
+            })
+        except Exception as e:
+            print(f"    解析追蹤記錄失敗: {e}")
+            continue
+
+    print(f"OK，取得 {len(rows)} 筆追蹤資料")
+    return rows
+
+
+def update_tracking_in_supabase(tracking_rows):
+    """透過案件編號更新 consultation_cases 的追蹤欄位。"""
+    if not tracking_rows:
+        return
+
+    import httpx
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+
+    print(f"  更新 {len(tracking_rows)} 筆追蹤資料到 Supabase...", end=" ", flush=True)
+
+    updated = 0
+    with httpx.Client(timeout=30) as client:
+        for row in tracking_rows:
+            cn = row["case_number"]
+            payload = {
+                "tracking_staff": row["tracking_staff"],
+                "tracking_notes": row["tracking_notes"],
+                "tracking_status": row["tracking_status"],
+            }
+            resp = client.patch(
+                f"{SUPABASE_URL}/rest/v1/consultation_cases",
+                params={"case_number": f"eq.{cn}"},
+                json=payload,
+                headers=headers,
+            )
+            if resp.status_code in (200, 204):
+                updated += 1
+            # 404/no match 是正常的（追蹤表的案件可能不在 consultation_cases）
+
+    print(f"已更新 {updated}/{len(tracking_rows)} 筆")
+
+
+# ═══════════════════════════════════════════════════════════
+#  Step 4: 寫入同步狀態
 # ═══════════════════════════════════════════════════════════
 
 def write_sync_status(status, message, scraped_months="", rows_scraped=0, rows_updated=0, started_at=None):
@@ -599,6 +725,7 @@ def main():
     parser.add_argument("--all", action="store_true", help="全部重抓 (2020 至今)")
     parser.add_argument("--skip-scrape", action="store_true", help="跳過爬蟲，只更新 Supabase")
     parser.add_argument("--skip-supabase", action="store_true", help="跳過 Supabase，只爬 CRM")
+    parser.add_argument("--skip-tracking", action="store_true", help="跳過客戶關係追蹤表")
     args = parser.parse_args()
 
     target_months = resolve_target_months(args)
@@ -643,6 +770,14 @@ def main():
             rows_updated = result or 0
         else:
             print("\n  (跳過 Supabase 更新)")
+
+        # Step 3: 爬取客戶關係追蹤表
+        if not args.skip_scrape and not args.skip_tracking:
+            tracking_session = crm_login(email, password)
+            tracking_rows = scrape_tracking_table(tracking_session, target_months)
+            update_tracking_in_supabase(tracking_rows)
+        else:
+            print("\n  (跳過客戶關係追蹤表)")
 
     except Exception as e:
         print(f"\n  ❌ 錯誤：{e}")
