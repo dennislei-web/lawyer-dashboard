@@ -1689,7 +1689,10 @@ function showTab(tab) {
   if (tab === 'tracking')  renderTrackingPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
   if (tab === 'unsigned')  renderUnsignedPage();
-  if (tab === 'admin')     renderAdminPage();
+  if (tab === 'admin') {
+    if (!currentLawyer || currentLawyer.role !== 'admin') return;
+    renderAdminPage();
+  }
 }
 
 function showDetailPage(lawyerId) {
@@ -1711,18 +1714,19 @@ function goBackFromDetail() {
   showTab('overview');
 }
 
-// 判斷當前使用者是否可以看全部資料（admin 或 can_view_all）
+// 判斷當前使用者是否可以看全部資料（admin、manager 或 can_view_all）
 function canViewAll() {
-  return currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.can_view_all === true);
+  return currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager' || currentLawyer.can_view_all === true);
 }
 
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
-  // Show upload/admin tabs only for admin
+  // Show tabs based on role: admin sees all, manager sees upload but not admin
   const isAdmin = currentLawyer && currentLawyer.role === 'admin';
+  const isManager = currentLawyer && currentLawyer.role === 'manager';
   const uploadTab = document.getElementById('tab-upload');
-  if (uploadTab) uploadTab.style.display = isAdmin ? '' : 'none';
+  if (uploadTab) uploadTab.style.display = (isAdmin || isManager) ? '' : 'none';
   const adminTab = document.getElementById('tab-admin');
   if (adminTab) adminTab.style.display = isAdmin ? '' : 'none';
 
@@ -3574,17 +3578,26 @@ function renderAdminPage() {
   }
 
   tbody.innerHTML = lawyers.map(l => {
+    const role = l.role || 'lawyer';
     const viewAll = l.can_view_all === true;
+    // 角色顯示：admin=管理員, manager=主管, lawyer=律師
+    const roleBadge = role === 'admin' ? '🔑 管理員'
+      : role === 'manager' ? '📊 主管'
+      : viewAll ? '👁 全部資料' : '🔒 僅自己';
+    const roleColor = role === 'admin' ? 'var(--gold-light)'
+      : role === 'manager' ? 'var(--blue)' : 'var(--text-muted)';
     return `<tr>
       <td style="font-weight:600;">${escHtml(l.name)}</td>
       <td style="color:var(--text-muted);">${escHtml(l.office || '-')}</td>
       <td style="color:var(--text-muted);font-size:0.82rem;">${escHtml(l.email || '-')}</td>
       <td style="text-align:center;">
-        <button class="btn btn-sm ${viewAll ? 'btn-primary' : 'btn-ghost'}"
-                style="min-width:120px;font-size:0.82rem;"
-                onclick="toggleViewAll('${l.id}', ${!viewAll})">
-          ${viewAll ? '👁 全部資料' : '🔒 僅自己'}
-        </button>
+        <select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;"
+                onchange="changeRole('${l.id}', this.value)">
+          <option value="lawyer" ${role === 'lawyer' && !viewAll ? 'selected' : ''}>🔒 律師（僅自己）</option>
+          <option value="lawyer_viewall" ${role === 'lawyer' && viewAll ? 'selected' : ''}>👁 律師（全部資料）</option>
+          <option value="manager" ${role === 'manager' ? 'selected' : ''}>📊 主管</option>
+          <option value="admin" ${role === 'admin' ? 'selected' : ''}>🔑 管理員</option>
+        </select>
       </td>
       <td style="text-align:center;">
         <span style="font-size:0.78rem;color:var(--${l.is_active ? 'green' : 'text-muted'});">
@@ -3595,31 +3608,43 @@ function renderAdminPage() {
   }).join('');
 }
 
-async function toggleViewAll(lawyerId, newValue) {
+async function changeRole(lawyerId, newRole) {
   const lawyer = allLawyersMap[lawyerId];
   if (!lawyer) return;
 
-  const confirmMsg = newValue
-    ? `確定讓「${lawyer.name}」看到全部律師的資料嗎？`
-    : `確定將「${lawyer.name}」改為僅看自己的資料嗎？`;
+  // Parse the composite value
+  let role, canViewAll;
+  if (newRole === 'admin') {
+    role = 'admin'; canViewAll = true;
+  } else if (newRole === 'manager') {
+    role = 'manager'; canViewAll = true;
+  } else if (newRole === 'lawyer_viewall') {
+    role = 'lawyer'; canViewAll = true;
+  } else {
+    role = 'lawyer'; canViewAll = false;
+  }
 
-  if (!confirm(confirmMsg)) return;
+  const roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : canViewAll ? '律師（全部資料）' : '律師（僅自己）';
+  if (!confirm(`確定將「${lawyer.name}」設為「${roleLabel}」嗎？`)) {
+    renderAdminPage(); // reset dropdown
+    return;
+  }
 
-  // Update in Supabase
   const { error } = await sb
     .from('lawyers')
-    .update({ can_view_all: newValue })
+    .update({ role, can_view_all: canViewAll })
     .eq('id', lawyerId);
 
   if (error) {
     alert('更新失敗：' + error.message);
+    renderAdminPage();
     return;
   }
 
   // Update local state
-  allLawyersMap[lawyerId].can_view_all = newValue;
+  allLawyersMap[lawyerId].role = role;
+  allLawyersMap[lawyerId].can_view_all = canViewAll;
 
-  // Re-render
   renderAdminPage();
 }
 
