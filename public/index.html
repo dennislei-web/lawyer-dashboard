@@ -1336,8 +1336,8 @@
         <table>
           <thead>
             <tr>
-              <th style="text-align:left;">律師</th>
-              <th style="text-align:left;">所屬事務所</th>
+              <th style="text-align:left;cursor:pointer;" onclick="adminSortBy='name';renderAdminPage();">律師 <span id="adminSortName">▼</span></th>
+              <th style="text-align:left;cursor:pointer;" onclick="adminSortBy='office';renderAdminPage();">所屬事務所 <span id="adminSortOffice"></span></th>
               <th style="text-align:left;">Email</th>
               <th style="text-align:center;">資料範圍</th>
               <th style="text-align:center;">狀態</th>
@@ -3566,14 +3566,27 @@ function setUnsignedRange(months) {
 }
 
 // ===================== ADMIN PAGE =====================
+let adminSortBy = 'name';
 function renderAdminPage() {
   const tbody = document.getElementById('adminLawyerTableBody');
   if (!tbody) return;
 
+  // Update sort indicators
+  const sn = document.getElementById('adminSortName');
+  const so = document.getElementById('adminSortOffice');
+  if (sn) sn.textContent = adminSortBy === 'name' ? '▼' : '';
+  if (so) so.textContent = adminSortBy === 'office' ? '▼' : '';
+
   // Collect all active lawyers
   const lawyers = Object.values(allLawyersMap)
-    .filter(l => l.id !== currentLawyer.id && l.role !== 'legal_staff') // 不顯示自己和法務人員
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+    .filter(l => l.id !== currentLawyer.id && l.role !== 'legal_staff')
+    .sort((a, b) => {
+      if (adminSortBy === 'office') {
+        const cmp = (a.office || '').localeCompare(b.office || '', 'zh');
+        return cmp !== 0 ? cmp : a.name.localeCompare(b.name, 'zh');
+      }
+      return a.name.localeCompare(b.name, 'zh');
+    });
 
   if (lawyers.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暫無律師資料</div></td></tr>';
