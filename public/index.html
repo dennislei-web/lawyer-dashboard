@@ -3572,7 +3572,7 @@ function renderAdminPage() {
 
   // Collect all active lawyers
   const lawyers = Object.values(allLawyersMap)
-    .filter(l => l.id !== currentLawyer.id) // 不顯示自己（管理員）
+    .filter(l => l.id !== currentLawyer.id && l.role !== 'legal_staff') // 不顯示自己和法務人員
     .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
 
   if (lawyers.length === 0) {
