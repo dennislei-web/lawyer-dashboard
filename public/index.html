@@ -3596,8 +3596,7 @@ function renderAdminPage() {
       <td style="text-align:center;">
         <select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;"
                 onchange="changeRole('${l.id}', this.value)">
-          <option value="lawyer" ${role === 'lawyer' && !viewAll ? 'selected' : ''}>🔒 律師（僅自己）</option>
-          <option value="lawyer_viewall" ${role === 'lawyer' && viewAll ? 'selected' : ''}>👁 律師（全部資料）</option>
+          <option value="lawyer" ${role === 'lawyer' ? 'selected' : ''}>👁 律師</option>
           <option value="manager" ${role === 'manager' ? 'selected' : ''}>📊 主管</option>
           <option value="admin" ${role === 'admin' ? 'selected' : ''}>🔑 管理員</option>
         </select>
@@ -3621,13 +3620,11 @@ async function changeRole(lawyerId, newRole) {
     role = 'admin'; canViewAll = true;
   } else if (newRole === 'manager') {
     role = 'manager'; canViewAll = true;
-  } else if (newRole === 'lawyer_viewall') {
-    role = 'lawyer'; canViewAll = true;
   } else {
-    role = 'lawyer'; canViewAll = false;
+    role = 'lawyer'; canViewAll = true;
   }
 
-  const roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : canViewAll ? '律師（全部資料）' : '律師（僅自己）';
+  const roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : '律師';
   if (!confirm(`確定將「${lawyer.name}」設為「${roleLabel}」嗎？`)) {
     renderAdminPage(); // reset dropdown
     return;
