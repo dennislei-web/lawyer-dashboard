@@ -3671,7 +3671,7 @@ function renderUnsignedPage() {
     // Build lawyer options if empty
     if (filterSelect.options.length <= 1) {
       filterSelect.innerHTML = '<option value="">全部律師</option>';
-      const lawyers = Object.values(allLawyersMap).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+      const lawyers = Object.values(allLawyersMap).filter(l => l.role !== 'legal_staff').sort((a, b) => a.name.localeCompare(b.name, 'zh'));
       lawyers.forEach(l => {
         filterSelect.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
       });
