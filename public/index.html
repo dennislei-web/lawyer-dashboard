@@ -299,6 +299,8 @@
       align-items: center;
       gap: 12px;
       flex-shrink: 0;
+      position: relative;
+      z-index: 2;
     }
 
     .user-name {
@@ -3489,9 +3491,14 @@ async function reloadCases() {
 
 // ===================== LOGOUT =====================
 async function handleLogout() {
-  if (sb) await sb.auth.signOut();
+  try { if (sb) await sb.auth.signOut(); } catch(e) { console.warn('signOut error', e); }
   showLoginPage();
 }
+// Also bind via addEventListener as fallback for onclick
+document.addEventListener('DOMContentLoaded', () => {
+  const logoutBtn = document.querySelector('button[onclick="handleLogout()"]');
+  if (logoutBtn) logoutBtn.addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
+});
 
 function showLoginPage() {
   document.getElementById('dashboard').style.display  = 'none';
