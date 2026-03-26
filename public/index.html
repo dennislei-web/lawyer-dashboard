@@ -3780,7 +3780,7 @@ function renderUnsignedPage() {
     const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
       <td>${c.case_date}</td>
-      <td>${escHtml(c.case_number || '')}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;">${escHtml(c.case_number || '')}</td>
       <td>${escHtml(c.client_name || '—')}</td>
       <td>${escHtml(c.case_type || '—')}</td>
       ${showAllData ? `<td>${escHtml(lawyerName)}</td>` : ''}
