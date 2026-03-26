@@ -3876,12 +3876,13 @@ function renderUnsignedPage() {
           >${escHtml(shortNotes) || '—'}</td>
       <td style="overflow-wrap:break-word;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
-             onclick="this.querySelector('textarea').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
+             onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
           <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(c.lawyer_notes || '') || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>'}</span>
           <textarea style="display:none;width:100%;min-height:60px;background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:0.78rem;font-family:inherit;resize:vertical;"
                     onblur="saveLawyerNote('${c.id}', this.value, this.parentElement)"
-                    onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}"
+                    onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
           >${escHtml(c.lawyer_notes || '')}</textarea>
+          <div class="note-hint" style="display:none;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">按 Enter 儲存 · Shift+Enter 換行 · Esc 取消</div>
         </div>
       </td>
     </tr>`;
@@ -3903,9 +3904,17 @@ async function saveLawyerNote(caseId, note, cellEl) {
   // Update display
   const span = cellEl.querySelector('span');
   const ta = cellEl.querySelector('textarea');
+  const hint = cellEl.querySelector('.note-hint');
   span.innerHTML = escHtml(note) || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
   span.style.display = 'block';
   ta.style.display = 'none';
+  if (hint) hint.style.display = 'none';
+  // Show save confirmation
+  const saved = document.createElement('div');
+  saved.textContent = '✓ 已儲存';
+  saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
+  cellEl.appendChild(saved);
+  setTimeout(() => saved.remove(), 2000);
 }
 
 function sortUnsignedRows(cases, col, dir) {
