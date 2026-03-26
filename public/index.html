@@ -969,22 +969,97 @@
     .upload-file-name { margin-top: 8px; font-size: 0.85rem; font-weight: 600; color: var(--green); }
 
     /* ===================== RESPONSIVE ===================== */
+    /* ===================== RWD: TABLET ===================== */
     @media (max-width: 900px) {
       .kpi-grid { grid-template-columns: repeat(3, 1fr); }
       .yoy-grid  { grid-template-columns: repeat(2, 1fr); }
     }
 
+    /* ===================== RWD: MOBILE ===================== */
     @media (max-width: 640px) {
-      .page { padding: 16px; }
-      .header { padding: 0 16px; }
-      .header-brand { font-size: 0.85rem; }
-      .tab-btn { padding: 5px 10px; font-size: 0.78rem; }
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      /* --- Header: 兩列佈局 --- */
+      .header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 12px;
+        gap: 4px;
+      }
+      .header-left {
+        width: 100%;
+        gap: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-shrink: 0;
+      }
+      .header-brand { font-size: 0.8rem; }
+      .tab-nav { gap: 2px; }
+      .tab-btn { padding: 4px 8px; font-size: 0.72rem; white-space: nowrap; }
+      .header-right {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .user-name { font-size: 0.75rem; }
+      .header-right .btn { font-size: 0.72rem; padding: 3px 8px; }
+
+      /* --- Page content --- */
+      .page { padding: 12px; }
+      .page-title { font-size: 1.1rem; }
+      .section { padding: 12px; }
+      .section-title { font-size: 0.9rem; }
+
+      /* --- KPI Cards --- */
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .kpi-card { padding: 12px; }
       .kpi-card:first-child { grid-column: 1 / -1; }
-      .yoy-grid { grid-template-columns: 1fr 1fr; }
+      .kpi-label { font-size: 0.72rem; }
+      .kpi-value { font-size: 1.2rem; }
+      .kpi-sub { font-size: 0.7rem; }
+
+      /* --- Year filter --- */
+      .year-filter-bar { flex-wrap: wrap; gap: 4px; }
+      .year-filter-bar .year-btn { padding: 4px 10px; font-size: 0.75rem; }
+
+      /* --- Tables --- */
+      .table-wrap { -webkit-overflow-scrolling: touch; }
+      .table-wrap table { font-size: 0.75rem; }
+      .table-wrap th, .table-wrap td { padding: 6px 8px; }
+      .rank-table th { font-size: 0.72rem; }
+
+      /* --- YoY grid --- */
+      .yoy-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+      /* --- Month & Case cards --- */
       .month-cards-grid { grid-template-columns: 1fr; }
       .case-cards-grid { grid-template-columns: 1fr; }
-      .login-card { padding: 30px 24px; }
+
+      /* --- 未成案追蹤 filters --- */
+      .unsigned-filters {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+      }
+      .unsigned-filters select { font-size: 0.78rem; max-width: 120px; }
+
+      /* --- Login --- */
+      .login-card { padding: 24px 16px; max-width: 95vw; }
+      .firm-name { font-size: 1.3rem; }
+
+      /* --- Upload --- */
+      .upload-dropzone { padding: 16px; }
+      .upload-step-desc { font-size: 0.75rem; }
+
+      /* --- Admin table --- */
+      .admin-table { font-size: 0.75rem; }
+      .admin-table th, .admin-table td { padding: 6px 8px; }
+    }
+
+    /* ===================== RWD: VERY SMALL ===================== */
+    @media (max-width: 400px) {
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+      .kpi-value { font-size: 1rem; }
+      .header-brand { display: none; }
+      .tab-btn { padding: 4px 6px; font-size: 0.68rem; }
+      .header-right .user-name { display: none; }
     }
   </style>
 </head>
@@ -1032,7 +1107,7 @@
       <span class="user-name" id="userName"></span>
       <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeToggleBtn" title="切換明暗主題">🌙</button>
       <button class="btn btn-ghost btn-sm" onclick="handleChangePassword()">修改密碼</button>
-      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">登出</button>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">登出</button>
     </div>
   </div>
 
@@ -1297,7 +1372,7 @@
     <div class="section-header" style="margin-bottom:20px;">
       <div class="section-title" style="font-size:1.1rem;">未成案追蹤</div>
     </div>
-    <div class="year-filter-bar" id="unsignedFilterBar" style="margin-bottom:16px;">
+    <div class="year-filter-bar unsigned-filters" id="unsignedFilterBar" style="margin-bottom:16px;">
       <span class="filter-label">時間範圍</span>
       <button class="year-btn active" onclick="setUnsignedRange(1)">近1個月</button>
       <button class="year-btn" onclick="setUnsignedRange(3)">近3個月</button>
@@ -3492,12 +3567,14 @@ async function reloadCases() {
 // ===================== LOGOUT =====================
 async function handleLogout() {
   try { if (sb) await sb.auth.signOut(); } catch(e) { console.warn('signOut error', e); }
+  // Clear local storage session
+  try { localStorage.removeItem('sb-zpbkeyhxyykbvownrngf-auth-token'); } catch(e) {}
   showLoginPage();
 }
-// Also bind via addEventListener as fallback for onclick
+// Bind logout via addEventListener (more reliable than inline onclick)
 document.addEventListener('DOMContentLoaded', () => {
-  const logoutBtn = document.querySelector('button[onclick="handleLogout()"]');
-  if (logoutBtn) logoutBtn.addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
+  const btn = document.getElementById('logoutBtn');
+  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); handleLogout(); });
 });
 
 function showLoginPage() {
