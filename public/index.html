@@ -3744,9 +3744,16 @@ function renderUnsignedPage() {
   cols.push({ key: 'tracking_notes', label: '備註' });
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
 
+  // Fixed layout: compact left columns, wide right columns for notes
+  const tbl = document.getElementById('unsignedTable');
+  tbl.style.tableLayout = 'fixed';
+  tbl.style.width = showAllData ? '1800px' : '1500px';
+  const colW = { case_date:'82px', case_number:'100px', client_name:'68px', case_type:'80px',
+    lawyer_name:'68px', tracking_staff:'68px', tracking_status:'68px', days_ago:'52px' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;">${c.label}${arrow}</th>`;
+    const w = colW[c.key] ? `width:${colW[c.key]};` : '';
+    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${w}">${c.label}${arrow}</th>`;
   }).join('');
 
   // Bind sort
@@ -3779,18 +3786,18 @@ function renderUnsignedPage() {
     const shortNotes = notes.length > 60 ? notes.slice(0, 60) + '…' : notes;
     const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
-      <td>${c.case_date}</td>
-      <td style="font-size:0.78rem;white-space:nowrap;">${escHtml(c.case_number || '')}</td>
-      <td>${escHtml(c.client_name || '—')}</td>
-      <td>${escHtml(c.case_type || '—')}</td>
-      ${showAllData ? `<td>${escHtml(lawyerName)}</td>` : ''}
-      <td>${escHtml(c.tracking_staff || '—')}</td>
-      <td style="color:${statusColor};font-size:0.82rem;">${escHtml(c.tracking_status || '—')}</td>
-      <td class="num ${daysClass}">${daysAgo}</td>
-      <td style="max-width:300px;font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;${notes.length > 60 ? 'cursor:pointer;' : ''}"
+      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.case_date}</td>
+      <td style="font-size:0.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(c.case_number || '')}">${escHtml(c.case_number || '')}</td>
+      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.client_name || '—')}</td>
+      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.case_type || '—')}</td>
+      ${showAllData ? `<td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lawyerName)}</td>` : ''}
+      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_staff || '—')}</td>
+      <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_status || '—')}</td>
+      <td class="num ${daysClass}" style="white-space:nowrap;">${daysAgo}</td>
+      <td style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:break-word;${notes.length > 60 ? 'cursor:pointer;' : ''}"
           ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
           >${escHtml(shortNotes) || '—'}</td>
-      <td style="min-width:180px;max-width:300px;">
+      <td style="overflow-wrap:break-word;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
              onclick="this.querySelector('textarea').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
           <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(c.lawyer_notes || '') || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>'}</span>
