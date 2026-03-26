@@ -1639,7 +1639,7 @@ async function loadDashboard(user) {
   }
 
   // Determine consultation_cases columns (try once)
-  let caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status';
+  let caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
   const testRes = await sb.from('consultation_cases').select(caseCols).limit(1);
   if (testRes.error) caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
 
@@ -3742,6 +3742,7 @@ function renderUnsignedPage() {
   cols.push({ key: 'tracking_status', label: '追蹤狀態' });
   cols.push({ key: 'days_ago', label: '距今天數' });
   cols.push({ key: 'tracking_notes', label: '備註' });
+  cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
 
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
@@ -3789,8 +3790,38 @@ function renderUnsignedPage() {
       <td style="max-width:300px;font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;${notes.length > 60 ? 'cursor:pointer;' : ''}"
           ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
           >${escHtml(shortNotes) || '—'}</td>
+      <td style="min-width:180px;max-width:300px;">
+        <div class="lawyer-note-cell" data-case-id="${c.id}"
+             onclick="this.querySelector('textarea').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
+          <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(c.lawyer_notes || '') || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>'}</span>
+          <textarea style="display:none;width:100%;min-height:60px;background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:0.78rem;font-family:inherit;resize:vertical;"
+                    onblur="saveLawyerNote('${c.id}', this.value, this.parentElement)"
+                    onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}"
+          >${escHtml(c.lawyer_notes || '')}</textarea>
+        </div>
+      </td>
     </tr>`;
   }).join('');
+}
+
+async function saveLawyerNote(caseId, note, cellEl) {
+  const { error } = await sb
+    .from('consultation_cases')
+    .update({ lawyer_notes: note })
+    .eq('id', caseId);
+  if (error) {
+    alert('儲存失敗：' + error.message);
+    return;
+  }
+  // Update local data
+  const c = allCases.find(c => c.id === caseId);
+  if (c) c.lawyer_notes = note;
+  // Update display
+  const span = cellEl.querySelector('span');
+  const ta = cellEl.querySelector('textarea');
+  span.innerHTML = escHtml(note) || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
+  span.style.display = 'block';
+  ta.style.display = 'none';
 }
 
 function sortUnsignedRows(cases, col, dir) {
