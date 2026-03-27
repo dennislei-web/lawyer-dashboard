@@ -3809,15 +3809,13 @@ function renderUnsignedPage() {
   // Table header
   const headRow = document.getElementById('unsignedTableHead');
   const cols = [
-    { key: 'case_date', label: '諮詢日期' },
-    { key: 'case_number', label: '案件編號' },
+    { key: 'case_date', label: '日期(天)' },
     { key: 'client_name', label: '當事人' },
-    { key: 'case_type', label: '案件類型' },
+    { key: 'case_type', label: '類型' },
   ];
-  if (showAllData) cols.push({ key: 'lawyer_name', label: '諮詢律師' });
-  cols.push({ key: 'tracking_staff', label: '負責法務' });
-  cols.push({ key: 'tracking_status', label: '追蹤狀態' });
-  cols.push({ key: 'days_ago', label: '距今天數' });
+  if (showAllData) cols.push({ key: 'lawyer_name', label: '律師' });
+  cols.push({ key: 'tracking_staff', label: '法務' });
+  cols.push({ key: 'tracking_status', label: '狀態' });
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
   cols.push({ key: 'tracking_notes', label: '備註' });
 
@@ -3863,14 +3861,12 @@ function renderUnsignedPage() {
     const shortNotes = notes.length > 60 ? notes.slice(0, 60) + '…' : notes;
     const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
-      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.case_date}</td>
-      <td style="font-size:0.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(c.case_number || '')}">${escHtml(c.case_number || '')}</td>
-      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.client_name || '—')}</td>
-      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.case_type || '—')}</td>
-      ${showAllData ? `<td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lawyerName)}</td>` : ''}
-      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_staff || '—')}</td>
-      <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_status || '—')}</td>
-      <td class="num ${daysClass}" style="white-space:nowrap;">${daysAgo}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;" title="${escHtml(c.case_number || '')}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
+      <td style="font-size:0.8rem;white-space:nowrap;">${escHtml(c.client_name || '—')}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;">${escHtml((c.case_type || '—').replace('諮詢',''))}</td>
+      ${showAllData ? `<td style="font-size:0.8rem;white-space:nowrap;">${escHtml(lawyerName)}</td>` : ''}
+      <td style="font-size:0.8rem;white-space:nowrap;">${escHtml(c.tracking_staff || '—')}</td>
+      <td style="color:${statusColor};font-size:0.78rem;white-space:nowrap;">${escHtml(c.tracking_status || '—')}</td>
       <td style="overflow-wrap:break-word;min-width:140px;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
              onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
