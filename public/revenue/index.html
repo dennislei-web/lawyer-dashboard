@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 營運儀表板</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg-main:    #020b18;
+      --bg-card:    #0a1628;
+      --bg-row:     #111b2e;
+      --bg-hover:   #16253d;
+      --border:     #1e3050;
+      --border-light: #243a5e;
+      --gold:       #c9a84c;
+      --gold-light: #e8c97a;
+      --text:       #e0e0e0;
+      --text-muted: #8899aa;
+      --blue:       #4f8ef7;
+      --blue-dim:   rgba(79,142,247,0.15);
+      --green:      #4caf82;
+      --green-dim:  rgba(76,175,130,0.15);
+      --red:        #e05c5c;
+      --red-dim:    rgba(224,92,92,0.15);
+      --orange:     #e0954a;
+      --orange-dim: rgba(224,149,74,0.15);
+      --brand-color: #e8c97a;
+      --header-bg:  rgba(10,22,40,0.95);
+      --login-shadow: rgba(0,0,0,0.5);
+      --tab-active-bg: rgba(201,168,76,0.12);
+      --tab-active-border: rgba(201,168,76,0.2);
+      --tab-active-color: var(--gold-light);
+      --ghost-bg: rgba(255,255,255,0.07);
+      --ghost-hover-bg: rgba(255,255,255,0.12);
+    }
+
+    [data-theme="light"] {
+      --bg-main:    #f5f6fa;
+      --bg-card:    #ffffff;
+      --bg-row:     #f0f2f5;
+      --bg-hover:   #e8eaf0;
+      --border:     #d0d5dd;
+      --border-light: #e0e4eb;
+      --gold:       #a3842a;
+      --gold-light: #8b6f1e;
+      --text:       #1a1a2e;
+      --text-muted: #6b7280;
+      --blue:       #2563eb;
+      --blue-dim:   rgba(37,99,235,0.1);
+      --green:      #15803d;
+      --green-dim:  rgba(21,128,61,0.12);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.1);
+      --orange:     #d97706;
+      --orange-dim: rgba(217,119,6,0.1);
+      --brand-color: #1a1a2e;
+      --header-bg:  rgba(255,255,255,0.95);
+      --login-shadow: rgba(0,0,0,0.12);
+      --tab-active-bg: rgba(37,99,235,0.1);
+      --tab-active-border: rgba(37,99,235,0.25);
+      --tab-active-color: #2563eb;
+      --ghost-bg: rgba(0,0,0,0.04);
+      --ghost-hover-bg: rgba(0,0,0,0.08);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background: var(--bg-main);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+    /* ===================== LOGIN ===================== */
+    #loginPage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+        var(--bg-main);
+    }
+
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 24px 64px var(--login-shadow);
+    }
+
+    .login-logo { text-align: center; margin-bottom: 28px; }
+    .login-logo .firm-name { font-size: 1.6rem; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
+    .login-logo .subtitle { margin-top: 6px; font-size: 0.85rem; color: var(--text-muted); letter-spacing: 1px; }
+    .login-divider { height: 1px; background: linear-gradient(to right, transparent, var(--border-light), transparent); margin-bottom: 28px; }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .form-group input {
+      width: 100%; padding: 12px 16px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.95rem; transition: border-color 0.2s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--gold); }
+
+    .btn-login {
+      width: 100%; padding: 13px; background: linear-gradient(135deg, var(--gold), #b8942e);
+      color: #0a0a0a; font-weight: 700; font-size: 0.95rem; border: none; border-radius: 8px;
+      cursor: pointer; transition: opacity 0.2s; margin-top: 8px;
+    }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .login-error { color: var(--red); font-size: 0.85rem; margin-top: 12px; text-align: center; display: none; }
+
+    /* ===================== HEADER ===================== */
+    .header {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 56px;
+      background: var(--header-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-brand { font-size: 1.1rem; font-weight: 700; color: var(--gold-light); letter-spacing: 1px; }
+    .header-subtitle { font-size: 0.78rem; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .btn-icon {
+      background: var(--ghost-bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text-muted); cursor: pointer; padding: 6px 10px; font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .btn-icon:hover { background: var(--ghost-hover-bg); color: var(--text); }
+
+    .user-badge {
+      font-size: 0.8rem; color: var(--text-muted); padding: 4px 10px;
+      background: var(--ghost-bg); border-radius: 6px;
+    }
+
+    /* ===================== TABS ===================== */
+    .tabs {
+      display: flex; gap: 2px; padding: 8px 24px;
+      background: var(--bg-main); border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      padding: 8px 18px; font-size: 0.85rem; font-weight: 500;
+      color: var(--text-muted); background: transparent; border: 1px solid transparent;
+      border-radius: 8px; cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .tab-btn:hover { background: var(--ghost-bg); color: var(--text); }
+    .tab-btn.active {
+      background: var(--tab-active-bg); border-color: var(--tab-active-border);
+      color: var(--tab-active-color); font-weight: 600;
+    }
+
+    /* ===================== MAIN CONTENT ===================== */
+    .main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ===================== KPI CARDS ===================== */
+    .kpi-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .kpi-card.gold::before { background: var(--gold); }
+    .kpi-card.blue::before { background: var(--blue); }
+    .kpi-card.green::before { background: var(--green); }
+    .kpi-card.red::before { background: var(--red); }
+    .kpi-card.orange::before { background: var(--orange); }
+
+    .kpi-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; }
+    .kpi-value.gold { color: var(--gold-light); }
+    .kpi-value.blue { color: var(--blue); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.orange { color: var(--orange); }
+    .kpi-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* ===================== CHARTS ===================== */
+    .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+    .chart-container { position: relative; height: 300px; }
+
+    /* ===================== FILTERS ===================== */
+    .filter-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+    .filter-select, .filter-input {
+      padding: 6px 12px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.85rem;
+    }
+    .filter-select:focus, .filter-input:focus { outline: none; border-color: var(--gold); }
+
+    .year-btns { display: flex; gap: 4px; }
+    .year-btn {
+      padding: 5px 14px; font-size: 0.8rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--bg-row); color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .year-btn:hover { background: var(--ghost-hover-bg); }
+    .year-btn.active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
+
+    /* ===================== TABLE ===================== */
+    .table-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden;
+    }
+    .table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: 0.9rem; font-weight: 600; }
+    .table-actions { display: flex; gap: 8px; }
+
+    .btn-sm {
+      padding: 5px 12px; font-size: 0.78rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--ghost-bg); color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-sm:hover { background: var(--ghost-hover-bg); color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 10px 14px; text-align: left; font-size: 0.75rem; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap;
+    }
+    thead th:hover { color: var(--text); }
+    tbody td {
+      padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid var(--border);
+    }
+    tbody tr:hover { background: var(--bg-hover); }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 600;
+    }
+    .badge-green { background: var(--green-dim); color: var(--green); }
+    .badge-red { background: var(--red-dim); color: var(--red); }
+    .badge-blue { background: var(--blue-dim); color: var(--blue); }
+    .badge-orange { background: var(--orange-dim); color: var(--orange); }
+
+    .text-right { text-align: right; }
+    .text-green { color: var(--green); }
+    .text-red { color: var(--red); }
+    .text-gold { color: var(--gold-light); }
+    .text-blue { color: var(--blue); }
+    .text-muted { color: var(--text-muted); }
+
+    /* ===================== DEPT CARDS ===================== */
+    .dept-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .dept-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .dept-name { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: var(--gold-light); }
+    .dept-stat { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.85rem; }
+    .dept-stat-label { color: var(--text-muted); }
+    .dept-stat-value { font-weight: 600; }
+
+    /* ===================== EMPTY STATE ===================== */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--text-muted);
+    }
+    .empty-state-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
+    .empty-state-text { font-size: 0.95rem; }
+
+    /* ===================== LOADING ===================== */
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    .spinner {
+      display: inline-block; width: 24px; height: 24px;
+      border: 2px solid var(--border); border-top-color: var(--gold);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===================== EXPANDABLE ROWS ===================== */
+    .row-toggle { cursor: pointer; user-select: none; text-align: center; font-size: 0.8rem; color: var(--text-muted); transition: transform 0.2s; }
+    .row-toggle.open { transform: rotate(90deg); }
+    .office-row { cursor: pointer; }
+    .office-row:hover { background: var(--bg-hover); }
+    .office-row td { font-weight: 600; }
+    .dept-sub-row { display: none; }
+    .dept-sub-row.show { display: table-row; }
+    .dept-sub-row td { padding-left: 44px; color: var(--text-muted); font-size: 0.82rem; }
+    .dept-sub-row td:first-child { padding-left: 30px; }
+
+    /* ===================== RESPONSIVE ===================== */
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .chart-row { grid-template-columns: 1fr; }
+      .dept-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .kpi-row { grid-template-columns: 1fr; }
+      .dept-grid { grid-template-columns: 1fr; }
+      .header { padding: 0 12px; }
+      .main { padding: 12px; }
+      .tabs { padding: 8px 12px; }
+      .filter-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== LOGIN PAGE ==================== -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">營運儀表板</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div id="dashboard" style="display:none">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">營運儀表板</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="overview">總覽</button>
+    <button class="tab-btn" data-tab="yearly">年度追蹤</button>
+    <button class="tab-btn" data-tab="departments">部門分析</button>
+    <button class="tab-btn" data-tab="sources">來源分析</button>
+    <button class="tab-btn" data-tab="partner">合署律師</button>
+    <button class="tab-btn" data-tab="partnerYearly">合署年度追蹤</button>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+
+    <!-- ========== 總覽 ========== -->
+    <div class="page active" id="page-overview">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="yearBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="overviewOfficeFilter">
+            <option value="">全部</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="kpi-row" id="kpiRow">
+        <div class="kpi-card gold"><div class="kpi-label">付款建議款</div><div class="kpi-value gold" id="kpiPayments">-</div><div class="kpi-sub" id="kpiPaymentsSub"></div></div>
+        <div class="kpi-card red"><div class="kpi-label">退款金額</div><div class="kpi-value red" id="kpiRefunds">-</div><div class="kpi-sub" id="kpiRefundsSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">淨收入</div><div class="kpi-value green" id="kpiNet">-</div><div class="kpi-sub" id="kpiNetSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">交易筆數</div><div class="kpi-value blue" id="kpiCount">-</div><div class="kpi-sub" id="kpiCountSub"></div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">月度收款趨勢</div>
+          <div class="chart-container"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">客戶來源分佈</div>
+          <div class="chart-container"><canvas id="sourceChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">接案所營收排行</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px"></th>
+              <th>接案所</th>
+              <th class="text-right">付款筆數</th>
+              <th class="text-right">付款金額</th>
+              <th class="text-right">退款金額</th>
+              <th class="text-right">淨收入</th>
+            </tr>
+          </thead>
+          <tbody id="deptSummaryBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 月度分析 + 歷年同月比較 -->
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header">
+          <span class="table-title">月度收款明細 + 歷年同月比較</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th class="text-right">付款金額</th>
+                <th class="text-right">退款金額</th>
+                <th class="text-right">淨收入</th>
+                <th class="text-right">筆數</th>
+                <th class="text-right">去年同月</th>
+                <th class="text-right">YoY 成長</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 部門分析 ========== -->
+    <div class="page" id="page-departments">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="deptYearBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="deptOfficeFilter"><option value="">全部</option></select>
+        </div>
+      </div>
+
+      <div class="dept-grid" id="deptGrid"></div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">部門營收比較</div>
+          <div class="chart-container"><canvas id="deptBarChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">退款率比較</div>
+          <div class="chart-container"><canvas id="refundRateChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 來源分析 ========== -->
+    <div class="page" id="page-sources">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="srcYearBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="srcOfficeFilter"><option value="">全部</option></select>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">來源管道 - 案件數</div>
+          <div class="chart-container"><canvas id="srcCaseChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">來源管道 - 營收</div>
+          <div class="chart-container"><canvas id="srcRevenueChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">來源管道明細</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>來源管道</th>
+              <th class="text-right">案件數</th>
+              <th class="text-right">應收金額</th>
+              <th class="text-right">已收金額</th>
+              <th class="text-right">退款</th>
+              <th class="text-right">佔比</th>
+            </tr>
+          </thead>
+          <tbody id="srcTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== 合署律師 ========== -->
+    <div class="page" id="page-partner">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="partnerYearBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="partnerOfficeFilter"><option value="">全部</option></select>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card gold"><div class="kpi-label">合署付款建議款</div><div class="kpi-value gold" id="pKpiPay">-</div><div class="kpi-sub" id="pKpiPaySub"></div></div>
+        <div class="kpi-card red"><div class="kpi-label">合署退款</div><div class="kpi-value red" id="pKpiRef">-</div><div class="kpi-sub" id="pKpiRefSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">合署淨收入</div><div class="kpi-value green" id="pKpiNet">-</div><div class="kpi-sub" id="pKpiNetSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">合署交易筆數</div><div class="kpi-value blue" id="pKpiCount">-</div><div class="kpi-sub" id="pKpiCountSub"></div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">合署律師營收比較</div>
+          <div class="chart-container"><canvas id="partnerBarChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">合署律師營收佔比</div>
+          <div class="chart-container"><canvas id="partnerPieChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">合署律師營收排行 <span class="text-muted" id="partnerCount"></span></span>
+          <button class="btn-sm" id="partnerExportBtn">匯出 Excel</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>合署律師</th>
+              <th>接案所</th>
+              <th class="text-right">付款筆數</th>
+              <th class="text-right">付款金額</th>
+              <th class="text-right">退款</th>
+              <th class="text-right">淨收入</th>
+              <th class="text-right">退款率</th>
+            </tr>
+          </thead>
+          <tbody id="partnerTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 合署月度分析 + 歷年同月比較 -->
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header">
+          <span class="table-title">合署月度收款 + 歷年同月比較</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th class="text-right">付款金額</th>
+                <th class="text-right">退款金額</th>
+                <th class="text-right">淨收入</th>
+                <th class="text-right">筆數</th>
+                <th class="text-right">去年同月</th>
+                <th class="text-right">YoY 成長</th>
+              </tr>
+            </thead>
+            <tbody id="partnerMonthlyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 年度追蹤 ========== -->
+    <div class="page" id="page-yearly">
+      <div class="filter-bar">
+        <div class="filter-label">2026 年度追蹤 - 月份：</div>
+        <div class="year-btns" id="ytMonthBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="yearlyOfficeFilter"><option value="">全部</option></select>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card gold"><div class="kpi-label">付款建議款</div><div class="kpi-value gold" id="ytKpiPay">-</div><div class="kpi-sub" id="ytKpiPaySub"></div></div>
+        <div class="kpi-card red"><div class="kpi-label">退款金額</div><div class="kpi-value red" id="ytKpiRef">-</div><div class="kpi-sub" id="ytKpiRefSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">淨收入</div><div class="kpi-value green" id="ytKpiNet">-</div><div class="kpi-sub" id="ytKpiNetSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">交易筆數</div><div class="kpi-value blue" id="ytKpiCount">-</div><div class="kpi-sub" id="ytKpiCountSub"></div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">月度收款趨勢</div>
+          <div class="chart-container"><canvas id="ytTrendChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">客戶來源分佈</div>
+          <div class="chart-container"><canvas id="ytSourceChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">接案所營收排行</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px"></th>
+              <th>接案所</th>
+              <th class="text-right">付款筆數</th>
+              <th class="text-right">付款金額</th>
+              <th class="text-right">退款金額</th>
+              <th class="text-right">淨收入</th>
+            </tr>
+          </thead>
+          <tbody id="ytDeptBody"></tbody>
+        </table>
+      </div>
+
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header">
+          <span class="table-title">去年同月比較</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>項目</th>
+                <th class="text-right">本月</th>
+                <th class="text-right">去年同月</th>
+                <th class="text-right">YoY 成長</th>
+              </tr>
+            </thead>
+            <tbody id="ytYoyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 合署年度追蹤 ========== -->
+    <div class="page" id="page-partnerYearly">
+      <div class="filter-bar">
+        <div class="filter-label">2026 合署年度追蹤 - 月份：</div>
+        <div class="year-btns" id="pyMonthBtns"></div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">接案所：</div>
+          <select class="filter-select" id="pyOfficeFilter"><option value="">全部</option></select>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card gold"><div class="kpi-label">合署付款建議款</div><div class="kpi-value gold" id="pyKpiPay">-</div><div class="kpi-sub" id="pyKpiPaySub"></div></div>
+        <div class="kpi-card red"><div class="kpi-label">合署退款</div><div class="kpi-value red" id="pyKpiRef">-</div><div class="kpi-sub" id="pyKpiRefSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">合署淨收入</div><div class="kpi-value green" id="pyKpiNet">-</div><div class="kpi-sub" id="pyKpiNetSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">合署交易筆數</div><div class="kpi-value blue" id="pyKpiCount">-</div><div class="kpi-sub" id="pyKpiCountSub"></div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">合署律師營收比較</div>
+          <div class="chart-container"><canvas id="pyBarChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">合署律師營收佔比</div>
+          <div class="chart-container"><canvas id="pyPieChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">合署律師營收排行 <span class="text-muted" id="pyPartnerCount"></span></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>合署律師</th>
+              <th>接案所</th>
+              <th class="text-right">付款筆數</th>
+              <th class="text-right">付款金額</th>
+              <th class="text-right">退款</th>
+              <th class="text-right">淨收入</th>
+              <th class="text-right">退款率</th>
+            </tr>
+          </thead>
+          <tbody id="pyTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header">
+          <span class="table-title">去年同月比較</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>項目</th>
+                <th class="text-right">本月</th>
+                <th class="text-right">去年同月</th>
+                <th class="text-right">YoY 成長</th>
+              </tr>
+            </thead>
+            <tbody id="pyYoyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var OFFICES = ['台北所','台中所','台南所','桃園所','新竹所','高雄所'];
+var sb, currentUser, currentLawyer, selectedYear = new Date().getFullYear(), charts = {};
+var _cache = {}; // key: 'year-office' → records array
+
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══ AUTH ═══
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) { currentUser = s.data.session.user; await loadUserProfile(); showDashboard(); }
+  else showLogin();
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) currentLawyer = r.data;
+}
+function showLogin() { document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; }
+async function showDashboard() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser?.email||'');
+  populateOfficeFilters(); initYearButtons(); initMonthBtns(); await loadOverviewData();
+}
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({ email: document.getElementById('loginEmail').value.trim(), password: document.getElementById('loginPassword').value });
+    if (r.error) throw r.error;
+    currentUser = r.data.user; await loadUserProfile(); showDashboard();
+  } catch(ex) { err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
+  finally { btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() { if(sb) await sb.auth.signOut(); currentUser=null; currentLawyer=null; showLogin(); });
+
+// ═══ DATA ═══
+function populateOfficeFilters() {
+  ['overviewOfficeFilter','deptOfficeFilter','srcOfficeFilter','partnerOfficeFilter'].forEach(function(id) {
+    var el = document.getElementById(id); if(!el) return;
+    el.innerHTML = '<option value="">全部</option>';
+    OFFICES.forEach(function(o) { el.innerHTML += '<option value="'+o+'">'+o+'</option>'; });
+  });
+}
+async function fetchAllByYear(year) {
+  if (!sb) return [];
+  var key = 'y'+year;
+  if (_cache[key]) return _cache[key];
+  var all = [], from = 0, ps = 1000;
+  while (true) {
+    var q = sb.from('revenue_records').select('*').eq('is_void', false)
+      .gte('record_date', year+'-01-01').lte('record_date', year+'-12-31')
+      .order('record_date', { ascending: false }).range(from, from + ps - 1);
+    var r = await q;
+    if (r.error) { console.error('fetch:', r.error); break; }
+    var rows = r.data || [];
+    all = all.concat(rows);
+    if (rows.length < ps) break;
+    from += ps;
+  }
+  _cache[key] = all;
+  return all;
+}
+async function loadRecords(filters) {
+  if (filters.year) {
+    var all = await fetchAllByYear(filters.year);
+    return all.filter(function(r) {
+      if (filters.office && r.office !== filters.office) return false;
+      if (filters.transactionType && r.transaction_type !== filters.transactionType) return false;
+      if (filters.sourceChannel && r.source_channel !== filters.sourceChannel) return false;
+      return true;
+    });
+  }
+  // date range query (no cache)
+  if (!sb) return [];
+  var all2 = [], from2 = 0, ps2 = 1000;
+  while (true) {
+    var q = sb.from('revenue_records').select('*').eq('is_void', false).order('record_date', { ascending: false }).range(from2, from2 + ps2 - 1);
+    if (filters.startDate) q = q.gte('record_date', filters.startDate);
+    if (filters.endDate) q = q.lte('record_date', filters.endDate);
+    if (filters.office) q = q.eq('office', filters.office);
+    if (filters.transactionType) q = q.eq('transaction_type', filters.transactionType);
+    if (filters.sourceChannel) q = q.eq('source_channel', filters.sourceChannel);
+    var r = await q;
+    if (r.error) break;
+    var rows = r.data || [];
+    all2 = all2.concat(rows);
+    if (rows.length < ps2) break;
+    from2 += ps2;
+  }
+  return all2;
+}
+function sumBy(recs, type) { return recs.filter(function(r){return r.transaction_type===type}).reduce(function(s,r){return s+Number(r.amount||0)},0); }
+function isPartner(r) { return r.group_name && r.group_name.indexOf('合署') !== -1; }
+function splitSources(src) {
+  if (!src) return ['未分類'];
+  return src.split(/[,，、]\s*/).map(function(s){return s.trim()}).filter(Boolean);
+}
+function aggregateSources(recs) {
+  // cases/pay count each source separately; a record with 2 sources counts in both
+  var map = {};
+  recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).forEach(function(r) {
+    var srcs = splitSources(r.source_channel);
+    srcs.forEach(function(s) {
+      if (!map[s]) map[s]={cases:0,pay:0};
+      map[s].cases++; map[s].pay+=Number(r.amount||0);
+    });
+  });
+  return map;
+}
+async function renderMonthlyYoY(tbodyId, filterFn) {
+  // Current year data
+  var curRecs = filterFn(await loadRecords({ year: selectedYear }));
+  // Previous year data for YoY comparison
+  var prevRecs = filterFn(await loadRecords({ year: selectedYear - 1 }));
+
+  var months = {};
+  for (var m=1;m<=12;m++) months[String(m).padStart(2,'0')]={pay:0,ref:0,n:0};
+  curRecs.forEach(function(r) {
+    var mm=(r.record_date||'').substring(5,7);
+    if (mm&&months[mm]) {
+      if (r.transaction_type==='PaymentTransaction') { months[mm].pay+=Number(r.amount||0); months[mm].n++; }
+      else months[mm].ref+=Number(r.amount||0);
+    }
+  });
+  var prevMonths = {};
+  for (var m2=1;m2<=12;m2++) prevMonths[String(m2).padStart(2,'0')]={pay:0};
+  prevRecs.forEach(function(r) {
+    var mm=(r.record_date||'').substring(5,7);
+    if (mm&&prevMonths[mm]&&r.transaction_type==='PaymentTransaction') prevMonths[mm].pay+=Number(r.amount||0);
+  });
+
+  var tbody=document.getElementById(tbodyId);
+  var html='';
+  for (var m3=1;m3<=12;m3++) {
+    var k=String(m3).padStart(2,'0');
+    var cur=months[k], prev=prevMonths[k];
+    var net=cur.pay-cur.ref;
+    var yoyPct = prev.pay>0 ? ((cur.pay-prev.pay)/prev.pay*100) : (cur.pay>0?999:0);
+    var yoyText = prev.pay>0 ? (yoyPct>0?'+':'')+yoyPct.toFixed(1)+'%' : (cur.pay>0?'N/A':'-');
+    var yoyClass = yoyPct>0?'text-green':(yoyPct<0?'text-red':'text-muted');
+    if (cur.pay===0&&cur.ref===0&&cur.n===0) {
+      html+='<tr><td>'+m3+'月</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">'+formatMoney(prev.pay)+'</td><td class="text-right text-muted">-</td></tr>';
+    } else {
+      html+='<tr><td><strong>'+m3+'月</strong></td>' +
+        '<td class="text-right text-gold">'+formatMoney(cur.pay)+'</td>' +
+        '<td class="text-right text-red">'+formatMoney(cur.ref)+'</td>' +
+        '<td class="text-right" style="font-weight:600">'+formatMoney(net)+'</td>' +
+        '<td class="text-right">'+cur.n+'</td>' +
+        '<td class="text-right text-muted">'+formatMoney(prev.pay)+'</td>' +
+        '<td class="text-right '+yoyClass+'">'+yoyText+'</td></tr>';
+    }
+  }
+  tbody.innerHTML=html;
+}
+function excludePartner(recs) { return recs.filter(function(r) { return !isPartner(r); }); }
+function onlyPartner(recs) { return recs.filter(isPartner); }
+
+// ═══ OVERVIEW ═══
+async function loadOverviewData() {
+  var office = document.getElementById('overviewOfficeFilter').value;
+  var recs = excludePartner(await loadRecords({ year: selectedYear, office: office||undefined }));
+  var pay = sumBy(recs,'PaymentTransaction'), ref = sumBy(recs,'RefundTransaction'), net = pay - ref;
+  var payN = recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).length;
+  var refN = recs.filter(function(r){return r.transaction_type==='RefundTransaction'}).length;
+  document.getElementById('kpiPayments').textContent = formatMoney(pay);
+  document.getElementById('kpiRefunds').textContent = formatMoney(ref);
+  document.getElementById('kpiNet').textContent = formatMoney(net);
+  document.getElementById('kpiCount').textContent = recs.length.toLocaleString();
+  document.getElementById('kpiPaymentsSub').textContent = '付款 '+payN+' 筆';
+  document.getElementById('kpiRefundsSub').textContent = '退款 '+refN+' 筆';
+  document.getElementById('kpiNetSub').textContent = pay>0 ? '退款率 '+(ref/pay*100).toFixed(1)+'%' : '';
+  document.getElementById('kpiCountSub').textContent = '';
+  renderTrendChart(recs); renderSourcePieChart(recs); renderDeptSummaryTable(recs);
+  renderMonthlyYoY('monthlyBody', excludePartner);
+}
+function renderTrendChart(recs) {
+  var months = {};
+  for (var m=1;m<=12;m++) { var k=selectedYear+'-'+String(m).padStart(2,'0'); months[k]={pay:0,ref:0}; }
+  recs.forEach(function(r) {
+    var m = (r.record_date||'').substring(0,7);
+    if (m && months[m]) {
+      if (r.transaction_type==='PaymentTransaction') months[m].pay += Number(r.amount||0);
+      else months[m].ref += Number(r.amount||0);
+    }
+  });
+  var labels=Object.keys(months).map(function(k){return k.substring(5)+'月'});
+  var payData=Object.values(months).map(function(v){return v.pay});
+  var refData=Object.values(months).map(function(v){return v.ref});
+  if (charts.trend) charts.trend.destroy();
+  charts.trend = new Chart(document.getElementById('trendChart'), {
+    type:'line', data:{ labels:labels, datasets:[
+      {label:'付款',data:payData,borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,0.1)',fill:true,tension:0.3},
+      {label:'退款',data:refData,borderColor:'#e05c5c',backgroundColor:'rgba(224,92,92,0.1)',fill:true,tension:0.3}
+    ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}}},
+      scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+}
+function renderSourcePieChart(recs) {
+  var sources = aggregateSources(recs);
+  var labels=Object.keys(sources), data=labels.map(function(l){return sources[l].pay});
+  var colors=['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22'];
+  if (charts.source) charts.source.destroy();
+  charts.source = new Chart(document.getElementById('sourceChart'), {
+    type:'doughnut', data:{labels:labels,datasets:[{data:data,backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#8899aa',padding:12,font:{size:11}}}}}
+  });
+}
+function renderDeptSummaryTable(recs) {
+  // Group by office, then by department
+  var offices = {};
+  recs.forEach(function(r) {
+    var o = r.office || '未分配', g = r.group_name || '無';
+    if (!offices[o]) offices[o] = { payN:0, pay:0, ref:0, depts:{} };
+    if (!offices[o].depts[g]) offices[o].depts[g] = { payN:0, pay:0, ref:0 };
+    if (r.transaction_type==='PaymentTransaction') {
+      offices[o].payN++; offices[o].pay+=Number(r.amount||0);
+      offices[o].depts[g].payN++; offices[o].depts[g].pay+=Number(r.amount||0);
+    } else {
+      offices[o].ref+=Number(r.amount||0);
+      offices[o].depts[g].ref+=Number(r.amount||0);
+    }
+  });
+  var sorted = Object.entries(offices).sort(function(a,b){return b[1].pay-a[1].pay});
+  var tbody = document.getElementById('deptSummaryBody');
+  var html = '';
+  sorted.forEach(function(e, idx) {
+    var name=e[0], o=e[1];
+    var isTaipei = name === '台北所';
+    var depts = Object.entries(o.depts).sort(function(a,b){return b[1].pay-a[1].pay});
+    html += '<tr class="'+(isTaipei?'office-row':'')+'" data-office-idx="'+idx+'">' +
+      '<td class="'+(isTaipei?'row-toggle':'')+'" data-office-idx="'+idx+'">'+(isTaipei?'&#9654;':'')+'</td>' +
+      '<td><strong>'+name+'</strong></td>' +
+      '<td class="text-right">'+o.payN+'</td><td class="text-right text-gold">'+formatMoney(o.pay)+'</td>' +
+      '<td class="text-right text-red">'+formatMoney(o.ref)+'</td>' +
+      '<td class="text-right" style="font-weight:600">'+formatMoney(o.pay-o.ref)+'</td></tr>';
+    if (isTaipei) {
+      depts.forEach(function(de) {
+        var dn=de[0], dd=de[1];
+        html += '<tr class="dept-sub-row" data-parent="'+idx+'">' +
+          '<td></td><td style="padding-left:28px;color:var(--text-muted)">'+dn+'</td>' +
+          '<td class="text-right">'+dd.payN+'</td><td class="text-right text-gold">'+formatMoney(dd.pay)+'</td>' +
+          '<td class="text-right text-red">'+formatMoney(dd.ref)+'</td>' +
+          '<td class="text-right">'+formatMoney(dd.pay-dd.ref)+'</td></tr>';
+      });
+    }
+  });
+  if (!sorted.length) html='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+  tbody.innerHTML = html;
+  // Toggle click
+  tbody.querySelectorAll('.office-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var idx = row.getAttribute('data-office-idx');
+      var toggle = row.querySelector('.row-toggle');
+      var open = toggle.classList.toggle('open');
+      tbody.querySelectorAll('.dept-sub-row[data-parent="'+idx+'"]').forEach(function(sub) {
+        sub.classList.toggle('show', open);
+      });
+    });
+  });
+}
+
+// ═══ DEPARTMENT PAGE ═══
+async function loadDeptPage() {
+  var officeFilter = document.getElementById('deptOfficeFilter').value;
+  var recs = excludePartner(await loadRecords({ year: selectedYear, office: officeFilter||undefined }));
+
+  // Group by office → depts
+  var officeMap = {};
+  recs.forEach(function(r) {
+    var o = r.office || '未分配', g = r.group_name || '無';
+    if (!officeMap[o]) officeMap[o] = { payN:0, pay:0, ref:0, depts:{} };
+    if (!officeMap[o].depts[g]) officeMap[o].depts[g] = { payN:0, pay:0, ref:0 };
+    if (r.transaction_type==='PaymentTransaction') {
+      officeMap[o].payN++; officeMap[o].pay+=Number(r.amount||0);
+      officeMap[o].depts[g].payN++; officeMap[o].depts[g].pay+=Number(r.amount||0);
+    } else {
+      officeMap[o].ref+=Number(r.amount||0);
+      officeMap[o].depts[g].ref+=Number(r.amount||0);
+    }
+  });
+  var sorted = Object.entries(officeMap).sort(function(a,b){return b[1].pay-a[1].pay});
+
+  // Render cards - office level, 北所(台北所) shows sub-depts
+  var grid = document.getElementById('deptGrid');
+  var html = '';
+  sorted.forEach(function(e) {
+    var name=e[0], o=e[1];
+    var net=o.pay-o.ref, refRate=o.pay>0?(o.ref/o.pay*100).toFixed(1)+'%':'0%';
+    var isTaipei = name === '台北所';
+    var depts = Object.entries(o.depts).sort(function(a,b){return b[1].pay-a[1].pay});
+    var cardId = 'dcard-'+name.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g,'');
+
+    html += '<div class="dept-card">';
+    html += '<div class="dept-name" '+(isTaipei?'style="cursor:pointer" onclick="document.getElementById(\''+cardId+'\').style.display=document.getElementById(\''+cardId+'\').style.display===\'none\'?\'block\':\'none\'"':'')+'>';
+    html += name + (isTaipei ? ' <span style="font-size:0.75rem;color:var(--text-muted)">▼ 點擊展開</span>' : '');
+    html += '</div>';
+    html += '<div class="dept-stat"><span class="dept-stat-label">付款筆數</span><span class="dept-stat-value text-blue">'+o.payN+'</span></div>';
+    html += '<div class="dept-stat"><span class="dept-stat-label">付款金額</span><span class="dept-stat-value text-gold">'+formatMoney(o.pay)+'</span></div>';
+    html += '<div class="dept-stat"><span class="dept-stat-label">退款</span><span class="dept-stat-value text-red">'+formatMoney(o.ref)+'</span></div>';
+    html += '<div class="dept-stat"><span class="dept-stat-label">淨收入</span><span class="dept-stat-value" style="font-weight:700">'+formatMoney(net)+'</span></div>';
+    html += '<div class="dept-stat"><span class="dept-stat-label">退款率</span><span class="dept-stat-value '+(o.pay>0&&o.ref/o.pay>0.1?'text-red':'text-muted')+'">'+refRate+'</span></div>';
+
+    if (isTaipei && depts.length > 1) {
+      html += '<div id="'+cardId+'" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+      depts.forEach(function(de) {
+        var dn=de[0], dd=de[1], dnet=dd.pay-dd.ref;
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="font-weight:600;font-size:0.85rem;color:var(--blue);margin-bottom:4px">'+dn+'</div>';
+        html += '<div class="dept-stat"><span class="dept-stat-label">付款筆數</span><span class="dept-stat-value">'+dd.payN+'</span></div>';
+        html += '<div class="dept-stat"><span class="dept-stat-label">付款金額</span><span class="dept-stat-value text-gold">'+formatMoney(dd.pay)+'</span></div>';
+        html += '<div class="dept-stat"><span class="dept-stat-label">退款</span><span class="dept-stat-value text-red">'+formatMoney(dd.ref)+'</span></div>';
+        html += '<div class="dept-stat"><span class="dept-stat-label">淨收入</span><span class="dept-stat-value">'+formatMoney(dnet)+'</span></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  grid.innerHTML = html;
+
+  // Charts - by office
+  var names=sorted.map(function(e){return e[0]}), pays=sorted.map(function(e){return e[1].pay}), refs=sorted.map(function(e){return e[1].ref});
+  if (charts.deptBar) charts.deptBar.destroy();
+  charts.deptBar = new Chart(document.getElementById('deptBarChart'), {
+    type:'bar', data:{labels:names,datasets:[{label:'付款',data:pays,backgroundColor:'rgba(201,168,76,0.7)'},{label:'退款',data:refs,backgroundColor:'rgba(224,92,92,0.7)'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}}},scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+  var rates=sorted.map(function(e){var o=e[1];return o.pay>0?(o.ref/o.pay*100):0});
+  if (charts.refundRate) charts.refundRate.destroy();
+  charts.refundRate = new Chart(document.getElementById('refundRateChart'), {
+    type:'bar', data:{labels:names,datasets:[{label:'退款率%',data:rates,backgroundColor:rates.map(function(r){return r>10?'rgba(224,92,92,0.7)':'rgba(76,175,130,0.7)'})}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+}
+
+// ═══ SOURCE PAGE ═══
+async function loadSourcePage() {
+  var office = document.getElementById('srcOfficeFilter').value;
+  var recs = excludePartner(await loadRecords({ year: selectedYear, office: office||undefined }));
+  var sources = aggregateSources(recs);
+  var total = Object.values(sources).reduce(function(s,d){return s+d.cases},0);
+  var labels=Object.keys(sources), colors=['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71'];
+  var caseData=labels.map(function(l){return sources[l].cases});
+  var payData=labels.map(function(l){return sources[l].pay});
+  var totalPay=payData.reduce(function(a,b){return a+b},0);
+  var casePctCb={callbacks:{label:function(ctx){var v=ctx.raw;return ctx.label+': '+v+' ('+( total>0?(v/total*100).toFixed(1):'0')+'%)';}}};
+  var payPctCb={callbacks:{label:function(ctx){var v=ctx.raw;return ctx.label+': '+formatMoney(v)+' ('+(totalPay>0?(v/totalPay*100).toFixed(1):'0')+'%)';}}};
+  if (charts.srcCase) charts.srcCase.destroy();
+  charts.srcCase = new Chart(document.getElementById('srcCaseChart'), {
+    type:'bar', data:{labels:labels,datasets:[{label:'案件數',data:caseData,backgroundColor:colors.slice(0,labels.length)}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:casePctCb},scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+  if (charts.srcRevenue) charts.srcRevenue.destroy();
+  charts.srcRevenue = new Chart(document.getElementById('srcRevenueChart'), {
+    type:'bar', data:{labels:labels,datasets:[{label:'營收',data:payData,backgroundColor:colors.slice(0,labels.length)}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:payPctCb},scales:{x:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+  var sorted=Object.entries(sources).sort(function(a,b){return b[1].pay-a[1].pay});
+  var tbody=document.getElementById('srcTableBody');
+  tbody.innerHTML=sorted.map(function(e){var n=e[0],d=e[1]; return '<tr><td><span class="badge badge-blue">'+n+'</span></td>' +
+    '<td class="text-right">'+d.cases+'</td><td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
+    '<td class="text-right">-</td><td class="text-right">-</td>' +
+    '<td class="text-right">'+(total>0?(d.cases/total*100).toFixed(1)+'%':'0%')+'</td></tr>';}).join('');
+  if (!sorted.length) tbody.innerHTML='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+}
+
+// ═══ PARTNER PAGE ═══
+var partnerGroups = [];
+async function loadPartnerPage() {
+  var office = document.getElementById('partnerOfficeFilter').value;
+  var recs = onlyPartner(await loadRecords({ year: selectedYear, office: office||undefined }));
+
+  // KPI
+  var pay = sumBy(recs,'PaymentTransaction'), ref = sumBy(recs,'RefundTransaction'), net = pay - ref;
+  var payN = recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).length;
+  var refN = recs.filter(function(r){return r.transaction_type==='RefundTransaction'}).length;
+  document.getElementById('pKpiPay').textContent = formatMoney(pay);
+  document.getElementById('pKpiRef').textContent = formatMoney(ref);
+  document.getElementById('pKpiNet').textContent = formatMoney(net);
+  document.getElementById('pKpiCount').textContent = recs.length.toLocaleString();
+  document.getElementById('pKpiPaySub').textContent = '付款 '+payN+' 筆';
+  document.getElementById('pKpiRefSub').textContent = '退款 '+refN+' 筆';
+  document.getElementById('pKpiNetSub').textContent = pay>0 ? '退款率 '+(ref/pay*100).toFixed(1)+'%' : '';
+  document.getElementById('pKpiCountSub').textContent = '';
+
+  // Group by partner lawyer
+  var map = {};
+  recs.forEach(function(r) {
+    var g = r.group_name || '無';
+    if (!map[g]) map[g]={name:g,office:r.office||'',payN:0,pay:0,ref:0};
+    if (r.transaction_type==='PaymentTransaction') { map[g].payN++; map[g].pay+=Number(r.amount||0); }
+    else map[g].ref+=Number(r.amount||0);
+  });
+  partnerGroups = Object.values(map).sort(function(a,b){return b.pay-a.pay});
+  var colors = ['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#f39c12','#8e44ad','#d35400','#16a085'];
+
+  // Bar chart - revenue comparison
+  var names = partnerGroups.map(function(d){ return d.name.replace(/合署\s*[（(]\s*/,'').replace(/[）)]\s*$/,''); });
+  var pays = partnerGroups.map(function(d){return d.pay});
+  var refs = partnerGroups.map(function(d){return d.ref});
+  if (charts.partnerBar) charts.partnerBar.destroy();
+  charts.partnerBar = new Chart(document.getElementById('partnerBarChart'), {
+    type:'bar', data:{labels:names,datasets:[
+      {label:'付款',data:pays,backgroundColor:'rgba(201,168,76,0.7)'},
+      {label:'退款',data:refs,backgroundColor:'rgba(224,92,92,0.7)'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+      plugins:{legend:{labels:{color:'#8899aa'}}},
+      scales:{x:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa',font:{size:10}},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+
+  // Pie chart - revenue share
+  if (charts.partnerPie) charts.partnerPie.destroy();
+  charts.partnerPie = new Chart(document.getElementById('partnerPieChart'), {
+    type:'doughnut', data:{labels:names,datasets:[{data:pays,backgroundColor:colors.slice(0,names.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#8899aa',padding:8,font:{size:10}}}}}
+  });
+
+  // Summary table
+  document.getElementById('partnerCount').textContent = '('+partnerGroups.length+' 位)';
+  var tbody = document.getElementById('partnerTableBody');
+  tbody.innerHTML = partnerGroups.map(function(d) {
+    var net=d.pay-d.ref, refRate=d.pay>0?(d.ref/d.pay*100).toFixed(1)+'%':'0%';
+    return '<tr><td><strong>'+d.name+'</strong></td><td>'+d.office+'</td>' +
+      '<td class="text-right">'+d.payN+'</td><td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
+      '<td class="text-right text-red">'+(d.ref>0?formatMoney(d.ref):'-')+'</td>' +
+      '<td class="text-right" style="font-weight:600">'+formatMoney(net)+'</td>' +
+      '<td class="text-right '+(d.pay>0&&d.ref/d.pay>0.1?'text-red':'text-muted')+'">'+refRate+'</td></tr>';
+  }).join('');
+  if (!partnerGroups.length) tbody.innerHTML='<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+  renderMonthlyYoY('partnerMonthlyBody', onlyPartner);
+}
+document.getElementById('partnerExportBtn').addEventListener('click', function() {
+  if (!partnerGroups.length) return;
+  var rows = partnerGroups.map(function(d) { return {
+    '合署律師':d.name,'接案所':d.office,'付款筆數':d.payN,
+    '付款金額':d.pay,'退款':d.ref,'淨收入':d.pay-d.ref,
+    '退款率':d.pay>0?(d.ref/d.pay*100).toFixed(1)+'%':'0%'
+  }; });
+  var ws=XLSX.utils.json_to_sheet(rows), wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'合署律師');
+  XLSX.writeFile(wb,'合署律師_'+selectedYear+'.xlsx');
+});
+document.getElementById('partnerOfficeFilter').addEventListener('change', loadPartnerPage);
+
+// ═══ YEARLY TRACKING (年度追蹤) - 月份選擇器 ═══
+var ytSelectedMonth = new Date().getMonth() + 1; // current month
+var pySelectedMonth = new Date().getMonth() + 1;
+var TRACK_YEAR = 2026;
+
+function initMonthButtons(containerId, getMonth, setMonth, loadFn) {
+  var c = document.getElementById(containerId);
+  var html = '';
+  for (var m=1; m<=12; m++) {
+    html += '<button class="year-btn '+(m===getMonth()?'active':'')+'" data-month="'+m+'">'+m+'月</button>';
+  }
+  c.innerHTML = html;
+  c.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('year-btn')) return;
+    setMonth(Number(e.target.dataset.month));
+    c.querySelectorAll('.year-btn').forEach(function(b){ b.classList.toggle('active', Number(b.dataset.month)===getMonth()); });
+    loadFn();
+  });
+}
+
+function filterByMonth(recs, month) {
+  var mm = String(month).padStart(2,'0');
+  return recs.filter(function(r) { return (r.record_date||'').substring(5,7) === mm; });
+}
+
+async function loadYearlyPage() {
+  var office = document.getElementById('yearlyOfficeFilter').value;
+  var allRecs = excludePartner(await loadRecords({ year: TRACK_YEAR, office: office||undefined }));
+  var recs = filterByMonth(allRecs, ytSelectedMonth);
+
+  // KPI
+  var pay = sumBy(recs,'PaymentTransaction'), ref = sumBy(recs,'RefundTransaction'), net = pay - ref;
+  var payN = recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).length;
+  var refN = recs.filter(function(r){return r.transaction_type==='RefundTransaction'}).length;
+  document.getElementById('ytKpiPay').textContent = formatMoney(pay);
+  document.getElementById('ytKpiRef').textContent = formatMoney(ref);
+  document.getElementById('ytKpiNet').textContent = formatMoney(net);
+  document.getElementById('ytKpiCount').textContent = recs.length.toLocaleString();
+  document.getElementById('ytKpiPaySub').textContent = '付款 '+payN+' 筆';
+  document.getElementById('ytKpiRefSub').textContent = '退款 '+refN+' 筆';
+  document.getElementById('ytKpiNetSub').textContent = pay>0 ? '退款率 '+(ref/pay*100).toFixed(1)+'%' : '';
+  document.getElementById('ytKpiCountSub').textContent = '';
+
+  // Trend chart - all 12 months bar, highlight selected
+  var mLabels=[], mPays=[], mBgColors=[];
+  for (var m=1;m<=12;m++) {
+    mLabels.push(m+'月');
+    var mRecs = filterByMonth(allRecs, m);
+    mPays.push(sumBy(mRecs,'PaymentTransaction'));
+    mBgColors.push(m===ytSelectedMonth ? 'rgba(201,168,76,0.9)' : 'rgba(201,168,76,0.3)');
+  }
+  if (charts.ytTrend) charts.ytTrend.destroy();
+  charts.ytTrend = new Chart(document.getElementById('ytTrendChart'), {
+    type:'bar', data:{labels:mLabels,datasets:[{label:'付款',data:mPays,backgroundColor:mBgColors}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){return ctx.label+': '+formatMoney(ctx.raw)}}}},
+      scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},
+        y:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+
+  // Source pie chart - for selected month
+  var sources = aggregateSources(recs);
+  var srcLabels=Object.keys(sources), srcData=srcLabels.map(function(l){return sources[l].pay});
+  var colors=['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71'];
+  if (charts.ytSource) charts.ytSource.destroy();
+  charts.ytSource = new Chart(document.getElementById('ytSourceChart'), {
+    type:'doughnut', data:{labels:srcLabels,datasets:[{data:srcData,backgroundColor:colors.slice(0,srcLabels.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#8899aa',padding:12,font:{size:11}}}}}
+  });
+
+  // Office breakdown table
+  var offices = {};
+  recs.forEach(function(r) {
+    var o = r.office || '未分配', g = r.group_name || '無';
+    if (!offices[o]) offices[o] = { payN:0, pay:0, ref:0, depts:{} };
+    if (!offices[o].depts[g]) offices[o].depts[g] = { payN:0, pay:0, ref:0 };
+    if (r.transaction_type==='PaymentTransaction') {
+      offices[o].payN++; offices[o].pay+=Number(r.amount||0);
+      offices[o].depts[g].payN++; offices[o].depts[g].pay+=Number(r.amount||0);
+    } else {
+      offices[o].ref+=Number(r.amount||0);
+      offices[o].depts[g].ref+=Number(r.amount||0);
+    }
+  });
+  var sorted = Object.entries(offices).sort(function(a,b){return b[1].pay-a[1].pay});
+  var tbody = document.getElementById('ytDeptBody');
+  var html = '';
+  sorted.forEach(function(e, idx) {
+    var name=e[0], o=e[1];
+    var isTaipei = name === '台北所';
+    var depts = Object.entries(o.depts).sort(function(a,b){return b[1].pay-a[1].pay});
+    html += '<tr class="'+(isTaipei?'office-row':'')+'" data-office-idx="yt'+idx+'">' +
+      '<td class="'+(isTaipei?'row-toggle':'')+'" data-office-idx="yt'+idx+'">'+(isTaipei?'&#9654;':'')+'</td>' +
+      '<td><strong>'+name+'</strong></td>' +
+      '<td class="text-right">'+o.payN+'</td><td class="text-right text-gold">'+formatMoney(o.pay)+'</td>' +
+      '<td class="text-right text-red">'+formatMoney(o.ref)+'</td>' +
+      '<td class="text-right" style="font-weight:600">'+formatMoney(o.pay-o.ref)+'</td></tr>';
+    if (isTaipei) {
+      depts.forEach(function(de) {
+        var dn=de[0], dd=de[1];
+        html += '<tr class="dept-sub-row" data-parent="yt'+idx+'">' +
+          '<td></td><td style="padding-left:28px;color:var(--text-muted)">'+dn+'</td>' +
+          '<td class="text-right">'+dd.payN+'</td><td class="text-right text-gold">'+formatMoney(dd.pay)+'</td>' +
+          '<td class="text-right text-red">'+formatMoney(dd.ref)+'</td>' +
+          '<td class="text-right">'+formatMoney(dd.pay-dd.ref)+'</td></tr>';
+      });
+    }
+  });
+  if (!sorted.length) html='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+  tbody.innerHTML = html;
+  tbody.querySelectorAll('.office-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var idx2 = row.getAttribute('data-office-idx');
+      var toggle = row.querySelector('.row-toggle');
+      var open = toggle.classList.toggle('open');
+      tbody.querySelectorAll('.dept-sub-row[data-parent="'+idx2+'"]').forEach(function(sub) { sub.classList.toggle('show', open); });
+    });
+  });
+
+  // YoY comparison
+  var prevRecs = excludePartner(await loadRecords({ year: TRACK_YEAR - 1, office: office||undefined }));
+  var prevMonth = filterByMonth(prevRecs, ytSelectedMonth);
+  var prevPay = sumBy(prevMonth,'PaymentTransaction'), prevRef = sumBy(prevMonth,'RefundTransaction');
+  var prevNet = prevPay - prevRef;
+  var yoyBody = document.getElementById('ytYoyBody');
+  function yoyRow(label, cur, prev) {
+    var pct = prev>0 ? ((cur-prev)/prev*100) : (cur>0?999:0);
+    var txt = prev>0 ? (pct>0?'+':'')+pct.toFixed(1)+'%' : (cur>0?'N/A':'-');
+    var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
+    return '<tr><td>'+label+'</td><td class="text-right text-gold">'+formatMoney(cur)+'</td><td class="text-right text-muted">'+formatMoney(prev)+'</td><td class="text-right '+cls+'">'+txt+'</td></tr>';
+  }
+  yoyBody.innerHTML = yoyRow('付款金額', pay, prevPay) + yoyRow('退款金額', ref, prevRef) + yoyRow('淨收入', net, prevNet);
+}
+document.getElementById('yearlyOfficeFilter').addEventListener('change', loadYearlyPage);
+
+async function loadPartnerYearlyPage() {
+  var office = document.getElementById('pyOfficeFilter').value;
+  var allRecs = onlyPartner(await loadRecords({ year: TRACK_YEAR, office: office||undefined }));
+  var recs = filterByMonth(allRecs, pySelectedMonth);
+
+  // KPI
+  var pay = sumBy(recs,'PaymentTransaction'), ref = sumBy(recs,'RefundTransaction'), net = pay - ref;
+  var payN = recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).length;
+  var refN = recs.filter(function(r){return r.transaction_type==='RefundTransaction'}).length;
+  document.getElementById('pyKpiPay').textContent = formatMoney(pay);
+  document.getElementById('pyKpiRef').textContent = formatMoney(ref);
+  document.getElementById('pyKpiNet').textContent = formatMoney(net);
+  document.getElementById('pyKpiCount').textContent = recs.length.toLocaleString();
+  document.getElementById('pyKpiPaySub').textContent = '付款 '+payN+' 筆';
+  document.getElementById('pyKpiRefSub').textContent = '退款 '+refN+' 筆';
+  document.getElementById('pyKpiNetSub').textContent = pay>0 ? '退款率 '+(ref/pay*100).toFixed(1)+'%' : '';
+  document.getElementById('pyKpiCountSub').textContent = '';
+
+  // Partner lawyer breakdown
+  var map = {};
+  recs.forEach(function(r) {
+    var g = r.group_name || '無';
+    if (!map[g]) map[g]={name:g,office:r.office||'',payN:0,pay:0,ref:0};
+    if (r.transaction_type==='PaymentTransaction') { map[g].payN++; map[g].pay+=Number(r.amount||0); }
+    else map[g].ref+=Number(r.amount||0);
+  });
+  var partners = Object.values(map).sort(function(a,b){return b.pay-a.pay});
+  var colors = ['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#f39c12','#8e44ad'];
+  var names = partners.map(function(d){ return d.name.replace(/合署\s*[（(]\s*/,'').replace(/[）)]\s*$/,''); });
+  var pays = partners.map(function(d){return d.pay});
+  var refs = partners.map(function(d){return d.ref});
+
+  if (charts.pyBar) charts.pyBar.destroy();
+  charts.pyBar = new Chart(document.getElementById('pyBarChart'), {
+    type:'bar', data:{labels:names,datasets:[
+      {label:'付款',data:pays,backgroundColor:'rgba(201,168,76,0.7)'},
+      {label:'退款',data:refs,backgroundColor:'rgba(224,92,92,0.7)'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+      plugins:{legend:{labels:{color:'#8899aa'}}},
+      scales:{x:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa',font:{size:10}},grid:{color:'rgba(30,48,80,0.3)'}}}}
+  });
+  if (charts.pyPie) charts.pyPie.destroy();
+  charts.pyPie = new Chart(document.getElementById('pyPieChart'), {
+    type:'doughnut', data:{labels:names,datasets:[{data:pays,backgroundColor:colors.slice(0,names.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#8899aa',padding:8,font:{size:10}}}}}
+  });
+
+  // Table
+  document.getElementById('pyPartnerCount').textContent = '('+partners.length+' 位)';
+  var tbody = document.getElementById('pyTableBody');
+  tbody.innerHTML = partners.map(function(d) {
+    var pnet=d.pay-d.ref, refRate=d.pay>0?(d.ref/d.pay*100).toFixed(1)+'%':'0%';
+    return '<tr><td><strong>'+d.name+'</strong></td><td>'+d.office+'</td>' +
+      '<td class="text-right">'+d.payN+'</td><td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
+      '<td class="text-right text-red">'+(d.ref>0?formatMoney(d.ref):'-')+'</td>' +
+      '<td class="text-right" style="font-weight:600">'+formatMoney(pnet)+'</td>' +
+      '<td class="text-right '+(d.pay>0&&d.ref/d.pay>0.1?'text-red':'text-muted')+'">'+refRate+'</td></tr>';
+  }).join('');
+  if (!partners.length) tbody.innerHTML='<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+
+  // YoY comparison
+  var prevRecs = onlyPartner(await loadRecords({ year: TRACK_YEAR - 1, office: office||undefined }));
+  var prevMonth = filterByMonth(prevRecs, pySelectedMonth);
+  var prevPay = sumBy(prevMonth,'PaymentTransaction'), prevRef = sumBy(prevMonth,'RefundTransaction');
+  var prevNet = prevPay - prevRef;
+  var yoyBody = document.getElementById('pyYoyBody');
+  function pyYoyRow(label, cur, prev) {
+    var pct = prev>0 ? ((cur-prev)/prev*100) : (cur>0?999:0);
+    var txt = prev>0 ? (pct>0?'+':'')+pct.toFixed(1)+'%' : (cur>0?'N/A':'-');
+    var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
+    return '<tr><td>'+label+'</td><td class="text-right text-gold">'+formatMoney(cur)+'</td><td class="text-right text-muted">'+formatMoney(prev)+'</td><td class="text-right '+cls+'">'+txt+'</td></tr>';
+  }
+  yoyBody.innerHTML = pyYoyRow('付款金額', pay, prevPay) + pyYoyRow('退款金額', ref, prevRef) + pyYoyRow('淨收入', net, prevNet);
+}
+document.getElementById('pyOfficeFilter').addEventListener('change', loadPartnerYearlyPage);
+
+// ═══ TABS & YEAR ═══
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+    document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+    btn.classList.add('active');
+    var tab = btn.dataset.tab;
+    document.getElementById('page-'+tab).classList.add('active');
+    if (tab==='overview') loadOverviewData();
+    else if (tab==='yearly') loadYearlyPage();
+    else if (tab==='departments') loadDeptPage();
+    else if (tab==='sources') loadSourcePage();
+    else if (tab==='partner') loadPartnerPage();
+    else if (tab==='partnerYearly') loadPartnerYearlyPage();
+  });
+});
+function initYearButtons() {
+  var cy=new Date().getFullYear(), years=[];
+  for (var y=cy;y>=cy-3;y--) years.push(y);
+  ['yearBtns','deptYearBtns','srcYearBtns','partnerYearBtns'].forEach(function(cid) {
+    var c=document.getElementById(cid);
+    c.innerHTML=years.map(function(y){return '<button class="year-btn '+(y===selectedYear?'active':'')+'" data-year="'+y+'">'+y+'</button>'}).join('');
+    c.addEventListener('click',function(e){
+      if (!e.target.classList.contains('year-btn')) return;
+      selectedYear=Number(e.target.dataset.year);
+      document.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active',Number(b.dataset.year)===selectedYear)});
+      var ap=document.querySelector('.tab-btn.active');
+      if(ap){var t=ap.dataset.tab; if(t==='overview')loadOverviewData();else if(t==='yearly')loadYearlyPage();else if(t==='departments')loadDeptPage();else if(t==='sources')loadSourcePage();else if(t==='partner')loadPartnerPage();else if(t==='partnerYearly')loadPartnerYearlyPage();}
+    });
+  });
+}
+document.getElementById('overviewOfficeFilter').addEventListener('change', loadOverviewData);
+document.getElementById('deptOfficeFilter').addEventListener('change', loadDeptPage);
+document.getElementById('srcOfficeFilter').addEventListener('change', loadSourcePage);
+
+function initMonthBtns() {
+  initMonthButtons('ytMonthBtns', function(){return ytSelectedMonth}, function(m){ytSelectedMonth=m}, loadYearlyPage);
+  initMonthButtons('pyMonthBtns', function(){return pySelectedMonth}, function(m){pySelectedMonth=m}, loadPartnerYearlyPage);
+}
+
+// ═══ THEME ═══
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var c=document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme',c==='light'?'':'light');
+  localStorage.setItem('theme',c==='light'?'dark':'light');
+});
+if (localStorage.getItem('theme')==='light') document.documentElement.setAttribute('data-theme','light');
+
+function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return n.toLocaleString('zh-TW'); }
+
+checkSession();
+</script>
+</body>
+</html>
