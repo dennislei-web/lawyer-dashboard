@@ -3819,16 +3819,16 @@ function renderUnsignedPage() {
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
   cols.push({ key: 'tracking_notes', label: '備註' });
 
-  // Auto layout: left columns compact, notes columns get remaining space
   const tbl = document.getElementById('unsignedTable');
-  tbl.style.tableLayout = 'auto';
+  tbl.style.tableLayout = 'fixed';
   tbl.style.width = '100%';
+  // Width allocation: left columns tight, notes get remaining space
+  const colW = { case_date:'90px', client_name:'60px', case_type:'50px',
+    lawyer_name:'55px', tracking_staff:'55px', tracking_status:'72px' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    // Notes columns: no nowrap, allow them to take space
-    const isNote = (c.key === 'tracking_notes' || c.key === 'lawyer_notes');
-    const style = isNote ? 'min-width:150px;' : 'white-space:nowrap;';
-    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${style}">${c.label}${arrow}</th>`;
+    const w = colW[c.key] ? `width:${colW[c.key]};` : '';
+    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${w}">${c.label}${arrow}</th>`;
   }).join('');
 
   // Bind sort
