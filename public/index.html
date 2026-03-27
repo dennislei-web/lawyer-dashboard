@@ -3861,12 +3861,12 @@ function renderUnsignedPage() {
     const shortNotes = notes.length > 60 ? notes.slice(0, 60) + '…' : notes;
     const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
-      <td style="font-size:0.78rem;white-space:nowrap;" title="${escHtml(c.case_number || '')}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
-      <td style="font-size:0.8rem;white-space:nowrap;">${escHtml(c.client_name || '—')}</td>
-      <td style="font-size:0.78rem;white-space:nowrap;">${escHtml((c.case_type || '—').replace('諮詢',''))}</td>
-      ${showAllData ? `<td style="font-size:0.8rem;white-space:nowrap;">${escHtml(lawyerName)}</td>` : ''}
-      <td style="font-size:0.8rem;white-space:nowrap;">${escHtml(c.tracking_staff || '—')}</td>
-      <td style="color:${statusColor};font-size:0.78rem;white-space:nowrap;">${escHtml(c.tracking_status || '—')}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_number || '')}&#10;${c.case_date}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
+      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.client_name || '')}">${escHtml(c.client_name || '—')}</td>
+      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_type || '')}">${escHtml((c.case_type || '—').replace(/諮詢/g,''))}</td>
+      ${showAllData ? `<td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(lawyerName)}</td>` : ''}
+      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_staff || '—')}</td>
+      <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_status || '—')}</td>
       <td style="overflow-wrap:break-word;min-width:140px;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
              onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
