@@ -3823,8 +3823,8 @@ function renderUnsignedPage() {
   tbl.style.tableLayout = 'fixed';
   tbl.style.width = '100%';
   // Width allocation: left columns tight, notes get remaining space
-  const colW = { case_date:'90px', client_name:'60px', case_type:'50px',
-    lawyer_name:'55px', tracking_staff:'55px', tracking_status:'72px' };
+  const colW = { case_date:'86px', client_name:'62px', case_type:'40px',
+    lawyer_name:'62px', tracking_staff:'62px', tracking_status:'62px' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
     const w = colW[c.key] ? `width:${colW[c.key]};` : '';
@@ -3862,10 +3862,10 @@ function renderUnsignedPage() {
     const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
     return `<tr>
       <td style="font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_number || '')}&#10;${c.case_date}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
-      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.client_name || '')}">${escHtml(c.client_name || '—')}</td>
+      <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.client_name || '')}">${escHtml(c.client_name || '—')}</td>
       <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_type || '')}">${escHtml((c.case_type || '—').replace(/諮詢/g,''))}</td>
-      ${showAllData ? `<td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(lawyerName)}</td>` : ''}
-      <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_staff || '—')}</td>
+      ${showAllData ? `<td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lawyerName)}</td>` : ''}
+      <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_staff || '—')}</td>
       <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_status || '—')}</td>
       <td style="overflow-wrap:break-word;min-width:140px;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
