@@ -419,6 +419,7 @@
 
     /* ===================== TABLES ===================== */
     .table-wrap { overflow-x: auto; }
+    #unsignedTable td, #unsignedTable th { padding: 8px 6px; }
 
     table {
       width: 100%;
@@ -3822,9 +3823,10 @@ function renderUnsignedPage() {
   const tbl = document.getElementById('unsignedTable');
   tbl.style.tableLayout = 'fixed';
   tbl.style.width = '100%';
+  tbl.style.fontSize = '0.82rem';
   // Width allocation: left columns tight, notes get remaining space
-  const colW = { case_date:'86px', client_name:'62px', case_type:'40px',
-    lawyer_name:'62px', tracking_staff:'62px', tracking_status:'62px' };
+  const colW = { case_date:'86px', client_name:'5em', case_type:'3em',
+    lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
     const w = colW[c.key] ? `width:${colW[c.key]};` : '';
