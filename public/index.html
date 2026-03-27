@@ -3865,7 +3865,7 @@ function renderUnsignedPage() {
     return `<tr>
       <td style="font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_number || '')}&#10;${c.case_date}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
       <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.client_name || '')}">${escHtml(c.client_name || '—')}</td>
-      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_type || '')}">${escHtml((c.case_type || '—').replace(/諮詢/g,''))}</td>
+      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(c.case_type || '')}">${escHtml((c.case_type || '—').replace(/諮詢/g,'').split(/[,，]/)[0].slice(0,2))}</td>
       ${showAllData ? `<td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lawyerName)}</td>` : ''}
       <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_staff || '—')}</td>
       <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_status || '—')}</td>
