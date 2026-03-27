@@ -3818,8 +3818,8 @@ function renderUnsignedPage() {
   cols.push({ key: 'tracking_staff', label: '負責法務' });
   cols.push({ key: 'tracking_status', label: '追蹤狀態' });
   cols.push({ key: 'days_ago', label: '距今天數' });
-  cols.push({ key: 'tracking_notes', label: '備註' });
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
+  cols.push({ key: 'tracking_notes', label: '備註' });
 
   // Auto layout: left columns compact, notes columns get remaining space
   const tbl = document.getElementById('unsignedTable');
@@ -3871,10 +3871,7 @@ function renderUnsignedPage() {
       <td style="font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_staff || '—')}</td>
       <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.tracking_status || '—')}</td>
       <td class="num ${daysClass}" style="white-space:nowrap;">${daysAgo}</td>
-      <td style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:break-word;${notes.length > 60 ? 'cursor:pointer;' : ''}"
-          ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
-          >${escHtml(shortNotes) || '—'}</td>
-      <td style="overflow-wrap:break-word;">
+      <td style="overflow-wrap:break-word;min-width:140px;">
         <div class="lawyer-note-cell" data-case-id="${c.id}"
              onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
           <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(c.lawyer_notes || '') || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>'}</span>
@@ -3885,6 +3882,9 @@ function renderUnsignedPage() {
           <div class="note-hint" style="display:none;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">按 Enter 儲存 · Shift+Enter 換行 · Esc 取消</div>
         </div>
       </td>
+      <td style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:break-word;${notes.length > 60 ? 'cursor:pointer;' : ''}"
+          ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
+          >${escHtml(shortNotes) || '—'}</td>
     </tr>`;
   }).join('');
 }
