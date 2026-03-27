@@ -3888,18 +3888,7 @@ function renderUnsignedPage() {
 }
 
 async function saveLawyerNote(caseId, note, cellEl) {
-  const { error } = await sb
-    .from('consultation_cases')
-    .update({ lawyer_notes: note })
-    .eq('id', caseId);
-  if (error) {
-    alert('儲存失敗：' + error.message);
-    return;
-  }
-  // Update local data
-  const c = allCases.find(c => c.id === caseId);
-  if (c) c.lawyer_notes = note;
-  // Update display
+  // Always close textarea first
   const span = cellEl.querySelector('span');
   const ta = cellEl.querySelector('textarea');
   const hint = cellEl.querySelector('.note-hint');
@@ -3907,12 +3896,38 @@ async function saveLawyerNote(caseId, note, cellEl) {
   span.style.display = 'block';
   ta.style.display = 'none';
   if (hint) hint.style.display = 'none';
-  // Show save confirmation
-  const saved = document.createElement('div');
-  saved.textContent = '✓ 已儲存';
-  saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
-  cellEl.appendChild(saved);
-  setTimeout(() => saved.remove(), 2000);
+
+  try {
+    const { error } = await sb
+      .from('consultation_cases')
+      .update({ lawyer_notes: note })
+      .eq('id', caseId);
+    if (error) {
+      const msg = document.createElement('div');
+      msg.textContent = '✗ 儲存失敗';
+      msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+      cellEl.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+      console.error('saveLawyerNote error:', error);
+      return;
+    }
+    // Update local data
+    const c = allCases.find(c => c.id === caseId);
+    if (c) c.lawyer_notes = note;
+    // Show save confirmation
+    const saved = document.createElement('div');
+    saved.textContent = '✓ 已儲存';
+    saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(saved);
+    setTimeout(() => saved.remove(), 2000);
+  } catch (e) {
+    console.error('saveLawyerNote exception:', e);
+    const msg = document.createElement('div');
+    msg.textContent = '✗ 網路錯誤';
+    msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }
 }
 
 function sortUnsignedRows(cases, col, dir) {
