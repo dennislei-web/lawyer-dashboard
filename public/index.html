@@ -3821,16 +3821,16 @@ function renderUnsignedPage() {
   cols.push({ key: 'tracking_notes', label: '備註' });
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
 
-  // Fixed layout: compact left columns, wide right columns for notes
+  // Auto layout: left columns compact, notes columns get remaining space
   const tbl = document.getElementById('unsignedTable');
-  tbl.style.tableLayout = 'fixed';
-  tbl.style.width = showAllData ? '1800px' : '1500px';
-  const colW = { case_date:'82px', case_number:'100px', client_name:'68px', case_type:'80px',
-    lawyer_name:'68px', tracking_staff:'68px', tracking_status:'68px', days_ago:'52px' };
+  tbl.style.tableLayout = 'auto';
+  tbl.style.width = '100%';
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    const w = colW[c.key] ? `width:${colW[c.key]};` : '';
-    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${w}">${c.label}${arrow}</th>`;
+    // Notes columns: no nowrap, allow them to take space
+    const isNote = (c.key === 'tracking_notes' || c.key === 'lawyer_notes');
+    const style = isNote ? 'min-width:150px;' : 'white-space:nowrap;';
+    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${style}">${c.label}${arrow}</th>`;
   }).join('');
 
   // Bind sort
