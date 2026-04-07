@@ -1419,6 +1419,7 @@
               <th style="text-align:left;">Email</th>
               <th style="text-align:center;">資料範圍</th>
               <th style="text-align:center;">狀態</th>
+              <th style="text-align:center;">密碼</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
@@ -3698,6 +3699,9 @@ function renderAdminPage() {
           ${l.is_active ? '在職' : '離職'}
         </span>
       </td>
+      <td style="text-align:center;">
+        ${l.auth_user_id ? `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword('${l.auth_user_id}', '${escHtml(l.name)}')">🔄 重設</button>` : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>'}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -3738,6 +3742,23 @@ async function changeRole(lawyerId, newRole) {
   allLawyersMap[lawyerId].can_view_all = canViewAll;
 
   renderAdminPage();
+}
+
+const DEFAULT_PASSWORD = 'ChangeMe123!';
+async function resetPassword(authUserId, name) {
+  if (!confirm(`確定要將「${name}」的密碼重設為預設密碼（${DEFAULT_PASSWORD}）嗎？`)) return;
+
+  try {
+    const { error } = await sb.rpc('admin_reset_password', {
+      target_user_id: authUserId,
+      new_password: DEFAULT_PASSWORD
+    });
+    if (error) throw error;
+    alert(`「${name}」的密碼已重設為：${DEFAULT_PASSWORD}`);
+  } catch (e) {
+    alert('重設失敗：' + (e.message || e));
+    console.error('resetPassword error:', e);
+  }
 }
 
 function renderUnsignedPage() {
