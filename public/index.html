@@ -1722,7 +1722,7 @@ async function loadDashboard(user) {
 
   // Parallel fetch: stats + cases + lawyers (all at once)
   const lawyerPromise = canViewAll()
-    ? sb.from('lawyers').select('id,name,email,office,role,is_active,can_view_all').order('name')
+    ? sb.from('lawyers').select('id,name,email,office,role,is_active,can_view_all,auth_user_id').order('name')
     : Promise.resolve({ data: null });
 
   const [statsResult, casesResult, lawyersResult] = await Promise.all([
