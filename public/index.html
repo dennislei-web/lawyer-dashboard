@@ -1686,48 +1686,38 @@ async function loadDashboard(user) {
   currentLawyer = lawyers[0];
   document.getElementById('userName').textContent = currentLawyer.name;
 
-  // Helper: parallel paginated fetch - fires all page requests at once
-  async function fetchAllParallel(table, select, orderCol, ascending, estTotal) {
-    const pageSize = 1000;
-    // First page to get actual data and estimate total
-    const { data: first, error } = await sb.from(table).select(select)
-      .order(orderCol, { ascending }).range(0, pageSize - 1);
-    if (error || !first || first.length === 0) return [];
-    if (first.length < pageSize) return first;
-
-    // Fire remaining pages in parallel
-    const pages = Math.ceil((estTotal || 20000) / pageSize);
+  // Fire ALL page requests at once (no sequential first page)
+  async function fetchAllPages(table, select, orderCol, ascending, maxPages) {
+    const ps = 1000;
     const promises = [];
-    for (let i = 1; i < pages; i++) {
+    for (let i = 0; i < maxPages; i++) {
       promises.push(
         sb.from(table).select(select)
           .order(orderCol, { ascending })
-          .range(i * pageSize, (i + 1) * pageSize - 1)
-          .then(r => r.data || [])
+          .range(i * ps, (i + 1) * ps - 1)
+          .then(r => ({ idx: i, data: r.data || [], err: r.error }))
       );
     }
-    const results = await Promise.all(promises);
-    let all = first;
+    const results = (await Promise.all(promises)).sort((a, b) => a.idx - b.idx);
+    let all = [];
     for (const r of results) {
-      if (r.length === 0) break;
-      all = all.concat(r);
+      if (r.err || r.data.length === 0) break;
+      all = all.concat(r.data);
+      if (r.data.length < ps) break;
     }
     return all;
   }
 
-  // Determine consultation_cases columns (try once)
-  let caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
-  const testRes = await sb.from('consultation_cases').select(caseCols).limit(1);
-  if (testRes.error) caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,meeting_record,transcript';
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
 
-  // Parallel fetch: stats + cases + lawyers (all at once)
+  // All fetches fire simultaneously
   const lawyerPromise = canViewAll()
     ? sb.from('lawyers').select('id,name,email,office,role,is_active,can_view_all,auth_user_id').order('name')
     : Promise.resolve({ data: null });
 
   const [statsResult, casesResult, lawyersResult] = await Promise.all([
-    fetchAllParallel('monthly_stats', '*', 'month', true, 2000),
-    fetchAllParallel('consultation_cases', caseCols, 'case_date', false, 20000),
+    fetchAllPages('monthly_stats', '*', 'month', true, 3),
+    fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20),
     lawyerPromise
   ]);
 
