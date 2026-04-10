@@ -36,7 +36,7 @@ jobs:
           elif [ -n "${{ github.event.inputs.months }}" ]; then
             ARGS="--months ${{ github.event.inputs.months }}"
           fi
-          python scripts/daily_update.py --months 3 $ARGS
+          python scripts/daily_update.py --months 6 $ARGS
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
