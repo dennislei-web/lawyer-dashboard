@@ -1686,24 +1686,28 @@ async function loadDashboard(user) {
   currentLawyer = lawyers[0];
   document.getElementById('userName').textContent = currentLawyer.name;
 
-  // Fire ALL page requests at once (no sequential first page)
+  // Fetch all rows with batched parallelism (5 concurrent requests max)
   async function fetchAllPages(table, select, orderCol, ascending, maxPages) {
-    const ps = 1000;
-    const promises = [];
-    for (let i = 0; i < maxPages; i++) {
-      promises.push(
-        sb.from(table).select(select)
-          .order(orderCol, { ascending })
-          .range(i * ps, (i + 1) * ps - 1)
-          .then(r => ({ idx: i, data: r.data || [], err: r.error }))
-      );
-    }
-    const results = (await Promise.all(promises)).sort((a, b) => a.idx - b.idx);
+    const ps = 1000, batch = 5;
     let all = [];
-    for (const r of results) {
-      if (r.err || r.data.length === 0) break;
-      all = all.concat(r.data);
-      if (r.data.length < ps) break;
+    for (let b = 0; b < maxPages; b += batch) {
+      const promises = [];
+      for (let i = b; i < Math.min(b + batch, maxPages); i++) {
+        promises.push(
+          sb.from(table).select(select)
+            .order(orderCol, { ascending })
+            .range(i * ps, (i + 1) * ps - 1)
+            .then(r => ({ idx: i, data: r.data || [], err: r.error }))
+        );
+      }
+      const results = (await Promise.all(promises)).sort((a, b) => a.idx - b.idx);
+      let done = false;
+      for (const r of results) {
+        if (r.err || r.data.length === 0) { done = true; break; }
+        all = all.concat(r.data);
+        if (r.data.length < ps) { done = true; break; }
+      }
+      if (done) break;
     }
     return all;
   }
