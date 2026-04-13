@@ -443,6 +443,10 @@
             <input type="file" id="uploadFile" accept=".xlsx,.xls">
             <button class="btn-primary" id="uploadBtn">上傳解析</button>
           </div>
+          <div class="upload-row" style="margin-top:8px">
+            <button class="btn-sm" id="clearHistBtn" style="color:var(--red);border-color:var(--red)">清除該年度全部歷史資料</button>
+            <span class="text-muted" style="font-size:0.75rem">（重新上傳前請先清除，避免重複計算）</span>
+          </div>
           <div id="uploadMsg"></div>
           <div class="upload-log" id="uploadLog"></div>
         </div>
@@ -1214,6 +1218,23 @@ async function loadUploadLog() {
 // ═══════════════════════════════════════════════════════════
 //  EXCEL UPLOAD
 // ═══════════════════════════════════════════════════════════
+
+// Clear historical data button
+document.getElementById('clearHistBtn').addEventListener('click', async function() {
+  var year = parseInt(document.getElementById('uploadYear').value);
+  if (!year) return;
+  if (!confirm('確定要清除 ' + year + ' 年的全部歷史資料？此操作不可復原。')) return;
+  this.disabled = true; this.textContent = '清除中...';
+  var r = await sb.from('finance_data').delete().eq('fiscal_year', year).eq('data_type', 'historical');
+  if (r.error) { alert('清除失敗：' + r.error.message); }
+  else {
+    delete dataCache[year + '-historical'];
+    showUploadMsg('已清除 ' + year + ' 年全部歷史資料，請重新上傳', 'success');
+    loadHistoryData();
+  }
+  this.disabled = false; this.textContent = '清除該年度全部歷史資料';
+});
+
 document.getElementById('uploadBtn').addEventListener('click', async function() {
   var fileInput = document.getElementById('uploadFile');
   var entity = document.getElementById('uploadEntity').value;
@@ -1287,16 +1308,16 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
     });
     var dedupedList = Object.values(deduped);
 
-    // Check if there's existing data for another entity for same year - if so, merge
+    // Check existing data for same year - ADD to it (for multi-entity upload)
     var existingKey = year + '-historical';
-    var existingRows = await fetchFinanceData(year, 'historical');
+    var existingRows = dataCache[existingKey] || [];
     var existingMap = {};
     existingRows.forEach(function(r) {
       var key = r.category_id + '-' + r.month;
       existingMap[key] = r.amount || 0;
     });
 
-    // Merge: add new amounts to existing
+    // Merge: add new amounts to existing (for second entity upload)
     var finalUpserts = dedupedList.map(function(u) {
       var key = u.category_id + '-' + u.month;
       var existing = existingMap[key] || 0;
@@ -1316,8 +1337,10 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
       uploaded_by: currentLawyer ? currentLawyer.id : null, row_count: allUpserts.length
     });
 
+    // Refresh cache so next entity upload can correctly add to this data
     delete dataCache[existingKey];
-    showUploadMsg('上傳成功！解析 ' + monthSheets.length + ' 個月份，共 ' + allUpserts.length + ' 筆資料', 'success');
+    await fetchFinanceData(year, 'historical'); // re-cache
+    showUploadMsg('上傳成功！解析 ' + monthSheets.length + ' 個月份，共 ' + dedupedList.length + ' 筆科目資料（去重後）', 'success');
     loadHistoryData();
   } catch(ex) {
     console.error('upload error:', ex);
