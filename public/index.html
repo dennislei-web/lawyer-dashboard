@@ -1714,19 +1714,17 @@ async function loadDashboard(user) {
 
   const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
 
-  // All fetches fire simultaneously
+  // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
     ? sb.from('lawyers').select('id,name,email,office,role,is_active,can_view_all,auth_user_id').order('name')
     : Promise.resolve({ data: null });
 
-  const [statsResult, casesResult, lawyersResult] = await Promise.all([
+  const [statsResult, lawyersResult] = await Promise.all([
     fetchAllPages('monthly_stats', '*', 'month', true, 3),
-    fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20),
     lawyerPromise
   ]);
 
   allStats = statsResult;
-  allCases = casesResult;
 
   if (canViewAll() && lawyersResult.data) {
     lawyersResult.data.forEach(l => {
@@ -1737,8 +1735,15 @@ async function loadDashboard(user) {
     allLawyersMap[currentLawyer.id] = currentLawyer;
   }
 
+  // Step 2: Show dashboard immediately (before cases load)
   hidePage('loginPage');
   showDashboard();
+
+  // Step 3: Load cases in background
+  fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20).then(cases => {
+    allCases = cases;
+    console.log('[DEBUG] cases loaded:', cases.length);
+  });
 }
 
 // ===================== TAB NAVIGATION =====================
