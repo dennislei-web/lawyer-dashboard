@@ -1540,9 +1540,9 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
     for (var mo = 0; mo < 12; mo++) {
       var d = totalB[mo] - totalA[mo];
       grandB += totalB[mo]; grandA += totalA[mo];
-      html += '<td class="text-right" style="font-weight:600">' + fmt(totalB[mo]) + '</td>';
-      html += '<td class="text-right" style="font-weight:600">' + fmt(totalA[mo]) + '</td>';
-      html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:600">' + fmt(d) + '</td>';
+      html += '<td class="text-right text-gold" style="font-weight:600">' + fmt(totalB[mo]) + '</td>';
+      html += '<td class="text-right text-blue" style="font-weight:600">' + fmt(totalA[mo]) + '</td>';
+      html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700">' + (d !== 0 ? (d > 0 ? '+' : '') + fmt(d) : '-') + '</td>';
     }
     var grandD = grandB - grandA;
     html += '<td class="text-right text-gold" style="font-weight:700;font-size:0.9rem">' + fmtCurrency(grandB) + '</td>';
