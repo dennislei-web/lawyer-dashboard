@@ -1800,26 +1800,19 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
     });
     var dedupedList = Object.values(deduped);
 
-    // For historical: add to existing (multi-entity merge)
-    // For actual: just overwrite (partial month upload)
+    // Merge with existing data (for multi-entity upload: 喆律 + 法律010)
     var existingKey = year + '-' + dataType;
-    var finalUpserts;
-    if (dataType === 'historical') {
-      var existingRows = dataCache[existingKey] || [];
-      var existingMap = {};
-      existingRows.forEach(function(r) {
-        var key = r.category_id + '-' + r.month;
-        existingMap[key] = r.amount || 0;
-      });
-      finalUpserts = dedupedList.map(function(u) {
-        var key = u.category_id + '-' + u.month;
-        var existing = existingMap[key] || 0;
-        return Object.assign({}, u, { amount: existing + u.amount });
-      });
-    } else {
-      // actual: direct upsert, no merge needed (each entity's data replaces)
-      finalUpserts = dedupedList;
-    }
+    var existingRows = dataCache[existingKey] || [];
+    var existingMap = {};
+    existingRows.forEach(function(r) {
+      var key = r.category_id + '-' + r.month;
+      existingMap[key] = r.amount || 0;
+    });
+    var finalUpserts = dedupedList.map(function(u) {
+      var key = u.category_id + '-' + u.month;
+      var existing = existingMap[key] || 0;
+      return Object.assign({}, u, { amount: existing + u.amount });
+    });
 
     // Batch upsert
     for (var i = 0; i < finalUpserts.length; i += 200) {
