@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 財務規劃</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg-main:    #020b18;
+      --bg-card:    #0a1628;
+      --bg-row:     #111b2e;
+      --bg-hover:   #16253d;
+      --border:     #1e3050;
+      --border-light: #243a5e;
+      --gold:       #c9a84c;
+      --gold-light: #e8c97a;
+      --text:       #e0e0e0;
+      --text-muted: #8899aa;
+      --blue:       #4f8ef7;
+      --blue-dim:   rgba(79,142,247,0.15);
+      --green:      #4caf82;
+      --green-dim:  rgba(76,175,130,0.15);
+      --red:        #e05c5c;
+      --red-dim:    rgba(224,92,92,0.15);
+      --orange:     #e0954a;
+      --orange-dim: rgba(224,149,74,0.15);
+      --brand-color: #e8c97a;
+      --header-bg:  rgba(10,22,40,0.95);
+      --login-shadow: rgba(0,0,0,0.5);
+      --tab-active-bg: rgba(201,168,76,0.12);
+      --tab-active-border: rgba(201,168,76,0.2);
+      --tab-active-color: var(--gold-light);
+      --ghost-bg: rgba(255,255,255,0.07);
+      --ghost-hover-bg: rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:    #f5f6fa;
+      --bg-card:    #ffffff;
+      --bg-row:     #f0f2f5;
+      --bg-hover:   #e8eaf0;
+      --border:     #d0d5dd;
+      --border-light: #e0e4eb;
+      --gold:       #a3842a;
+      --gold-light: #8b6f1e;
+      --text:       #1a1a2e;
+      --text-muted: #6b7280;
+      --blue:       #2563eb;
+      --blue-dim:   rgba(37,99,235,0.1);
+      --green:      #15803d;
+      --green-dim:  rgba(21,128,61,0.12);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.1);
+      --orange:     #d97706;
+      --orange-dim: rgba(217,119,6,0.1);
+      --brand-color: #1a1a2e;
+      --header-bg:  rgba(255,255,255,0.95);
+      --login-shadow: rgba(0,0,0,0.12);
+      --tab-active-bg: rgba(37,99,235,0.1);
+      --tab-active-border: rgba(37,99,235,0.25);
+      --tab-active-color: #2563eb;
+      --ghost-bg: rgba(0,0,0,0.04);
+      --ghost-hover-bg: rgba(0,0,0,0.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background: var(--bg-main); color: var(--text); min-height: 100vh; font-size: 14px;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 20px;
+      background: radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+                  var(--bg-main);
+    }
+    .login-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 44px 40px; width: 100%; max-width: 420px; box-shadow: 0 24px 64px var(--login-shadow);
+    }
+    .login-logo { text-align: center; margin-bottom: 28px; }
+    .login-logo .firm-name { font-size: 1.6rem; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
+    .login-logo .subtitle { margin-top: 6px; font-size: 0.85rem; color: var(--text-muted); letter-spacing: 1px; }
+    .login-divider { height: 1px; background: linear-gradient(to right, transparent, var(--border-light), transparent); margin-bottom: 28px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .form-group input {
+      width: 100%; padding: 12px 16px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.95rem; transition: border-color 0.2s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--gold); }
+    .btn-login {
+      width: 100%; padding: 13px; background: linear-gradient(135deg, var(--gold), #b8942e);
+      color: #0a0a0a; font-weight: 700; font-size: 0.95rem; border: none; border-radius: 8px;
+      cursor: pointer; transition: opacity 0.2s; margin-top: 8px;
+    }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error { color: var(--red); font-size: 0.85rem; margin-top: 12px; text-align: center; display: none; }
+
+    /* HEADER */
+    .header {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 56px;
+      background: var(--header-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-brand { font-size: 1.1rem; font-weight: 700; color: var(--gold-light); letter-spacing: 1px; cursor: pointer; text-decoration: none; }
+    .header-subtitle { font-size: 0.78rem; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .user-badge { font-size: 0.8rem; color: var(--text-muted); padding: 4px 10px; background: var(--ghost-bg); border-radius: 6px; }
+    .btn-icon {
+      background: var(--ghost-bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text-muted); cursor: pointer; padding: 6px 10px; font-size: 0.85rem; transition: all 0.15s;
+    }
+    .btn-icon:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-link {
+      padding: 4px 10px; font-size: 0.75rem; color: var(--text-muted); text-decoration: none;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--ghost-bg); transition: all 0.15s;
+    }
+    .nav-link:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    .nav-link.active { background: var(--tab-active-bg); color: var(--tab-active-color); border-color: var(--tab-active-border); }
+
+    /* TABS */
+    .tabs {
+      display: flex; gap: 2px; padding: 8px 24px;
+      background: var(--bg-main); border-bottom: 1px solid var(--border); overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 8px 18px; font-size: 0.85rem; font-weight: 500;
+      color: var(--text-muted); background: transparent; border: 1px solid transparent;
+      border-radius: 8px; cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .tab-btn:hover { background: var(--ghost-bg); color: var(--text); }
+    .tab-btn.active {
+      background: var(--tab-active-bg); border-color: var(--tab-active-border);
+      color: var(--tab-active-color); font-weight: 600;
+    }
+
+    /* MAIN */
+    .main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* KPI */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .kpi-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; position: relative; overflow: hidden;
+    }
+    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .kpi-card.gold::before { background: var(--gold); }
+    .kpi-card.blue::before { background: var(--blue); }
+    .kpi-card.green::before { background: var(--green); }
+    .kpi-card.red::before { background: var(--red); }
+    .kpi-card.orange::before { background: var(--orange); }
+    .kpi-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; }
+    .kpi-value.gold { color: var(--gold-light); }
+    .kpi-value.blue { color: var(--blue); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.orange { color: var(--orange); }
+    .kpi-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* CHARTS */
+    .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+    .chart-container { position: relative; height: 300px; }
+
+    /* FILTERS */
+    .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+    .year-btns { display: flex; gap: 4px; }
+    .year-btn {
+      padding: 5px 14px; font-size: 0.8rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--bg-row); color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .year-btn:hover { background: var(--ghost-hover-bg); }
+    .year-btn.active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
+
+    /* TABLE */
+    .table-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px;
+    }
+    .table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: 0.9rem; font-weight: 600; }
+    .table-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-sm {
+      padding: 5px 12px; font-size: 0.78rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--ghost-bg); color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-sm:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    .btn-primary {
+      padding: 5px 14px; font-size: 0.78rem; border: none; border-radius: 6px;
+      background: var(--gold); color: #0a0a0a; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 10px 14px; text-align: left; font-size: 0.75rem; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    tbody td { padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: var(--bg-hover); }
+
+    .text-right { text-align: right; }
+    .text-green { color: var(--green); }
+    .text-red { color: var(--red); }
+    .text-gold { color: var(--gold-light); }
+    .text-blue { color: var(--blue); }
+    .text-muted { color: var(--text-muted); }
+
+    /* FINANCE GRID */
+    .finance-grid { overflow-x: auto; }
+    .finance-grid table { min-width: 1200px; }
+    .finance-grid th, .finance-grid td { padding: 6px 10px; font-size: 0.8rem; }
+    .finance-grid th { position: sticky; top: 0; background: var(--bg-card); z-index: 1; }
+    .finance-grid td:first-child { position: sticky; left: 0; background: var(--bg-card); z-index: 1; white-space: nowrap; min-width: 160px; }
+    .finance-grid thead th:first-child { z-index: 2; }
+
+    .section-row td { background: var(--bg-row) !important; font-weight: 700; color: var(--gold-light); font-size: 0.82rem; }
+    .subtotal-row td { font-weight: 700; border-top: 2px solid var(--border-light); }
+    .net-row td { font-weight: 700; color: var(--gold-light); border-top: 2px solid var(--gold); font-size: 0.88rem; }
+
+    .cell-input {
+      width: 100%; padding: 3px 6px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); font-size: 0.8rem; text-align: right;
+      transition: border-color 0.2s;
+    }
+    .cell-input:focus { outline: none; border-color: var(--gold); background: var(--bg-hover); }
+    .cell-input.saved { border-color: var(--green); transition: border-color 0.3s; }
+    .cell-input.error { border-color: var(--red); }
+
+    /* COMPARISON TABLE */
+    .compare-grid th.month-group { text-align: center; border-bottom: 2px solid var(--border-light); }
+    .compare-grid .sub-header th { font-size: 0.7rem; text-align: right; }
+    .variance-pos { color: var(--green); }
+    .variance-neg { color: var(--red); }
+
+    /* UPLOAD */
+    .upload-section {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 24px; margin-bottom: 24px;
+    }
+    .upload-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; }
+    .upload-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .upload-row select, .upload-row input[type="file"] {
+      padding: 8px 12px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.85rem;
+    }
+    .upload-log { margin-top: 16px; font-size: 0.82rem; color: var(--text-muted); }
+    .upload-msg { padding: 8px 12px; border-radius: 6px; margin-top: 8px; font-size: 0.82rem; }
+    .upload-msg.success { background: var(--green-dim); color: var(--green); }
+    .upload-msg.error { background: var(--red-dim); color: var(--red); }
+
+    /* LOADING */
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    .spinner {
+      display: inline-block; width: 24px; height: 24px;
+      border: 2px solid var(--border); border-top-color: var(--gold);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .chart-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .kpi-row { grid-template-columns: 1fr; }
+      .header { padding: 0 12px; }
+      .main { padding: 12px; }
+      .tabs { padding: 8px 12px; }
+      .filter-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">財務規劃</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <a class="header-brand" href="/finance/">喆律法律事務所</a>
+      <span class="header-subtitle">財務規劃</span>
+      <div class="nav-links">
+        <a class="nav-link" href="/">諮詢分析</a>
+        <a class="nav-link" href="/revenue/">營運</a>
+        <a class="nav-link active" href="/finance/">財務規劃</a>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="overview">總覽</button>
+    <button class="tab-btn" data-tab="budget">預算編列</button>
+    <button class="tab-btn" data-tab="compare">實際 vs 預算</button>
+    <button class="tab-btn" data-tab="history">歷史資料</button>
+  </div>
+
+  <div class="main">
+
+    <!-- ========== 總覽 ========== -->
+    <div class="page active" id="page-overview">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="ovYearBtns"></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card gold"><div class="kpi-label">年度預算支出</div><div class="kpi-value gold" id="kpiBudgetTotal">-</div><div class="kpi-sub" id="kpiBudgetSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">已實際支出</div><div class="kpi-value blue" id="kpiActualTotal">-</div><div class="kpi-sub" id="kpiActualSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">預算餘額</div><div class="kpi-value green" id="kpiVariance">-</div><div class="kpi-sub" id="kpiVarianceSub"></div></div>
+        <div class="kpi-card orange"><div class="kpi-label">預估年度結算</div><div class="kpi-value orange" id="kpiProjected">-</div><div class="kpi-sub" id="kpiProjectedSub"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">月度趨勢：預算 vs 實際 vs 去年</div>
+          <div class="chart-container"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">費用佔比</div>
+          <div class="chart-container"><canvas id="pieChart"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><span class="table-title">損益摘要</span></div>
+        <table>
+          <thead><tr>
+            <th>項目</th><th class="text-right">預算</th><th class="text-right">實際 YTD</th>
+            <th class="text-right">差異</th><th class="text-right">執行率</th>
+          </tr></thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== 預算編列 ========== -->
+    <div class="page" id="page-budget">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="budgetYearBtns"></div>
+        <div class="table-actions" style="margin-left:auto" id="budgetActions"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">預算編列表</span>
+          <span class="text-muted" style="font-size:0.75rem" id="budgetHint"></span>
+        </div>
+        <div class="finance-grid" id="budgetGrid"></div>
+      </div>
+    </div>
+
+    <!-- ========== 實際 vs 預算 ========== -->
+    <div class="page" id="page-compare">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="compareYearBtns"></div>
+        <div class="filter-label" style="margin-left:12px">顯示月份：</div>
+        <select class="filter-select" id="compareMonthFilter" style="padding:5px 10px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem">
+          <option value="ytd">累計 YTD</option>
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">實際 vs 預算比較</span>
+          <div class="table-actions" id="compareActions"></div>
+        </div>
+        <div class="finance-grid compare-grid" id="compareGrid"></div>
+      </div>
+      <div class="chart-row" style="margin-top:24px">
+        <div class="chart-card" style="grid-column: 1 / -1">
+          <div class="chart-title">科目預算 vs 實際（前 10 大費用）</div>
+          <div class="chart-container" style="height:350px"><canvas id="compareBarChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 歷史資料 ========== -->
+    <div class="page" id="page-history">
+      <div id="uploadSection" style="display:none">
+        <div class="upload-section">
+          <div class="upload-title">上傳損益表 Excel</div>
+          <div class="upload-row">
+            <select id="uploadEntity">
+              <option value="zhelv">喆律綜合損益表</option>
+              <option value="legal010">法律010綜合損益表</option>
+            </select>
+            <input type="number" id="uploadYear" value="114" min="100" max="200" style="width:80px;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="民國年">
+            <input type="file" id="uploadFile" accept=".xlsx,.xls">
+            <button class="btn-primary" id="uploadBtn">上傳解析</button>
+          </div>
+          <div id="uploadMsg"></div>
+          <div class="upload-log" id="uploadLog"></div>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="histYearBtns"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">歷史損益資料</span>
+          <button class="btn-sm" id="histExportBtn">匯出 Excel</button>
+        </div>
+        <div class="finance-grid" id="historyGrid"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer, isAdmin = false;
+var categories = []; // finance_categories rows
+var catMap = {};      // code -> category obj
+var catIdMap = {};    // id -> category obj
+var dataCache = {};   // 'year-type' -> rows
+var selectedYear = 115;
+var charts = {};
+
+var MONTH_LABELS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+// 科目名稱 → code 對照表（用於 Excel 解析）
+var NAME_TO_CODE = {
+  '銷貨收入': 'revenue_gross', '減：銷貨退回': 'revenue_returns', '銷貨退回': 'revenue_returns',
+  '營業收入淨額': 'revenue_net',
+  '薪資費用': 'salary', '租金費用': 'rent', '文具用品': 'stationery', '旅費': 'travel',
+  '運費': 'shipping', '郵電費': 'postage', '修繕費': 'repair', '廣告費': 'advertising',
+  '水電費': 'utilities', '保險費': 'insurance', '交際費': 'entertainment', '稅捐': 'tax_expense',
+  '折舊及耗竭': 'depreciation', '各項攤銷': 'amortization', '職工福利': 'welfare',
+  '教育訓練費用': 'training', '勞務費用': 'service_fee', '交通燃料費': 'transport',
+  '印刷影印費': 'printing', '書報雜誌': 'publications', '雜項購置': 'misc_purchase',
+  '什費': 'sundry', '退休金': 'pension', '律師公會費': 'bar_fee',
+  '薪資支出(年終預估)': 'bonus_accrual', '薪資支出（年終預估）': 'bonus_accrual',
+  '年終預估': 'bonus_accrual', '年終': 'bonus_accrual',
+  '手續費': 'bank_fee',
+  '租賃收益': 'lease_income', '其他收入': 'other_income',
+  '合署律師合作收入': 'partner_income', '利息收益': 'interest_income', '政府補助收益': 'gov_subsidy',
+  '所得稅': 'income_tax', '所得稅總計': 'income_tax'
+};
+
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══════════════════════════════════════════════════════════
+//  THEME
+// ═══════════════════════════════════════════════════════════
+(function() {
+  var saved = localStorage.getItem('theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+})();
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  this.innerHTML = next === 'light' ? '&#9728;' : '&#x1f313;';
+});
+
+// ═══════════════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════════════
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) { currentUser = s.data.session.user; await loadUserProfile(); showDashboard(); }
+  else showLogin();
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) { currentLawyer = r.data; isAdmin = r.data.role === 'admin'; }
+}
+function showLogin() { document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; }
+async function showDashboard() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser?.email||'');
+  if (isAdmin) {
+    document.getElementById('uploadSection').style.display = 'block';
+    document.getElementById('budgetHint').textContent = '點擊數字可編輯';
+  }
+  await loadCategories();
+  initAllYearBtns();
+  await loadOverviewData();
+}
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({ email: document.getElementById('loginEmail').value.trim(), password: document.getElementById('loginPassword').value });
+    if (r.error) throw r.error;
+    currentUser = r.data.user; await loadUserProfile(); showDashboard();
+  } catch(ex) { err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
+  finally { btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+  if(sb) await sb.auth.signOut(); currentUser=null; currentLawyer=null; isAdmin=false; showLogin();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    this.classList.add('active');
+    var tab = this.getAttribute('data-tab');
+    document.getElementById('page-' + tab).classList.add('active');
+    if (tab === 'overview') loadOverviewData();
+    else if (tab === 'budget') loadBudgetData();
+    else if (tab === 'compare') loadCompareData();
+    else if (tab === 'history') loadHistoryData();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════════════
+async function loadCategories() {
+  if (!sb) return;
+  var r = await sb.from('finance_categories').select('*').order('sort_order');
+  if (r.data) {
+    categories = r.data;
+    catMap = {}; catIdMap = {};
+    categories.forEach(function(c) { catMap[c.code] = c; catIdMap[c.id] = c; });
+  }
+}
+
+async function fetchFinanceData(year, dataType) {
+  var key = year + '-' + dataType;
+  if (dataCache[key]) return dataCache[key];
+  if (!sb) return [];
+  var r = await sb.from('finance_data').select('*').eq('fiscal_year', year).eq('data_type', dataType);
+  if (r.error) { console.error('fetch finance_data:', r.error); return []; }
+  dataCache[key] = r.data || [];
+  return dataCache[key];
+}
+
+function buildDataMap(rows) {
+  // { categoryId: { month: amount } }
+  var map = {};
+  rows.forEach(function(r) {
+    if (!map[r.category_id]) map[r.category_id] = {};
+    map[r.category_id][r.month] = r.amount || 0;
+  });
+  return map;
+}
+
+function sumBySection(dataMap, section, months) {
+  var total = 0;
+  categories.forEach(function(c) {
+    if (c.section !== section || c.is_subtotal) return;
+    var m = dataMap[c.id] || {};
+    (months || [1,2,3,4,5,6,7,8,9,10,11,12]).forEach(function(mo) { total += (m[mo] || 0); });
+  });
+  return total;
+}
+
+function annualTotal(dataMap, catId) {
+  var m = dataMap[catId] || {};
+  var t = 0;
+  for (var i = 1; i <= 12; i++) t += (m[i] || 0);
+  return t;
+}
+
+function fmt(n) {
+  if (n == null || isNaN(n)) return '-';
+  return Math.round(n).toLocaleString();
+}
+function fmtCurrency(n) {
+  if (n == null || isNaN(n)) return '-';
+  return '$' + Math.round(n).toLocaleString();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  YEAR BUTTONS
+// ═══════════════════════════════════════════════════════════
+function initAllYearBtns() {
+  var years = [114, 115, 116];
+  ['ovYearBtns','budgetYearBtns','compareYearBtns','histYearBtns'].forEach(function(id) {
+    var el = document.getElementById(id); if (!el) return;
+    el.innerHTML = '';
+    years.forEach(function(y) {
+      var btn = document.createElement('button');
+      btn.className = 'year-btn' + (y === selectedYear ? ' active' : '');
+      btn.textContent = y + '年';
+      btn.addEventListener('click', function() {
+        selectedYear = y;
+        el.querySelectorAll('.year-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        // sync other year buttons
+        document.querySelectorAll('.year-btns').forEach(function(container) {
+          container.querySelectorAll('.year-btn').forEach(function(b) {
+            b.classList.toggle('active', b.textContent === y + '年');
+          });
+        });
+        // reload current tab
+        var activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab) activeTab.click();
+      });
+      el.appendChild(btn);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 1: OVERVIEW
+// ═══════════════════════════════════════════════════════════
+async function loadOverviewData() {
+  var year = selectedYear;
+  var budgetRows = await fetchFinanceData(year, 'budget');
+  var actualRows = await fetchFinanceData(year, 'actual');
+  var histRows = await fetchFinanceData(year - 1, 'historical');
+
+  var budgetMap = buildDataMap(budgetRows);
+  var actualMap = buildDataMap(actualRows);
+  var histMap = buildDataMap(histRows);
+
+  // Determine which months have actuals
+  var actualMonths = new Set();
+  actualRows.forEach(function(r) { actualMonths.add(r.month); });
+  var maxActualMonth = actualMonths.size > 0 ? Math.max.apply(null, Array.from(actualMonths)) : 0;
+
+  // KPIs - operating expenses only
+  var budgetExpTotal = sumBySection(budgetMap, 'operating_expense');
+  var actualExpTotal = sumBySection(actualMap, 'operating_expense');
+  var variance = budgetExpTotal - actualExpTotal;
+
+  // Projected: actual months + budget for remaining
+  var projectedExp = 0;
+  categories.forEach(function(c) {
+    if (c.section !== 'operating_expense' || c.is_subtotal) return;
+    var bm = budgetMap[c.id] || {};
+    var am = actualMap[c.id] || {};
+    for (var mo = 1; mo <= 12; mo++) {
+      projectedExp += actualMonths.has(mo) ? (am[mo] || 0) : (bm[mo] || 0);
+    }
+  });
+
+  document.getElementById('kpiBudgetTotal').textContent = fmtCurrency(budgetExpTotal);
+  document.getElementById('kpiBudgetSub').textContent = year + '年預算';
+  document.getElementById('kpiActualTotal').textContent = fmtCurrency(actualExpTotal);
+  document.getElementById('kpiActualSub').textContent = maxActualMonth > 0 ? '1-' + maxActualMonth + '月實際' : '尚無實際資料';
+  document.getElementById('kpiVariance').textContent = fmtCurrency(variance);
+  document.getElementById('kpiVariance').className = 'kpi-value ' + (variance >= 0 ? 'green' : 'red');
+  document.getElementById('kpiVarianceSub').textContent = variance >= 0 ? '低於預算' : '超出預算';
+  document.getElementById('kpiProjected').textContent = fmtCurrency(projectedExp);
+  document.getElementById('kpiProjectedSub').textContent = '實際+預算填補';
+
+  // Trend chart
+  renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth);
+  // Pie chart
+  renderPieChart(budgetMap, actualMap, maxActualMonth);
+  // Summary table
+  renderSummaryTable(budgetMap, actualMap, maxActualMonth);
+}
+
+function renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth) {
+  var budgetData = [], actualData = [], histData = [];
+  for (var mo = 1; mo <= 12; mo++) {
+    var bTotal = 0, aTotal = 0, hTotal = 0;
+    categories.forEach(function(c) {
+      if (c.section !== 'operating_expense' || c.is_subtotal) return;
+      bTotal += ((budgetMap[c.id] || {})[mo] || 0);
+      aTotal += ((actualMap[c.id] || {})[mo] || 0);
+      hTotal += ((histMap[c.id] || {})[mo] || 0);
+    });
+    budgetData.push(bTotal);
+    actualData.push(mo <= maxActualMonth ? aTotal : null);
+    histData.push(hTotal);
+  }
+
+  var ctx = document.getElementById('trendChart');
+  if (charts.trend) charts.trend.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  charts.trend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: MONTH_LABELS,
+      datasets: [
+        { label: '預算', data: budgetData, borderColor: cs.getPropertyValue('--gold').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
+        { label: '實際', data: actualData, borderColor: cs.getPropertyValue('--blue').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
+        { label: '去年', data: histData, borderColor: cs.getPropertyValue('--text-muted').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 1, borderDash: [4,4] }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 }, callback: function(v) { return (v/1000000).toFixed(1)+'M'; } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+function renderPieChart(budgetMap, actualMap, maxActualMonth) {
+  // Use actual if available, otherwise budget
+  var useMap = maxActualMonth > 0 ? actualMap : budgetMap;
+  var items = [];
+  categories.forEach(function(c) {
+    if (c.section !== 'operating_expense' || c.is_subtotal) return;
+    var total = annualTotal(useMap, c.id);
+    if (total > 0) items.push({ name: c.name, value: total });
+  });
+  items.sort(function(a,b) { return b.value - a.value; });
+  // Top 8 + others
+  var top = items.slice(0, 8);
+  var others = items.slice(8).reduce(function(s,i) { return s + i.value; }, 0);
+  if (others > 0) top.push({ name: '其他', value: others });
+
+  var ctx = document.getElementById('pieChart');
+  if (charts.pie) charts.pie.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  var colors = ['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#95a5a6'];
+  charts.pie = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: top.map(function(i) { return i.name; }),
+      datasets: [{ data: top.map(function(i) { return i.value; }), backgroundColor: colors.slice(0, top.length), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 10 }, padding: 8 } } }
+    }
+  });
+}
+
+function renderSummaryTable(budgetMap, actualMap, maxActualMonth) {
+  var sections = [
+    { label: '營業收入', section: 'revenue', sign: 1 },
+    { label: '營業費用', section: 'operating_expense', sign: -1 },
+    { label: '營業外收入', section: 'non_operating_income', sign: 1 },
+    { label: '所得稅', section: 'tax', sign: -1 }
+  ];
+  var html = '';
+  var netBudget = 0, netActual = 0;
+  sections.forEach(function(s) {
+    var budget = sumBySection(budgetMap, s.section);
+    var actual = sumBySection(actualMap, s.section);
+    var diff = budget - actual;
+    var rate = budget > 0 ? (actual / budget * 100).toFixed(1) + '%' : '-';
+    netBudget += budget * s.sign;
+    netActual += actual * s.sign;
+    html += '<tr><td style="font-weight:600">' + s.label + '</td>';
+    html += '<td class="text-right">' + fmtCurrency(budget) + '</td>';
+    html += '<td class="text-right">' + fmtCurrency(actual) + '</td>';
+    html += '<td class="text-right ' + (diff >= 0 ? 'text-green' : 'text-red') + '">' + fmtCurrency(diff) + '</td>';
+    html += '<td class="text-right">' + rate + '</td></tr>';
+  });
+  // Net row
+  var netDiff = netBudget - netActual;
+  html += '<tr style="border-top:2px solid var(--gold)"><td style="font-weight:700;color:var(--gold-light)">淨利</td>';
+  html += '<td class="text-right text-gold" style="font-weight:700">' + fmtCurrency(netBudget) + '</td>';
+  html += '<td class="text-right text-gold" style="font-weight:700">' + fmtCurrency(netActual) + '</td>';
+  html += '<td class="text-right ' + (netDiff >= 0 ? 'text-green' : 'text-red') + '" style="font-weight:700">' + fmtCurrency(netDiff) + '</td>';
+  html += '<td class="text-right">-</td></tr>';
+  document.getElementById('summaryBody').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 2: BUDGET PLANNING
+// ═══════════════════════════════════════════════════════════
+async function loadBudgetData() {
+  var year = selectedYear;
+  var budgetRows = await fetchFinanceData(year, 'budget');
+  var budgetMap = buildDataMap(budgetRows);
+  var histRows = await fetchFinanceData(year - 1, 'historical');
+
+  // Admin actions
+  var actionsEl = document.getElementById('budgetActions');
+  if (isAdmin) {
+    actionsEl.innerHTML = '<button class="btn-sm" id="copyHistBtn">複製' + (year-1) + '年資料</button>';
+    document.getElementById('copyHistBtn').addEventListener('click', function() {
+      if (histRows.length === 0) { alert('沒有' + (year-1) + '年的歷史資料'); return; }
+      if (!confirm('確定要用' + (year-1) + '年資料填入' + year + '年預算？已有的數字會被覆蓋。')) return;
+      copyHistoricalToBudget(year, histRows);
+    });
+  } else {
+    actionsEl.innerHTML = '';
+  }
+
+  renderBudgetGrid(budgetMap);
+}
+
+function renderBudgetGrid(budgetMap) {
+  var html = '<table><thead><tr><th>科目</th>';
+  for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月</th>';
+  html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th></tr></thead><tbody>';
+
+  var sections = [
+    { key: 'revenue', label: '營業收入' },
+    { key: 'operating_expense', label: '營業費用（管理及總務費用）' },
+    { key: 'non_operating_income', label: '營業外收入' },
+    { key: 'tax', label: '所得稅' }
+  ];
+
+  var sectionTotals = {};
+  sections.forEach(function(s) { sectionTotals[s.key] = new Array(12).fill(0); });
+
+  sections.forEach(function(sec) {
+    html += '<tr class="section-row"><td colspan="14">' + sec.label + '</td></tr>';
+    var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
+    sectionCats.forEach(function(cat) {
+      var rowData = budgetMap[cat.id] || {};
+      var rowTotal = 0;
+      html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
+      for (var mo = 1; mo <= 12; mo++) {
+        var val = rowData[mo] || 0;
+        rowTotal += val;
+        sectionTotals[sec.key][mo-1] += val;
+        if (isAdmin) {
+          html += '<td class="text-right"><input class="cell-input" data-cat="' + cat.id + '" data-month="' + mo + '" value="' + (val || '') + '"></td>';
+        } else {
+          html += '<td class="text-right">' + fmt(val) + '</td>';
+        }
+      }
+      html += '<td class="text-right" style="font-weight:600">' + fmt(rowTotal) + '</td></tr>';
+    });
+    // Subtotal
+    var secTotal = sectionTotals[sec.key].reduce(function(a,b) { return a+b; }, 0);
+    html += '<tr class="subtotal-row"><td style="padding-left:8px">' + sec.label + '合計</td>';
+    for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionTotals[sec.key][mo]) + '</td>';
+    html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td></tr>';
+  });
+
+  // Net income row
+  html += '<tr class="net-row"><td>淨利（收入-費用+營業外-稅）</td>';
+  for (var mo = 0; mo < 12; mo++) {
+    var net = (sectionTotals.revenue[mo] || 0) - (sectionTotals.operating_expense[mo] || 0) + (sectionTotals.non_operating_income[mo] || 0) - (sectionTotals.tax[mo] || 0);
+    html += '<td class="text-right">' + fmt(net) + '</td>';
+  }
+  var netTotal = 0;
+  ['revenue','operating_expense','non_operating_income','tax'].forEach(function(s) {
+    var sign = (s === 'revenue' || s === 'non_operating_income') ? 1 : -1;
+    netTotal += sign * sectionTotals[s].reduce(function(a,b) { return a+b; }, 0);
+  });
+  html += '<td class="text-right">' + fmt(netTotal) + '</td></tr>';
+
+  html += '</tbody></table>';
+  document.getElementById('budgetGrid').innerHTML = html;
+
+  // Bind input events
+  if (isAdmin) {
+    document.querySelectorAll('#budgetGrid .cell-input').forEach(function(input) {
+      var saveTimer;
+      input.addEventListener('blur', function() { saveBudgetCell(this); });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Tab') { saveBudgetCell(this); }
+      });
+    });
+  }
+}
+
+async function saveBudgetCell(input) {
+  var catId = input.getAttribute('data-cat');
+  var month = parseInt(input.getAttribute('data-month'));
+  var val = parseInt(input.value) || 0;
+
+  input.classList.remove('saved', 'error');
+  var r = await sb.from('finance_data').upsert({
+    category_id: catId, fiscal_year: selectedYear, month: month, data_type: 'budget',
+    amount: val, updated_by: currentLawyer ? currentLawyer.id : null
+  }, { onConflict: 'category_id,fiscal_year,month,data_type' });
+
+  if (r.error) {
+    console.error('save budget:', r.error);
+    input.classList.add('error');
+  } else {
+    input.classList.add('saved');
+    // Invalidate cache
+    delete dataCache[selectedYear + '-budget'];
+    setTimeout(function() { input.classList.remove('saved'); }, 1500);
+  }
+}
+
+async function copyHistoricalToBudget(year, histRows) {
+  var upserts = histRows.map(function(r) {
+    return {
+      category_id: r.category_id, fiscal_year: year, month: r.month, data_type: 'budget',
+      amount: r.amount, updated_by: currentLawyer ? currentLawyer.id : null
+    };
+  });
+  // Batch upsert in chunks of 200
+  for (var i = 0; i < upserts.length; i += 200) {
+    var chunk = upserts.slice(i, i + 200);
+    var r = await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
+    if (r.error) { console.error('copy hist:', r.error); alert('複製失敗：' + r.error.message); return; }
+  }
+  delete dataCache[year + '-budget'];
+  alert('已複製' + (year-1) + '年資料到' + year + '年預算');
+  loadBudgetData();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 3: ACTUAL VS BUDGET
+// ═══════════════════════════════════════════════════════════
+document.getElementById('compareMonthFilter').addEventListener('change', function() { loadCompareData(); });
+
+async function loadCompareData() {
+  var year = selectedYear;
+  var budgetRows = await fetchFinanceData(year, 'budget');
+  var actualRows = await fetchFinanceData(year, 'actual');
+  var budgetMap = buildDataMap(budgetRows);
+  var actualMap = buildDataMap(actualRows);
+  var monthFilter = document.getElementById('compareMonthFilter').value;
+
+  // Admin actions - enter actual button
+  var actionsEl = document.getElementById('compareActions');
+  if (isAdmin) {
+    actionsEl.innerHTML = '<button class="btn-sm" id="enterActualBtn">輸入實際數字</button>';
+    document.getElementById('enterActualBtn').addEventListener('click', function() {
+      showActualEntryMode(budgetMap, actualMap);
+    });
+  } else {
+    actionsEl.innerHTML = '';
+  }
+
+  renderCompareGrid(budgetMap, actualMap, monthFilter);
+  renderCompareChart(budgetMap, actualMap);
+}
+
+function renderCompareGrid(budgetMap, actualMap, monthFilter) {
+  var isYTD = monthFilter === 'ytd';
+  var months = isYTD ? [1,2,3,4,5,6,7,8,9,10,11,12] : [parseInt(monthFilter)];
+
+  var html = '<table><thead><tr><th>科目</th>';
+  if (isYTD) {
+    for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th><th class="text-right">差</th>';
+    html += '<th class="text-right" style="color:var(--gold-light)">累計預</th><th class="text-right" style="color:var(--blue)">累計實</th><th class="text-right">累計差</th>';
+  } else {
+    html += '<th class="text-right">預算</th><th class="text-right">實際</th><th class="text-right">差異</th><th class="text-right">執行率</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  var sections = [
+    { key: 'operating_expense', label: '營業費用' },
+    { key: 'revenue', label: '營業收入' },
+    { key: 'non_operating_income', label: '營業外收入' }
+  ];
+
+  sections.forEach(function(sec) {
+    html += '<tr class="section-row"><td colspan="' + (isYTD ? 40 : 6) + '">' + sec.label + '</td></tr>';
+    var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
+    sectionCats.forEach(function(cat) {
+      var bm = budgetMap[cat.id] || {};
+      var am = actualMap[cat.id] || {};
+      html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
+
+      if (isYTD) {
+        var cumB = 0, cumA = 0;
+        for (var mo = 1; mo <= 12; mo++) {
+          var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
+          cumB += b; cumA += a;
+          var hasActual = a !== 0 || (actualMap[cat.id] && actualMap[cat.id][mo] !== undefined);
+          html += '<td class="text-right text-muted">' + fmt(b) + '</td>';
+          html += '<td class="text-right">' + (hasActual ? fmt(a) : '<span class="text-muted">---</span>') + '</td>';
+          html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '">' + (hasActual ? fmt(d) : '') + '</td>';
+        }
+        var cumD = cumB - cumA;
+        html += '<td class="text-right text-gold" style="font-weight:600">' + fmt(cumB) + '</td>';
+        html += '<td class="text-right text-blue" style="font-weight:600">' + fmt(cumA) + '</td>';
+        html += '<td class="text-right ' + (cumD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:600">' + fmt(cumD) + '</td>';
+      } else {
+        var mo = months[0];
+        var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
+        var rate = b > 0 ? (a/b*100).toFixed(1)+'%' : '-';
+        html += '<td class="text-right">' + fmt(b) + '</td>';
+        html += '<td class="text-right">' + fmt(a) + '</td>';
+        html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '">' + fmt(d) + '</td>';
+        html += '<td class="text-right">' + rate + '</td>';
+      }
+      html += '</tr>';
+    });
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('compareGrid').innerHTML = html;
+}
+
+function renderCompareChart(budgetMap, actualMap) {
+  // Top 10 expense categories by budget
+  var items = [];
+  categories.forEach(function(c) {
+    if (c.section !== 'operating_expense' || c.is_subtotal) return;
+    items.push({ name: c.name, budget: annualTotal(budgetMap, c.id), actual: annualTotal(actualMap, c.id) });
+  });
+  items.sort(function(a,b) { return b.budget - a.budget; });
+  items = items.slice(0, 10);
+
+  var ctx = document.getElementById('compareBarChart');
+  if (charts.compareBar) charts.compareBar.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  charts.compareBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: items.map(function(i) { return i.name; }),
+      datasets: [
+        { label: '預算', data: items.map(function(i) { return i.budget; }), backgroundColor: cs.getPropertyValue('--gold').trim() + '99' },
+        { label: '實際', data: items.map(function(i) { return i.actual; }), backgroundColor: cs.getPropertyValue('--blue').trim() + '99' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), callback: function(v) { return (v/1000000).toFixed(1)+'M'; } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function showActualEntryMode(budgetMap, actualMap) {
+  var month = prompt('請輸入要填寫實際數字的月份（1-12）：');
+  if (!month || isNaN(month) || month < 1 || month > 12) return;
+  month = parseInt(month);
+
+  var expCats = categories.filter(function(c) { return !c.is_subtotal; });
+  var html = '<div class="upload-section"><div class="upload-title">輸入 ' + selectedYear + '年' + month + '月 實際數字</div>';
+  html += '<table style="max-width:500px"><thead><tr><th>科目</th><th class="text-right">預算</th><th class="text-right">實際金額</th></tr></thead><tbody>';
+
+  var sections = [
+    { key: 'revenue', label: '營業收入' },
+    { key: 'operating_expense', label: '營業費用' },
+    { key: 'non_operating_income', label: '營業外收入' },
+    { key: 'tax', label: '所得稅' }
+  ];
+
+  sections.forEach(function(sec) {
+    html += '<tr class="section-row"><td colspan="3">' + sec.label + '</td></tr>';
+    categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; }).forEach(function(cat) {
+      var bv = (budgetMap[cat.id] || {})[month] || 0;
+      var av = (actualMap[cat.id] || {})[month] || '';
+      html += '<tr><td>' + cat.name + '</td>';
+      html += '<td class="text-right text-muted">' + fmt(bv) + '</td>';
+      html += '<td class="text-right"><input class="cell-input actual-input" data-cat="' + cat.id + '" value="' + av + '" style="width:120px"></td></tr>';
+    });
+  });
+
+  html += '</tbody></table><div style="margin-top:12px"><button class="btn-primary" id="saveActualsBtn">儲存實際數字</button></div></div>';
+
+  var compareGrid = document.getElementById('compareGrid');
+  var existingEntry = document.getElementById('actualEntrySection');
+  if (existingEntry) existingEntry.remove();
+  var div = document.createElement('div');
+  div.id = 'actualEntrySection';
+  div.innerHTML = html;
+  compareGrid.parentNode.insertBefore(div, compareGrid);
+
+  document.getElementById('saveActualsBtn').addEventListener('click', async function() {
+    var inputs = document.querySelectorAll('.actual-input');
+    var upserts = [];
+    inputs.forEach(function(input) {
+      var val = parseInt(input.value);
+      if (!isNaN(val)) {
+        upserts.push({
+          category_id: input.getAttribute('data-cat'),
+          fiscal_year: selectedYear, month: month, data_type: 'actual',
+          amount: val, updated_by: currentLawyer ? currentLawyer.id : null
+        });
+      }
+    });
+    if (upserts.length === 0) { alert('沒有需要儲存的資料'); return; }
+    this.disabled = true; this.textContent = '儲存中...';
+    for (var i = 0; i < upserts.length; i += 200) {
+      var chunk = upserts.slice(i, i + 200);
+      var r = await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
+      if (r.error) { alert('儲存失敗：' + r.error.message); this.disabled = false; this.textContent = '儲存實際數字'; return; }
+    }
+    delete dataCache[selectedYear + '-actual'];
+    alert('已儲存 ' + month + '月的實際數字');
+    div.remove();
+    loadCompareData();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 4: HISTORY
+// ═══════════════════════════════════════════════════════════
+async function loadHistoryData() {
+  var year = selectedYear;
+  var histRows = await fetchFinanceData(year, 'historical');
+  var histMap = buildDataMap(histRows);
+  renderHistoryGrid(histMap);
+  loadUploadLog();
+}
+
+function renderHistoryGrid(histMap) {
+  var html = '<table><thead><tr><th>科目</th>';
+  for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月</th>';
+  html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th></tr></thead><tbody>';
+
+  var sections = [
+    { key: 'revenue', label: '營業收入' },
+    { key: 'operating_expense', label: '營業費用' },
+    { key: 'non_operating_income', label: '營業外收入' },
+    { key: 'tax', label: '所得稅' }
+  ];
+
+  sections.forEach(function(sec) {
+    html += '<tr class="section-row"><td colspan="14">' + sec.label + '</td></tr>';
+    var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
+    var sectionMonthly = new Array(12).fill(0);
+
+    sectionCats.forEach(function(cat) {
+      var rowData = histMap[cat.id] || {};
+      var rowTotal = 0;
+      html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
+      for (var mo = 1; mo <= 12; mo++) {
+        var val = rowData[mo] || 0;
+        rowTotal += val;
+        sectionMonthly[mo-1] += val;
+        html += '<td class="text-right">' + fmt(val) + '</td>';
+      }
+      html += '<td class="text-right" style="font-weight:600">' + fmt(rowTotal) + '</td></tr>';
+    });
+
+    var secTotal = sectionMonthly.reduce(function(a,b) { return a+b; }, 0);
+    html += '<tr class="subtotal-row"><td>合計</td>';
+    for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionMonthly[mo]) + '</td>';
+    html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td></tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('historyGrid').innerHTML = html;
+}
+
+// Export
+document.getElementById('histExportBtn').addEventListener('click', function() {
+  var table = document.querySelector('#historyGrid table');
+  if (!table) return;
+  var wb = XLSX.utils.table_to_book(table, { sheet: selectedYear + '年損益表' });
+  XLSX.writeFile(wb, selectedYear + '年損益表.xlsx');
+});
+
+// Upload log
+async function loadUploadLog() {
+  if (!sb) return;
+  var r = await sb.from('finance_uploads').select('*').order('created_at', { ascending: false }).limit(10);
+  if (!r.data || r.data.length === 0) { document.getElementById('uploadLog').innerHTML = ''; return; }
+  var html = '<div style="margin-top:12px;font-weight:600">上傳紀錄</div><table style="margin-top:8px"><thead><tr><th>時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th></tr></thead><tbody>';
+  r.data.forEach(function(u) {
+    var d = new Date(u.created_at);
+    html += '<tr><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
+    html += '<td>' + u.filename + '</td><td>' + u.entity + '</td><td>' + u.fiscal_year + '</td><td>' + (u.row_count||'-') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('uploadLog').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EXCEL UPLOAD
+// ═══════════════════════════════════════════════════════════
+document.getElementById('uploadBtn').addEventListener('click', async function() {
+  var fileInput = document.getElementById('uploadFile');
+  var entity = document.getElementById('uploadEntity').value;
+  var year = parseInt(document.getElementById('uploadYear').value);
+  var msgEl = document.getElementById('uploadMsg');
+
+  if (!fileInput.files.length) { showUploadMsg('請選擇檔案', 'error'); return; }
+  if (!year || year < 100) { showUploadMsg('請輸入正確的民國年', 'error'); return; }
+
+  this.disabled = true; this.textContent = '解析中...';
+  msgEl.innerHTML = '';
+
+  try {
+    var file = fileInput.files[0];
+    var data = await file.arrayBuffer();
+    var wb = XLSX.read(data, { type: 'array' });
+
+    var allUpserts = [];
+    var monthSheets = [];
+
+    // Find monthly sheets (e.g., 11401, 11402, ... or 1410)
+    wb.SheetNames.forEach(function(name) {
+      var match = name.match(/^(\d{3,4})(\d{2})$/);
+      if (match) {
+        var sheetYear = parseInt(match[1]);
+        var sheetMonth = parseInt(match[2]);
+        if (sheetMonth >= 1 && sheetMonth <= 12 && (sheetYear === year || sheetYear === Math.floor(year/10))) {
+          monthSheets.push({ name: name, month: sheetMonth });
+        }
+      }
+    });
+
+    if (monthSheets.length === 0) {
+      showUploadMsg('找不到月份工作表（例如 ' + year + '01, ' + year + '02...）', 'error');
+      return;
+    }
+
+    monthSheets.forEach(function(ms) {
+      var ws = wb.Sheets[ms.name];
+      var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      json.forEach(function(row) {
+        if (!row[0] || typeof row[0] !== 'string') return;
+        var itemName = row[0].trim();
+        var code = matchCategory(itemName);
+        if (!code || !catMap[code]) return;
+        var cat = catMap[code];
+        if (cat.is_subtotal) return; // skip computed rows
+
+        // Try column B (金額) first, then C (小計), then D (總計)
+        var amount = parseAmount(row[1]) || parseAmount(row[2]) || parseAmount(row[3]) || 0;
+
+        allUpserts.push({
+          category_id: cat.id, fiscal_year: year, month: ms.month, data_type: 'historical',
+          amount: Math.round(amount), updated_by: currentLawyer ? currentLawyer.id : null
+        });
+      });
+    });
+
+    if (allUpserts.length === 0) {
+      showUploadMsg('無法從工作表中匹配到任何科目', 'error');
+      return;
+    }
+
+    // Check if there's existing data for another entity for same year - if so, merge
+    var existingKey = year + '-historical';
+    var existingRows = await fetchFinanceData(year, 'historical');
+    var existingMap = {};
+    existingRows.forEach(function(r) {
+      var key = r.category_id + '-' + r.month;
+      existingMap[key] = r.amount || 0;
+    });
+
+    // Merge: add new amounts to existing
+    var finalUpserts = allUpserts.map(function(u) {
+      var key = u.category_id + '-' + u.month;
+      var existing = existingMap[key] || 0;
+      return Object.assign({}, u, { amount: existing + u.amount });
+    });
+
+    // Batch upsert
+    for (var i = 0; i < finalUpserts.length; i += 200) {
+      var chunk = finalUpserts.slice(i, i + 200);
+      var r = await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
+      if (r.error) throw r.error;
+    }
+
+    // Log upload
+    await sb.from('finance_uploads').insert({
+      filename: file.name, fiscal_year: year, entity: entity,
+      uploaded_by: currentLawyer ? currentLawyer.id : null, row_count: allUpserts.length
+    });
+
+    delete dataCache[existingKey];
+    showUploadMsg('上傳成功！解析 ' + monthSheets.length + ' 個月份，共 ' + allUpserts.length + ' 筆資料', 'success');
+    loadHistoryData();
+  } catch(ex) {
+    console.error('upload error:', ex);
+    showUploadMsg('上傳失敗：' + (ex.message || ex), 'error');
+  } finally {
+    this.disabled = false; this.textContent = '上傳解析';
+  }
+});
+
+function matchCategory(name) {
+  name = name.trim().replace(/\s+/g, '');
+  // Exact match first
+  if (NAME_TO_CODE[name]) return NAME_TO_CODE[name];
+  // Fuzzy match
+  var keys = Object.keys(NAME_TO_CODE);
+  for (var i = 0; i < keys.length; i++) {
+    if (name.includes(keys[i]) || keys[i].includes(name)) return NAME_TO_CODE[keys[i]];
+  }
+  return null;
+}
+
+function parseAmount(val) {
+  if (val == null || val === '') return 0;
+  if (typeof val === 'number') return val;
+  var str = String(val).replace(/[,$\s]/g, '');
+  var n = parseFloat(str);
+  return isNaN(n) ? 0 : n;
+}
+
+function showUploadMsg(msg, type) {
+  document.getElementById('uploadMsg').innerHTML = '<div class="upload-msg ' + type + '">' + msg + '</div>';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+checkSession();
+</script>
+</body>
+</html>
