@@ -51,7 +51,29 @@ CREATE TABLE IF NOT EXISTS finance_uploads (
     created_at    TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. 預算調整紀錄
+-- 4. 員工薪資名冊
+CREATE TABLE IF NOT EXISTS finance_employees (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL,
+    department      TEXT,
+    base_salary     NUMERIC(10,0) DEFAULT 0,
+    total_salary    NUMERIC(10,0) DEFAULT 0,
+    total_pay       NUMERIC(10,0) DEFAULT 0,
+    employer_labor  NUMERIC(10,0) DEFAULT 0,
+    employer_health NUMERIC(10,0) DEFAULT 0,
+    employer_pension NUMERIC(10,0) DEFAULT 0,
+    employer_total  NUMERIC(10,0) DEFAULT 0,
+    bonus           NUMERIC(10,0) DEFAULT 0,
+    fiscal_year     INTEGER NOT NULL,
+    is_active       BOOLEAN DEFAULT true,
+    notes           TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_finance_emp_year ON finance_employees(fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_finance_emp_name ON finance_employees(name);
+
+-- 5. 預算調整紀錄
 CREATE TABLE IF NOT EXISTS finance_adjustments (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     fiscal_year   INTEGER NOT NULL,
@@ -75,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_finance_adj_year ON finance_adjustments(fiscal_ye
 ALTER TABLE finance_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance_uploads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE finance_employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance_adjustments ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: 所有登入使用者可讀
@@ -95,6 +118,13 @@ CREATE POLICY finance_data_admin ON finance_data
     FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 
 CREATE POLICY finance_uploads_admin ON finance_uploads
+    FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- finance_employees
+CREATE POLICY finance_employees_select ON finance_employees
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY finance_employees_admin ON finance_employees
     FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 
 -- finance_adjustments

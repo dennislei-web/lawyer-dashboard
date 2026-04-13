@@ -450,6 +450,17 @@
           <div id="uploadMsg"></div>
           <div class="upload-log" id="uploadLog"></div>
         </div>
+        <div class="upload-section" style="margin-top:16px">
+          <div class="upload-title">上傳薪資表 Excel</div>
+          <div class="text-muted" style="font-size:0.78rem;margin-bottom:8px">上傳後可在「預算編列」用人員姓名直接帶入離職/新進的成本影響</div>
+          <div class="upload-row">
+            <input type="number" id="salaryYear" value="114" min="100" max="200" style="width:80px;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="民國年">
+            <input type="file" id="salaryFile" accept=".xlsx,.xls">
+            <button class="btn-primary" id="salaryUploadBtn">上傳薪資表</button>
+          </div>
+          <div id="salaryMsg"></div>
+          <div id="salaryCount" class="text-muted" style="font-size:0.8rem;margin-top:8px"></div>
+        </div>
       </div>
       <div class="filter-bar">
         <div class="filter-label">年度：</div>
@@ -543,8 +554,11 @@ async function showDashboard() {
     document.getElementById('budgetHint').textContent = '點擊數字可編輯';
   }
   await loadCategories();
+  loadEmployees(selectedYear); // background load, no await
   initAllYearBtns();
   await loadOverviewData();
+  // Show employee count on history page
+  loadEmployeeCount();
 }
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -993,26 +1007,63 @@ var PERSONNEL_COST_RATES = {
   meal_allowance: 3000    // 伙食費
 };
 
-function showPersonnelChangeForm(year) {
+async function showPersonnelChangeForm(year) {
   var existing = document.getElementById('adjFormSection');
   if (existing) existing.remove();
+
+  // Load employees
+  await loadEmployees(year);
 
   var div = document.createElement('div');
   div.id = 'adjFormSection';
 
+  // Build employee datalist for autocomplete
+  var empOptions = '<option value="">-- 手動輸入 --</option>';
+  var deptGroups = {};
+  employeeList.forEach(function(e) {
+    var d = e.department || '未分類';
+    if (!deptGroups[d]) deptGroups[d] = [];
+    deptGroups[d].push(e);
+  });
+  Object.keys(deptGroups).sort().forEach(function(dept) {
+    empOptions += '<optgroup label="' + dept + '">';
+    deptGroups[dept].forEach(function(e) {
+      empOptions += '<option value="' + e.id + '">' + e.name + '（本薪 ' + fmt(e.base_salary) + '，雇主成本 ' + fmt(e.employer_total) + '/月）</option>';
+    });
+    empOptions += '</optgroup>';
+  });
+
   var html = '<div class="upload-section" style="margin-bottom:16px;border-color:var(--blue)">';
   html += '<div class="upload-title" style="color:var(--blue)">人員異動</div>';
-  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:16px">輸入人員資訊，自動計算對薪資、保險、退休金、年終預估的影響</div>';
+  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:16px">選擇現有員工或手動輸入，自動計算對薪資、保險、退休金、年終預估的影響</div>';
 
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:700px">';
-  html += '<div class="form-group"><label>異動類型</label><select id="pType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="join">新進人員</option><option value="leave">人員離職</option></select></div>';
-  html += '<div class="form-group"><label>姓名</label><input type="text" id="pName" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：王小明"></div>';
-  html += '<div class="form-group"><label>月薪（本薪）</label><input type="number" id="pSalary" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：80000"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:700px">';
+  html += '<div class="form-group"><label>異動類型</label><select id="pType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="leave">人員離職</option><option value="join">新進人員</option></select></div>';
   html += '<div class="form-group"><label>生效月份</label><select id="pMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
   for (var i = 1; i <= 12; i++) html += '<option value="' + i + '">' + i + '月</option>';
   html += '</select></div>';
+  html += '</div>';
+
+  if (employeeList.length > 0) {
+    html += '<div class="form-group" style="max-width:700px;margin-top:8px"><label>選擇員工（離職時從名冊帶入）</label>';
+    html += '<select id="pEmployee" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">' + empOptions + '</select></div>';
+  }
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:700px;margin-top:8px">';
+  html += '<div class="form-group"><label>姓名</label><input type="text" id="pName" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：王小明"></div>';
+  html += '<div class="form-group"><label>月薪（本薪）</label><input type="number" id="pSalary" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：80000"></div>';
   html += '<div class="form-group"><label>職位/備註</label><input type="text" id="pRole" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：律師、助理"></div>';
   html += '</div>';
+
+  // Extra fields for actual employer costs (from employee record)
+  html += '<div id="pActualCosts" style="display:none;margin-top:8px;max-width:700px">';
+  html += '<div class="text-muted" style="font-size:0.75rem;margin-bottom:4px">實際雇主成本（從薪資表帶入）：</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+  html += '<div class="form-group"><label style="font-size:0.7rem">勞保(雇主)</label><input type="number" id="pLabor" style="width:100%;padding:6px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.8rem"></div>';
+  html += '<div class="form-group"><label style="font-size:0.7rem">健保(雇主)</label><input type="number" id="pHealth" style="width:100%;padding:6px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.8rem"></div>';
+  html += '<div class="form-group"><label style="font-size:0.7rem">勞退(雇主)</label><input type="number" id="pPension" style="width:100%;padding:6px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.8rem"></div>';
+  html += '<div class="form-group"><label style="font-size:0.7rem">年終獎金</label><input type="number" id="pBonus" style="width:100%;padding:6px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.8rem"></div>';
+  html += '</div></div>';
 
   // Preview area
   html += '<div id="pPreview" style="margin-top:16px;background:var(--bg-row);padding:16px;border-radius:8px;display:none">';
@@ -1029,6 +1080,32 @@ function showPersonnelChangeForm(year) {
   budgetGrid.parentNode.insertBefore(div, budgetGrid);
 
   document.getElementById('cancelPersonnelBtn').addEventListener('click', function() { div.remove(); });
+
+  // Employee selection → auto-fill
+  var empSelect = document.getElementById('pEmployee');
+  if (empSelect) {
+    empSelect.addEventListener('change', function() {
+      var empId = this.value;
+      if (!empId) {
+        document.getElementById('pName').value = '';
+        document.getElementById('pSalary').value = '';
+        document.getElementById('pRole').value = '';
+        document.getElementById('pActualCosts').style.display = 'none';
+        return;
+      }
+      var emp = employeeList.find(function(e) { return e.id === empId; });
+      if (!emp) return;
+      document.getElementById('pName').value = emp.name;
+      document.getElementById('pSalary').value = emp.total_salary || emp.base_salary;
+      document.getElementById('pRole').value = emp.department || '';
+      // Fill actual costs
+      document.getElementById('pLabor').value = emp.employer_labor || '';
+      document.getElementById('pHealth').value = emp.employer_health || '';
+      document.getElementById('pPension').value = emp.employer_pension || '';
+      document.getElementById('pBonus').value = emp.bonus || '';
+      document.getElementById('pActualCosts').style.display = 'block';
+    });
+  }
 
   // Preview
   document.getElementById('previewPersonnelBtn').addEventListener('click', function() {
@@ -1069,28 +1146,44 @@ function computePersonnelImpact() {
     endMonth = 12;
   }
 
+  // Check if actual employer costs are available (from employee record)
+  var hasActual = document.getElementById('pLabor') && parseInt(document.getElementById('pLabor').value) > 0;
   var rates = PERSONNEL_COST_RATES;
-  var monthlySalary = salary * sign;
-  var monthlyInsurance = Math.round(salary * rates.insurance_rate) * sign;
-  var monthlyPension = Math.round(salary * rates.pension_rate) * sign;
-  var monthlyBonus = Math.round(salary * rates.bonus_months / 12) * sign;
-  var monthlyMeal = rates.meal_allowance * sign;
+
+  var monthlySalary, monthlyInsurance, monthlyPension, monthlyBonus;
+
+  if (hasActual) {
+    // Use actual costs from salary Excel
+    monthlySalary = salary * sign;
+    var labor = parseInt(document.getElementById('pLabor').value) || 0;
+    var health = parseInt(document.getElementById('pHealth').value) || 0;
+    monthlyInsurance = (labor + health) * sign;
+    monthlyPension = (parseInt(document.getElementById('pPension').value) || 0) * sign;
+    var bonusTotal = parseInt(document.getElementById('pBonus').value) || 0;
+    monthlyBonus = (bonusTotal > 0 ? Math.round(bonusTotal / 12) : Math.round(salary / 12)) * sign;
+  } else {
+    // Estimate costs
+    monthlySalary = salary * sign;
+    monthlyInsurance = Math.round(salary * rates.insurance_rate) * sign;
+    monthlyPension = Math.round(salary * rates.pension_rate) * sign;
+    monthlyBonus = Math.round(salary * rates.bonus_months / 12) * sign;
+  }
 
   var monthCount = endMonth - startMonth + 1;
   var items = [
     { code: 'salary', name: '薪資費用', monthly: monthlySalary, annual: monthlySalary * monthCount },
-    { code: 'insurance', name: '保險費（勞健保雇主）', monthly: monthlyInsurance, annual: monthlyInsurance * monthCount },
-    { code: 'pension', name: '退休金（勞退6%）', monthly: monthlyPension, annual: monthlyPension * monthCount },
+    { code: 'insurance', name: '保險費（勞健保雇主' + (hasActual ? '，實際值' : '，估算') + '）', monthly: monthlyInsurance, annual: monthlyInsurance * monthCount },
+    { code: 'pension', name: '退休金（' + (hasActual ? '實際值' : '估算6%') + '）', monthly: monthlyPension, annual: monthlyPension * monthCount },
     { code: 'bonus_accrual', name: '年終預估', monthly: monthlyBonus, annual: monthlyBonus * monthCount },
   ];
 
-  var totalMonthly = monthlySalary + monthlyInsurance + monthlyPension + monthlyBonus + monthlyMeal;
-  var totalAnnual = items.reduce(function(s, i) { return s + i.annual; }, 0) + monthlyMeal * monthCount;
+  var totalMonthly = monthlySalary + monthlyInsurance + monthlyPension + monthlyBonus;
+  var totalAnnual = items.reduce(function(s, i) { return s + i.annual; }, 0);
 
   return {
     type: type, typeLabel: typeLabel, name: name, salary: salary, role: role,
     startMonth: startMonth, endMonth: endMonth, monthCount: monthCount,
-    items: items, mealMonthly: monthlyMeal * sign, mealAnnual: monthlyMeal * monthCount * sign,
+    items: items, hasActual: hasActual,
     totalMonthly: totalMonthly, totalAnnual: totalAnnual, sign: sign
   };
 }
@@ -1102,7 +1195,9 @@ function renderPersonnelPreview(p) {
 
   var html = '<div style="font-weight:600;margin-bottom:8px">' + p.typeLabel + '：' + p.name;
   if (p.role) html += '（' + p.role + '）';
-  html += ' — 月薪 ' + fmtCurrency(p.salary) + '，' + p.startMonth + '月~' + p.endMonth + '月</div>';
+  html += ' — 月薪 ' + fmtCurrency(p.salary) + '，' + p.startMonth + '月~' + p.endMonth + '月';
+  if (p.hasActual) html += ' <span class="text-blue" style="font-size:0.75rem">（使用實際薪資表數據）</span>';
+  html += '</div>';
 
   html += '<table style="font-size:0.82rem"><thead><tr><th>影響科目</th><th class="text-right">每月影響</th><th class="text-right">年度影響（' + p.monthCount + '個月）</th></tr></thead><tbody>';
   p.items.forEach(function(item) {
@@ -1706,6 +1801,120 @@ function parseAmount(val) {
 function showUploadMsg(msg, type) {
   document.getElementById('uploadMsg').innerHTML = '<div class="upload-msg ' + type + '">' + msg + '</div>';
 }
+
+// ═══════════════════════════════════════════════════════════
+//  SALARY UPLOAD
+// ═══════════════════════════════════════════════════════════
+var employeeList = []; // cached employee list
+
+async function loadEmployees(year) {
+  if (!sb) return [];
+  // Try current year first, fallback to previous year
+  var r = await sb.from('finance_employees').select('*').eq('fiscal_year', year).eq('is_active', true).order('department,name');
+  if (r.data && r.data.length > 0) { employeeList = r.data; return r.data; }
+  r = await sb.from('finance_employees').select('*').eq('fiscal_year', year - 1).eq('is_active', true).order('department,name');
+  employeeList = r.data || [];
+  return employeeList;
+}
+
+async function loadEmployeeCount() {
+  if (!sb) return;
+  var r = await sb.from('finance_employees').select('id', { count: 'exact', head: true });
+  var cnt = r.count || 0;
+  var el = document.getElementById('salaryCount');
+  if (el) el.textContent = cnt > 0 ? '目前有 ' + cnt + ' 位員工薪資資料' : '';
+}
+
+document.getElementById('salaryUploadBtn').addEventListener('click', async function() {
+  var fileInput = document.getElementById('salaryFile');
+  var year = parseInt(document.getElementById('salaryYear').value);
+  if (!fileInput.files.length) { document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg error">請選擇薪資表檔案</div>'; return; }
+  if (!year) return;
+
+  this.disabled = true; this.textContent = '解析中...';
+  try {
+    var file = fileInput.files[0];
+    var data = await file.arrayBuffer();
+    var wb = XLSX.read(data, { type: 'array' });
+
+    // Find the last month sheet (e.g., 11412)
+    var lastSheet = null, lastMonth = 0;
+    wb.SheetNames.forEach(function(name) {
+      var match = name.match(/^(\d{3,4})(\d{2})$/);
+      if (match) {
+        var m = parseInt(match[2]);
+        if (m >= 1 && m <= 12 && m > lastMonth) { lastMonth = m; lastSheet = name; }
+      }
+    });
+
+    if (!lastSheet) { throw new Error('找不到月份工作表'); }
+
+    var ws = wb.Sheets[lastSheet];
+    var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Also try to get year-end bonus data
+    var bonusMap = {};
+    var bonusSheet = wb.Sheets['114年終'] || wb.Sheets[year + '年終'];
+    if (bonusSheet) {
+      var bonusJson = XLSX.utils.sheet_to_json(bonusSheet, { header: 1, defval: '' });
+      bonusJson.forEach(function(row) {
+        var name = (row[0] || '').toString().trim();
+        var amount = parseFloat(row[1]) || 0;
+        if (name && amount > 0) bonusMap[name] = amount;
+      });
+    }
+
+    // Delete existing employees for this year
+    await sb.from('finance_employees').delete().eq('fiscal_year', year);
+
+    var employees = [];
+    for (var i = 1; i < json.length; i++) {
+      var row = json[i];
+      var dept = (row[1] || '').toString().trim();
+      var name = (row[2] || '').toString().trim();
+      var baseSalary = parseFloat(row[4]) || 0;
+      var totalSalary = parseFloat(row[14]) || 0; // Column O = index 14
+      var totalPay = parseFloat(row[19]) || 0;    // Column T = index 19
+      var empLabor = parseFloat(row[27]) || 0;    // Column AB = index 27
+      var empHealth = parseFloat(row[28]) || 0;   // Column AC = index 28
+      var empPension = parseFloat(row[29]) || 0;  // Column AD = index 29
+      var empTotal = parseFloat(row[30]) || 0;    // Column AE = index 30
+
+      if (!name || baseSalary === 0) continue;
+      // Skip if row looks like a header or subtotal
+      if (name.includes('小計') || name.includes('合計') || name.includes('外包')) continue;
+
+      employees.push({
+        name: name, department: dept || '未分類',
+        base_salary: Math.round(baseSalary),
+        total_salary: Math.round(totalSalary),
+        total_pay: Math.round(totalPay),
+        employer_labor: Math.round(empLabor),
+        employer_health: Math.round(empHealth),
+        employer_pension: Math.round(empPension),
+        employer_total: Math.round(empTotal),
+        bonus: Math.round(bonusMap[name] || 0),
+        fiscal_year: year, is_active: true
+      });
+    }
+
+    // Batch insert
+    for (var i = 0; i < employees.length; i += 100) {
+      var chunk = employees.slice(i, i + 100);
+      var r = await sb.from('finance_employees').insert(chunk);
+      if (r.error) throw r.error;
+    }
+
+    employeeList = employees;
+    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！從 ' + lastSheet + ' 解析 ' + employees.length + ' 位員工薪資</div>';
+    document.getElementById('salaryCount').textContent = '目前 ' + year + ' 年共 ' + employees.length + ' 位員工資料';
+  } catch(ex) {
+    console.error('salary upload:', ex);
+    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg error">上傳失敗：' + (ex.message || ex) + '</div>';
+  } finally {
+    this.disabled = false; this.textContent = '上傳薪資表';
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 //  INIT
