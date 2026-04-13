@@ -1736,14 +1736,28 @@ document.getElementById('histExportBtn').addEventListener('click', function() {
 // Upload log
 async function loadUploadLog() {
   if (!sb) return;
-  var r = await sb.from('finance_uploads').select('*').order('created_at', { ascending: false }).limit(10);
+  var r = await sb.from('finance_uploads').select('*').order('created_at', { ascending: false }).limit(50);
   if (!r.data || r.data.length === 0) { document.getElementById('uploadLog').innerHTML = ''; return; }
-  var html = '<div style="margin-top:12px;font-weight:600">上傳紀錄</div><table style="margin-top:8px"><thead><tr><th>時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th></tr></thead><tbody>';
+
+  // Only show the latest record per year+entity, skip entries before a deletion
+  var seen = {}; // key: year-entity → true if already shown or cleared
+  var validRows = [];
   r.data.forEach(function(u) {
+    var key = u.fiscal_year + '-' + u.entity;
+    if (seen[key]) return; // already found the latest for this combo
+    if (u.filename.indexOf('已清除') > -1) {
+      seen[key] = true; // mark as cleared, skip everything older
+      return;
+    }
+    validRows.push(u);
+    seen[key] = true;
+  });
+
+  if (validRows.length === 0) { document.getElementById('uploadLog').innerHTML = ''; return; }
+  var html = '<div style="margin-top:12px;font-weight:600">目前有效資料</div><table style="margin-top:8px"><thead><tr><th>上傳時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th></tr></thead><tbody>';
+  validRows.forEach(function(u) {
     var d = new Date(u.created_at);
-    var isDeletion = u.filename.indexOf('已清除') > -1;
-    var rowStyle = isDeletion ? 'color:var(--red);opacity:0.7' : '';
-    html += '<tr style="' + rowStyle + '"><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
+    html += '<tr><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
     html += '<td>' + u.filename + '</td><td>' + u.entity + '</td><td>' + u.fiscal_year + '</td><td>' + (u.row_count||'-') + '</td></tr>';
   });
   html += '</tbody></table>';
