@@ -824,39 +824,103 @@ function renderSummaryTable(budgetMap, actualMap, maxActualMonth) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  TAB 2: BUDGET PLANNING
+//  TAB 2: BUDGET PLANNING (基底 + 調整項)
 // ═══════════════════════════════════════════════════════════
+var adjustments = []; // finance_adjustments rows for current year
+
 async function loadBudgetData() {
   var year = selectedYear;
-  var budgetRows = await fetchFinanceData(year, 'budget');
-  var budgetMap = buildDataMap(budgetRows);
   var histRows = await fetchFinanceData(year - 1, 'historical');
+  var histMap = buildDataMap(histRows);
+
+  // Load adjustments
+  if (sb) {
+    var r = await sb.from('finance_adjustments').select('*').eq('fiscal_year', year).order('created_at');
+    adjustments = (r.data || []);
+  }
+
+  // Compute budget = base (hist) + adjustments
+  var budgetMap = computeBudgetFromAdjustments(histMap, adjustments);
+
+  // Save computed budget to DB (so other tabs can use it)
+  await saveBudgetToDb(year, budgetMap);
 
   // Admin actions
   var actionsEl = document.getElementById('budgetActions');
   if (isAdmin) {
-    actionsEl.innerHTML = '<button class="btn-primary" id="aiEstimateBtn">AI 預估 ' + year + '年預算</button>' +
-      '<button class="btn-sm" id="copyHistBtn" style="margin-left:8px">直接複製' + (year-1) + '年</button>';
-    document.getElementById('aiEstimateBtn').addEventListener('click', function() {
-      if (histRows.length === 0) { alert('沒有' + (year-1) + '年的歷史資料，請先到「歷史資料」上傳'); return; }
-      showAIEstimateDialog(year, histRows);
-    });
-    document.getElementById('copyHistBtn').addEventListener('click', function() {
-      if (histRows.length === 0) { alert('沒有' + (year-1) + '年的歷史資料'); return; }
-      if (!confirm('確定要用' + (year-1) + '年資料原封不動填入' + year + '年預算？')) return;
-      copyHistoricalToBudget(year, histRows);
+    actionsEl.innerHTML = '<button class="btn-primary" id="addAdjustBtn">+ 新增調整項目</button>';
+    document.getElementById('addAdjustBtn').addEventListener('click', function() {
+      if (histRows.length === 0) {
+        alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表');
+        return;
+      }
+      showAddAdjustmentForm(year);
     });
   } else {
     actionsEl.innerHTML = '';
   }
 
-  renderBudgetGrid(budgetMap);
+  var hasHist = histRows.length > 0;
+  document.getElementById('budgetHint').textContent = hasHist
+    ? '基底：' + (year-1) + '年歷史資料 + 下方調整項 = ' + year + '年預算'
+    : '尚無 ' + (year-1) + '年歷史資料，請先到「歷史資料」上傳';
+
+  renderBudgetGrid(histMap, budgetMap);
+  renderAdjustmentLog(year);
 }
 
-function renderBudgetGrid(budgetMap) {
+function computeBudgetFromAdjustments(histMap, adjs) {
+  // Start with historical as base
+  var budget = {};
+  categories.forEach(function(cat) {
+    if (cat.is_subtotal) return;
+    budget[cat.id] = {};
+    var hm = histMap[cat.id] || {};
+    for (var mo = 1; mo <= 12; mo++) budget[cat.id][mo] = hm[mo] || 0;
+  });
+
+  // Apply active adjustments
+  adjs.forEach(function(adj) {
+    if (!adj.is_active) return;
+    var catBudget = budget[adj.category_id];
+    if (!catBudget) return;
+    var startM = adj.start_month, endM = adj.end_month;
+    for (var mo = startM; mo <= endM; mo++) {
+      if (adj.adjust_type === 'monthly') {
+        catBudget[mo] = (catBudget[mo] || 0) + adj.amount;
+      } else if (adj.adjust_type === 'one_time' && mo === startM) {
+        catBudget[mo] = (catBudget[mo] || 0) + adj.amount;
+      }
+    }
+  });
+  return budget;
+}
+
+async function saveBudgetToDb(year, budgetMap) {
+  var upserts = [];
+  categories.forEach(function(cat) {
+    if (cat.is_subtotal) return;
+    var bm = budgetMap[cat.id] || {};
+    for (var mo = 1; mo <= 12; mo++) {
+      upserts.push({
+        category_id: cat.id, fiscal_year: year, month: mo, data_type: 'budget',
+        amount: bm[mo] || 0, updated_by: currentLawyer ? currentLawyer.id : null
+      });
+    }
+  });
+  for (var i = 0; i < upserts.length; i += 200) {
+    var chunk = upserts.slice(i, i + 200);
+    await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
+  }
+  delete dataCache[year + '-budget'];
+}
+
+function renderBudgetGrid(histMap, budgetMap) {
   var html = '<table><thead><tr><th>科目</th>';
   for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月</th>';
-  html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th></tr></thead><tbody>';
+  html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th>';
+  html += '<th class="text-right text-muted" style="font-size:0.7rem">vs去年</th>';
+  html += '</tr></thead><tbody>';
 
   var sections = [
     { key: 'revenue', label: '營業收入' },
@@ -866,302 +930,215 @@ function renderBudgetGrid(budgetMap) {
   ];
 
   var sectionTotals = {};
-  sections.forEach(function(s) { sectionTotals[s.key] = new Array(12).fill(0); });
+  var sectionHistTotals = {};
+  sections.forEach(function(s) { sectionTotals[s.key] = new Array(12).fill(0); sectionHistTotals[s.key] = 0; });
 
   sections.forEach(function(sec) {
-    html += '<tr class="section-row"><td colspan="14">' + sec.label + '</td></tr>';
+    html += '<tr class="section-row"><td colspan="15">' + sec.label + '</td></tr>';
     var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
     sectionCats.forEach(function(cat) {
       var rowData = budgetMap[cat.id] || {};
-      var rowTotal = 0;
-      html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
+      var histData = histMap[cat.id] || {};
+      var rowTotal = 0, histTotal = 0;
+      for (var mo = 1; mo <= 12; mo++) { histTotal += (histData[mo] || 0); }
+      sectionHistTotals[sec.key] += histTotal;
+
+      // Check if this category has adjustments
+      var hasAdj = adjustments.some(function(a) { return a.category_id === cat.id && a.is_active; });
+      var nameStyle = hasAdj ? 'padding-left:20px;color:var(--blue)' : 'padding-left:20px';
+
+      html += '<tr><td style="' + nameStyle + '">' + cat.name + (hasAdj ? ' *' : '') + '</td>';
       for (var mo = 1; mo <= 12; mo++) {
         var val = rowData[mo] || 0;
+        var histVal = histData[mo] || 0;
+        var diff = val - histVal;
         rowTotal += val;
         sectionTotals[sec.key][mo-1] += val;
-        if (isAdmin) {
-          html += '<td class="text-right"><input class="cell-input" data-cat="' + cat.id + '" data-month="' + mo + '" value="' + (val || '') + '"></td>';
-        } else {
-          html += '<td class="text-right">' + fmt(val) + '</td>';
-        }
+        var cellClass = diff > 0 ? 'text-blue' : (diff < 0 ? 'text-green' : '');
+        html += '<td class="text-right ' + cellClass + '">' + fmt(val) + '</td>';
       }
-      html += '<td class="text-right" style="font-weight:600">' + fmt(rowTotal) + '</td></tr>';
+      var diffTotal = rowTotal - histTotal;
+      var diffStr = diffTotal !== 0 ? (diffTotal > 0 ? '+' : '') + fmt(diffTotal) : '-';
+      var diffClass = diffTotal > 0 ? 'text-red' : (diffTotal < 0 ? 'text-green' : 'text-muted');
+      html += '<td class="text-right" style="font-weight:600">' + fmt(rowTotal) + '</td>';
+      html += '<td class="text-right ' + diffClass + '" style="font-size:0.75rem">' + diffStr + '</td>';
+      html += '</tr>';
     });
-    // Subtotal
     var secTotal = sectionTotals[sec.key].reduce(function(a,b) { return a+b; }, 0);
+    var secDiff = secTotal - sectionHistTotals[sec.key];
     html += '<tr class="subtotal-row"><td style="padding-left:8px">' + sec.label + '合計</td>';
     for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionTotals[sec.key][mo]) + '</td>';
-    html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td></tr>';
+    html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td>';
+    html += '<td class="text-right ' + (secDiff > 0 ? 'text-red' : 'text-green') + '" style="font-size:0.75rem">' + (secDiff !== 0 ? (secDiff > 0 ? '+' : '') + fmt(secDiff) : '-') + '</td>';
+    html += '</tr>';
   });
 
   // Net income row
-  html += '<tr class="net-row"><td>淨利（收入-費用+營業外-稅）</td>';
+  html += '<tr class="net-row"><td>淨利</td>';
+  var netHistTotal = 0;
   for (var mo = 0; mo < 12; mo++) {
-    var net = (sectionTotals.revenue[mo] || 0) - (sectionTotals.operating_expense[mo] || 0) + (sectionTotals.non_operating_income[mo] || 0) - (sectionTotals.tax[mo] || 0);
+    var net = (sectionTotals.revenue[mo]||0) - (sectionTotals.operating_expense[mo]||0) + (sectionTotals.non_operating_income[mo]||0) - (sectionTotals.tax[mo]||0);
     html += '<td class="text-right">' + fmt(net) + '</td>';
   }
   var netTotal = 0;
   ['revenue','operating_expense','non_operating_income','tax'].forEach(function(s) {
     var sign = (s === 'revenue' || s === 'non_operating_income') ? 1 : -1;
     netTotal += sign * sectionTotals[s].reduce(function(a,b) { return a+b; }, 0);
+    netHistTotal += sign * sectionHistTotals[s];
   });
-  html += '<td class="text-right">' + fmt(netTotal) + '</td></tr>';
+  var netDiff = netTotal - netHistTotal;
+  html += '<td class="text-right">' + fmt(netTotal) + '</td>';
+  html += '<td class="text-right ' + (netDiff >= 0 ? 'text-green' : 'text-red') + '" style="font-size:0.75rem">' + (netDiff !== 0 ? (netDiff > 0 ? '+' : '') + fmt(netDiff) : '-') + '</td>';
+  html += '</tr>';
 
   html += '</tbody></table>';
   document.getElementById('budgetGrid').innerHTML = html;
-
-  // Bind input events
-  if (isAdmin) {
-    document.querySelectorAll('#budgetGrid .cell-input').forEach(function(input) {
-      var saveTimer;
-      input.addEventListener('blur', function() { saveBudgetCell(this); });
-      input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-        if (e.key === 'Tab') { saveBudgetCell(this); }
-      });
-    });
-  }
 }
 
-async function saveBudgetCell(input) {
-  var catId = input.getAttribute('data-cat');
-  var month = parseInt(input.getAttribute('data-month'));
-  var val = parseInt(input.value) || 0;
-
-  input.classList.remove('saved', 'error');
-  var r = await sb.from('finance_data').upsert({
-    category_id: catId, fiscal_year: selectedYear, month: month, data_type: 'budget',
-    amount: val, updated_by: currentLawyer ? currentLawyer.id : null
-  }, { onConflict: 'category_id,fiscal_year,month,data_type' });
-
-  if (r.error) {
-    console.error('save budget:', r.error);
-    input.classList.add('error');
-  } else {
-    input.classList.add('saved');
-    // Invalidate cache
-    delete dataCache[selectedYear + '-budget'];
-    setTimeout(function() { input.classList.remove('saved'); }, 1500);
-  }
-}
-
-async function copyHistoricalToBudget(year, histRows) {
-  var upserts = histRows.map(function(r) {
-    return {
-      category_id: r.category_id, fiscal_year: year, month: r.month, data_type: 'budget',
-      amount: r.amount, updated_by: currentLawyer ? currentLawyer.id : null
-    };
-  });
-  for (var i = 0; i < upserts.length; i += 200) {
-    var chunk = upserts.slice(i, i + 200);
-    var r = await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
-    if (r.error) { console.error('copy hist:', r.error); alert('複製失敗：' + r.error.message); return; }
-  }
-  delete dataCache[year + '-budget'];
-  alert('已複製' + (year-1) + '年資料到' + year + '年預算');
-  loadBudgetData();
-}
-
-// ═══════════════════════════════════════════════════════════
-//  AI BUDGET ESTIMATION
-// ═══════════════════════════════════════════════════════════
-
-// Category estimation rules based on 114年 data analysis
-var ESTIMATE_RULES = {
-  // Revenue
-  revenue_gross:   { type: 'growth', defaultGrowth: 5, label: '營收成長' },
-  revenue_returns: { type: 'growth', defaultGrowth: 0, label: '退回比例維持' },
-  // Fixed costs - stable monthly, slight annual growth
-  salary:       { type: 'growth', defaultGrowth: 3, label: '調薪/擴編' },
-  rent:         { type: 'growth', defaultGrowth: 0, label: '租約固定' },
-  insurance:    { type: 'growth', defaultGrowth: 2, label: '保費微調' },
-  pension:      { type: 'growth', defaultGrowth: 3, label: '隨薪資調整' },
-  postage:      { type: 'growth', defaultGrowth: 0, label: '維持' },
-  bank_fee:     { type: 'growth', defaultGrowth: 0, label: '維持' },
-  // Semi-variable
-  advertising:  { type: 'growth', defaultGrowth: 0, label: '廣告策略' },
-  transport:    { type: 'growth', defaultGrowth: 5, label: '微幅成長' },
-  amortization: { type: 'growth', defaultGrowth: 0, label: '攤銷維持' },
-  printing:     { type: 'growth', defaultGrowth: 0, label: '維持' },
-  // Seasonal / volatile - keep monthly pattern
-  welfare:      { type: 'seasonal', defaultGrowth: 0, label: '節日福利（依月份）' },
-  sundry:       { type: 'seasonal', defaultGrowth: 0, label: '什費（依月份）' },
-  bar_fee:      { type: 'seasonal', defaultGrowth: 0, label: '公會費（依月份）' },
-  bonus_accrual:{ type: 'seasonal', defaultGrowth: 3, label: '年終隨薪資' },
-  // Small items - use average
-  stationery:   { type: 'growth', defaultGrowth: 0, label: '維持' },
-  travel:       { type: 'growth', defaultGrowth: 0, label: '維持' },
-  shipping:     { type: 'growth', defaultGrowth: 0, label: '維持' },
-  repair:       { type: 'growth', defaultGrowth: 0, label: '維持' },
-  utilities:    { type: 'seasonal', defaultGrowth: 0, label: '水電（依月份）' },
-  entertainment:{ type: 'growth', defaultGrowth: 0, label: '維持' },
-  tax_expense:  { type: 'seasonal', defaultGrowth: 0, label: '稅捐（依月份）' },
-  depreciation: { type: 'growth', defaultGrowth: 0, label: '折舊維持' },
-  training:     { type: 'growth', defaultGrowth: 0, label: '維持' },
-  service_fee:  { type: 'growth', defaultGrowth: 0, label: '維持' },
-  publications: { type: 'growth', defaultGrowth: 0, label: '維持' },
-  misc_purchase:{ type: 'growth', defaultGrowth: 0, label: '維持' },
-  // Non-operating
-  lease_income:   { type: 'growth', defaultGrowth: 0, label: '維持' },
-  other_income:   { type: 'growth', defaultGrowth: 0, label: '維持' },
-  partner_income: { type: 'growth', defaultGrowth: 0, label: '合署收入' },
-  interest_income:{ type: 'growth', defaultGrowth: 0, label: '維持' },
-  gov_subsidy:    { type: 'growth', defaultGrowth: 0, label: '維持' },
-  income_tax:     { type: 'growth', defaultGrowth: 0, label: '維持' }
-};
-
-function showAIEstimateDialog(year, histRows) {
-  var histMap = buildDataMap(histRows);
-  var prevYear = year - 1;
-
-  // Build dialog
-  var existing = document.getElementById('aiEstimateDialog');
+// ── Adjustment Form ──
+function showAddAdjustmentForm(year) {
+  var existing = document.getElementById('adjFormSection');
   if (existing) existing.remove();
 
   var div = document.createElement('div');
-  div.id = 'aiEstimateDialog';
+  div.id = 'adjFormSection';
 
-  var html = '<div class="upload-section" style="margin-bottom:20px">';
-  html += '<div class="upload-title" style="font-size:1rem;margin-bottom:4px">AI 預估 ' + year + '年預算</div>';
-  html += '<div class="text-muted" style="font-size:0.8rem;margin-bottom:16px">根據 ' + prevYear + '年實際數據，自動評估各科目的 ' + year + '年預算。可調整成長率後生成。</div>';
-
-  // Summary of historical data
-  var totalHistExp = 0;
-  categories.forEach(function(c) {
-    if (c.section === 'operating_expense' && !c.is_subtotal) totalHistExp += annualTotal(histMap, c.id);
-  });
-
-  html += '<div style="background:var(--bg-row);padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:0.82rem">';
-  html += '<strong>' + prevYear + '年營業費用合計：</strong> <span class="text-gold">' + fmtCurrency(totalHistExp) + '</span>';
-  html += '</div>';
-
-  // Growth rate table
-  html += '<table style="max-width:700px"><thead><tr>';
-  html += '<th>科目</th><th class="text-right">' + prevYear + '年合計</th>';
-  html += '<th class="text-right" style="width:100px">成長率 %</th>';
-  html += '<th>說明</th>';
-  html += '<th class="text-right">' + year + '年預估</th>';
-  html += '</tr></thead><tbody>';
-
+  var catOptions = '';
   var sections = [
     { key: 'revenue', label: '營業收入' },
     { key: 'operating_expense', label: '營業費用' },
     { key: 'non_operating_income', label: '營業外收入' },
-    { key: 'tax', label: '所得稅' }
+    { key: 'tax', label: '稅' }
   ];
-
   sections.forEach(function(sec) {
-    html += '<tr class="section-row"><td colspan="5">' + sec.label + '</td></tr>';
-    categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; }).forEach(function(cat) {
-      var histTotal = annualTotal(histMap, cat.id);
-      var rule = ESTIMATE_RULES[cat.code] || { type: 'growth', defaultGrowth: 0, label: '維持' };
-      var estTotal = Math.round(histTotal * (1 + rule.defaultGrowth / 100));
-
-      html += '<tr>';
-      html += '<td style="padding-left:16px">' + cat.name + '</td>';
-      html += '<td class="text-right text-muted">' + fmt(histTotal) + '</td>';
-      html += '<td class="text-right"><input class="cell-input growth-input" data-code="' + cat.code + '" data-cat="' + cat.id + '" value="' + rule.defaultGrowth + '" style="width:70px;text-align:center"></td>';
-      html += '<td class="text-muted" style="font-size:0.75rem">' + rule.label + '</td>';
-      html += '<td class="text-right estimate-preview" data-code="' + cat.code + '" style="font-weight:600">' + fmt(estTotal) + '</td>';
-      html += '</tr>';
+    catOptions += '<optgroup label="' + sec.label + '">';
+    categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; }).forEach(function(c) {
+      catOptions += '<option value="' + c.id + '">' + c.name + '</option>';
     });
+    catOptions += '</optgroup>';
   });
 
-  html += '</tbody></table>';
-  html += '<div style="margin-top:16px;display:flex;gap:8px">';
-  html += '<button class="btn-primary" id="applyEstimateBtn">套用預估到預算</button>';
-  html += '<button class="btn-sm" id="cancelEstimateBtn">取消</button>';
+  var html = '<div class="upload-section" style="margin-bottom:16px;border-color:var(--blue)">';
+  html += '<div class="upload-title">新增預算調整</div>';
+  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:12px">輸入費用變動計畫，系統自動調整預算數字並記錄</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px">';
+  html += '<div class="form-group"><label>調整科目</label><select id="adjCat" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">' + catOptions + '</select></div>';
+  html += '<div class="form-group"><label>調整類型</label><select id="adjType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="monthly">每月固定增減</option><option value="one_time">單次增減</option></select></div>';
+  html += '<div class="form-group"><label>金額（正=增加 / 負=減少）</label><input type="number" id="adjAmount" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：80000 或 -50000"></div>';
+  html += '<div class="form-group"><label>說明</label><input type="text" id="adjDesc" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：新增一位律師"></div>';
+  html += '<div class="form-group"><label>起始月份</label><select id="adjStartMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
+  for (var i = 1; i <= 12; i++) html += '<option value="' + i + '">' + i + '月</option>';
+  html += '</select></div>';
+  html += '<div class="form-group"><label>結束月份</label><select id="adjEndMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
+  for (var i = 1; i <= 12; i++) html += '<option value="' + i + '"' + (i === 12 ? ' selected' : '') + '>' + i + '月</option>';
+  html += '</select></div>';
+  html += '</div>';
+  html += '<div style="margin-top:12px;display:flex;gap:8px">';
+  html += '<button class="btn-primary" id="saveAdjBtn">儲存調整</button>';
+  html += '<button class="btn-sm" id="cancelAdjBtn">取消</button>';
   html += '</div></div>';
 
   div.innerHTML = html;
   var budgetGrid = document.getElementById('budgetGrid');
   budgetGrid.parentNode.insertBefore(div, budgetGrid);
 
-  // Live preview: update estimate when growth rate changes
-  div.querySelectorAll('.growth-input').forEach(function(input) {
-    input.addEventListener('input', function() {
-      var code = this.getAttribute('data-code');
-      var catId = this.getAttribute('data-cat');
-      var growth = parseFloat(this.value) || 0;
-      var histTotal = annualTotal(histMap, catId);
-      var estTotal = Math.round(histTotal * (1 + growth / 100));
-      var preview = div.querySelector('.estimate-preview[data-code="' + code + '"]');
-      if (preview) preview.textContent = fmt(estTotal);
-    });
+  document.getElementById('cancelAdjBtn').addEventListener('click', function() { div.remove(); });
+  document.getElementById('adjType').addEventListener('change', function() {
+    var isOneTime = this.value === 'one_time';
+    document.getElementById('adjEndMonth').disabled = isOneTime;
+    if (isOneTime) document.getElementById('adjEndMonth').value = document.getElementById('adjStartMonth').value;
+  });
+  document.getElementById('adjStartMonth').addEventListener('change', function() {
+    if (document.getElementById('adjType').value === 'one_time') {
+      document.getElementById('adjEndMonth').value = this.value;
+    }
   });
 
-  // Cancel
-  document.getElementById('cancelEstimateBtn').addEventListener('click', function() { div.remove(); });
+  document.getElementById('saveAdjBtn').addEventListener('click', async function() {
+    var catId = document.getElementById('adjCat').value;
+    var adjType = document.getElementById('adjType').value;
+    var amount = parseInt(document.getElementById('adjAmount').value);
+    var desc = document.getElementById('adjDesc').value.trim();
+    var startMonth = parseInt(document.getElementById('adjStartMonth').value);
+    var endMonth = parseInt(document.getElementById('adjEndMonth').value);
 
-  // Apply
-  document.getElementById('applyEstimateBtn').addEventListener('click', async function() {
-    this.disabled = true; this.textContent = '生成中...';
-    await generateAIBudget(year, histMap, div);
+    if (!amount || isNaN(amount)) { alert('請輸入金額'); return; }
+    if (!desc) { alert('請輸入說明'); return; }
+    if (endMonth < startMonth) { alert('結束月份不能早於起始月份'); return; }
+
+    this.disabled = true; this.textContent = '儲存中...';
+    var r = await sb.from('finance_adjustments').insert({
+      fiscal_year: year, category_id: catId, description: desc,
+      amount: amount, adjust_type: adjType,
+      start_month: startMonth, end_month: endMonth,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+    if (r.error) { alert('儲存失敗：' + r.error.message); this.disabled = false; this.textContent = '儲存調整'; return; }
+
     div.remove();
+    await loadBudgetData(); // reload everything
   });
 }
 
-async function generateAIBudget(year, histMap, dialogEl) {
-  var upserts = [];
-  var growthInputs = dialogEl.querySelectorAll('.growth-input');
-  var growthMap = {};
-  growthInputs.forEach(function(input) {
-    growthMap[input.getAttribute('data-code')] = (parseFloat(input.value) || 0) / 100;
-  });
+// ── Adjustment Log ──
+function renderAdjustmentLog(year) {
+  var activeAdjs = adjustments.filter(function(a) { return a.is_active; });
+  if (activeAdjs.length === 0) return;
 
-  categories.forEach(function(cat) {
-    if (cat.is_subtotal) return;
-    var rule = ESTIMATE_RULES[cat.code] || { type: 'growth', defaultGrowth: 0 };
-    var growth = growthMap[cat.code] != null ? growthMap[cat.code] : (rule.defaultGrowth / 100);
-    var hm = histMap[cat.id] || {};
-
-    // Calculate monthly values based on estimation type
-    var histMonthly = [];
-    var histTotal = 0;
-    for (var mo = 1; mo <= 12; mo++) {
-      histMonthly.push(hm[mo] || 0);
-      histTotal += (hm[mo] || 0);
-    }
-    var histAvg = histTotal / 12;
-
-    for (var mo = 1; mo <= 12; mo++) {
-      var estimated;
-      if (rule.type === 'seasonal' && histTotal > 0) {
-        // Preserve monthly distribution pattern, apply growth
-        estimated = Math.round(histMonthly[mo - 1] * (1 + growth));
-      } else if (histTotal > 0) {
-        // Check if monthly values are stable (CV < 20%) → use average; otherwise keep pattern
-        var sumSq = 0;
-        histMonthly.forEach(function(v) { sumSq += (v - histAvg) * (v - histAvg); });
-        var cv = histAvg > 0 ? Math.sqrt(sumSq / 12) / histAvg : 0;
-
-        if (cv < 0.2) {
-          // Stable: use rounded average with growth
-          estimated = Math.round(histAvg * (1 + growth));
-        } else {
-          // Variable: keep monthly pattern with growth
-          estimated = Math.round(histMonthly[mo - 1] * (1 + growth));
-        }
-      } else {
-        estimated = 0;
-      }
-
-      upserts.push({
-        category_id: cat.id, fiscal_year: year, month: mo, data_type: 'budget',
-        amount: estimated, updated_by: currentLawyer ? currentLawyer.id : null
-      });
-    }
-  });
-
-  // Batch upsert
-  for (var i = 0; i < upserts.length; i += 200) {
-    var chunk = upserts.slice(i, i + 200);
-    var r = await sb.from('finance_data').upsert(chunk, { onConflict: 'category_id,fiscal_year,month,data_type' });
-    if (r.error) { console.error('ai estimate:', r.error); alert('預估失敗：' + r.error.message); return; }
+  var logEl = document.querySelector('#page-budget .adj-log');
+  if (!logEl) {
+    logEl = document.createElement('div');
+    logEl.className = 'adj-log table-card';
+    document.getElementById('budgetGrid').parentNode.appendChild(logEl);
   }
-  delete dataCache[year + '-budget'];
-  alert('已生成 ' + year + '年預算！\n\n穩定費用以月均值 × 成長率計算\n波動費用保留月份分佈模式\n\n你可以在表格中直接修改任何數字。');
-  loadBudgetData();
+
+  var html = '<div class="table-header"><span class="table-title">調整紀錄</span>';
+  html += '<span class="text-muted" style="font-size:0.75rem">共 ' + activeAdjs.length + ' 筆調整</span></div>';
+  html += '<table><thead><tr><th>時間</th><th>科目</th><th>說明</th><th class="text-right">金額/月</th><th>期間</th><th class="text-right">年度影響</th>';
+  if (isAdmin) html += '<th></th>';
+  html += '</tr></thead><tbody>';
+
+  var totalImpact = 0;
+  activeAdjs.forEach(function(adj) {
+    var cat = catIdMap[adj.category_id];
+    var catName = cat ? cat.name : '未知';
+    var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
+    var impact = adj.amount * monthCount;
+    totalImpact += impact;
+
+    var d = new Date(adj.created_at);
+    var dateStr = (d.getMonth()+1) + '/' + d.getDate();
+    var periodStr = adj.adjust_type === 'one_time'
+      ? adj.start_month + '月（單次）'
+      : adj.start_month + '月 ~ ' + adj.end_month + '月';
+
+    html += '<tr>';
+    html += '<td class="text-muted">' + dateStr + '</td>';
+    html += '<td>' + catName + '</td>';
+    html += '<td><strong>' + adj.description + '</strong></td>';
+    html += '<td class="text-right ' + (adj.amount >= 0 ? 'text-red' : 'text-green') + '">' + (adj.amount >= 0 ? '+' : '') + fmt(adj.amount) + '</td>';
+    html += '<td>' + periodStr + '</td>';
+    html += '<td class="text-right ' + (impact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:600">' + (impact >= 0 ? '+' : '') + fmtCurrency(impact) + '</td>';
+    if (isAdmin) {
+      html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteAdjustment(\'' + adj.id + '\')">刪除</button></td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '<tr style="border-top:2px solid var(--gold)"><td colspan="5" style="font-weight:700;color:var(--gold-light)">調整總影響</td>';
+  html += '<td class="text-right ' + (totalImpact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:700">' + (totalImpact >= 0 ? '+' : '') + fmtCurrency(totalImpact) + '</td>';
+  if (isAdmin) html += '<td></td>';
+  html += '</tr>';
+  html += '</tbody></table>';
+
+  logEl.innerHTML = html;
+}
+
+async function deleteAdjustment(adjId) {
+  if (!confirm('確定要刪除這筆調整？預算數字會重新計算。')) return;
+  var r = await sb.from('finance_adjustments').update({ is_active: false }).eq('id', adjId);
+  if (r.error) { alert('刪除失敗：' + r.error.message); return; }
+  await loadBudgetData();
 }
 
 // ═══════════════════════════════════════════════════════════

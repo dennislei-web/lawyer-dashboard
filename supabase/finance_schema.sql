@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS finance_uploads (
     created_at    TIMESTAMPTZ DEFAULT now()
 );
 
+-- 4. 預算調整紀錄
+CREATE TABLE IF NOT EXISTS finance_adjustments (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fiscal_year   INTEGER NOT NULL,
+    category_id   UUID NOT NULL REFERENCES finance_categories(id),
+    description   TEXT NOT NULL,
+    amount        NUMERIC(14,0) NOT NULL,
+    adjust_type   TEXT NOT NULL CHECK (adjust_type IN ('monthly', 'one_time')),
+    start_month   INTEGER NOT NULL CHECK (start_month BETWEEN 1 AND 12),
+    end_month     INTEGER NOT NULL CHECK (end_month BETWEEN 1 AND 12),
+    is_active     BOOLEAN DEFAULT true,
+    created_by    UUID REFERENCES lawyers(id),
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_finance_adj_year ON finance_adjustments(fiscal_year);
+
 -- ============================================================
 --  RLS
 -- ============================================================
@@ -58,6 +75,7 @@ CREATE TABLE IF NOT EXISTS finance_uploads (
 ALTER TABLE finance_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finance_uploads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE finance_adjustments ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: 所有登入使用者可讀
 CREATE POLICY finance_categories_select ON finance_categories
@@ -77,6 +95,13 @@ CREATE POLICY finance_data_admin ON finance_data
     FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 
 CREATE POLICY finance_uploads_admin ON finance_uploads
+    FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+
+-- finance_adjustments
+CREATE POLICY finance_adjustments_select ON finance_adjustments
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY finance_adjustments_admin ON finance_adjustments
     FOR ALL USING (is_admin()) WITH CHECK (is_admin());
 
 -- ============================================================
