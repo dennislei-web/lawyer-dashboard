@@ -1043,9 +1043,12 @@ async function showPersonnelChangeForm(year) {
   html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:16px">選擇現有員工或手動輸入，自動計算對薪資、保險、退休金、年終預估的影響</div>';
 
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:700px">';
-  html += '<div class="form-group"><label>異動類型</label><select id="pType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="leave">人員離職</option><option value="join">新進人員</option></select></div>';
-  html += '<div class="form-group"><label>生效月份</label><select id="pMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
+  html += '<div class="form-group"><label>異動類型</label><select id="pType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="leave">人員離職</option><option value="parental">育嬰留停</option><option value="join">新進人員</option></select></div>';
+  html += '<div class="form-group"><label id="pMonthLabel">生效月份</label><select id="pMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
   for (var i = 1; i <= 12; i++) html += '<option value="' + i + '">' + i + '月</option>';
+  html += '</select></div>';
+  html += '<div class="form-group" id="pEndMonthGroup" style="display:none"><label>留停結束月份</label><select id="pEndMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
+  for (var i = 1; i <= 12; i++) html += '<option value="' + i + '"' + (i === 6 ? ' selected' : '') + '>' + i + '月</option>';
   html += '</select></div>';
   html += '</div>';
 
@@ -1085,6 +1088,13 @@ async function showPersonnelChangeForm(year) {
   budgetGrid.parentNode.insertBefore(div, budgetGrid);
 
   document.getElementById('cancelPersonnelBtn').addEventListener('click', function() { div.remove(); });
+
+  // Type change → show/hide end month for parental leave
+  document.getElementById('pType').addEventListener('change', function() {
+    var isParental = this.value === 'parental';
+    document.getElementById('pEndMonthGroup').style.display = isParental ? 'block' : 'none';
+    document.getElementById('pMonthLabel').textContent = isParental ? '留停開始月份' : '生效月份';
+  });
 
   // Employee selection → auto-fill
   var empSelect = document.getElementById('pEmployee');
@@ -1141,14 +1151,18 @@ function computePersonnelImpact() {
   if (!salary || isNaN(salary)) { alert('請輸入月薪'); return null; }
 
   var sign = type === 'join' ? 1 : -1;
-  var typeLabel = type === 'join' ? '新進' : '離職';
-  var endMonth = type === 'join' ? 12 : month; // 新進到年底，離職=該月之後不再有
-  var startMonth = type === 'join' ? month : month; // 離職：從該月起減少
+  var typeLabel = type === 'join' ? '新進' : (type === 'parental' ? '育嬰留停' : '離職');
+  var startMonth, endMonth;
 
-  // For leave: impact is from the leave month through Dec (they STOP costing)
-  if (type === 'leave') {
+  if (type === 'join') {
+    startMonth = month; endMonth = 12;
+  } else if (type === 'parental') {
     startMonth = month;
-    endMonth = 12;
+    endMonth = parseInt(document.getElementById('pEndMonth').value);
+    if (endMonth < startMonth) { alert('結束月份不能早於開始月份'); return null; }
+    sign = -1;
+  } else { // leave
+    startMonth = month; endMonth = 12;
   }
 
   // Check if actual employer costs are available (from employee record)
@@ -1348,7 +1362,7 @@ function renderAdjustmentLog(year) {
   var otherGroup = { label: '其他調整', type: 'other', adjs: [], totalImpact: 0 };
 
   activeAdjs.forEach(function(adj) {
-    var match = adj.description.match(/^(離職|新進)\s+(\S+?)[\s（(]/);
+    var match = adj.description.match(/^(離職|新進|育嬰留停)\s+(\S+?)[\s（(]/);
     if (match) {
       var empName = match[2];
       var action = match[1];
@@ -1382,7 +1396,7 @@ function renderAdjustmentLog(year) {
 
   groups.forEach(function(g) {
     // Group header
-    var icon = g.type === 'personnel' ? (g.action === '離職' ? '👋' : '🆕') : '📋';
+    var icon = g.type === 'personnel' ? (g.action === '離職' ? '👋' : g.action === '育嬰留停' ? '🍼' : '🆕') : '📋';
     var groupColor = g.totalImpact <= 0 ? 'text-green' : 'text-red';
     html += '<tr class="section-row"><td colspan="4" style="font-size:0.85rem">' + icon + ' <strong>' + g.label + '</strong></td>';
     html += '<td class="text-right ' + groupColor + '" style="font-weight:700">' + (g.totalImpact >= 0 ? '+' : '') + fmtCurrency(g.totalImpact) + '</td>';
