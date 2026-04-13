@@ -1278,6 +1278,15 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
       return;
     }
 
+    // Deduplicate: same category+month in one file → sum amounts
+    var deduped = {};
+    allUpserts.forEach(function(u) {
+      var key = u.category_id + '-' + u.month;
+      if (deduped[key]) { deduped[key].amount += u.amount; }
+      else { deduped[key] = Object.assign({}, u); }
+    });
+    var dedupedList = Object.values(deduped);
+
     // Check if there's existing data for another entity for same year - if so, merge
     var existingKey = year + '-historical';
     var existingRows = await fetchFinanceData(year, 'historical');
@@ -1288,7 +1297,7 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
     });
 
     // Merge: add new amounts to existing
-    var finalUpserts = allUpserts.map(function(u) {
+    var finalUpserts = dedupedList.map(function(u) {
       var key = u.category_id + '-' + u.month;
       var existing = existingMap[key] || 0;
       return Object.assign({}, u, { amount: existing + u.amount });
