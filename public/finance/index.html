@@ -1881,8 +1881,12 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
       var empTotal = parseFloat(row[30]) || 0;    // Column AE = index 30
 
       if (!name || baseSalary === 0) continue;
+      // Skip if name is purely numeric (工讀生/時薪人員 data in wrong column)
+      if (/^\d+$/.test(name)) continue;
+      // Skip if base salary is unreasonably low (hourly rate, not monthly)
+      if (baseSalary < 10000) continue;
       // Skip if row looks like a header or subtotal
-      if (name.includes('小計') || name.includes('合計') || name.includes('外包')) continue;
+      if (name.includes('小計') || name.includes('合計') || name.includes('外包') || name.includes('姓名')) continue;
 
       employees.push({
         name: name, department: dept || '未分類',
