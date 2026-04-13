@@ -434,18 +434,23 @@
       <div id="uploadSection" style="display:none">
         <div class="upload-section">
           <div class="upload-title">上傳損益表 Excel</div>
+          <div class="text-muted" style="font-size:0.78rem;margin-bottom:8px">過去年度選「歷史資料」，當年度選「實際支出」（只上傳有的月份，不影響其他月）</div>
           <div class="upload-row">
             <select id="uploadEntity">
               <option value="zhelv">喆律綜合損益表</option>
               <option value="legal010">法律010綜合損益表</option>
             </select>
-            <input type="number" id="uploadYear" value="114" min="100" max="200" style="width:80px;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="民國年">
+            <input type="number" id="uploadYear" value="115" min="100" max="200" style="width:80px;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="民國年">
+            <select id="uploadDataType" style="padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+              <option value="actual">實際支出（當年度）</option>
+              <option value="historical">歷史資料（過去年度）</option>
+            </select>
             <input type="file" id="uploadFile" accept=".xlsx,.xls">
             <button class="btn-primary" id="uploadBtn">上傳解析</button>
           </div>
           <div class="upload-row" style="margin-top:8px">
-            <button class="btn-sm" id="clearHistBtn" style="color:var(--red);border-color:var(--red)">清除該年度全部歷史資料</button>
-            <span class="text-muted" style="font-size:0.75rem">（重新上傳前請先清除，避免重複計算）</span>
+            <button class="btn-sm" id="clearHistBtn" style="color:var(--red);border-color:var(--red)">清除該年度資料</button>
+            <span class="text-muted" style="font-size:0.75rem">（歷史資料重傳前先清除；實際支出會自動覆蓋對應月份）</span>
           </div>
           <div id="uploadMsg"></div>
           <div class="upload-log" id="uploadLog"></div>
@@ -1328,7 +1333,6 @@ function showAddAdjustmentForm(year) {
 // ── Adjustment Log ──
 function renderAdjustmentLog(year) {
   var activeAdjs = adjustments.filter(function(a) { return a.is_active; });
-  if (activeAdjs.length === 0) return;
 
   var logEl = document.querySelector('#page-budget .adj-log');
   if (!logEl) {
@@ -1336,41 +1340,89 @@ function renderAdjustmentLog(year) {
     logEl.className = 'adj-log table-card';
     document.getElementById('budgetGrid').parentNode.appendChild(logEl);
   }
+  if (activeAdjs.length === 0) { logEl.innerHTML = ''; return; }
+
+  // Group: extract employee name from description pattern "離職 XXX（..." or "新進 XXX（..."
+  var groups = []; // { label, type:'personnel'|'other', adjs:[], totalImpact }
+  var personnelMap = {}; // key = employee name → group index
+  var otherGroup = { label: '其他調整', type: 'other', adjs: [], totalImpact: 0 };
+
+  activeAdjs.forEach(function(adj) {
+    var match = adj.description.match(/^(離職|新進)\s+(\S+?)[\s（(]/);
+    if (match) {
+      var empName = match[2];
+      var action = match[1];
+      var key = action + '-' + empName;
+      if (personnelMap[key] == null) {
+        personnelMap[key] = groups.length;
+        groups.push({ label: action + ' ' + empName, type: 'personnel', action: action, empName: empName, adjs: [], totalImpact: 0 });
+      }
+      var g = groups[personnelMap[key]];
+      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
+      var impact = adj.amount * monthCount;
+      g.adjs.push(adj);
+      g.totalImpact += impact;
+    } else {
+      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
+      var impact = adj.amount * monthCount;
+      otherGroup.adjs.push(adj);
+      otherGroup.totalImpact += impact;
+    }
+  });
+  if (otherGroup.adjs.length > 0) groups.push(otherGroup);
+
+  var totalImpact = 0;
+  groups.forEach(function(g) { totalImpact += g.totalImpact; });
 
   var html = '<div class="table-header"><span class="table-title">調整紀錄</span>';
   html += '<span class="text-muted" style="font-size:0.75rem">共 ' + activeAdjs.length + ' 筆調整</span></div>';
-  html += '<table><thead><tr><th>時間</th><th>科目</th><th>說明</th><th class="text-right">金額/月</th><th>期間</th><th class="text-right">年度影響</th>';
+  html += '<table><thead><tr><th>科目</th><th>說明</th><th class="text-right">金額/月</th><th>期間</th><th class="text-right">年度影響</th>';
   if (isAdmin) html += '<th></th>';
   html += '</tr></thead><tbody>';
 
-  var totalImpact = 0;
-  activeAdjs.forEach(function(adj) {
-    var cat = catIdMap[adj.category_id];
-    var catName = cat ? cat.name : '未知';
-    var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
-    var impact = adj.amount * monthCount;
-    totalImpact += impact;
-
-    var d = new Date(adj.created_at);
-    var dateStr = (d.getMonth()+1) + '/' + d.getDate();
-    var periodStr = adj.adjust_type === 'one_time'
-      ? adj.start_month + '月（單次）'
-      : adj.start_month + '月 ~ ' + adj.end_month + '月';
-
-    html += '<tr>';
-    html += '<td class="text-muted">' + dateStr + '</td>';
-    html += '<td>' + catName + '</td>';
-    html += '<td><strong>' + adj.description + '</strong></td>';
-    html += '<td class="text-right ' + (adj.amount >= 0 ? 'text-red' : 'text-green') + '">' + (adj.amount >= 0 ? '+' : '') + fmt(adj.amount) + '</td>';
-    html += '<td>' + periodStr + '</td>';
-    html += '<td class="text-right ' + (impact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:600">' + (impact >= 0 ? '+' : '') + fmtCurrency(impact) + '</td>';
+  groups.forEach(function(g) {
+    // Group header
+    var icon = g.type === 'personnel' ? (g.action === '離職' ? '👋' : '🆕') : '📋';
+    var groupColor = g.totalImpact <= 0 ? 'text-green' : 'text-red';
+    html += '<tr class="section-row"><td colspan="4" style="font-size:0.85rem">' + icon + ' <strong>' + g.label + '</strong></td>';
+    html += '<td class="text-right ' + groupColor + '" style="font-weight:700">' + (g.totalImpact >= 0 ? '+' : '') + fmtCurrency(g.totalImpact) + '</td>';
     if (isAdmin) {
-      html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteAdjustment(\'' + adj.id + '\')">刪除</button></td>';
+      if (g.type === 'personnel') {
+        var ids = g.adjs.map(function(a){return a.id}).join(',');
+        html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteAdjustmentGroup(\'' + ids + '\')">整組刪除</button></td>';
+      } else { html += '<td></td>'; }
     }
     html += '</tr>';
+
+    // Detail rows
+    g.adjs.forEach(function(adj) {
+      var cat = catIdMap[adj.category_id];
+      var catName = cat ? cat.name : '未知';
+      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
+      var impact = adj.amount * monthCount;
+      var periodStr = adj.adjust_type === 'one_time' ? adj.start_month + '月（單次）' : adj.start_month + '月~' + adj.end_month + '月';
+
+      // For personnel: simplify description (remove repeated prefix)
+      var desc = adj.description;
+      if (g.type === 'personnel') {
+        var arrow = desc.indexOf('→');
+        desc = arrow > -1 ? desc.substring(arrow + 1).trim() : catName;
+      }
+
+      html += '<tr>';
+      html += '<td style="padding-left:24px;color:var(--text-muted);font-size:0.8rem">' + catName + '</td>';
+      html += '<td style="font-size:0.8rem">' + desc + '</td>';
+      html += '<td class="text-right ' + (adj.amount >= 0 ? 'text-red' : 'text-green') + '" style="font-size:0.8rem">' + (adj.amount >= 0 ? '+' : '') + fmt(adj.amount) + '</td>';
+      html += '<td style="font-size:0.8rem">' + periodStr + '</td>';
+      html += '<td class="text-right ' + (impact >= 0 ? 'text-red' : 'text-green') + '" style="font-size:0.8rem">' + (impact >= 0 ? '+' : '') + fmtCurrency(impact) + '</td>';
+      if (isAdmin && g.type !== 'personnel') {
+        html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 6px;font-size:0.65rem" onclick="deleteAdjustment(\'' + adj.id + '\')">刪除</button></td>';
+      } else if (isAdmin) { html += '<td></td>'; }
+      html += '</tr>';
+    });
   });
 
-  html += '<tr style="border-top:2px solid var(--gold)"><td colspan="5" style="font-weight:700;color:var(--gold-light)">調整總影響</td>';
+  html += '<tr style="border-top:2px solid var(--gold)"><td colspan="4" style="font-weight:700;color:var(--gold-light)">調整總影響</td>';
   html += '<td class="text-right ' + (totalImpact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:700">' + (totalImpact >= 0 ? '+' : '') + fmtCurrency(totalImpact) + '</td>';
   if (isAdmin) html += '<td></td>';
   html += '</tr>';
@@ -1383,6 +1435,15 @@ async function deleteAdjustment(adjId) {
   if (!confirm('確定要刪除這筆調整？預算數字會重新計算。')) return;
   var r = await sb.from('finance_adjustments').update({ is_active: false }).eq('id', adjId);
   if (r.error) { alert('刪除失敗：' + r.error.message); return; }
+  await loadBudgetData();
+}
+
+async function deleteAdjustmentGroup(ids) {
+  var idArr = ids.split(',');
+  if (!confirm('確定要刪除這位同仁的全部 ' + idArr.length + ' 筆調整？')) return;
+  for (var i = 0; i < idArr.length; i++) {
+    await sb.from('finance_adjustments').update({ is_active: false }).eq('id', idArr[i]);
+  }
   await loadBudgetData();
 }
 
@@ -1651,13 +1712,15 @@ async function loadUploadLog() {
 document.getElementById('clearHistBtn').addEventListener('click', async function() {
   var year = parseInt(document.getElementById('uploadYear').value);
   if (!year) return;
-  if (!confirm('確定要清除 ' + year + ' 年的全部歷史資料？此操作不可復原。')) return;
+  var clearType = document.getElementById('uploadDataType').value;
+  var clearLabel = clearType === 'actual' ? '實際支出' : '歷史';
+  if (!confirm('確定要清除 ' + year + ' 年的全部' + clearLabel + '資料？此操作不可復原。')) return;
   this.disabled = true; this.textContent = '清除中...';
-  var r = await sb.from('finance_data').delete().eq('fiscal_year', year).eq('data_type', 'historical');
+  var r = await sb.from('finance_data').delete().eq('fiscal_year', year).eq('data_type', clearType);
   if (r.error) { alert('清除失敗：' + r.error.message); }
   else {
-    delete dataCache[year + '-historical'];
-    showUploadMsg('已清除 ' + year + ' 年全部歷史資料，請重新上傳', 'success');
+    delete dataCache[year + '-' + clearType];
+    showUploadMsg('已清除 ' + year + ' 年全部' + clearLabel + '資料', 'success');
     loadHistoryData();
   }
   this.disabled = false; this.textContent = '清除該年度全部歷史資料';
@@ -1667,6 +1730,7 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
   var fileInput = document.getElementById('uploadFile');
   var entity = document.getElementById('uploadEntity').value;
   var year = parseInt(document.getElementById('uploadYear').value);
+  var dataType = document.getElementById('uploadDataType').value;
   var msgEl = document.getElementById('uploadMsg');
 
   if (!fileInput.files.length) { showUploadMsg('請選擇檔案', 'error'); return; }
@@ -1716,7 +1780,7 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
         var amount = parseAmount(row[1]) || parseAmount(row[2]) || parseAmount(row[3]) || 0;
 
         allUpserts.push({
-          category_id: cat.id, fiscal_year: year, month: ms.month, data_type: 'historical',
+          category_id: cat.id, fiscal_year: year, month: ms.month, data_type: dataType,
           amount: Math.round(amount), updated_by: currentLawyer ? currentLawyer.id : null
         });
       });
@@ -1736,21 +1800,26 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
     });
     var dedupedList = Object.values(deduped);
 
-    // Check existing data for same year - ADD to it (for multi-entity upload)
-    var existingKey = year + '-historical';
-    var existingRows = dataCache[existingKey] || [];
-    var existingMap = {};
-    existingRows.forEach(function(r) {
-      var key = r.category_id + '-' + r.month;
-      existingMap[key] = r.amount || 0;
-    });
-
-    // Merge: add new amounts to existing (for second entity upload)
-    var finalUpserts = dedupedList.map(function(u) {
-      var key = u.category_id + '-' + u.month;
-      var existing = existingMap[key] || 0;
-      return Object.assign({}, u, { amount: existing + u.amount });
-    });
+    // For historical: add to existing (multi-entity merge)
+    // For actual: just overwrite (partial month upload)
+    var existingKey = year + '-' + dataType;
+    var finalUpserts;
+    if (dataType === 'historical') {
+      var existingRows = dataCache[existingKey] || [];
+      var existingMap = {};
+      existingRows.forEach(function(r) {
+        var key = r.category_id + '-' + r.month;
+        existingMap[key] = r.amount || 0;
+      });
+      finalUpserts = dedupedList.map(function(u) {
+        var key = u.category_id + '-' + u.month;
+        var existing = existingMap[key] || 0;
+        return Object.assign({}, u, { amount: existing + u.amount });
+      });
+    } else {
+      // actual: direct upsert, no merge needed (each entity's data replaces)
+      finalUpserts = dedupedList;
+    }
 
     // Batch upsert
     for (var i = 0; i < finalUpserts.length; i += 200) {
@@ -1767,8 +1836,9 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
 
     // Refresh cache so next entity upload can correctly add to this data
     delete dataCache[existingKey];
-    await fetchFinanceData(year, 'historical'); // re-cache
-    showUploadMsg('上傳成功！解析 ' + monthSheets.length + ' 個月份，共 ' + dedupedList.length + ' 筆科目資料（去重後）', 'success');
+    await fetchFinanceData(year, dataType); // re-cache
+    var typeLabel = dataType === 'actual' ? '實際支出' : '歷史資料';
+    showUploadMsg('上傳成功！' + typeLabel + ' — 解析 ' + monthSheets.length + ' 個月份（' + monthSheets.map(function(s){return s.month+'月'}).join(',') + '），共 ' + dedupedList.length + ' 筆科目', 'success');
     loadHistoryData();
   } catch(ex) {
     console.error('upload error:', ex);
