@@ -848,12 +848,14 @@ async function loadBudgetData() {
   // Admin actions
   var actionsEl = document.getElementById('budgetActions');
   if (isAdmin) {
-    actionsEl.innerHTML = '<button class="btn-primary" id="addAdjustBtn">+ 新增調整項目</button>';
+    actionsEl.innerHTML = '<button class="btn-primary" id="addPersonnelBtn" style="background:var(--blue)">+ 人員異動</button>' +
+      '<button class="btn-primary" id="addAdjustBtn" style="margin-left:8px">+ 其他調整</button>';
+    document.getElementById('addPersonnelBtn').addEventListener('click', function() {
+      if (histRows.length === 0) { alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表'); return; }
+      showPersonnelChangeForm(year);
+    });
     document.getElementById('addAdjustBtn').addEventListener('click', function() {
-      if (histRows.length === 0) {
-        alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表');
-        return;
-      }
+      if (histRows.length === 0) { alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表'); return; }
       showAddAdjustmentForm(year);
     });
   } else {
@@ -922,18 +924,17 @@ function renderBudgetGrid(histMap, budgetMap) {
   html += '<th class="text-right text-muted" style="font-size:0.7rem">vs去年</th>';
   html += '</tr></thead><tbody>';
 
+  // Budget page: only show cost categories
   var sections = [
-    { key: 'revenue', label: '營業收入' },
-    { key: 'operating_expense', label: '營業費用（管理及總務費用）' },
-    { key: 'non_operating_income', label: '營業外收入' },
-    { key: 'tax', label: '所得稅' }
+    { key: 'operating_expense', label: '營業費用（管理及總務費用）' }
   ];
 
-  var sectionTotals = {};
-  var sectionHistTotals = {};
-  sections.forEach(function(s) { sectionTotals[s.key] = new Array(12).fill(0); sectionHistTotals[s.key] = 0; });
+  var grandTotal = new Array(12).fill(0);
+  var grandHistTotal = 0;
 
   sections.forEach(function(sec) {
+    var sectionMonthly = new Array(12).fill(0);
+    var sectionHistTotal = 0;
     html += '<tr class="section-row"><td colspan="15">' + sec.label + '</td></tr>';
     var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
     sectionCats.forEach(function(cat) {
@@ -941,9 +942,8 @@ function renderBudgetGrid(histMap, budgetMap) {
       var histData = histMap[cat.id] || {};
       var rowTotal = 0, histTotal = 0;
       for (var mo = 1; mo <= 12; mo++) { histTotal += (histData[mo] || 0); }
-      sectionHistTotals[sec.key] += histTotal;
+      sectionHistTotal += histTotal;
 
-      // Check if this category has adjustments
       var hasAdj = adjustments.some(function(a) { return a.category_id === cat.id && a.is_active; });
       var nameStyle = hasAdj ? 'padding-left:20px;color:var(--blue)' : 'padding-left:20px';
 
@@ -953,8 +953,8 @@ function renderBudgetGrid(histMap, budgetMap) {
         var histVal = histData[mo] || 0;
         var diff = val - histVal;
         rowTotal += val;
-        sectionTotals[sec.key][mo-1] += val;
-        var cellClass = diff > 0 ? 'text-blue' : (diff < 0 ? 'text-green' : '');
+        sectionMonthly[mo-1] += val;
+        var cellClass = diff > 0 ? 'text-red' : (diff < 0 ? 'text-green' : '');
         html += '<td class="text-right ' + cellClass + '">' + fmt(val) + '</td>';
       }
       var diffTotal = rowTotal - histTotal;
@@ -964,35 +964,185 @@ function renderBudgetGrid(histMap, budgetMap) {
       html += '<td class="text-right ' + diffClass + '" style="font-size:0.75rem">' + diffStr + '</td>';
       html += '</tr>';
     });
-    var secTotal = sectionTotals[sec.key].reduce(function(a,b) { return a+b; }, 0);
-    var secDiff = secTotal - sectionHistTotals[sec.key];
-    html += '<tr class="subtotal-row"><td style="padding-left:8px">' + sec.label + '合計</td>';
-    for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionTotals[sec.key][mo]) + '</td>';
+    var secTotal = sectionMonthly.reduce(function(a,b) { return a+b; }, 0);
+    var secDiff = secTotal - sectionHistTotal;
+    for (var mo = 0; mo < 12; mo++) grandTotal[mo] += sectionMonthly[mo];
+    grandHistTotal += sectionHistTotal;
+    html += '<tr class="subtotal-row"><td style="padding-left:8px">營業費用合計</td>';
+    for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionMonthly[mo]) + '</td>';
     html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td>';
     html += '<td class="text-right ' + (secDiff > 0 ? 'text-red' : 'text-green') + '" style="font-size:0.75rem">' + (secDiff !== 0 ? (secDiff > 0 ? '+' : '') + fmt(secDiff) : '-') + '</td>';
     html += '</tr>';
   });
 
-  // Net income row
-  html += '<tr class="net-row"><td>淨利</td>';
-  var netHistTotal = 0;
-  for (var mo = 0; mo < 12; mo++) {
-    var net = (sectionTotals.revenue[mo]||0) - (sectionTotals.operating_expense[mo]||0) + (sectionTotals.non_operating_income[mo]||0) - (sectionTotals.tax[mo]||0);
-    html += '<td class="text-right">' + fmt(net) + '</td>';
-  }
-  var netTotal = 0;
-  ['revenue','operating_expense','non_operating_income','tax'].forEach(function(s) {
-    var sign = (s === 'revenue' || s === 'non_operating_income') ? 1 : -1;
-    netTotal += sign * sectionTotals[s].reduce(function(a,b) { return a+b; }, 0);
-    netHistTotal += sign * sectionHistTotals[s];
-  });
-  var netDiff = netTotal - netHistTotal;
-  html += '<td class="text-right">' + fmt(netTotal) + '</td>';
-  html += '<td class="text-right ' + (netDiff >= 0 ? 'text-green' : 'text-red') + '" style="font-size:0.75rem">' + (netDiff !== 0 ? (netDiff > 0 ? '+' : '') + fmt(netDiff) : '-') + '</td>';
-  html += '</tr>';
-
   html += '</tbody></table>';
   document.getElementById('budgetGrid').innerHTML = html;
+}
+
+// ── Personnel Change Form ──
+// 台灣法律事務所人事成本結構：
+// 勞保(雇主): ~11.48% of 投保級距
+// 健保(雇主): ~5.17% of 投保級距 (含眷屬平均)
+// 勞退: 6% of 月薪
+// 年終預估: 月薪/12 per month accrual
+// 伙食費: 3,000/月 (免稅)
+var PERSONNEL_COST_RATES = {
+  insurance_rate: 0.1665, // 勞保+健保雇主合計約 16.65%
+  pension_rate: 0.06,     // 勞退 6%
+  bonus_months: 1,        // 年終約 1 個月
+  meal_allowance: 3000    // 伙食費
+};
+
+function showPersonnelChangeForm(year) {
+  var existing = document.getElementById('adjFormSection');
+  if (existing) existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'adjFormSection';
+
+  var html = '<div class="upload-section" style="margin-bottom:16px;border-color:var(--blue)">';
+  html += '<div class="upload-title" style="color:var(--blue)">人員異動</div>';
+  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:16px">輸入人員資訊，自動計算對薪資、保險、退休金、年終預估的影響</div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:700px">';
+  html += '<div class="form-group"><label>異動類型</label><select id="pType" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem"><option value="join">新進人員</option><option value="leave">人員離職</option></select></div>';
+  html += '<div class="form-group"><label>姓名</label><input type="text" id="pName" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：王小明"></div>';
+  html += '<div class="form-group"><label>月薪（本薪）</label><input type="number" id="pSalary" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：80000"></div>';
+  html += '<div class="form-group"><label>生效月份</label><select id="pMonth" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">';
+  for (var i = 1; i <= 12; i++) html += '<option value="' + i + '">' + i + '月</option>';
+  html += '</select></div>';
+  html += '<div class="form-group"><label>職位/備註</label><input type="text" id="pRole" style="width:100%;padding:8px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem" placeholder="例：律師、助理"></div>';
+  html += '</div>';
+
+  // Preview area
+  html += '<div id="pPreview" style="margin-top:16px;background:var(--bg-row);padding:16px;border-radius:8px;display:none">';
+  html += '</div>';
+
+  html += '<div style="margin-top:12px;display:flex;gap:8px">';
+  html += '<button class="btn-primary" id="savePersonnelBtn" style="background:var(--blue)">儲存人員異動</button>';
+  html += '<button class="btn-sm" id="previewPersonnelBtn">預覽影響</button>';
+  html += '<button class="btn-sm" id="cancelPersonnelBtn">取消</button>';
+  html += '</div></div>';
+
+  div.innerHTML = html;
+  var budgetGrid = document.getElementById('budgetGrid');
+  budgetGrid.parentNode.insertBefore(div, budgetGrid);
+
+  document.getElementById('cancelPersonnelBtn').addEventListener('click', function() { div.remove(); });
+
+  // Preview
+  document.getElementById('previewPersonnelBtn').addEventListener('click', function() {
+    var preview = computePersonnelImpact();
+    if (!preview) return;
+    renderPersonnelPreview(preview);
+  });
+
+  // Save
+  document.getElementById('savePersonnelBtn').addEventListener('click', async function() {
+    var preview = computePersonnelImpact();
+    if (!preview) return;
+    this.disabled = true; this.textContent = '儲存中...';
+    await savePersonnelAdjustments(year, preview);
+    div.remove();
+    await loadBudgetData();
+  });
+}
+
+function computePersonnelImpact() {
+  var type = document.getElementById('pType').value;
+  var name = document.getElementById('pName').value.trim();
+  var salary = parseInt(document.getElementById('pSalary').value);
+  var month = parseInt(document.getElementById('pMonth').value);
+  var role = document.getElementById('pRole').value.trim();
+
+  if (!name) { alert('請輸入姓名'); return null; }
+  if (!salary || isNaN(salary)) { alert('請輸入月薪'); return null; }
+
+  var sign = type === 'join' ? 1 : -1;
+  var typeLabel = type === 'join' ? '新進' : '離職';
+  var endMonth = type === 'join' ? 12 : month; // 新進到年底，離職=該月之後不再有
+  var startMonth = type === 'join' ? month : month; // 離職：從該月起減少
+
+  // For leave: impact is from the leave month through Dec (they STOP costing)
+  if (type === 'leave') {
+    startMonth = month;
+    endMonth = 12;
+  }
+
+  var rates = PERSONNEL_COST_RATES;
+  var monthlySalary = salary * sign;
+  var monthlyInsurance = Math.round(salary * rates.insurance_rate) * sign;
+  var monthlyPension = Math.round(salary * rates.pension_rate) * sign;
+  var monthlyBonus = Math.round(salary * rates.bonus_months / 12) * sign;
+  var monthlyMeal = rates.meal_allowance * sign;
+
+  var monthCount = endMonth - startMonth + 1;
+  var items = [
+    { code: 'salary', name: '薪資費用', monthly: monthlySalary, annual: monthlySalary * monthCount },
+    { code: 'insurance', name: '保險費（勞健保雇主）', monthly: monthlyInsurance, annual: monthlyInsurance * monthCount },
+    { code: 'pension', name: '退休金（勞退6%）', monthly: monthlyPension, annual: monthlyPension * monthCount },
+    { code: 'bonus_accrual', name: '年終預估', monthly: monthlyBonus, annual: monthlyBonus * monthCount },
+  ];
+
+  var totalMonthly = monthlySalary + monthlyInsurance + monthlyPension + monthlyBonus + monthlyMeal;
+  var totalAnnual = items.reduce(function(s, i) { return s + i.annual; }, 0) + monthlyMeal * monthCount;
+
+  return {
+    type: type, typeLabel: typeLabel, name: name, salary: salary, role: role,
+    startMonth: startMonth, endMonth: endMonth, monthCount: monthCount,
+    items: items, mealMonthly: monthlyMeal * sign, mealAnnual: monthlyMeal * monthCount * sign,
+    totalMonthly: totalMonthly, totalAnnual: totalAnnual, sign: sign
+  };
+}
+
+function renderPersonnelPreview(p) {
+  var el = document.getElementById('pPreview');
+  var signLabel = p.sign > 0 ? '+' : '';
+  var colorClass = p.sign > 0 ? 'text-red' : 'text-green';
+
+  var html = '<div style="font-weight:600;margin-bottom:8px">' + p.typeLabel + '：' + p.name;
+  if (p.role) html += '（' + p.role + '）';
+  html += ' — 月薪 ' + fmtCurrency(p.salary) + '，' + p.startMonth + '月~' + p.endMonth + '月</div>';
+
+  html += '<table style="font-size:0.82rem"><thead><tr><th>影響科目</th><th class="text-right">每月影響</th><th class="text-right">年度影響（' + p.monthCount + '個月）</th></tr></thead><tbody>';
+  p.items.forEach(function(item) {
+    html += '<tr><td>' + item.name + '</td>';
+    html += '<td class="text-right ' + colorClass + '">' + signLabel + fmtCurrency(Math.abs(item.monthly)) + '</td>';
+    html += '<td class="text-right ' + colorClass + '">' + signLabel + fmtCurrency(Math.abs(item.annual)) + '</td></tr>';
+  });
+  html += '<tr style="border-top:2px solid var(--border-light);font-weight:700"><td>合計人事成本</td>';
+  html += '<td class="text-right ' + colorClass + '">' + signLabel + fmtCurrency(Math.abs(p.totalMonthly)) + '/月</td>';
+  html += '<td class="text-right ' + colorClass + '">' + signLabel + fmtCurrency(Math.abs(p.totalAnnual)) + '</td></tr>';
+  html += '</tbody></table>';
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+async function savePersonnelAdjustments(year, p) {
+  var desc = p.typeLabel + ' ' + p.name + (p.role ? '（' + p.role + '）' : '') + ' 月薪' + fmtCurrency(p.salary);
+  var inserts = [];
+
+  // Map code to category_id
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  p.items.forEach(function(item) {
+    var catId = codeToId[item.code];
+    if (!catId) return;
+    inserts.push({
+      fiscal_year: year, category_id: catId,
+      description: desc + ' → ' + item.name,
+      amount: item.monthly, adjust_type: 'monthly',
+      start_month: p.startMonth, end_month: p.endMonth,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+  });
+
+  for (var i = 0; i < inserts.length; i++) {
+    var r = await sb.from('finance_adjustments').insert(inserts[i]);
+    if (r.error) { alert('儲存失敗：' + r.error.message); return; }
+  }
 }
 
 // ── Adjustment Form ──
