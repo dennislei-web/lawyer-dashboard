@@ -1492,6 +1492,10 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
     { key: 'operating_expense', label: '營業費用' }
   ];
 
+  // Track totals per month
+  var totalB = new Array(12).fill(0);
+  var totalA = new Array(12).fill(0);
+
   sections.forEach(function(sec) {
     html += '<tr class="section-row"><td colspan="' + (isYTD ? 40 : 6) + '">' + sec.label + '</td></tr>';
     var sectionCats = categories.filter(function(c) { return c.section === sec.key && !c.is_subtotal; });
@@ -1505,6 +1509,7 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
         for (var mo = 1; mo <= 12; mo++) {
           var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
           cumB += b; cumA += a;
+          totalB[mo-1] += b; totalA[mo-1] += a;
           var hasActual = a !== 0 || (actualMap[cat.id] && actualMap[cat.id][mo] !== undefined);
           html += '<td class="text-right text-muted">' + fmt(b) + '</td>';
           html += '<td class="text-right">' + (hasActual ? fmt(a) : '<span class="text-muted">---</span>') + '</td>';
@@ -1517,6 +1522,7 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
       } else {
         var mo = months[0];
         var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
+        totalB[mo-1] += b; totalA[mo-1] += a;
         var rate = b > 0 ? (a/b*100).toFixed(1)+'%' : '-';
         html += '<td class="text-right">' + fmt(b) + '</td>';
         html += '<td class="text-right">' + fmt(a) + '</td>';
@@ -1526,6 +1532,32 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
       html += '</tr>';
     });
   });
+
+  // Total row
+  html += '<tr class="net-row"><td style="font-weight:700">營業費用合計</td>';
+  if (isYTD) {
+    var grandB = 0, grandA = 0;
+    for (var mo = 0; mo < 12; mo++) {
+      var d = totalB[mo] - totalA[mo];
+      grandB += totalB[mo]; grandA += totalA[mo];
+      html += '<td class="text-right" style="font-weight:600">' + fmt(totalB[mo]) + '</td>';
+      html += '<td class="text-right" style="font-weight:600">' + fmt(totalA[mo]) + '</td>';
+      html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:600">' + fmt(d) + '</td>';
+    }
+    var grandD = grandB - grandA;
+    html += '<td class="text-right text-gold" style="font-weight:700;font-size:0.9rem">' + fmtCurrency(grandB) + '</td>';
+    html += '<td class="text-right text-blue" style="font-weight:700;font-size:0.9rem">' + fmtCurrency(grandA) + '</td>';
+    html += '<td class="text-right ' + (grandD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700;font-size:0.9rem">' + (grandD >= 0 ? '+' : '') + fmtCurrency(grandD) + '</td>';
+  } else {
+    var mo = months[0] - 1;
+    var d = totalB[mo] - totalA[mo];
+    var rate = totalB[mo] > 0 ? (totalA[mo]/totalB[mo]*100).toFixed(1)+'%' : '-';
+    html += '<td class="text-right" style="font-weight:700">' + fmtCurrency(totalB[mo]) + '</td>';
+    html += '<td class="text-right" style="font-weight:700">' + fmtCurrency(totalA[mo]) + '</td>';
+    html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700">' + (d >= 0 ? '+' : '') + fmtCurrency(d) + '</td>';
+    html += '<td class="text-right" style="font-weight:700">' + rate + '</td>';
+  }
+  html += '</tr>';
 
   html += '</tbody></table>';
   document.getElementById('compareGrid').innerHTML = html;
