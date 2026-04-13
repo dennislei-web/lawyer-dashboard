@@ -1727,7 +1727,9 @@ async function loadUploadLog() {
   var html = '<div style="margin-top:12px;font-weight:600">上傳紀錄</div><table style="margin-top:8px"><thead><tr><th>時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th></tr></thead><tbody>';
   r.data.forEach(function(u) {
     var d = new Date(u.created_at);
-    html += '<tr><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
+    var isDeletion = u.filename.indexOf('已清除') > -1;
+    var rowStyle = isDeletion ? 'color:var(--red);opacity:0.7' : '';
+    html += '<tr style="' + rowStyle + '"><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
     html += '<td>' + u.filename + '</td><td>' + u.entity + '</td><td>' + u.fiscal_year + '</td><td>' + (u.row_count||'-') + '</td></tr>';
   });
   html += '</tbody></table>';
@@ -1750,10 +1752,15 @@ document.getElementById('clearHistBtn').addEventListener('click', async function
   if (r.error) { alert('清除失敗：' + r.error.message); }
   else {
     delete dataCache[year + '-' + clearType];
+    // Log the deletion
+    await sb.from('finance_uploads').insert({
+      filename: '【已清除】' + clearLabel + '資料', fiscal_year: year, entity: 'all',
+      uploaded_by: currentLawyer ? currentLawyer.id : null, row_count: 0
+    });
     showUploadMsg('已清除 ' + year + ' 年全部' + clearLabel + '資料', 'success');
     loadHistoryData();
   }
-  this.disabled = false; this.textContent = '清除該年度全部歷史資料';
+  this.disabled = false; this.textContent = '清除該年度資料';
 });
 
 document.getElementById('uploadBtn').addEventListener('click', async function() {
