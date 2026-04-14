@@ -2000,24 +2000,55 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     var data = await file.arrayBuffer();
     var wb = XLSX.read(data, { type: 'array' });
 
-    // Find the last month sheet (e.g., 11412)
-    var lastSheet = null, lastMonth = 0;
+    // Find ALL monthly sheets
+    var monthSheets = [];
     wb.SheetNames.forEach(function(name) {
       var match = name.match(/^(\d{3,4})(\d{2})$/);
       if (match) {
         var m = parseInt(match[2]);
-        if (m >= 1 && m <= 12 && m > lastMonth) { lastMonth = m; lastSheet = name; }
+        if (m >= 1 && m <= 12) monthSheets.push({ name: name, month: m });
+      }
+    });
+    monthSheets.sort(function(a,b) { return a.month - b.month; });
+
+    if (monthSheets.length === 0) { throw new Error('找不到月份工作表'); }
+    var lastMonth = monthSheets[monthSheets.length - 1].month;
+
+    // Scan ALL months: track each person's active months
+    // personData[name] = { months: [1,3,5...], dept, lastRow data }
+    var personData = {};
+
+    function isValidName(n) {
+      if (!n || n.length === 0) return false;
+      if (/^\d[\d\s,.]*$/.test(n.trim())) return false;
+      if (!/[\u4e00-\u9fff\u3400-\u4dbfa-zA-Z]/.test(n)) return false;
+      if (n.includes('小計') || n.includes('合計') || n.includes('外包') || n.includes('姓名')) return false;
+      return true;
+    }
+
+    monthSheets.forEach(function(ms) {
+      var ws = wb.Sheets[ms.name];
+      var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      for (var i = 1; i < json.length; i++) {
+        var row = json[i];
+        var name = (row[2] || '').toString().trim();
+        var baseSalary = parseFloat(row[4]) || 0;
+        if (!isValidName(name) || baseSalary < 10000) continue;
+
+        if (!personData[name]) {
+          personData[name] = { months: [], dept: '', lastRow: null };
+        }
+        personData[name].months.push(ms.month);
+        personData[name].dept = (row[1] || '').toString().trim() || personData[name].dept;
+        // Always keep the latest month's full data
+        personData[name].lastRow = row;
+        personData[name].lastMonth = ms.month;
       }
     });
 
-    if (!lastSheet) { throw new Error('找不到月份工作表'); }
-
-    var ws = wb.Sheets[lastSheet];
-    var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-
-    // Also try to get year-end bonus data
+    // Year-end bonus
     var bonusMap = {};
-    var bonusSheet = wb.Sheets['114年終'] || wb.Sheets[year + '年終'];
+    var bonusSheet = wb.Sheets[year + '年終'] || wb.Sheets['114年終'];
     if (bonusSheet) {
       var bonusJson = XLSX.utils.sheet_to_json(bonusSheet, { header: 1, defval: '' });
       bonusJson.forEach(function(row) {
@@ -2030,33 +2061,30 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     // Delete existing employees for this year
     await sb.from('finance_employees').delete().eq('fiscal_year', year);
 
+    // Build employee records from the last active month's data
     var employees = [];
-    for (var i = 1; i < json.length; i++) {
-      var row = json[i];
-      var dept = (row[1] || '').toString().trim();
-      var name = (row[2] || '').toString().trim();
+    Object.keys(personData).forEach(function(name) {
+      var pd = personData[name];
+      var row = pd.lastRow;
+      if (!row) return;
       var baseSalary = parseFloat(row[4]) || 0;
-      var totalSalary = parseFloat(row[14]) || 0; // Column O = index 14
-      var totalPay = parseFloat(row[19]) || 0;    // Column T = index 19
-      var empLabor = parseFloat(row[27]) || 0;    // Column AB = index 27
-      var empHealth = parseFloat(row[28]) || 0;   // Column AC = index 28
-      var empPension = parseFloat(row[29]) || 0;  // Column AD = index 29
-      var empTotal = parseFloat(row[30]) || 0;    // Column AE = index 30
+      var totalSalary = parseFloat(row[14]) || 0;
+      var totalPay = parseFloat(row[19]) || 0;
+      var empLabor = parseFloat(row[27]) || 0;
+      var empHealth = parseFloat(row[28]) || 0;
+      var empPension = parseFloat(row[29]) || 0;
+      var empTotal = parseFloat(row[30]) || 0;
 
-      if (!name || baseSalary === 0) continue;
-      // Skip if name looks numeric (工讀生投保級距被誤讀為姓名)
-      if (/^\d[\d\s,.]*$/.test(name.trim())) continue;
-      // Skip if name is too short (1 char) or looks like a number
-      if (name.length <= 1 && /\d/.test(name)) continue;
-      // Skip if base salary is unreasonably low (hourly rate, not monthly)
-      if (baseSalary < 10000) continue;
-      // Skip if name doesn't contain any Chinese/letter characters (純數字或符號)
-      if (!/[\u4e00-\u9fff\u3400-\u4dbfa-zA-Z]/.test(name)) continue;
-      // Skip if row looks like a header or subtotal
-      if (name.includes('小計') || name.includes('合計') || name.includes('外包') || name.includes('姓名')) continue;
+      // Determine first/last active month
+      var activeMonths = pd.months.sort(function(a,b){return a-b;});
+      var firstActive = activeMonths[0];
+      var lastActive = activeMonths[activeMonths.length - 1];
+      var isFullYear = (activeMonths.length === monthSheets.length);
+      var notesStr = '在職月份:' + firstActive + '-' + lastActive + '/' + monthSheets.length + '個月';
+      if (lastActive < lastMonth) notesStr += ' (推測' + (lastActive + 1) + '月離職)';
 
       employees.push({
-        name: name, department: dept || '未分類',
+        name: name, department: pd.dept || '未分類',
         base_salary: Math.round(baseSalary),
         total_salary: Math.round(totalSalary),
         total_pay: Math.round(totalPay),
@@ -2065,9 +2093,10 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
         employer_pension: Math.round(empPension),
         employer_total: Math.round(empTotal),
         bonus: Math.round(bonusMap[name] || 0),
-        fiscal_year: year, is_active: true
+        fiscal_year: year, is_active: true,
+        notes: notesStr
       });
-    }
+    });
 
     // Batch insert
     for (var i = 0; i < employees.length; i += 100) {
@@ -2122,7 +2151,17 @@ async function showSalaryDiffReport(newYear, newEmployees) {
 
   prevEmployees.forEach(function(e) {
     if (!newMap[e.name]) {
-      left.push(e);
+      // Parse notes to find departure month
+      var depMonth = null;
+      if (e.notes) {
+        var depMatch = e.notes.match(/推測(\d+)月離職/);
+        if (depMatch) depMonth = parseInt(depMatch[1]);
+        if (!depMonth) {
+          var rangeMatch = e.notes.match(/在職月份:(\d+)-(\d+)/);
+          if (rangeMatch) depMonth = parseInt(rangeMatch[2]) + 1;
+        }
+      }
+      left.push({ emp: e, departureMonth: depMonth });
     }
   });
 
@@ -2151,12 +2190,27 @@ async function showSalaryDiffReport(newYear, newEmployees) {
   // Left employees
   if (left.length > 0) {
     html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--red);margin-bottom:4px">👋 不在新年度名冊（可能離職）</div>';
-    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th></th></tr></thead><tbody>';
-    left.forEach(function(e, idx) {
-      html += '<tr><td>' + e.name + '</td><td>' + (e.department||'') + '</td>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th>推測離職時間</th><th>建議調整</th><th></th></tr></thead><tbody>';
+    left.forEach(function(item) {
+      var e = item.emp;
+      var depM = item.departureMonth;
+      var depStr = depM ? prevYear + '年' + depM + '月' : '年底';
+      // Budget suggestion: if left during prev year, next year full deduction
+      // If left at year end, next year full deduction
+      var budgetYear = newYear;
+      var budgetStartMonth = 1;
+      var suggestion = budgetYear + '年 1~12月 全年扣除';
+      if (depM && depM <= 12) {
+        // Left during prev year month X → prev year also needs adjustment from month X
+        suggestion = prevYear + '年 ' + depM + '~12月 扣除 + ' + newYear + '年全年扣除';
+      }
+
+      html += '<tr><td><strong>' + e.name + '</strong></td><td>' + (e.department||'') + '</td>';
       html += '<td class="text-right">' + fmt(e.total_salary || e.base_salary) + '</td>';
       html += '<td class="text-right">' + fmt(e.employer_total) + '</td>';
-      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffLeave(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\')">加入離職調整</button></td>';
+      html += '<td style="color:var(--orange)">' + depStr + '</td>';
+      html += '<td style="font-size:0.75rem;color:var(--text-muted)">' + suggestion + '</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffLeaveWithMonth(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\',' + (depM||1) + ',' + prevYear + ')">加入調整</button></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2165,12 +2219,23 @@ async function showSalaryDiffReport(newYear, newEmployees) {
   // Joined employees
   if (joined.length > 0) {
     html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--green);margin-bottom:4px">🆕 新進人員</div>';
-    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th></th></tr></thead><tbody>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th>到職時間</th><th>建議調整</th><th></th></tr></thead><tbody>';
     joined.forEach(function(e) {
-      html += '<tr><td>' + e.name + '</td><td>' + (e.department||'') + '</td>';
+      // Parse notes for first active month
+      var joinMonth = 1;
+      if (e.notes) {
+        var rangeMatch = e.notes.match(/在職月份:(\d+)-/);
+        if (rangeMatch) joinMonth = parseInt(rangeMatch[1]);
+      }
+      var joinStr = newYear + '年' + joinMonth + '月';
+      var suggestion = newYear + '年 ' + joinMonth + '~12月 新增';
+
+      html += '<tr><td><strong>' + e.name + '</strong></td><td>' + (e.department||'') + '</td>';
       html += '<td class="text-right">' + fmt(e.total_salary || e.base_salary) + '</td>';
       html += '<td class="text-right">' + fmt(e.employer_total) + '</td>';
-      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffJoin(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\')">加入新進調整</button></td>';
+      html += '<td style="color:var(--green)">' + joinStr + '</td>';
+      html += '<td style="font-size:0.75rem;color:var(--text-muted)">' + suggestion + '</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffJoinWithMonth(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\',' + joinMonth + ')">加入調整</button></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2201,53 +2266,85 @@ async function showSalaryDiffReport(newYear, newEmployees) {
 
 // Quick apply functions from diff report
 async function applyDiffLeave(name, salary, labor, health, pension, bonus, dept) {
-  var year = selectedYear + 1; // next year budget
+  await applyDiffLeaveWithMonth(name, salary, labor, health, pension, bonus, dept, 1, selectedYear);
+}
+
+async function applyDiffLeaveWithMonth(name, salary, labor, health, pension, bonus, dept, depMonth, prevYear) {
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
 
-  var desc = '離職 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary);
-  var inserts = [
-    { category_id: codeToId['salary'], amount: -salary, description: desc + ' → 薪資費用' },
-    { category_id: codeToId['insurance'], amount: -(labor + health), description: desc + ' → 保險費' },
-    { category_id: codeToId['pension'], amount: -pension, description: desc + ' → 退休金' },
-    { category_id: codeToId['bonus_accrual'], amount: -Math.round((bonus || salary) / 12), description: desc + ' → 年終預估' }
+  var adjustments_to_make = [];
+
+  // If departed mid-year in prevYear → adjust prevYear budget from depMonth~12
+  if (depMonth > 1 && depMonth <= 12) {
+    var descPrev = '離職 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary) + ' ' + prevYear + '年' + depMonth + '月起';
+    adjustments_to_make.push({ year: prevYear, start: depMonth, end: 12, desc: descPrev });
+  }
+
+  // Always adjust next year budget full year (1~12)
+  var nextYear = prevYear + 1;
+  var descNext = '離職 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary);
+  adjustments_to_make.push({ year: nextYear, start: 1, end: 12, desc: descNext });
+
+  var items = [
+    { code: 'salary', amount: -salary, suffix: '薪資費用' },
+    { code: 'insurance', amount: -(labor + health), suffix: '保險費' },
+    { code: 'pension', amount: -pension, suffix: '退休金' },
+    { code: 'bonus_accrual', amount: -Math.round((bonus || salary) / 12), suffix: '年終預估' }
   ];
 
-  for (var i = 0; i < inserts.length; i++) {
-    var ins = inserts[i];
-    if (!ins.category_id) continue;
-    await sb.from('finance_adjustments').insert({
-      fiscal_year: year, category_id: ins.category_id, description: ins.description,
-      amount: ins.amount, adjust_type: 'monthly', start_month: 1, end_month: 12,
-      created_by: currentLawyer ? currentLawyer.id : null
-    });
+  for (var a = 0; a < adjustments_to_make.length; a++) {
+    var adj = adjustments_to_make[a];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!codeToId[item.code]) continue;
+      await sb.from('finance_adjustments').insert({
+        fiscal_year: adj.year, category_id: codeToId[item.code],
+        description: adj.desc + ' → ' + item.suffix,
+        amount: item.amount, adjust_type: 'monthly',
+        start_month: adj.start, end_month: adj.end,
+        created_by: currentLawyer ? currentLawyer.id : null
+      });
+    }
   }
-  alert('已新增「離職 ' + name + '」調整到 ' + year + '年預算');
+
+  var msg = '已新增「離職 ' + name + '」調整：\n';
+  adjustments_to_make.forEach(function(adj) {
+    msg += '• ' + adj.year + '年 ' + adj.start + '~' + adj.end + '月\n';
+  });
+  alert(msg);
 }
 
 async function applyDiffJoin(name, salary, labor, health, pension, bonus, dept) {
-  var year = selectedYear + 1;
+  await applyDiffJoinWithMonth(name, salary, labor, health, pension, bonus, dept, 1);
+}
+
+async function applyDiffJoinWithMonth(name, salary, labor, health, pension, bonus, dept, startMonth) {
+  var year = selectedYear; // current year budget (the year they joined)
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
 
   var desc = '新進 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary);
-  var inserts = [
-    { category_id: codeToId['salary'], amount: salary, description: desc + ' → 薪資費用' },
-    { category_id: codeToId['insurance'], amount: labor + health, description: desc + ' → 保險費' },
-    { category_id: codeToId['pension'], amount: pension, description: desc + ' → 退休金' },
-    { category_id: codeToId['bonus_accrual'], amount: Math.round((bonus || salary) / 12), description: desc + ' → 年終預估' }
+  if (startMonth > 1) desc += ' ' + year + '年' + startMonth + '月起';
+  var items = [
+    { code: 'salary', amount: salary, suffix: '薪資費用' },
+    { code: 'insurance', amount: labor + health, suffix: '保險費' },
+    { code: 'pension', amount: pension, suffix: '退休金' },
+    { code: 'bonus_accrual', amount: Math.round((bonus || salary) / 12), suffix: '年終預估' }
   ];
 
-  for (var i = 0; i < inserts.length; i++) {
-    var ins = inserts[i];
-    if (!ins.category_id) continue;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!codeToId[item.code]) continue;
     await sb.from('finance_adjustments').insert({
-      fiscal_year: year, category_id: ins.category_id, description: ins.description,
-      amount: ins.amount, adjust_type: 'monthly', start_month: 1, end_month: 12,
+      fiscal_year: year, category_id: codeToId[item.code],
+      description: desc + ' → ' + item.suffix,
+      amount: item.amount, adjust_type: 'monthly',
+      start_month: startMonth, end_month: 12,
       created_by: currentLawyer ? currentLawyer.id : null
     });
   }
-  alert('已新增「新進 ' + name + '」調整到 ' + year + '年預算');
+  alert('已新增「新進 ' + name + '」調整到 ' + year + '年 ' + startMonth + '~12月');
 }
 
 async function applyDiffSalaryChange(name, diff, dept) {
