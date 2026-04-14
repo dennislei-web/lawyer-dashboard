@@ -2250,7 +2250,7 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     loadSalaryInfo();
 
     // Confirmed personnel changes (month-over-month within this year)
-    showConfirmedChangesReport(year, monthEmployees, monthSheets);
+    await showConfirmedChangesReport(year, monthEmployees, monthSheets);
   } catch(ex) {
     console.error('salary upload:', ex);
     document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg error">上傳失敗：' + (ex.message || ex) + '</div>';
@@ -2262,8 +2262,15 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
 // ═══════════════════════════════════════════════════════════
 //  CONFIRMED PERSONNEL CHANGES (Month-over-Month within year)
 // ═══════════════════════════════════════════════════════════
-function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
+async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   if (monthSheets.length < 2) return;
+
+  // Load previous year employee data for prev-year average
+  var prevYearMap = {};
+  if (sb) {
+    var r = await sb.from('finance_employees').select('*').eq('fiscal_year', year - 1).eq('is_active', true);
+    (r.data || []).forEach(function(e) { prevYearMap[e.name] = e; });
+  }
 
   // Compare consecutive months to find ALL changes within the year
   var allLeft = [], allJoined = [];
@@ -2295,8 +2302,10 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
           avgSalary = Math.round(allMonthsData.reduce(function(s,x){return s+x.salary},0) / allMonthsData.length);
           avgEmpTotal = Math.round(allMonthsData.reduce(function(s,x){return s+x.empTotal},0) / allMonthsData.length);
         }
+        var prevEmp = prevYearMap[e.name];
+        var prevYearAvg = prevEmp ? (prevEmp.total_salary || prevEmp.base_salary || 0) : 0;
         allLeft.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal,
-          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, dept: e.dept || '' });
+          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, prevYearAvg: prevYearAvg, dept: e.dept || '' });
       }
     });
     currList.forEach(function(e) {
@@ -2312,8 +2321,10 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
           avgSalary = Math.round(allMonthsData.reduce(function(s,x){return s+x.salary},0) / allMonthsData.length);
           avgEmpTotal = Math.round(allMonthsData.reduce(function(s,x){return s+x.empTotal},0) / allMonthsData.length);
         }
+        var prevEmp = prevYearMap[e.name];
+        var prevYearAvg = prevEmp ? (prevEmp.total_salary || prevEmp.base_salary || 0) : 0;
         allJoined.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal,
-          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, dept: e.dept || '' });
+          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, prevYearAvg: prevYearAvg, dept: e.dept || '' });
       }
     });
   }
@@ -2341,7 +2352,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     html += '<div style="font-weight:600;color:var(--red);margin-bottom:6px">👋 離職（' + allLeft.length + ' 人）</div>';
     html += '<table style="font-size:0.78rem;width:100%"><thead><tr>';
     html += '<th style="width:30px"><input type="checkbox" id="checkAllLeft" checked></th>';
-    html += '<th>姓名</th><th>部門</th><th>離職月</th><th class="text-right">年均月薪</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
+    html += '<th>姓名</th><th>部門</th><th>離職月</th><th class="text-right">' + (year-1) + '年均</th><th class="text-right">' + year + '年均</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
     html += '</tr></thead><tbody>';
     allLeft.forEach(function(e, idx) {
       var moRemain = 12 - e.month + 1;
@@ -2353,6 +2364,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       html += '<td><strong>' + e.name + '</strong></td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--orange)">' + e.month + '月</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.prevYearAvg + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + (e.prevYearAvg ? fmt(e.prevYearAvg) : '-') + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.avgSalary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.avgSalary) + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.salary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.salary) + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.base + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.base) + '</td>';
@@ -2362,7 +2374,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       html += '</tr>';
     });
     html += '</tbody></table>';
-    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊「年均月薪」「當月薪資」「本薪」可快速填入採用金額，或直接輸入自訂金額</div>';
+    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊任一薪資數字可快速填入採用金額，或直接輸入自訂金額</div>';
     html += '</div>';
   }
 
@@ -2372,7 +2384,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     html += '<div style="font-weight:600;color:var(--green);margin-bottom:6px">🆕 新進（' + allJoined.length + ' 人）</div>';
     html += '<table style="font-size:0.78rem;width:100%"><thead><tr>';
     html += '<th style="width:30px"><input type="checkbox" id="checkAllJoin" checked></th>';
-    html += '<th>姓名</th><th>部門</th><th>到職月</th><th class="text-right">年均月薪</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
+    html += '<th>姓名</th><th>部門</th><th>到職月</th><th class="text-right">' + (year-1) + '年均</th><th class="text-right">' + year + '年均</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
     html += '</tr></thead><tbody>';
     allJoined.forEach(function(e, idx) {
       var moRemain = 12 - e.month + 1;
@@ -2384,6 +2396,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       html += '<td><strong>' + e.name + '</strong></td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--green)">' + e.month + '月</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.prevYearAvg + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + (e.prevYearAvg ? fmt(e.prevYearAvg) : '-') + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.avgSalary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.avgSalary) + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.salary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.salary) + '</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.base + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.base) + '</td>';
@@ -2393,7 +2406,7 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       html += '</tr>';
     });
     html += '</tbody></table>';
-    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊「年均月薪」「當月薪資」「本薪」可快速填入採用金額，或直接輸入自訂金額</div>';
+    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊任一薪資數字可快速填入採用金額，或直接輸入自訂金額</div>';
     html += '</div>';
   }
 
