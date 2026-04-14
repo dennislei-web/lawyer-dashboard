@@ -558,12 +558,13 @@ async function showDashboard() {
     document.getElementById('uploadSection').style.display = 'block';
     document.getElementById('budgetHint').textContent = '點擊數字可編輯';
   }
-  await loadCategories();
-  loadEmployees(selectedYear); // background load, no await
-  initAllYearBtns();
-  await loadOverviewData();
-  // Show employee count on history page
-  loadEmployeeCount();
+  try {
+    await loadCategories();
+    initAllYearBtns();
+    await loadOverviewData();
+    loadEmployees(selectedYear).catch(function(){}); // background
+    loadEmployeeCount(); // background
+  } catch(e) { console.error('showDashboard error:', e); }
 }
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -1979,10 +1980,12 @@ async function loadEmployees(year) {
 
 async function loadEmployeeCount() {
   if (!sb) return;
-  var r = await sb.from('finance_employees').select('id', { count: 'exact', head: true });
-  var cnt = r.count || 0;
-  var el = document.getElementById('salaryCount');
-  if (el) el.textContent = cnt > 0 ? '目前有 ' + cnt + ' 位員工薪資資料' : '';
+  try {
+    var r = await sb.from('finance_employees').select('id');
+    var cnt = (r.data || []).length;
+    var el = document.getElementById('salaryCount');
+    if (el) el.textContent = cnt > 0 ? '目前有 ' + cnt + ' 位員工薪資資料' : '';
+  } catch(e) { /* ignore */ }
 }
 
 document.getElementById('salaryUploadBtn').addEventListener('click', async function() {
