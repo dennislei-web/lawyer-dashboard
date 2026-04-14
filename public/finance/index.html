@@ -2410,14 +2410,8 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     html += '</div>';
   }
 
-  // Summary
-  var netImpact = totalAdded - totalSavings;
-  html += '<div style="background:var(--bg-row);padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:0.85rem">';
-  html += '<strong>預估淨影響：</strong>';
-  html += '<span class="text-green"> 離職省 ' + fmtCurrency(totalSavings) + '</span>';
-  html += ' + <span class="text-red">新進增 ' + fmtCurrency(totalAdded) + '</span>';
-  html += ' = <span style="font-weight:700" class="' + (netImpact >= 0 ? 'text-red' : 'text-green') + '">' + (netImpact >= 0 ? '+' : '') + fmtCurrency(netImpact) + '</span>';
-  html += '</div>';
+  // Summary (dynamic)
+  html += '<div id="diffSummary" style="background:var(--bg-row);padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:0.85rem"></div>';
 
   // Action buttons
   html += '<div style="display:flex;gap:8px;align-items:center">';
@@ -2433,14 +2427,63 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   div.innerHTML = html;
   document.getElementById('salaryMsg').parentNode.appendChild(div);
 
+  // Live summary update
+  function updateDiffSummary() {
+    var savings = 0, added = 0, leftCount = 0, joinCount = 0;
+    div.querySelectorAll('.chk-left:checked').forEach(function(cb) {
+      var idx = parseInt(cb.getAttribute('data-idx'));
+      var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="left"]');
+      var sal = salInput ? (parseInt(salInput.value) || 0) : window._confirmedLeft[idx].salary;
+      var months = 12 - window._confirmedLeft[idx].month + 1;
+      var rates = PERSONNEL_COST_RATES;
+      var monthlyCost = sal + Math.round(sal * rates.insurance_rate) + Math.round(sal * rates.pension_rate) + Math.round(sal / 12);
+      savings += monthlyCost * months;
+      leftCount++;
+    });
+    div.querySelectorAll('.chk-join:checked').forEach(function(cb) {
+      var idx = parseInt(cb.getAttribute('data-idx'));
+      var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="join"]');
+      var sal = salInput ? (parseInt(salInput.value) || 0) : window._confirmedJoined[idx].salary;
+      var months = 12 - window._confirmedJoined[idx].month + 1;
+      var rates = PERSONNEL_COST_RATES;
+      var monthlyCost = sal + Math.round(sal * rates.insurance_rate) + Math.round(sal * rates.pension_rate) + Math.round(sal / 12);
+      added += monthlyCost * months;
+      joinCount++;
+    });
+    var net = added - savings;
+    var el = document.getElementById('diffSummary');
+    if (el) {
+      el.innerHTML = '<strong>預估淨影響：</strong>' +
+        '<span class="text-green">離職省 ' + fmtCurrency(savings) + '（' + leftCount + '人）</span>' +
+        ' + <span class="text-red">新進增 ' + fmtCurrency(added) + '（' + joinCount + '人）</span>' +
+        ' = <span style="font-weight:700" class="' + (net >= 0 ? 'text-red' : 'text-green') + '">' + (net >= 0 ? '+' : '') + fmtCurrency(net) + '</span>';
+    }
+    // Update apply button text
+    var btn = document.getElementById('applySelectedBtn');
+    if (btn && !btn.disabled) btn.textContent = '套用勾選項目（' + (leftCount + joinCount) + ' 筆）';
+  }
+
+  // Initial render
+  setTimeout(updateDiffSummary, 0);
+
+  // Bind to all checkboxes and salary inputs
+  div.querySelectorAll('.chk-left, .chk-join').forEach(function(cb) {
+    cb.addEventListener('change', updateDiffSummary);
+  });
+  div.querySelectorAll('.sal-input').forEach(function(input) {
+    input.addEventListener('input', updateDiffSummary);
+  });
+
   // Check-all handlers
   var checkAllLeft = document.getElementById('checkAllLeft');
   if (checkAllLeft) checkAllLeft.addEventListener('change', function() {
     div.querySelectorAll('.chk-left').forEach(function(cb) { cb.checked = checkAllLeft.checked; });
+    updateDiffSummary();
   });
   var checkAllJoin = document.getElementById('checkAllJoin');
   if (checkAllJoin) checkAllJoin.addEventListener('change', function() {
     div.querySelectorAll('.chk-join').forEach(function(cb) { cb.checked = checkAllJoin.checked; });
+    updateDiffSummary();
   });
 
   // Apply selected
