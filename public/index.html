@@ -68,12 +68,14 @@
       --ghost-hover-bg: rgba(0,0,0,0.08);
     }
 
-    /* Embed mode: hide header when loaded in iframe */
-    .embed-mode .header { display: none !important; }
+    /* Embed mode: hide header brand/user info, keep tabs visible */
     .embed-mode #loginPage { display: none !important; }
     .embed-mode #dashboard { display: block !important; }
-    .embed-mode .tab-nav { margin-top: 0; }
     .embed-mode body { padding-top: 0 !important; }
+    .embed-mode .header-brand,
+    .embed-mode .header-subtitle,
+    .embed-mode .header-right { display: none !important; }
+    .embed-mode .header-left { flex: 1; }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
