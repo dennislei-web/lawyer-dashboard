@@ -2383,11 +2383,65 @@ async function showSalaryDiffReport(newYear, newEmployees) {
     html += '</tbody></table></div>';
   }
 
-  html += '<div style="margin-top:8px"><button class="btn-sm" onclick="document.getElementById(\'salaryDiffReport\').remove()">關閉報告</button></div>';
+  // Apply all button
+  var totalChanges = left.length + joined.length + midYearHires.length + changed.length;
+  html += '<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border);display:flex;gap:8px;align-items:center">';
+  html += '<button class="btn-primary" id="applyAllDiffBtn" style="font-size:0.85rem;padding:8px 20px">一鍵全部套用（' + totalChanges + ' 筆異動）</button>';
+  html += '<button class="btn-sm" onclick="document.getElementById(\'salaryDiffReport\').remove()">關閉報告</button>';
+  html += '<span class="text-muted" style="font-size:0.75rem">將所有離職/新進/補足/調薪一次建立預算調整</span>';
   html += '</div>';
+  html += '</div>';
+
+  // Store diff data for apply-all
+  window._salaryDiffData = { left: left, joined: joined, midYearHires: midYearHires, changed: changed, prevYear: prevYear, newYear: newYear };
 
   div.innerHTML = html;
   document.getElementById('salaryMsg').parentNode.appendChild(div);
+
+  document.getElementById('applyAllDiffBtn').addEventListener('click', async function() {
+    var d = window._salaryDiffData;
+    if (!d) return;
+    if (!confirm('確定要一次套用全部 ' + totalChanges + ' 筆人員異動調整？')) return;
+    this.disabled = true; this.textContent = '處理中...';
+
+    var count = 0;
+    // 1. Apply all departures
+    for (var i = 0; i < d.left.length; i++) {
+      var item = d.left[i];
+      var e = item.emp;
+      await applyDiffLeaveWithMonth(e.name, e.total_salary || e.base_salary, e.employer_labor||0, e.employer_health||0, e.employer_pension||0, e.bonus||0, e.department||'', item.departureMonth||1, d.prevYear, true);
+      count++;
+      this.textContent = '處理中... (' + count + '/' + totalChanges + ')';
+    }
+    // 2. Apply all new joins
+    for (var i = 0; i < d.joined.length; i++) {
+      var e = d.joined[i];
+      var joinMonth = 1;
+      if (e.notes) { var m = e.notes.match(/在職月份:(\d+)-/); if (m) joinMonth = parseInt(m[1]); }
+      await applyDiffJoinWithMonth(e.name, e.total_salary || e.base_salary, e.employer_labor||0, e.employer_health||0, e.employer_pension||0, e.bonus||0, e.department||'', joinMonth, true);
+      count++;
+      this.textContent = '處理中... (' + count + '/' + totalChanges + ')';
+    }
+    // 3. Apply mid-year hire adjustments
+    for (var i = 0; i < d.midYearHires.length; i++) {
+      var item = d.midYearHires[i];
+      var e = item.emp;
+      await applyMidYearHireAdjust(e.name, e.total_salary || e.base_salary, e.employer_labor||0, e.employer_health||0, e.employer_pension||0, e.bonus||0, e.department||'', item.joinMonth, d.newYear, true);
+      count++;
+      this.textContent = '處理中... (' + count + '/' + totalChanges + ')';
+    }
+    // 4. Apply salary changes
+    for (var i = 0; i < d.changed.length; i++) {
+      var c = d.changed[i];
+      await applyDiffSalaryChange(c.name, c.diff, c.dept||'', true);
+      count++;
+      this.textContent = '處理中... (' + count + '/' + totalChanges + ')';
+    }
+
+    this.textContent = '全部完成！';
+    this.style.background = 'var(--green)';
+    alert('已完成全部 ' + totalChanges + ' 筆人員異動調整！\n\n• 離職 ' + d.left.length + ' 人\n• 新進 ' + d.joined.length + ' 人\n• 中途到職補足 ' + d.midYearHires.length + ' 人\n• 調薪 ' + d.changed.length + ' 人\n\n請切到「預算編列」tab 查看結果。');
+  });
 }
 
 // Quick apply functions from diff report
@@ -2395,7 +2449,7 @@ async function applyDiffLeave(name, salary, labor, health, pension, bonus, dept)
   await applyDiffLeaveWithMonth(name, salary, labor, health, pension, bonus, dept, 1, selectedYear);
 }
 
-async function applyDiffLeaveWithMonth(name, salary, labor, health, pension, bonus, dept, depMonth, prevYear) {
+async function applyDiffLeaveWithMonth(name, salary, labor, health, pension, bonus, dept, depMonth, prevYear, silent) {
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
 
@@ -2434,18 +2488,18 @@ async function applyDiffLeaveWithMonth(name, salary, labor, health, pension, bon
     }
   }
 
-  var msg = '已新增「離職 ' + name + '」調整：\n';
-  adjustments_to_make.forEach(function(adj) {
-    msg += '• ' + adj.year + '年 ' + adj.start + '~' + adj.end + '月\n';
-  });
-  alert(msg);
+  if (!silent) {
+    var msg = '已新增「離職 ' + name + '」調整：\n';
+    adjustments_to_make.forEach(function(adj) { msg += '• ' + adj.year + '年 ' + adj.start + '~' + adj.end + '月\n'; });
+    alert(msg);
+  }
 }
 
 async function applyDiffJoin(name, salary, labor, health, pension, bonus, dept) {
   await applyDiffJoinWithMonth(name, salary, labor, health, pension, bonus, dept, 1);
 }
 
-async function applyDiffJoinWithMonth(name, salary, labor, health, pension, bonus, dept, startMonth) {
+async function applyDiffJoinWithMonth(name, salary, labor, health, pension, bonus, dept, startMonth, silent) {
   var year = selectedYear; // current year budget (the year they joined)
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
@@ -2470,10 +2524,10 @@ async function applyDiffJoinWithMonth(name, salary, labor, health, pension, bonu
       created_by: currentLawyer ? currentLawyer.id : null
     });
   }
-  alert('已新增「新進 ' + name + '」調整到 ' + year + '年 ' + startMonth + '~12月');
+  if (!silent) alert('已新增「新進 ' + name + '」調整到 ' + year + '年 ' + startMonth + '~12月');
 }
 
-async function applyDiffSalaryChange(name, diff, dept) {
+async function applyDiffSalaryChange(name, diff, dept, silent) {
   var year = selectedYear + 1;
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
@@ -2500,10 +2554,10 @@ async function applyDiffSalaryChange(name, diff, dept) {
       created_by: currentLawyer ? currentLawyer.id : null
     });
   }
-  alert('已新增「調薪 ' + name + '」調整到 ' + year + '年預算');
+  if (!silent) alert('已新增「調薪 ' + name + '」調整到 ' + year + '年預算');
 }
 
-async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonus, dept, joinMonth, year) {
+async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonus, dept, joinMonth, year, silent) {
   var codeToId = {};
   categories.forEach(function(c) { codeToId[c.code] = c.id; });
 
@@ -2527,7 +2581,7 @@ async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonu
       created_by: currentLawyer ? currentLawyer.id : null
     });
   }
-  alert('已補足「' + name + '」' + year + '年 1~' + endMonth + '月成本');
+  if (!silent) alert('已補足「' + name + '」' + year + '年 1~' + endMonth + '月成本');
 }
 
 // ═══════════════════════════════════════════════════════════
