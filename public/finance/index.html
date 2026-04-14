@@ -875,12 +875,21 @@ async function loadBudgetData() {
   var actionsEl = document.getElementById('budgetActions');
   if (isAdmin) {
     actionsEl.innerHTML = '<button class="btn-primary" id="addPersonnelBtn" style="background:var(--blue)">+ 人員異動</button>' +
-      '<button class="btn-primary" id="addAdjustBtn" style="margin-left:8px">+ 其他調整</button>';
+      '<button class="btn-primary" id="addAdjustBtn" style="margin-left:8px">+ 其他調整</button>' +
+      '<button class="btn-sm" id="clearAllAdjBtn" style="margin-left:12px;color:var(--red);border-color:var(--red)">清除全部調整</button>';
     document.getElementById('addPersonnelBtn').addEventListener('click', function() {
       showPersonnelChangeForm(year);
     });
     document.getElementById('addAdjustBtn').addEventListener('click', function() {
       showAddAdjustmentForm(year);
+    });
+    document.getElementById('clearAllAdjBtn').addEventListener('click', async function() {
+      var activeCount = adjustments.filter(function(a){return a.is_active}).length;
+      if (activeCount === 0) { alert('沒有調整項目'); return; }
+      if (!confirm('確定要清除 ' + year + '年的全部 ' + activeCount + ' 筆調整？')) return;
+      this.disabled = true; this.textContent = '清除中...';
+      await sb.from('finance_adjustments').update({ is_active: false }).eq('fiscal_year', year).eq('is_active', true);
+      await loadBudgetData();
     });
   } else {
     actionsEl.innerHTML = '';
@@ -2179,16 +2188,26 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
       return colIdx;
     }
 
+    // Track per-month employee lists for month-over-month comparison
+    var monthEmployees = {}; // month → [{ name, salary, empTotal }]
+
     monthSheets.forEach(function(ms) {
       var ws = wb.Sheets[ms.name];
       var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       var ci = detectColumns(json);
+      monthEmployees[ms.month] = [];
 
       for (var i = 1; i < json.length; i++) {
         var row = json[i];
         var name = ci.name >= 0 ? (row[ci.name] || '').toString().trim() : '';
         var baseSalary = ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
         if (!isValidName(name) || baseSalary < 10000) continue;
+
+        monthEmployees[ms.month].push({
+          name: name,
+          salary: ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : baseSalary,
+          empTotal: ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0
+        });
 
         if (!personData[name]) {
           personData[name] = { months: [], dept: '', ci: ci, sums: { baseSalary:0, totalSalary:0, totalPay:0, labor:0, health:0, pension:0, empTotal:0 } };
@@ -2273,6 +2292,9 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！掃描 ' + monthSheets.length + ' 個月份，解析 ' + employees.length + ' 位員工薪資</div>';
     loadSalaryInfo();
 
+    // Month-over-month comparison (e.g., 3月 vs 2月)
+    showMonthOverMonthReport(year, monthEmployees, monthSheets);
+
     // Compare with previous year
     await showSalaryDiffReport(year, employees);
   } catch(ex) {
@@ -2284,7 +2306,78 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
 });
 
 // ═══════════════════════════════════════════════════════════
-//  SALARY DIFF REPORT
+//  MONTH-OVER-MONTH COMPARISON
+// ═══════════════════════════════════════════════════════════
+function showMonthOverMonthReport(year, monthEmployees, monthSheets) {
+  if (monthSheets.length < 2) return; // need at least 2 months
+
+  var lastMonth = monthSheets[monthSheets.length - 1].month;
+  var prevMonth = monthSheets[monthSheets.length - 2].month;
+
+  var lastList = monthEmployees[lastMonth] || [];
+  var prevList = monthEmployees[prevMonth] || [];
+
+  var prevMap = {};
+  prevList.forEach(function(e) { prevMap[e.name] = e; });
+  var lastMap = {};
+  lastList.forEach(function(e) { lastMap[e.name] = e; });
+
+  var monthJoined = [], monthLeft = [], monthChanged = [];
+
+  lastList.forEach(function(e) {
+    if (!prevMap[e.name]) {
+      monthJoined.push(e);
+    } else if (Math.abs(e.salary - prevMap[e.name].salary) > 500) {
+      monthChanged.push({ name: e.name, prev: prevMap[e.name].salary, curr: e.salary, diff: e.salary - prevMap[e.name].salary });
+    }
+  });
+  prevList.forEach(function(e) {
+    if (!lastMap[e.name]) monthLeft.push(e);
+  });
+
+  if (monthJoined.length === 0 && monthLeft.length === 0 && monthChanged.length === 0) return;
+
+  var existing = document.getElementById('monthDiffReport');
+  if (existing) existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'monthDiffReport';
+
+  var html = '<div class="upload-section" style="margin-top:12px;border-color:var(--orange)">';
+  html += '<div class="upload-title" style="color:var(--orange)">月度人事變動（' + prevMonth + '月 → ' + lastMonth + '月）</div>';
+
+  var parts = [];
+  if (monthLeft.length) parts.push('<span class="text-red">' + monthLeft.length + ' 人離開</span>');
+  if (monthJoined.length) parts.push('<span class="text-green">' + monthJoined.length + ' 人新進</span>');
+  if (monthChanged.length) parts.push('<span class="text-blue">' + monthChanged.length + ' 人薪資異動</span>');
+  html += '<div style="margin-bottom:8px;font-size:0.85rem">' + prevMonth + '月 ' + prevList.length + '人 → ' + lastMonth + '月 ' + lastList.length + '人 ｜ ' + parts.join(' ') + '</div>';
+
+  if (monthLeft.length > 0) {
+    html += '<div style="margin-bottom:8px"><span style="font-weight:600;color:var(--red);font-size:0.82rem">👋 ' + lastMonth + '月起不在名冊：</span>';
+    html += monthLeft.map(function(e) { return '<span style="font-size:0.82rem">' + e.name + '（月薪' + fmt(e.salary) + '）</span>'; }).join('、');
+    html += '</div>';
+  }
+  if (monthJoined.length > 0) {
+    html += '<div style="margin-bottom:8px"><span style="font-weight:600;color:var(--green);font-size:0.82rem">🆕 ' + lastMonth + '月新加入：</span>';
+    html += monthJoined.map(function(e) { return '<span style="font-size:0.82rem">' + e.name + '（月薪' + fmt(e.salary) + '）</span>'; }).join('、');
+    html += '</div>';
+  }
+  if (monthChanged.length > 0) {
+    html += '<div style="margin-bottom:8px"><span style="font-weight:600;color:var(--blue);font-size:0.82rem">💰 薪資變動：</span>';
+    monthChanged.forEach(function(c) {
+      var cls = c.diff > 0 ? 'text-red' : 'text-green';
+      html += '<span style="font-size:0.82rem">' + c.name + '（' + fmt(c.prev) + '→' + fmt(c.curr) + ' <span class="' + cls + '">' + (c.diff>0?'+':'') + fmt(c.diff) + '</span>）</span> ';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  div.innerHTML = html;
+  document.getElementById('salaryMsg').parentNode.insertBefore(div, document.getElementById('salaryMsg').nextSibling);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SALARY DIFF REPORT (YEAR-OVER-YEAR)
 // ═══════════════════════════════════════════════════════════
 async function showSalaryDiffReport(newYear, newEmployees) {
   var prevYear = newYear - 1;
