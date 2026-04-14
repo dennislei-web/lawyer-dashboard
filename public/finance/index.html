@@ -1898,11 +1898,13 @@ function renderHistoryGrid(histMap, dataLabel) {
   html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th></tr></thead><tbody>';
 
   var sections = [
-    { key: 'revenue', label: '營業收入' },
-    { key: 'operating_expense', label: '營業費用' },
-    { key: 'non_operating_income', label: '營業外收入' },
-    { key: 'tax', label: '所得稅' }
+    { key: 'revenue', label: '營業收入', sign: 1 },
+    { key: 'operating_expense', label: '營業費用', sign: -1 },
+    { key: 'non_operating_income', label: '營業外收入', sign: 1 }
   ];
+
+  // Track monthly P&L for bottom line
+  var plMonthly = new Array(12).fill(0);
 
   sections.forEach(function(sec) {
     html += '<tr class="section-row"><td colspan="14">' + sec.label + '</td></tr>';
@@ -1917,7 +1919,6 @@ function renderHistoryGrid(histMap, dataLabel) {
       for (var mo = 1; mo <= 12; mo++) {
         var val = rowData[mo] || 0;
         rowTotal += val;
-        // Deductions subtract from section total
         sectionMonthly[mo-1] += isDeduction ? -val : val;
         html += '<td class="text-right">' + fmt(val) + '</td>';
       }
@@ -1926,9 +1927,22 @@ function renderHistoryGrid(histMap, dataLabel) {
 
     var secTotal = sectionMonthly.reduce(function(a,b) { return a+b; }, 0);
     html += '<tr class="subtotal-row"><td>合計</td>';
-    for (var mo = 0; mo < 12; mo++) html += '<td class="text-right">' + fmt(sectionMonthly[mo]) + '</td>';
+    for (var mo = 0; mo < 12; mo++) {
+      html += '<td class="text-right">' + fmt(sectionMonthly[mo]) + '</td>';
+      plMonthly[mo] += sectionMonthly[mo] * sec.sign;
+    }
     html += '<td class="text-right" style="color:var(--gold-light)">' + fmt(secTotal) + '</td></tr>';
   });
+
+  // Bottom line: 營業收入 - 營業費用 + 營業外收入
+  var plTotal = plMonthly.reduce(function(a,b) { return a+b; }, 0);
+  html += '<tr class="net-row"><td>營業損益（收入-費用+營業外）</td>';
+  for (var mo = 0; mo < 12; mo++) {
+    var cls = plMonthly[mo] >= 0 ? 'text-green' : 'text-red';
+    html += '<td class="text-right ' + cls + '">' + fmt(plMonthly[mo]) + '</td>';
+  }
+  var plClass = plTotal >= 0 ? 'text-green' : 'text-red';
+  html += '<td class="text-right ' + plClass + '" style="font-size:0.9rem">' + fmtCurrency(plTotal) + '</td></tr>';
 
   html += '</tbody></table>';
   document.getElementById('historyGrid').innerHTML = html;
