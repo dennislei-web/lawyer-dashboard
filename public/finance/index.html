@@ -329,9 +329,9 @@
       <a class="header-brand" href="/finance/">喆律法律事務所</a>
       <span class="header-subtitle">財務規劃</span>
       <div class="nav-links">
-        <a class="nav-link" href="/">諮詢分析</a>
-        <a class="nav-link" href="/revenue/">營運</a>
-        <a class="nav-link active" href="/finance/">財務規劃</a>
+        <a class="nav-link" href="https://dennislei-web.github.io/lawyer-dashboard/">諮詢分析</a>
+        <a class="nav-link" href="https://dennislei-web.github.io/lawyer-dashboard/revenue/">營運</a>
+        <a class="nav-link active" href="https://dennislei-web.github.io/lawyer-dashboard/finance/">財務規劃</a>
       </div>
     </div>
     <div class="header-right">
@@ -635,8 +635,11 @@ function sumBySection(dataMap, section, months) {
   var total = 0;
   categories.forEach(function(c) {
     if (c.section !== section || c.is_subtotal) return;
+    var isDeduction = DEDUCTION_CODES.indexOf(c.code) >= 0;
     var m = dataMap[c.id] || {};
-    (months || [1,2,3,4,5,6,7,8,9,10,11,12]).forEach(function(mo) { total += (m[mo] || 0); });
+    (months || [1,2,3,4,5,6,7,8,9,10,11,12]).forEach(function(mo) {
+      total += isDeduction ? -(m[mo] || 0) : (m[mo] || 0);
+    });
   });
   return total;
 }
@@ -850,6 +853,8 @@ var adjustments = []; // finance_adjustments rows for current year
 
 // Salary-related category codes that should use employee data as base
 var SALARY_CODES = ['salary', 'insurance', 'pension', 'bonus_accrual'];
+// Categories that are deductions (stored as positive but should subtract in subtotals)
+var DEDUCTION_CODES = ['revenue_returns'];
 
 async function loadBudgetData() {
   var year = selectedYear;
@@ -1907,11 +1912,13 @@ function renderHistoryGrid(histMap, dataLabel) {
     sectionCats.forEach(function(cat) {
       var rowData = histMap[cat.id] || {};
       var rowTotal = 0;
+      var isDeduction = DEDUCTION_CODES.indexOf(cat.code) >= 0;
       html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
       for (var mo = 1; mo <= 12; mo++) {
         var val = rowData[mo] || 0;
         rowTotal += val;
-        sectionMonthly[mo-1] += val;
+        // Deductions subtract from section total
+        sectionMonthly[mo-1] += isDeduction ? -val : val;
         html += '<td class="text-right">' + fmt(val) + '</td>';
       }
       html += '<td class="text-right" style="font-weight:600">' + fmt(rowTotal) + '</td></tr>';
