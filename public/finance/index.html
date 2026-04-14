@@ -1351,97 +1351,114 @@ function renderAdjustmentLog(year) {
   var logEl = document.querySelector('#page-budget .adj-log');
   if (!logEl) {
     logEl = document.createElement('div');
-    logEl.className = 'adj-log table-card';
+    logEl.className = 'adj-log';
     document.getElementById('budgetGrid').parentNode.appendChild(logEl);
   }
   if (activeAdjs.length === 0) { logEl.innerHTML = ''; return; }
 
-  // Group: extract employee name from description pattern "離職 XXX（..." or "新進 XXX（..."
-  var groups = []; // { label, type:'personnel'|'other', adjs:[], totalImpact }
-  var personnelMap = {}; // key = employee name → group index
-  var otherGroup = { label: '其他調整', type: 'other', adjs: [], totalImpact: 0 };
+  // Current ROC month
+  var now = new Date();
+  var rocYear = now.getFullYear() - 1911;
+  var currentMonth = (rocYear === year) ? now.getMonth() + 1 : (rocYear > year ? 13 : 0);
+
+  // Group each adjustment entry (by person) into groups first
+  var groups = [];
+  var personnelMap = {};
+  var otherIncrease = { label: '其他增加', adjs: [], totalImpact: 0 };
+  var otherDecrease = { label: '其他減少', adjs: [], totalImpact: 0 };
 
   activeAdjs.forEach(function(adj) {
-    var match = adj.description.match(/^(離職|新進|育嬰留停)\s+(\S+?)[\s（(]/);
+    var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
+    var impact = adj.amount * monthCount;
+    var match = adj.description.match(/^(離職|新進|育嬰留停|調薪)\s+(\S+?)[\s（(]/);
     if (match) {
-      var empName = match[2];
-      var action = match[1];
-      var key = action + '-' + empName;
+      var key = match[1] + '-' + match[2];
       if (personnelMap[key] == null) {
         personnelMap[key] = groups.length;
-        groups.push({ label: action + ' ' + empName, type: 'personnel', action: action, empName: empName, adjs: [], totalImpact: 0 });
+        groups.push({ label: match[1] + ' ' + match[2], action: match[1], empName: match[2], adjs: [], totalImpact: 0 });
       }
       var g = groups[personnelMap[key]];
-      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
-      var impact = adj.amount * monthCount;
-      g.adjs.push(adj);
-      g.totalImpact += impact;
+      g.adjs.push(adj); g.totalImpact += impact;
     } else {
-      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
-      var impact = adj.amount * monthCount;
-      otherGroup.adjs.push(adj);
-      otherGroup.totalImpact += impact;
+      if (adj.amount >= 0) { otherIncrease.adjs.push(adj); otherIncrease.totalImpact += impact; }
+      else { otherDecrease.adjs.push(adj); otherDecrease.totalImpact += impact; }
     }
   });
-  if (otherGroup.adjs.length > 0) groups.push(otherGroup);
+
+  // Split groups into 4 quadrants
+  var q = {
+    incHappened: [], incFuture: [], decHappened: [], decFuture: []
+  };
+
+  function classifyGroup(g) {
+    var isIncrease = g.totalImpact > 0;
+    var startMonth = Math.min.apply(null, g.adjs.map(function(a) { return a.start_month; }));
+    var happened = startMonth <= currentMonth;
+    if (isIncrease && happened) q.incHappened.push(g);
+    else if (isIncrease && !happened) q.incFuture.push(g);
+    else if (!isIncrease && happened) q.decHappened.push(g);
+    else q.decFuture.push(g);
+  }
+
+  groups.forEach(classifyGroup);
+  if (otherIncrease.adjs.length > 0) classifyGroup(otherIncrease);
+  if (otherDecrease.adjs.length > 0) classifyGroup(otherDecrease);
 
   var totalImpact = 0;
-  groups.forEach(function(g) { totalImpact += g.totalImpact; });
-
-  var html = '<div class="table-header"><span class="table-title">調整紀錄</span>';
-  html += '<span class="text-muted" style="font-size:0.75rem">共 ' + activeAdjs.length + ' 筆調整</span></div>';
-  html += '<table><thead><tr><th>科目</th><th>說明</th><th class="text-right">金額/月</th><th>期間</th><th class="text-right">年度影響</th>';
-  if (isAdmin) html += '<th></th>';
-  html += '</tr></thead><tbody>';
-
-  groups.forEach(function(g) {
-    // Group header
-    var icon = g.type === 'personnel' ? (g.action === '離職' ? '👋' : g.action === '育嬰留停' ? '🍼' : '🆕') : '📋';
-    var groupColor = g.totalImpact <= 0 ? 'text-green' : 'text-red';
-    html += '<tr class="section-row"><td colspan="4" style="font-size:0.85rem">' + icon + ' <strong>' + g.label + '</strong></td>';
-    html += '<td class="text-right ' + groupColor + '" style="font-weight:700">' + (g.totalImpact >= 0 ? '+' : '') + fmtCurrency(g.totalImpact) + '</td>';
-    if (isAdmin) {
-      if (g.type === 'personnel') {
-        var ids = g.adjs.map(function(a){return a.id}).join(',');
-        html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteAdjustmentGroup(\'' + ids + '\')">整組刪除</button></td>';
-      } else { html += '<td></td>'; }
-    }
-    html += '</tr>';
-
-    // Detail rows
-    g.adjs.forEach(function(adj) {
-      var cat = catIdMap[adj.category_id];
-      var catName = cat ? cat.name : '未知';
-      var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
-      var impact = adj.amount * monthCount;
-      var periodStr = adj.adjust_type === 'one_time' ? adj.start_month + '月（單次）' : adj.start_month + '月~' + adj.end_month + '月';
-
-      // For personnel: simplify description (remove repeated prefix)
-      var desc = adj.description;
-      if (g.type === 'personnel') {
-        var arrow = desc.indexOf('→');
-        desc = arrow > -1 ? desc.substring(arrow + 1).trim() : catName;
-      }
-
-      html += '<tr>';
-      html += '<td style="padding-left:24px;color:var(--text-muted);font-size:0.8rem">' + catName + '</td>';
-      html += '<td style="font-size:0.8rem">' + desc + '</td>';
-      html += '<td class="text-right ' + (adj.amount >= 0 ? 'text-red' : 'text-green') + '" style="font-size:0.8rem">' + (adj.amount >= 0 ? '+' : '') + fmt(adj.amount) + '</td>';
-      html += '<td style="font-size:0.8rem">' + periodStr + '</td>';
-      html += '<td class="text-right ' + (impact >= 0 ? 'text-red' : 'text-green') + '" style="font-size:0.8rem">' + (impact >= 0 ? '+' : '') + fmtCurrency(impact) + '</td>';
-      if (isAdmin && g.type !== 'personnel') {
-        html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 6px;font-size:0.65rem" onclick="deleteAdjustment(\'' + adj.id + '\')">刪除</button></td>';
-      } else if (isAdmin) { html += '<td></td>'; }
-      html += '</tr>';
-    });
+  activeAdjs.forEach(function(a) {
+    var mc = a.adjust_type === 'one_time' ? 1 : (a.end_month - a.start_month + 1);
+    totalImpact += a.amount * mc;
   });
 
-  html += '<tr style="border-top:2px solid var(--gold)"><td colspan="4" style="font-weight:700;color:var(--gold-light)">調整總影響</td>';
-  html += '<td class="text-right ' + (totalImpact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:700">' + (totalImpact >= 0 ? '+' : '') + fmtCurrency(totalImpact) + '</td>';
-  if (isAdmin) html += '<td></td>';
-  html += '</tr>';
-  html += '</tbody></table>';
+  // Render 4 quadrants
+  var html = '<div class="table-header" style="border:none;padding:16px 0 8px"><span class="table-title">調整紀錄</span>';
+  html += '<span class="text-muted" style="font-size:0.75rem">共 ' + activeAdjs.length + ' 筆 ｜ 總影響 <span class="' + (totalImpact >= 0 ? 'text-red' : 'text-green') + '" style="font-weight:700">' + (totalImpact >= 0 ? '+' : '') + fmtCurrency(totalImpact) + '</span></span></div>';
 
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  var quadrants = [
+    { key: 'incHappened', title: '預算增加・已發生', color: '--red', icon: '🔴', border: 'var(--red)' },
+    { key: 'incFuture', title: '預算增加・尚未發生', color: '--orange', icon: '🟡', border: 'var(--orange)' },
+    { key: 'decHappened', title: '預算減少・已發生', color: '--green', icon: '🟢', border: 'var(--green)' },
+    { key: 'decFuture', title: '預算減少・尚未發生', color: '--blue', icon: '🔵', border: 'var(--blue)' }
+  ];
+
+  quadrants.forEach(function(qd) {
+    var items = q[qd.key];
+    var qTotal = items.reduce(function(s, g) { return s + g.totalImpact; }, 0);
+    html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;border-top:3px solid ' + qd.border + ';padding:16px;min-height:120px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<span style="font-weight:600;font-size:0.85rem">' + qd.icon + ' ' + qd.title + '</span>';
+    if (items.length > 0) {
+      html += '<span style="font-weight:700;font-size:0.9rem;color:var(' + qd.color + ')">' + (qTotal >= 0 ? '+' : '') + fmtCurrency(qTotal) + '</span>';
+    }
+    html += '</div>';
+
+    if (items.length === 0) {
+      html += '<div class="text-muted" style="font-size:0.8rem;text-align:center;padding:16px 0">無</div>';
+    } else {
+      items.forEach(function(g) {
+        var icon = g.action === '離職' ? '👋' : g.action === '育嬰留停' ? '🍼' : g.action === '新進' ? '🆕' : g.action === '調薪' ? '💰' : '📋';
+        var periodParts = [];
+        var startM = Math.min.apply(null, g.adjs.map(function(a){return a.start_month}));
+        var endM = Math.max.apply(null, g.adjs.map(function(a){return a.end_month}));
+        var periodStr = startM + '月~' + endM + '月';
+
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8rem">';
+        html += '<span>' + icon + ' ' + g.label + ' <span class="text-muted">(' + periodStr + ')</span></span>';
+        html += '<div style="display:flex;align-items:center;gap:8px">';
+        html += '<span style="font-weight:600;color:var(' + qd.color + ')">' + (g.totalImpact >= 0 ? '+' : '') + fmtCurrency(g.totalImpact) + '</span>';
+        if (isAdmin) {
+          var ids = g.adjs.map(function(a){return a.id}).join(',');
+          html += '<button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:1px 6px;font-size:0.6rem" onclick="deleteAdjustmentGroup(\'' + ids + '\')">刪除</button>';
+        }
+        html += '</div></div>';
+      });
+    }
+    html += '</div>';
+  });
+
+  html += '</div>'; // close grid
   logEl.innerHTML = html;
 }
 
