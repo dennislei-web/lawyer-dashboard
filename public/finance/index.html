@@ -329,9 +329,9 @@
       <a class="header-brand" href="/finance/">喆律法律事務所</a>
       <span class="header-subtitle">財務規劃</span>
       <div class="nav-links">
-        <a class="nav-link" href="https://dennislei-web.github.io/lawyer-dashboard/" target="_blank">諮詢分析</a>
-        <a class="nav-link" href="https://dennislei-web.github.io/lawyer-dashboard/revenue/" target="_blank">營運</a>
-        <a class="nav-link active" href="https://dennislei-web.github.io/lawyer-dashboard/finance/">財務規劃</a>
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/" onclick="switchDashboard(this);return false">諮詢分析</a>
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/revenue/" onclick="switchDashboard(this);return false">營運</a>
+        <a class="nav-link active" href="#" data-dashboard="" onclick="switchDashboard(this);return false">財務規劃</a>
       </div>
     </div>
     <div class="header-right">
@@ -341,6 +341,10 @@
     </div>
   </div>
 
+  <!-- Iframe for other dashboards -->
+  <iframe id="dashboardFrame" style="display:none;width:100%;border:none;position:fixed;top:56px;left:0;right:0;bottom:0;z-index:50"></iframe>
+
+  <div id="localContent">
   <div class="tabs">
     <button class="tab-btn active" data-tab="overview">總覽</button>
     <button class="tab-btn" data-tab="budget">預算編列</button>
@@ -481,6 +485,7 @@
     </div>
 
   </div>
+  </div><!-- close localContent -->
 </div>
 
 <script>
@@ -519,6 +524,31 @@ var NAME_TO_CODE = {
 };
 
 try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══════════════════════════════════════════════════════════
+//  DASHBOARD SWITCHING
+// ═══════════════════════════════════════════════════════════
+function switchDashboard(link) {
+  var url = link.getAttribute('data-dashboard');
+  var frame = document.getElementById('dashboardFrame');
+  var local = document.getElementById('localContent');
+
+  // Update active nav
+  document.querySelectorAll('.nav-link').forEach(function(a) { a.classList.remove('active'); });
+  link.classList.add('active');
+
+  if (!url) {
+    // Back to local finance page
+    frame.style.display = 'none';
+    frame.src = '';
+    local.style.display = 'block';
+  } else {
+    // Load other dashboard in iframe
+    local.style.display = 'none';
+    frame.src = url;
+    frame.style.display = 'block';
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 //  THEME
