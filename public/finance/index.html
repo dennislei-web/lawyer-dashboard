@@ -895,68 +895,22 @@ async function loadBudgetData() {
     actionsEl.innerHTML = '';
   }
 
-  var hasSalaryBase = salaryBase && salaryBase.totalMonthly > 0;
   var hasHist = histRows.length > 0;
-  var hintParts = [];
-  if (hasSalaryBase) hintParts.push('薪資基底：' + year + '年在職' + salaryBase.headcount + '人薪資');
-  if (hasHist) hintParts.push('其他費用：' + (year-1) + '年歷史');
-  if (adjustments.length > 0) hintParts.push('+ ' + adjustments.filter(function(a){return a.is_active}).length + ' 筆調整');
-  document.getElementById('budgetHint').textContent = hintParts.join(' ｜ ') || '請先上傳歷史資料或薪資表';
+  var activeAdjCount = adjustments.filter(function(a){return a.is_active}).length;
+  var hint = hasHist ? '基底：' + (year-1) + '年損益表（含薪資）' : '請先上傳' + (year-1) + '年損益表';
+  if (activeAdjCount > 0) hint += ' ｜ + ' + activeAdjCount + ' 筆人事/費用調整';
+  document.getElementById('budgetHint').textContent = hint;
 
   renderBudgetGrid(histMap, budgetMap);
   renderAdjustmentLog(year);
 }
 
-// Compute salary baseline from current year's employee data
+// Salary baseline: use previous year P&L annual total / 12 for salary-related items
+// This is more accurate than employee data averages because it includes all components
 async function computeSalaryBaseline(year) {
-  if (!sb) return null;
-  // Try current year employees first, then previous year
-  var r = await sb.from('finance_employees').select('*').eq('fiscal_year', year).eq('is_active', true);
-  var emps = r.data || [];
-  if (emps.length === 0) {
-    r = await sb.from('finance_employees').select('*').eq('fiscal_year', year - 1).eq('is_active', true);
-    emps = r.data || [];
-  }
-  if (emps.length === 0) return null;
-
-  // Only count people who are active at start of year (first_month = 1 or full-year)
-  // For mid-year hires: they're already included since we have their average salary
-  var totalSalary = 0, totalInsurance = 0, totalPension = 0, totalBonus = 0;
-  var headcount = 0;
-
-  emps.forEach(function(e) {
-    // Check if employee was active at the start (month 1)
-    var firstMonth = 1;
-    if (e.notes) {
-      var m = e.notes.match(/在職月份:(\d+)-/);
-      if (m) firstMonth = parseInt(m[1]);
-    }
-    // Only include if they were active in month 1 (or it's the current year's data)
-    if (e.fiscal_year === year || firstMonth <= 1) {
-      totalSalary += (e.total_salary || e.base_salary || 0);
-      totalInsurance += ((e.employer_labor || 0) + (e.employer_health || 0));
-      totalPension += (e.employer_pension || 0);
-      totalBonus += Math.round((e.bonus || e.total_salary || e.base_salary || 0) / 12);
-      headcount++;
-    }
-  });
-
-  if (headcount === 0) return null;
-
-  // Map to category IDs
-  var codeToId = {};
-  categories.forEach(function(c) { codeToId[c.code] = c.id; });
-
-  return {
-    headcount: headcount,
-    totalMonthly: totalSalary + totalInsurance + totalPension + totalBonus,
-    byCategoryId: {
-      [codeToId['salary']]: totalSalary,
-      [codeToId['insurance']]: totalInsurance,
-      [codeToId['pension']]: totalPension,
-      [codeToId['bonus_accrual']]: totalBonus
-    }
-  };
+  // No longer override salary from employee data
+  // Use 114年 P&L data directly (already in histMap)
+  return null;
 }
 
 function computeBudgetFromAdjustments(histMap, adjs, salaryBase) {
