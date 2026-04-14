@@ -1547,9 +1547,22 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
   var isYTD = monthFilter === 'ytd';
   var months = isYTD ? [1,2,3,4,5,6,7,8,9,10,11,12] : [parseInt(monthFilter)];
 
+  // Store maps for analysis
+  window._compareBudgetMap = budgetMap;
+  window._compareActualMap = actualMap;
+
   var html = '<table><thead><tr><th>科目</th>';
   if (isYTD) {
-    for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th><th class="text-right">差</th>';
+    for (var m = 1; m <= 12; m++) {
+      // Check if this month has actual data
+      var hasData = categories.some(function(c) { return c.section === 'operating_expense' && !c.is_subtotal && (actualMap[c.id]||{})[m]; });
+      if (hasData) {
+        html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th>';
+        html += '<th class="text-right" style="cursor:pointer;color:var(--blue)" onclick="showMonthAnalysis(' + m + ')" title="點擊查看分析"><u>差</u> 📊</th>';
+      } else {
+        html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th><th class="text-right">差</th>';
+      }
+    }
     html += '<th class="text-right" style="color:var(--gold-light)">累計預</th><th class="text-right" style="color:var(--blue)">累計實</th><th class="text-right">累計差</th>';
   } else {
     html += '<th class="text-right">預算</th><th class="text-right">實際</th><th class="text-right">差異</th><th class="text-right">執行率</th>';
@@ -1629,6 +1642,125 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
 
   html += '</tbody></table>';
   document.getElementById('compareGrid').innerHTML = html;
+}
+
+function showMonthAnalysis(month) {
+  var budgetMap = window._compareBudgetMap;
+  var actualMap = window._compareActualMap;
+  if (!budgetMap || !actualMap) return;
+
+  // Collect all category variances for this month
+  var items = [];
+  var totalBudget = 0, totalActual = 0;
+
+  categories.forEach(function(c) {
+    if (c.section !== 'operating_expense' || c.is_subtotal) return;
+    var b = (budgetMap[c.id] || {})[month] || 0;
+    var a = (actualMap[c.id] || {})[month] || 0;
+    if (b === 0 && a === 0) return;
+    var diff = a - b;
+    var pct = b > 0 ? ((diff / b) * 100) : (a > 0 ? 100 : 0);
+    items.push({ name: c.name, budget: b, actual: a, diff: diff, pct: pct, absDiff: Math.abs(diff) });
+    totalBudget += b;
+    totalActual += a;
+  });
+
+  // Sort by absolute difference (biggest impact first)
+  items.sort(function(a, b) { return b.absDiff - a.absDiff; });
+
+  var totalDiff = totalActual - totalBudget;
+  var overBudget = items.filter(function(i) { return i.diff > 0; });
+  var underBudget = items.filter(function(i) { return i.diff < 0; });
+
+  // Build analysis
+  var existing = document.getElementById('monthAnalysisPanel');
+  if (existing) existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'monthAnalysisPanel';
+
+  var html = '<div class="upload-section" style="margin:16px 0;border-color:var(--blue)">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html += '<div class="upload-title" style="color:var(--blue);margin:0">📊 ' + selectedYear + '年' + month + '月 預實差異分析</div>';
+  html += '<button class="btn-sm" onclick="document.getElementById(\'monthAnalysisPanel\').remove()">關閉</button>';
+  html += '</div>';
+
+  // Overall summary
+  var overallClass = totalDiff > 0 ? 'text-red' : 'text-green';
+  var overallLabel = totalDiff > 0 ? '超出預算' : '低於預算';
+  html += '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
+  html += '<div style="font-size:0.9rem;margin-bottom:8px"><strong>' + month + '月整體：</strong>';
+  html += '預算 ' + fmtCurrency(totalBudget) + ' → 實際 ' + fmtCurrency(totalActual);
+  html += ' <span class="' + overallClass + '" style="font-weight:700;font-size:1rem">' + overallLabel + ' ' + fmtCurrency(Math.abs(totalDiff)) + '</span></div>';
+
+  // Key insights
+  html += '<div style="font-size:0.82rem;line-height:1.8">';
+
+  // Top over-budget items
+  if (overBudget.length > 0) {
+    html += '<div style="margin-bottom:8px"><strong style="color:var(--red)">⬆ 超出預算的主要項目：</strong></div>';
+    overBudget.slice(0, 5).forEach(function(item) {
+      var severity = item.absDiff > 100000 ? '🔴' : (item.absDiff > 30000 ? '🟡' : '⚪');
+      html += '<div style="padding-left:16px">' + severity + ' <strong>' + item.name + '</strong>：';
+      html += '預算 ' + fmt(item.budget) + ' → 實際 ' + fmt(item.actual);
+      html += ' <span class="text-red">(+' + fmt(item.diff) + '，' + (item.pct > 0 ? '+' : '') + item.pct.toFixed(1) + '%)</span>';
+      // Add insight based on category
+      if (item.name === '薪資費用' && Math.abs(item.pct) > 5) html += '<br><span class="text-muted" style="padding-left:20px">→ 可能因獎金/績效發放、加班費或人員異動</span>';
+      else if (item.name === '廣告費' && Math.abs(item.pct) > 10) html += '<br><span class="text-muted" style="padding-left:20px">→ 可能有額外行銷活動或季節性廣告投放</span>';
+      else if (item.name === '勞務費用' && Math.abs(item.pct) > 20) html += '<br><span class="text-muted" style="padding-left:20px">→ 可能有外包/委外案件增加</span>';
+      else if (item.name === '職工福利' && item.diff > 50000) html += '<br><span class="text-muted" style="padding-left:20px">→ 可能為節日禮金（端午/中秋/春節）</span>';
+      else if (item.name === '保險費' && Math.abs(item.pct) > 10) html += '<br><span class="text-muted" style="padding-left:20px">→ 可能因投保級距調整或人員增減</span>';
+      else if (item.absDiff > 50000) html += '<br><span class="text-muted" style="padding-left:20px">→ 建議確認是否為一次性支出或持續性增加</span>';
+      html += '</div>';
+    });
+  }
+
+  // Top under-budget items
+  if (underBudget.length > 0) {
+    html += '<div style="margin-top:8px;margin-bottom:8px"><strong style="color:var(--green)">⬇ 低於預算的主要項目：</strong></div>';
+    underBudget.slice(0, 5).forEach(function(item) {
+      html += '<div style="padding-left:16px">🟢 <strong>' + item.name + '</strong>：';
+      html += '預算 ' + fmt(item.budget) + ' → 實際 ' + fmt(item.actual);
+      html += ' <span class="text-green">(' + fmt(item.diff) + '，' + item.pct.toFixed(1) + '%)</span>';
+      if (item.actual === 0 && item.budget > 0) html += '<br><span class="text-muted" style="padding-left:20px">→ 本月無此項支出（可能為隔月結算）</span>';
+      html += '</div>';
+    });
+  }
+
+  // Personnel cost subtotal
+  var salaryItems = ['薪資費用','保險費','退休金','薪資支出(年終預估)'];
+  var personnelB = 0, personnelA = 0;
+  items.forEach(function(i) {
+    if (salaryItems.indexOf(i.name) >= 0 || i.name.includes('年終')) { personnelB += i.budget; personnelA += i.actual; }
+  });
+  var personnelDiff = personnelA - personnelB;
+  if (personnelB > 0) {
+    html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">';
+    html += '<strong>人事成本小計：</strong>預算 ' + fmtCurrency(personnelB) + ' → 實際 ' + fmtCurrency(personnelA);
+    html += ' <span class="' + (personnelDiff > 0 ? 'text-red' : 'text-green') + '">' + (personnelDiff >= 0 ? '+' : '') + fmtCurrency(personnelDiff) + '</span>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+
+  // Full breakdown table
+  html += '<div style="max-height:300px;overflow-y:auto;margin-top:8px"><table style="font-size:0.78rem;width:100%"><thead><tr><th>科目</th><th class="text-right">預算</th><th class="text-right">實際</th><th class="text-right">差異</th><th class="text-right">偏差%</th></tr></thead><tbody>';
+  items.forEach(function(item) {
+    var cls = item.diff > 0 ? 'text-red' : (item.diff < 0 ? 'text-green' : '');
+    html += '<tr><td>' + item.name + '</td>';
+    html += '<td class="text-right">' + fmt(item.budget) + '</td>';
+    html += '<td class="text-right">' + fmt(item.actual) + '</td>';
+    html += '<td class="text-right ' + cls + '">' + (item.diff >= 0 ? '+' : '') + fmt(item.diff) + '</td>';
+    html += '<td class="text-right ' + cls + '">' + (item.pct >= 0 ? '+' : '') + item.pct.toFixed(1) + '%</td></tr>';
+  });
+  html += '</tbody></table></div>';
+
+  html += '</div>';
+  div.innerHTML = html;
+
+  // Insert before the compare grid
+  var compareGrid = document.getElementById('compareGrid');
+  compareGrid.parentNode.insertBefore(div, compareGrid);
 }
 
 function renderCompareChart(budgetMap, actualMap) {
