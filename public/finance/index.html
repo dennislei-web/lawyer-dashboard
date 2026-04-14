@@ -1680,12 +1680,27 @@ function showActualEntryMode(budgetMap, actualMap) {
 async function loadHistoryData() {
   var year = selectedYear;
   var histRows = await fetchFinanceData(year, 'historical');
+  var actualRows = await fetchFinanceData(year, 'actual');
+  // Merge: use actual if available, fallback to historical
   var histMap = buildDataMap(histRows);
-  renderHistoryGrid(histMap);
+  var actualMap = buildDataMap(actualRows);
+  // Overlay actual on top of historical
+  var mergedMap = {};
+  categories.forEach(function(c) {
+    if (c.is_subtotal) return;
+    mergedMap[c.id] = {};
+    var hm = histMap[c.id] || {};
+    var am = actualMap[c.id] || {};
+    for (var mo = 1; mo <= 12; mo++) {
+      mergedMap[c.id][mo] = am[mo] || hm[mo] || 0;
+    }
+  });
+  var label = histRows.length > 0 && actualRows.length > 0 ? '歷史+實際' : (actualRows.length > 0 ? '實際支出' : '歷史');
+  renderHistoryGrid(mergedMap, label);
   loadUploadLog();
 }
 
-function renderHistoryGrid(histMap) {
+function renderHistoryGrid(histMap, dataLabel) {
   var html = '<table><thead><tr><th>科目</th>';
   for (var m = 1; m <= 12; m++) html += '<th class="text-right">' + m + '月</th>';
   html += '<th class="text-right" style="color:var(--gold-light)">年度合計</th></tr></thead><tbody>';
