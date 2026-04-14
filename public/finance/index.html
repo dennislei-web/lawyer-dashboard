@@ -2055,6 +2055,9 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     employeeList = employees;
     document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！從 ' + lastSheet + ' 解析 ' + employees.length + ' 位員工薪資</div>';
     document.getElementById('salaryCount').textContent = '目前 ' + year + ' 年共 ' + employees.length + ' 位員工資料';
+
+    // Compare with previous year
+    await showSalaryDiffReport(year, employees);
   } catch(ex) {
     console.error('salary upload:', ex);
     document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg error">上傳失敗：' + (ex.message || ex) + '</div>';
@@ -2062,6 +2065,196 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     this.disabled = false; this.textContent = '上傳薪資表';
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+//  SALARY DIFF REPORT
+// ═══════════════════════════════════════════════════════════
+async function showSalaryDiffReport(newYear, newEmployees) {
+  var prevYear = newYear - 1;
+  var r = await sb.from('finance_employees').select('*').eq('fiscal_year', prevYear).eq('is_active', true);
+  var prevEmployees = r.data || [];
+  if (prevEmployees.length === 0) return; // no previous data to compare
+
+  var prevMap = {};
+  prevEmployees.forEach(function(e) { prevMap[e.name] = e; });
+  var newMap = {};
+  newEmployees.forEach(function(e) { newMap[e.name] = e; });
+
+  var joined = [];  // in new but not prev
+  var left = [];    // in prev but not new
+  var changed = []; // in both but salary changed
+
+  newEmployees.forEach(function(e) {
+    if (!prevMap[e.name]) {
+      joined.push(e);
+    } else {
+      var prev = prevMap[e.name];
+      var diff = (e.total_salary || e.base_salary) - (prev.total_salary || prev.base_salary);
+      if (Math.abs(diff) > 500) { // ignore tiny rounding differences
+        changed.push({ name: e.name, dept: e.department, prev: prev, curr: e, diff: diff });
+      }
+    }
+  });
+
+  prevEmployees.forEach(function(e) {
+    if (!newMap[e.name]) {
+      left.push(e);
+    }
+  });
+
+  if (joined.length === 0 && left.length === 0 && changed.length === 0) {
+    document.getElementById('salaryMsg').innerHTML += '<div class="upload-msg success" style="margin-top:8px">與 ' + prevYear + ' 年比較：無人員異動</div>';
+    return;
+  }
+
+  // Build diff report
+  var existing = document.getElementById('salaryDiffReport');
+  if (existing) existing.remove();
+
+  var div = document.createElement('div');
+  div.id = 'salaryDiffReport';
+
+  var html = '<div class="upload-section" style="margin-top:16px;border-color:var(--blue)">';
+  html += '<div class="upload-title" style="color:var(--blue)">人員異動偵測（' + prevYear + '年 → ' + newYear + '年）</div>';
+
+  // Summary
+  var parts = [];
+  if (left.length) parts.push('<span class="text-red">' + left.length + ' 人離開</span>');
+  if (joined.length) parts.push('<span class="text-green">' + joined.length + ' 人新進</span>');
+  if (changed.length) parts.push('<span class="text-blue">' + changed.length + ' 人薪資異動</span>');
+  html += '<div style="margin-bottom:12px;font-size:0.85rem">' + parts.join(' ｜ ') + '</div>';
+
+  // Left employees
+  if (left.length > 0) {
+    html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--red);margin-bottom:4px">👋 不在新年度名冊（可能離職）</div>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th></th></tr></thead><tbody>';
+    left.forEach(function(e, idx) {
+      html += '<tr><td>' + e.name + '</td><td>' + (e.department||'') + '</td>';
+      html += '<td class="text-right">' + fmt(e.total_salary || e.base_salary) + '</td>';
+      html += '<td class="text-right">' + fmt(e.employer_total) + '</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffLeave(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\')">加入離職調整</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Joined employees
+  if (joined.length > 0) {
+    html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--green);margin-bottom:4px">🆕 新進人員</div>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th></th></tr></thead><tbody>';
+    joined.forEach(function(e) {
+      html += '<tr><td>' + e.name + '</td><td>' + (e.department||'') + '</td>';
+      html += '<td class="text-right">' + fmt(e.total_salary || e.base_salary) + '</td>';
+      html += '<td class="text-right">' + fmt(e.employer_total) + '</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffJoin(\'' + e.name + '\',' + (e.total_salary || e.base_salary) + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\')">加入新進調整</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Salary changes
+  if (changed.length > 0) {
+    html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--blue);margin-bottom:4px">💰 薪資異動</div>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">' + prevYear + '年月薪</th><th class="text-right">' + newYear + '年月薪</th><th class="text-right">差異</th><th></th></tr></thead><tbody>';
+    changed.forEach(function(c) {
+      var diffClass = c.diff > 0 ? 'text-red' : 'text-green';
+      html += '<tr><td>' + c.name + '</td><td>' + (c.dept||'') + '</td>';
+      html += '<td class="text-right">' + fmt(c.prev.total_salary || c.prev.base_salary) + '</td>';
+      html += '<td class="text-right">' + fmt(c.curr.total_salary || c.curr.base_salary) + '</td>';
+      html += '<td class="text-right ' + diffClass + '">' + (c.diff > 0 ? '+' : '') + fmt(c.diff) + '</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffSalaryChange(\'' + c.name + '\',' + c.diff + ',\'' + (c.dept||'') + '\')">加入調薪調整</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  html += '<div style="margin-top:8px"><button class="btn-sm" onclick="document.getElementById(\'salaryDiffReport\').remove()">關閉報告</button></div>';
+  html += '</div>';
+
+  div.innerHTML = html;
+  document.getElementById('salaryMsg').parentNode.appendChild(div);
+}
+
+// Quick apply functions from diff report
+async function applyDiffLeave(name, salary, labor, health, pension, bonus, dept) {
+  var year = selectedYear + 1; // next year budget
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  var desc = '離職 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary);
+  var inserts = [
+    { category_id: codeToId['salary'], amount: -salary, description: desc + ' → 薪資費用' },
+    { category_id: codeToId['insurance'], amount: -(labor + health), description: desc + ' → 保險費' },
+    { category_id: codeToId['pension'], amount: -pension, description: desc + ' → 退休金' },
+    { category_id: codeToId['bonus_accrual'], amount: -Math.round((bonus || salary) / 12), description: desc + ' → 年終預估' }
+  ];
+
+  for (var i = 0; i < inserts.length; i++) {
+    var ins = inserts[i];
+    if (!ins.category_id) continue;
+    await sb.from('finance_adjustments').insert({
+      fiscal_year: year, category_id: ins.category_id, description: ins.description,
+      amount: ins.amount, adjust_type: 'monthly', start_month: 1, end_month: 12,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+  }
+  alert('已新增「離職 ' + name + '」調整到 ' + year + '年預算');
+}
+
+async function applyDiffJoin(name, salary, labor, health, pension, bonus, dept) {
+  var year = selectedYear + 1;
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  var desc = '新進 ' + name + '（' + dept + '）月薪' + fmtCurrency(salary);
+  var inserts = [
+    { category_id: codeToId['salary'], amount: salary, description: desc + ' → 薪資費用' },
+    { category_id: codeToId['insurance'], amount: labor + health, description: desc + ' → 保險費' },
+    { category_id: codeToId['pension'], amount: pension, description: desc + ' → 退休金' },
+    { category_id: codeToId['bonus_accrual'], amount: Math.round((bonus || salary) / 12), description: desc + ' → 年終預估' }
+  ];
+
+  for (var i = 0; i < inserts.length; i++) {
+    var ins = inserts[i];
+    if (!ins.category_id) continue;
+    await sb.from('finance_adjustments').insert({
+      fiscal_year: year, category_id: ins.category_id, description: ins.description,
+      amount: ins.amount, adjust_type: 'monthly', start_month: 1, end_month: 12,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+  }
+  alert('已新增「新進 ' + name + '」調整到 ' + year + '年預算');
+}
+
+async function applyDiffSalaryChange(name, diff, dept) {
+  var year = selectedYear + 1;
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  var desc = '調薪 ' + name + '（' + dept + '）' + (diff > 0 ? '+' : '') + fmtCurrency(diff) + '/月';
+  // Salary change also affects pension (6%) and bonus accrual
+  var pensionDiff = Math.round(diff * 0.06);
+  var bonusDiff = Math.round(diff / 12);
+  var insuranceDiff = Math.round(diff * 0.1665);
+
+  var inserts = [
+    { category_id: codeToId['salary'], amount: diff, description: desc + ' → 薪資費用' },
+    { category_id: codeToId['insurance'], amount: insuranceDiff, description: desc + ' → 保險費' },
+    { category_id: codeToId['pension'], amount: pensionDiff, description: desc + ' → 退休金' },
+    { category_id: codeToId['bonus_accrual'], amount: bonusDiff, description: desc + ' → 年終預估' }
+  ];
+
+  for (var i = 0; i < inserts.length; i++) {
+    var ins = inserts[i];
+    if (!ins.category_id) continue;
+    await sb.from('finance_adjustments').insert({
+      fiscal_year: year, category_id: ins.category_id, description: ins.description,
+      amount: ins.amount, adjust_type: 'monthly', start_month: 1, end_month: 12,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+  }
+  alert('已新增「調薪 ' + name + '」調整到 ' + year + '年預算');
+}
 
 // ═══════════════════════════════════════════════════════════
 //  INIT
