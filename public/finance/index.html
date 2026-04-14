@@ -1999,14 +1999,33 @@ async function loadSalaryInfo() {
     var html = '';
     Object.keys(yearGroups).sort().forEach(function(yr) {
       var emps = yearGroups[yr];
-      // Count unique by name
-      var uniqueNames = {};
-      emps.forEach(function(e) { uniqueNames[e.name] = true; });
-      var uniqueCount = Object.keys(uniqueNames).length;
+
+      // Parse notes to compute monthly headcount
+      var monthCounts = new Array(12).fill(0);
+      var totalUnique = {};
+      emps.forEach(function(e) {
+        totalUnique[e.name] = true;
+        var firstM = 1, lastM = 12;
+        if (e.notes) {
+          var m = e.notes.match(/在職月份:(\d+)-(\d+)/);
+          if (m) { firstM = parseInt(m[1]); lastM = parseInt(m[2]); }
+        }
+        for (var mo = firstM; mo <= lastM; mo++) {
+          if (mo >= 1 && mo <= 12) monthCounts[mo-1]++;
+        }
+      });
+
+      var minCount = Math.min.apply(null, monthCounts.filter(function(c){return c>0;})) || 0;
+      var maxCount = Math.max.apply(null, monthCounts);
+      var totalEver = Object.keys(totalUnique).length;
 
       html += '<div style="background:var(--bg-row);padding:10px 14px;border-radius:8px;margin-bottom:8px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-      html += '<span style="font-weight:600;font-size:0.85rem">' + yr + '年薪資名冊 — ' + uniqueCount + ' 位員工</span>';
+      html += '<div>';
+      html += '<span style="font-weight:600;font-size:0.85rem">' + yr + '年薪資名冊</span>';
+      html += '<span class="text-muted" style="font-size:0.78rem;margin-left:8px">同時在職：' + minCount + '~' + maxCount + ' 人</span>';
+      html += '<span class="text-muted" style="font-size:0.72rem;margin-left:8px">（全年共 ' + totalEver + ' 人曾在職）</span>';
+      html += '</div>';
       if (isAdmin) {
         html += '<button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteSalaryYear(' + yr + ')">刪除此年度</button>';
       }
@@ -2206,9 +2225,10 @@ async function showSalaryDiffReport(newYear, newEmployees) {
   var newMap = {};
   newEmployees.forEach(function(e) { newMap[e.name] = e; });
 
-  var joined = [];  // in new but not prev
-  var left = [];    // in prev but not new
-  var changed = []; // in both but salary changed
+  var joined = [];      // in new but not prev
+  var left = [];        // in prev but not new
+  var changed = [];     // in both but salary changed
+  var midYearHires = []; // in prev, joined mid-year → needs full-year adjustment for next year
 
   newEmployees.forEach(function(e) {
     if (!prevMap[e.name]) {
@@ -2216,7 +2236,7 @@ async function showSalaryDiffReport(newYear, newEmployees) {
     } else {
       var prev = prevMap[e.name];
       var diff = (e.total_salary || e.base_salary) - (prev.total_salary || prev.base_salary);
-      if (Math.abs(diff) > 500) { // ignore tiny rounding differences
+      if (Math.abs(diff) > 500) {
         changed.push({ name: e.name, dept: e.department, prev: prev, curr: e, diff: diff });
       }
     }
@@ -2224,7 +2244,6 @@ async function showSalaryDiffReport(newYear, newEmployees) {
 
   prevEmployees.forEach(function(e) {
     if (!newMap[e.name]) {
-      // Parse notes to find departure month
       var depMonth = null;
       if (e.notes) {
         var depMatch = e.notes.match(/推測(\d+)月離職/);
@@ -2235,10 +2254,23 @@ async function showSalaryDiffReport(newYear, newEmployees) {
         }
       }
       left.push({ emp: e, departureMonth: depMonth });
+    } else {
+      // Check if this person joined mid-year in prev year
+      // If so, the 114 base only has partial costs → 115 needs extra months
+      if (e.notes) {
+        var rangeMatch = e.notes.match(/在職月份:(\d+)-(\d+)/);
+        if (rangeMatch) {
+          var firstMonth = parseInt(rangeMatch[1]);
+          if (firstMonth > 1) {
+            // This person joined mid-year → 115 budget base is missing months 1 to (firstMonth-1)
+            midYearHires.push({ emp: e, joinMonth: firstMonth, missingMonths: firstMonth - 1 });
+          }
+        }
+      }
     }
   });
 
-  if (joined.length === 0 && left.length === 0 && changed.length === 0) {
+  if (joined.length === 0 && left.length === 0 && changed.length === 0 && midYearHires.length === 0) {
     document.getElementById('salaryMsg').innerHTML += '<div class="upload-msg success" style="margin-top:8px">與 ' + prevYear + ' 年比較：無人員異動</div>';
     return;
   }
@@ -2257,6 +2289,7 @@ async function showSalaryDiffReport(newYear, newEmployees) {
   var parts = [];
   if (left.length) parts.push('<span class="text-red">' + left.length + ' 人離開</span>');
   if (joined.length) parts.push('<span class="text-green">' + joined.length + ' 人新進</span>');
+  if (midYearHires.length) parts.push('<span class="text-orange">' + midYearHires.length + ' 人中途到職需補足</span>');
   if (changed.length) parts.push('<span class="text-blue">' + changed.length + ' 人薪資異動</span>');
   html += '<div style="margin-bottom:12px;font-size:0.85rem">' + parts.join(' ｜ ') + '</div>';
 
@@ -2325,6 +2358,26 @@ async function showSalaryDiffReport(newYear, newEmployees) {
       html += '<td class="text-right">' + fmt(c.curr.total_salary || c.curr.base_salary) + '</td>';
       html += '<td class="text-right ' + diffClass + '">' + (c.diff > 0 ? '+' : '') + fmt(c.diff) + '</td>';
       html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyDiffSalaryChange(\'' + c.name + '\',' + c.diff + ',\'' + (c.dept||'') + '\')">加入調薪調整</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Mid-year hires from prev year → need full-year cost adjustment
+  if (midYearHires.length > 0) {
+    html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--orange);margin-bottom:4px">📌 ' + prevYear + '年中途到職 → ' + newYear + '年需補足整年成本</div>';
+    html += '<div class="text-muted" style="font-size:0.75rem;margin-bottom:8px">' + prevYear + '年預算基底只含這些人到職後的月份，' + newYear + '年他們會在職整年，需補上缺少的月份成本</div>';
+    html += '<table style="font-size:0.82rem"><thead><tr><th>姓名</th><th>部門</th><th class="text-right">月薪(均)</th><th class="text-right">雇主成本/月</th><th>' + prevYear + '年到職月</th><th>需補月數</th><th>建議調整</th><th></th></tr></thead><tbody>';
+    midYearHires.forEach(function(item) {
+      var e = item.emp;
+      var salary = e.total_salary || e.base_salary;
+      html += '<tr><td><strong>' + e.name + '</strong></td><td>' + (e.department||'') + '</td>';
+      html += '<td class="text-right">' + fmt(salary) + '</td>';
+      html += '<td class="text-right">' + fmt(e.employer_total) + '</td>';
+      html += '<td style="color:var(--orange)">' + prevYear + '年' + item.joinMonth + '月</td>';
+      html += '<td style="color:var(--orange)">' + item.missingMonths + '個月</td>';
+      html += '<td style="font-size:0.75rem;color:var(--text-muted)">' + newYear + '年 1~' + (item.joinMonth-1) + '月 補足</td>';
+      html += '<td><button class="btn-sm" style="font-size:0.7rem;padding:2px 8px" onclick="applyMidYearHireAdjust(\'' + e.name + '\',' + salary + ',' + (e.employer_labor||0) + ',' + (e.employer_health||0) + ',' + (e.employer_pension||0) + ',' + (e.bonus||0) + ',\'' + (e.department||'') + '\',' + item.joinMonth + ',' + newYear + ')">加入補足調整</button></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2448,6 +2501,33 @@ async function applyDiffSalaryChange(name, diff, dept) {
     });
   }
   alert('已新增「調薪 ' + name + '」調整到 ' + year + '年預算');
+}
+
+async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonus, dept, joinMonth, year) {
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  var endMonth = joinMonth - 1; // Fill months 1 to (joinMonth-1)
+  var desc = '補足 ' + name + '（' + dept + '）' + (year-1) + '年' + joinMonth + '月到職，補1~' + endMonth + '月';
+  var items = [
+    { code: 'salary', amount: salary, suffix: '薪資費用' },
+    { code: 'insurance', amount: (labor + health) || Math.round(salary * 0.1665), suffix: '保險費' },
+    { code: 'pension', amount: pension || Math.round(salary * 0.06), suffix: '退休金' },
+    { code: 'bonus_accrual', amount: Math.round((bonus || salary) / 12), suffix: '年終預估' }
+  ];
+
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!codeToId[item.code]) continue;
+    await sb.from('finance_adjustments').insert({
+      fiscal_year: year, category_id: codeToId[item.code],
+      description: desc + ' → ' + item.suffix,
+      amount: item.amount, adjust_type: 'monthly',
+      start_month: 1, end_month: endMonth,
+      created_by: currentLawyer ? currentLawyer.id : null
+    });
+  }
+  alert('已補足「' + name + '」' + year + '年 1~' + endMonth + '月成本');
 }
 
 // ═══════════════════════════════════════════════════════════
