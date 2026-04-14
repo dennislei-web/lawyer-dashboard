@@ -68,6 +68,11 @@
       --ghost-hover-bg: rgba(0,0,0,0.08);
     }
 
+    /* Embed mode: hide header when loaded in iframe */
+    .embed-mode .header { display: none !important; }
+    .embed-mode #loginPage { display: none !important; }
+    .embed-mode #dashboard { display: block !important; }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
@@ -1564,6 +1569,10 @@
 </div>
 
 <script>
+// Embed mode detection
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
 // ===================== CONFIG =====================
 const SUPABASE_URL     = 'https://zpbkeyhxyykbvownrngf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
