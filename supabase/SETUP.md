@@ -12,8 +12,9 @@
 ## 2. 建立資料表
 
 1. 進入 Supabase Dashboard → SQL Editor
-2. 貼上 `schema.sql` 的內容並執行
-3. 貼上 `seed.sql` 的內容並執行（記得先修改律師名單）
+2. 依時間戳順序執行 `migrations/` 資料夾內的 SQL 檔案（可參考 `migrations/README.md`）
+   - 初次建置：從 `20250101000000_initial_schema.sql` 開始依序執行
+   - 新加入的 migration 也是按時間戳順序
 
 ## 3. 建立 Auth 使用者
 
