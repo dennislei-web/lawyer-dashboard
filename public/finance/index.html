@@ -848,10 +848,16 @@ function renderSummaryTable(budgetMap, actualMap, maxActualMonth) {
 // ═══════════════════════════════════════════════════════════
 var adjustments = []; // finance_adjustments rows for current year
 
+// Salary-related category codes that should use employee data as base
+var SALARY_CODES = ['salary', 'insurance', 'pension', 'bonus_accrual'];
+
 async function loadBudgetData() {
   var year = selectedYear;
   var histRows = await fetchFinanceData(year - 1, 'historical');
   var histMap = buildDataMap(histRows);
+
+  // Load current year employee data for salary baseline
+  var salaryBase = await computeSalaryBaseline(year);
 
   // Load adjustments
   if (sb) {
@@ -859,8 +865,8 @@ async function loadBudgetData() {
     adjustments = (r.data || []);
   }
 
-  // Compute budget = base (hist) + adjustments
-  var budgetMap = computeBudgetFromAdjustments(histMap, adjustments);
+  // Compute budget = base + salary override + adjustments
+  var budgetMap = computeBudgetFromAdjustments(histMap, adjustments, salaryBase);
 
   // Save computed budget to DB (so other tabs can use it)
   await saveBudgetToDb(year, budgetMap);
@@ -871,34 +877,100 @@ async function loadBudgetData() {
     actionsEl.innerHTML = '<button class="btn-primary" id="addPersonnelBtn" style="background:var(--blue)">+ 人員異動</button>' +
       '<button class="btn-primary" id="addAdjustBtn" style="margin-left:8px">+ 其他調整</button>';
     document.getElementById('addPersonnelBtn').addEventListener('click', function() {
-      if (histRows.length === 0) { alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表'); return; }
       showPersonnelChangeForm(year);
     });
     document.getElementById('addAdjustBtn').addEventListener('click', function() {
-      if (histRows.length === 0) { alert('請先到「歷史資料」上傳 ' + (year-1) + ' 年的損益表'); return; }
       showAddAdjustmentForm(year);
     });
   } else {
     actionsEl.innerHTML = '';
   }
 
+  var hasSalaryBase = salaryBase && salaryBase.totalMonthly > 0;
   var hasHist = histRows.length > 0;
-  document.getElementById('budgetHint').textContent = hasHist
-    ? '基底：' + (year-1) + '年歷史資料 + 下方調整項 = ' + year + '年預算'
-    : '尚無 ' + (year-1) + '年歷史資料，請先到「歷史資料」上傳';
+  var hintParts = [];
+  if (hasSalaryBase) hintParts.push('薪資基底：' + year + '年在職' + salaryBase.headcount + '人薪資');
+  if (hasHist) hintParts.push('其他費用：' + (year-1) + '年歷史');
+  if (adjustments.length > 0) hintParts.push('+ ' + adjustments.filter(function(a){return a.is_active}).length + ' 筆調整');
+  document.getElementById('budgetHint').textContent = hintParts.join(' ｜ ') || '請先上傳歷史資料或薪資表';
 
   renderBudgetGrid(histMap, budgetMap);
   renderAdjustmentLog(year);
 }
 
-function computeBudgetFromAdjustments(histMap, adjs) {
+// Compute salary baseline from current year's employee data
+async function computeSalaryBaseline(year) {
+  if (!sb) return null;
+  // Try current year employees first, then previous year
+  var r = await sb.from('finance_employees').select('*').eq('fiscal_year', year).eq('is_active', true);
+  var emps = r.data || [];
+  if (emps.length === 0) {
+    r = await sb.from('finance_employees').select('*').eq('fiscal_year', year - 1).eq('is_active', true);
+    emps = r.data || [];
+  }
+  if (emps.length === 0) return null;
+
+  // Only count people who are active at start of year (first_month = 1 or full-year)
+  // For mid-year hires: they're already included since we have their average salary
+  var totalSalary = 0, totalInsurance = 0, totalPension = 0, totalBonus = 0;
+  var headcount = 0;
+
+  emps.forEach(function(e) {
+    // Check if employee was active at the start (month 1)
+    var firstMonth = 1;
+    if (e.notes) {
+      var m = e.notes.match(/在職月份:(\d+)-/);
+      if (m) firstMonth = parseInt(m[1]);
+    }
+    // Only include if they were active in month 1 (or it's the current year's data)
+    if (e.fiscal_year === year || firstMonth <= 1) {
+      totalSalary += (e.total_salary || e.base_salary || 0);
+      totalInsurance += ((e.employer_labor || 0) + (e.employer_health || 0));
+      totalPension += (e.employer_pension || 0);
+      totalBonus += Math.round((e.bonus || e.total_salary || e.base_salary || 0) / 12);
+      headcount++;
+    }
+  });
+
+  if (headcount === 0) return null;
+
+  // Map to category IDs
+  var codeToId = {};
+  categories.forEach(function(c) { codeToId[c.code] = c.id; });
+
+  return {
+    headcount: headcount,
+    totalMonthly: totalSalary + totalInsurance + totalPension + totalBonus,
+    byCategoryId: {
+      [codeToId['salary']]: totalSalary,
+      [codeToId['insurance']]: totalInsurance,
+      [codeToId['pension']]: totalPension,
+      [codeToId['bonus_accrual']]: totalBonus
+    }
+  };
+}
+
+function computeBudgetFromAdjustments(histMap, adjs, salaryBase) {
   // Start with historical as base
   var budget = {};
+  var salaryCatIds = {};
+  if (salaryBase && salaryBase.byCategoryId) {
+    Object.keys(salaryBase.byCategoryId).forEach(function(catId) { if (catId && catId !== 'undefined') salaryCatIds[catId] = true; });
+  }
+
   categories.forEach(function(cat) {
     if (cat.is_subtotal) return;
     budget[cat.id] = {};
-    var hm = histMap[cat.id] || {};
-    for (var mo = 1; mo <= 12; mo++) budget[cat.id][mo] = hm[mo] || 0;
+
+    // For salary-related categories: use employee data as base (same every month)
+    if (salaryBase && salaryCatIds[cat.id]) {
+      var monthlyAmount = salaryBase.byCategoryId[cat.id] || 0;
+      for (var mo = 1; mo <= 12; mo++) budget[cat.id][mo] = monthlyAmount;
+    } else {
+      // For non-salary categories: use historical data
+      var hm = histMap[cat.id] || {};
+      for (var mo = 1; mo <= 12; mo++) budget[cat.id][mo] = hm[mo] || 0;
+    }
   });
 
   // Apply active adjustments
