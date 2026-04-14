@@ -464,7 +464,7 @@
             <button class="btn-primary" id="salaryUploadBtn">上傳薪資表</button>
           </div>
           <div id="salaryMsg"></div>
-          <div id="salaryCount" class="text-muted" style="font-size:0.8rem;margin-top:8px"></div>
+          <div id="salaryInfo" style="margin-top:12px"></div>
         </div>
       </div>
       <div class="filter-bar">
@@ -563,7 +563,7 @@ async function showDashboard() {
     initAllYearBtns();
     await loadOverviewData();
     loadEmployees(selectedYear).catch(function(){}); // background
-    loadEmployeeCount(); // background
+    loadSalaryInfo(); // background
   } catch(e) { console.error('showDashboard error:', e); }
 }
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -1978,14 +1978,49 @@ async function loadEmployees(year) {
   return employeeList;
 }
 
-async function loadEmployeeCount() {
+async function loadSalaryInfo() {
   if (!sb) return;
   try {
-    var r = await sb.from('finance_employees').select('id');
-    var cnt = (r.data || []).length;
-    var el = document.getElementById('salaryCount');
-    if (el) el.textContent = cnt > 0 ? '目前有 ' + cnt + ' 位員工薪資資料' : '';
+    var el = document.getElementById('salaryInfo');
+    if (!el) return;
+
+    // Get all employees grouped by year
+    var r = await sb.from('finance_employees').select('*').eq('is_active', true).order('fiscal_year,department,name');
+    var allEmps = r.data || [];
+    if (allEmps.length === 0) { el.innerHTML = ''; return; }
+
+    // Group by year
+    var yearGroups = {};
+    allEmps.forEach(function(e) {
+      if (!yearGroups[e.fiscal_year]) yearGroups[e.fiscal_year] = [];
+      yearGroups[e.fiscal_year].push(e);
+    });
+
+    var html = '';
+    Object.keys(yearGroups).sort().forEach(function(yr) {
+      var emps = yearGroups[yr];
+      // Count unique by name
+      var uniqueNames = {};
+      emps.forEach(function(e) { uniqueNames[e.name] = true; });
+      var uniqueCount = Object.keys(uniqueNames).length;
+
+      html += '<div style="background:var(--bg-row);padding:10px 14px;border-radius:8px;margin-bottom:8px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span style="font-weight:600;font-size:0.85rem">' + yr + '年薪資名冊 — ' + uniqueCount + ' 位員工</span>';
+      if (isAdmin) {
+        html += '<button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:2px 8px;font-size:0.7rem" onclick="deleteSalaryYear(' + yr + ')">刪除此年度</button>';
+      }
+      html += '</div></div>';
+    });
+
+    el.innerHTML = html;
   } catch(e) { /* ignore */ }
+}
+
+async function deleteSalaryYear(year) {
+  if (!confirm('確定要刪除 ' + year + ' 年的全部薪資名冊？')) return;
+  await sb.from('finance_employees').delete().eq('fiscal_year', year);
+  loadSalaryInfo();
 }
 
 document.getElementById('salaryUploadBtn').addEventListener('click', async function() {
@@ -2106,8 +2141,8 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     }
 
     employeeList = employees;
-    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！從 ' + lastSheet + ' 解析 ' + employees.length + ' 位員工薪資</div>';
-    document.getElementById('salaryCount').textContent = '目前 ' + year + ' 年共 ' + employees.length + ' 位員工資料';
+    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！掃描 ' + monthSheets.length + ' 個月份，解析 ' + employees.length + ' 位員工薪資</div>';
+    loadSalaryInfo();
 
     // Compare with previous year
     await showSalaryDiffReport(year, employees);
