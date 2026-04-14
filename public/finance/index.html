@@ -2160,8 +2160,10 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
 
         monthEmployees[ms.month].push({
           name: name,
+          base: baseSalary,
           salary: ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : baseSalary,
-          empTotal: ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0
+          empTotal: ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0,
+          dept: ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : ''
         });
 
         if (!personData[name]) {
@@ -2278,10 +2280,41 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     currList.forEach(function(e) { currMap[e.name] = e; });
 
     prevList.forEach(function(e) {
-      if (!currMap[e.name]) allLeft.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal, dept: e.dept || '' });
+      if (!currMap[e.name]) {
+        // Get base salary from the month before leaving
+        var base = e.base || 0;
+        // Compute average from all months this person was active
+        var avgSalary = e.salary, avgEmpTotal = e.empTotal;
+        var allMonthsData = [];
+        monthSheets.forEach(function(ms2) {
+          var mList = monthEmployees[ms2.month] || [];
+          var found = mList.find(function(x) { return x.name === e.name; });
+          if (found) allMonthsData.push(found);
+        });
+        if (allMonthsData.length > 0) {
+          avgSalary = Math.round(allMonthsData.reduce(function(s,x){return s+x.salary},0) / allMonthsData.length);
+          avgEmpTotal = Math.round(allMonthsData.reduce(function(s,x){return s+x.empTotal},0) / allMonthsData.length);
+        }
+        allLeft.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal,
+          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, dept: e.dept || '' });
+      }
     });
     currList.forEach(function(e) {
-      if (!prevMap[e.name]) allJoined.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal, dept: e.dept || '' });
+      if (!prevMap[e.name]) {
+        var avgSalary = e.salary, avgEmpTotal = e.empTotal;
+        var allMonthsData = [];
+        monthSheets.forEach(function(ms2) {
+          var mList = monthEmployees[ms2.month] || [];
+          var found = mList.find(function(x) { return x.name === e.name; });
+          if (found) allMonthsData.push(found);
+        });
+        if (allMonthsData.length > 0) {
+          avgSalary = Math.round(allMonthsData.reduce(function(s,x){return s+x.salary},0) / allMonthsData.length);
+          avgEmpTotal = Math.round(allMonthsData.reduce(function(s,x){return s+x.empTotal},0) / allMonthsData.length);
+        }
+        allJoined.push({ name: e.name, month: currMo, salary: e.salary, empTotal: e.empTotal,
+          base: e.base || 0, avgSalary: avgSalary, avgEmpTotal: avgEmpTotal, dept: e.dept || '' });
+      }
     });
   }
 
@@ -2306,52 +2339,62 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   if (allLeft.length > 0) {
     html += '<div style="margin-bottom:16px">';
     html += '<div style="font-weight:600;color:var(--red);margin-bottom:6px">👋 離職（' + allLeft.length + ' 人）</div>';
-    html += '<table style="font-size:0.82rem;width:100%"><thead><tr>';
+    html += '<table style="font-size:0.78rem;width:100%"><thead><tr>';
     html += '<th style="width:30px"><input type="checkbox" id="checkAllLeft" checked></th>';
-    html += '<th>姓名</th><th>部門</th><th>離職月</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th class="text-right">調整期間</th><th class="text-right">年度影響</th>';
+    html += '<th>姓名</th><th>部門</th><th>離職月</th><th class="text-right">年均月薪</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
     html += '</tr></thead><tbody>';
     allLeft.forEach(function(e, idx) {
       var moRemain = 12 - e.month + 1;
-      var impact = e.empTotal * moRemain;
+      var defaultVal = e.avgSalary || e.salary;
+      var impact = defaultVal * moRemain;
       totalSavings += impact;
       html += '<tr>';
       html += '<td><input type="checkbox" class="chk-left" data-idx="' + idx + '" checked></td>';
       html += '<td><strong>' + e.name + '</strong></td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--orange)">' + e.month + '月</td>';
-      html += '<td class="text-right">' + fmt(e.salary) + '</td>';
-      html += '<td class="text-right">' + fmt(e.empTotal) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.avgSalary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.avgSalary) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.salary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.salary) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.base + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.base) + '</td>';
+      html += '<td class="text-right"><input class="cell-input sal-input" data-idx="' + idx + '" data-type="left" value="' + defaultVal + '" style="width:80px;text-align:right"></td>';
       html += '<td class="text-right">' + e.month + '~12月</td>';
-      html += '<td class="text-right text-green">-' + fmtCurrency(impact) + '</td>';
+      html += '<td class="text-right text-green sal-impact" data-months="' + moRemain + '">-' + fmtCurrency(impact) + '</td>';
       html += '</tr>';
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊「年均月薪」「當月薪資」「本薪」可快速填入採用金額，或直接輸入自訂金額</div>';
+    html += '</div>';
   }
 
   // JOINED
   if (allJoined.length > 0) {
     html += '<div style="margin-bottom:16px">';
     html += '<div style="font-weight:600;color:var(--green);margin-bottom:6px">🆕 新進（' + allJoined.length + ' 人）</div>';
-    html += '<table style="font-size:0.82rem;width:100%"><thead><tr>';
+    html += '<table style="font-size:0.78rem;width:100%"><thead><tr>';
     html += '<th style="width:30px"><input type="checkbox" id="checkAllJoin" checked></th>';
-    html += '<th>姓名</th><th>部門</th><th>到職月</th><th class="text-right">月薪</th><th class="text-right">雇主成本/月</th><th class="text-right">調整期間</th><th class="text-right">年度影響</th>';
+    html += '<th>姓名</th><th>部門</th><th>到職月</th><th class="text-right">年均月薪</th><th class="text-right">當月薪資</th><th class="text-right">本薪</th><th class="text-right" style="color:var(--gold-light)">採用金額</th><th class="text-right">期間</th><th class="text-right">年度影響</th>';
     html += '</tr></thead><tbody>';
     allJoined.forEach(function(e, idx) {
       var moRemain = 12 - e.month + 1;
-      var impact = e.empTotal * moRemain;
+      var defaultVal = e.avgSalary || e.salary;
+      var impact = defaultVal * moRemain;
       totalAdded += impact;
       html += '<tr>';
       html += '<td><input type="checkbox" class="chk-join" data-idx="' + idx + '" checked></td>';
       html += '<td><strong>' + e.name + '</strong></td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--green)">' + e.month + '月</td>';
-      html += '<td class="text-right">' + fmt(e.salary) + '</td>';
-      html += '<td class="text-right">' + fmt(e.empTotal) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.avgSalary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.avgSalary) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.salary + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.salary) + '</td>';
+      html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.base + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + fmt(e.base) + '</td>';
+      html += '<td class="text-right"><input class="cell-input sal-input" data-idx="' + idx + '" data-type="join" value="' + defaultVal + '" style="width:80px;text-align:right"></td>';
       html += '<td class="text-right">' + e.month + '~12月</td>';
-      html += '<td class="text-right text-red">+' + fmtCurrency(impact) + '</td>';
+      html += '<td class="text-right text-red sal-impact" data-months="' + moRemain + '">+' + fmtCurrency(impact) + '</td>';
       html += '</tr>';
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+    html += '<div class="text-muted" style="font-size:0.7rem;margin-top:4px">💡 點擊「年均月薪」「當月薪資」「本薪」可快速填入採用金額，或直接輸入自訂金額</div>';
+    html += '</div>';
   }
 
   // Summary
@@ -2391,11 +2434,20 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   document.getElementById('applySelectedBtn').addEventListener('click', async function() {
     var selectedLeft = [];
     div.querySelectorAll('.chk-left:checked').forEach(function(cb) {
-      selectedLeft.push(window._confirmedLeft[parseInt(cb.getAttribute('data-idx'))]);
+      var idx = parseInt(cb.getAttribute('data-idx'));
+      var e = Object.assign({}, window._confirmedLeft[idx]);
+      // Use custom salary from input
+      var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="left"]');
+      if (salInput) e.useSalary = parseInt(salInput.value) || e.salary;
+      selectedLeft.push(e);
     });
     var selectedJoin = [];
     div.querySelectorAll('.chk-join:checked').forEach(function(cb) {
-      selectedJoin.push(window._confirmedJoined[parseInt(cb.getAttribute('data-idx'))]);
+      var idx = parseInt(cb.getAttribute('data-idx'));
+      var e = Object.assign({}, window._confirmedJoined[idx]);
+      var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="join"]');
+      if (salInput) e.useSalary = parseInt(salInput.value) || e.salary;
+      selectedJoin.push(e);
     });
 
     var total = selectedLeft.length + selectedJoin.length;
@@ -2408,15 +2460,16 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     var count = 0;
     var rates = PERSONNEL_COST_RATES;
 
-    // Apply left
+    // Apply left (use custom salary)
     for (var i = 0; i < selectedLeft.length; i++) {
       var e = selectedLeft[i];
-      var desc = '離職 ' + e.name + '（' + e.dept + '）月薪' + fmtCurrency(e.salary);
+      var sal = e.useSalary || e.salary;
+      var desc = '離職 ' + e.name + '（' + e.dept + '）月薪' + fmtCurrency(sal);
       var items = [
-        { code: 'salary', amount: -e.salary },
-        { code: 'insurance', amount: -Math.round(e.salary * rates.insurance_rate) },
-        { code: 'pension', amount: -Math.round(e.salary * rates.pension_rate) },
-        { code: 'bonus_accrual', amount: -Math.round(e.salary / 12) }
+        { code: 'salary', amount: -sal },
+        { code: 'insurance', amount: -Math.round(sal * rates.insurance_rate) },
+        { code: 'pension', amount: -Math.round(sal * rates.pension_rate) },
+        { code: 'bonus_accrual', amount: -Math.round(sal / 12) }
       ];
       for (var j = 0; j < items.length; j++) {
         if (!codeToId[items[j].code]) continue;
@@ -2432,15 +2485,16 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       this.textContent = '處理中... (' + count + '/' + total + ')';
     }
 
-    // Apply joined
+    // Apply joined (use custom salary)
     for (var i = 0; i < selectedJoin.length; i++) {
       var e = selectedJoin[i];
-      var desc = '新進 ' + e.name + '（' + e.dept + '）月薪' + fmtCurrency(e.salary);
+      var sal = e.useSalary || e.salary;
+      var desc = '新進 ' + e.name + '（' + e.dept + '）月薪' + fmtCurrency(sal);
       var items = [
-        { code: 'salary', amount: e.salary },
-        { code: 'insurance', amount: Math.round(e.salary * rates.insurance_rate) },
-        { code: 'pension', amount: Math.round(e.salary * rates.pension_rate) },
-        { code: 'bonus_accrual', amount: Math.round(e.salary / 12) }
+        { code: 'salary', amount: sal },
+        { code: 'insurance', amount: Math.round(sal * rates.insurance_rate) },
+        { code: 'pension', amount: Math.round(sal * rates.pension_rate) },
+        { code: 'bonus_accrual', amount: Math.round(sal / 12) }
       ];
       for (var j = 0; j < items.length; j++) {
         if (!codeToId[items[j].code]) continue;
