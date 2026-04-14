@@ -1401,8 +1401,7 @@ function renderAdjustmentLog(year) {
   // Group each adjustment entry (by person) into groups first
   var groups = [];
   var personnelMap = {};
-  var otherIncrease = { label: '其他增加', adjs: [], totalImpact: 0 };
-  var otherDecrease = { label: '其他減少', adjs: [], totalImpact: 0 };
+  // (other adjustments are added individually to groups)
 
   activeAdjs.forEach(function(adj) {
     var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
@@ -1417,8 +1416,11 @@ function renderAdjustmentLog(year) {
       var g = groups[personnelMap[key]];
       g.adjs.push(adj); g.totalImpact += impact;
     } else {
-      if (adj.amount >= 0) { otherIncrease.adjs.push(adj); otherIncrease.totalImpact += impact; }
-      else { otherDecrease.adjs.push(adj); otherDecrease.totalImpact += impact; }
+      // Each non-personnel adjustment shown individually with its description
+      var cat = catIdMap[adj.category_id];
+      var catName = cat ? cat.name : '';
+      var label = adj.description || catName || '其他調整';
+      groups.push({ label: '📋 ' + label, action: '', empName: '', adjs: [adj], totalImpact: impact, isOther: true });
     }
   });
 
@@ -1438,8 +1440,7 @@ function renderAdjustmentLog(year) {
   }
 
   groups.forEach(classifyGroup);
-  if (otherIncrease.adjs.length > 0) classifyGroup(otherIncrease);
-  if (otherDecrease.adjs.length > 0) classifyGroup(otherDecrease);
+  // (other adjustments already in groups individually)
 
   var totalImpact = 0;
   activeAdjs.forEach(function(a) {
