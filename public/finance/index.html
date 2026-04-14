@@ -861,8 +861,9 @@ async function loadBudgetData() {
 
   // Load adjustments
   if (sb) {
-    var r = await sb.from('finance_adjustments').select('*').eq('fiscal_year', year).order('created_at');
+    var r = await sb.from('finance_adjustments').select('*').eq('fiscal_year', year).eq('is_active', true).order('created_at');
     adjustments = (r.data || []);
+    console.log('Loaded ' + adjustments.length + ' active adjustments for year ' + year);
   }
 
   // Compute budget = base + salary override + adjustments
@@ -2419,12 +2420,13 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       ];
       for (var j = 0; j < items.length; j++) {
         if (!codeToId[items[j].code]) continue;
-        await sb.from('finance_adjustments').insert({
+        var res = await sb.from('finance_adjustments').insert({
           fiscal_year: year, category_id: codeToId[items[j].code],
           description: desc, amount: items[j].amount, adjust_type: 'monthly',
           start_month: e.month, end_month: 12,
           created_by: currentLawyer ? currentLawyer.id : null
         });
+        if (res.error) { console.error('insert fail:', res.error); alert('寫入失敗：' + res.error.message); return; }
       }
       count++;
       this.textContent = '處理中... (' + count + '/' + total + ')';
@@ -2442,12 +2444,13 @@ function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       ];
       for (var j = 0; j < items.length; j++) {
         if (!codeToId[items[j].code]) continue;
-        await sb.from('finance_adjustments').insert({
+        var res = await sb.from('finance_adjustments').insert({
           fiscal_year: year, category_id: codeToId[items[j].code],
           description: desc, amount: items[j].amount, adjust_type: 'monthly',
           start_month: e.month, end_month: 12,
           created_by: currentLawyer ? currentLawyer.id : null
         });
+        if (res.error) { console.error('insert fail:', res.error); alert('寫入失敗：' + res.error.message); return; }
       }
       count++;
       this.textContent = '處理中... (' + count + '/' + total + ')';
