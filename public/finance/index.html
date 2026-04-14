@@ -2061,21 +2061,50 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
       return true;
     }
 
+    // Auto-detect column indices from header row
+    var colIdx = null;
+    function detectColumns(json) {
+      if (colIdx) return colIdx;
+      // Scan first 3 rows for header patterns
+      for (var r = 0; r < Math.min(3, json.length); r++) {
+        var row = json[r];
+        var idx = { name: -1, dept: -1, baseSalary: -1, totalSalary: -1, totalPay: -1, labor: -1, health: -1, pension: -1, empTotal: -1 };
+        for (var c = 0; c < row.length; c++) {
+          var h = (row[c] || '').toString().trim();
+          if (h === '姓名') idx.name = c;
+          else if (h === '部門') idx.dept = c;
+          else if (h.includes('本薪') || h === '本薪(1)') idx.baseSalary = c;
+          else if (h.includes('薪資小計') || h === '薪資小計(11)' || h === '薪資小計 (11)') idx.totalSalary = c;
+          else if (h === '合計(16)' || h === '合計（16）' || h === '合計') idx.totalPay = c;
+          else if (h.includes('事務所負擔勞保') || h.includes('負擔勞保')) idx.labor = c;
+          else if (h.includes('事務所負擔健保') || h.includes('負擔健保')) idx.health = c;
+          else if (h.includes('事務所提撥勞退') || h.includes('提撥勞退')) idx.pension = c;
+          else if (h.includes('事務所支出合計') || h === '事務所支出合計(26)') idx.empTotal = c;
+        }
+        if (idx.name >= 0 && idx.baseSalary >= 0) { colIdx = idx; return idx; }
+      }
+      // Fallback to hardcoded positions
+      colIdx = { dept: 1, name: 2, baseSalary: 4, totalSalary: 14, totalPay: 19, labor: 27, health: 28, pension: 29, empTotal: 30 };
+      return colIdx;
+    }
+
     monthSheets.forEach(function(ms) {
       var ws = wb.Sheets[ms.name];
       var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      var ci = detectColumns(json);
+
       for (var i = 1; i < json.length; i++) {
         var row = json[i];
-        var name = (row[2] || '').toString().trim();
-        var baseSalary = parseFloat(row[4]) || 0;
+        var name = ci.name >= 0 ? (row[ci.name] || '').toString().trim() : '';
+        var baseSalary = ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
         if (!isValidName(name) || baseSalary < 10000) continue;
 
         if (!personData[name]) {
-          personData[name] = { months: [], dept: '', lastRow: null };
+          personData[name] = { months: [], dept: '', lastRow: null, ci: ci };
         }
         personData[name].months.push(ms.month);
-        personData[name].dept = (row[1] || '').toString().trim() || personData[name].dept;
-        // Always keep the latest month's full data
+        var dept = ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : '';
+        personData[name].dept = dept || personData[name].dept;
         personData[name].lastRow = row;
         personData[name].lastMonth = ms.month;
       }
@@ -2101,14 +2130,15 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     Object.keys(personData).forEach(function(name) {
       var pd = personData[name];
       var row = pd.lastRow;
-      if (!row) return;
-      var baseSalary = parseFloat(row[4]) || 0;
-      var totalSalary = parseFloat(row[14]) || 0;
-      var totalPay = parseFloat(row[19]) || 0;
-      var empLabor = parseFloat(row[27]) || 0;
-      var empHealth = parseFloat(row[28]) || 0;
-      var empPension = parseFloat(row[29]) || 0;
-      var empTotal = parseFloat(row[30]) || 0;
+      var ci = pd.ci || colIdx;
+      if (!row || !ci) return;
+      var baseSalary = ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
+      var totalSalary = ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : 0;
+      var totalPay = ci.totalPay >= 0 ? (parseFloat(row[ci.totalPay]) || 0) : 0;
+      var empLabor = ci.labor >= 0 ? (parseFloat(row[ci.labor]) || 0) : 0;
+      var empHealth = ci.health >= 0 ? (parseFloat(row[ci.health]) || 0) : 0;
+      var empPension = ci.pension >= 0 ? (parseFloat(row[ci.pension]) || 0) : 0;
+      var empTotal = ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0;
 
       // Determine first/last active month
       var activeMonths = pd.months.sort(function(a,b){return a-b;});
