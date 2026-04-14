@@ -2100,13 +2100,20 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
         if (!isValidName(name) || baseSalary < 10000) continue;
 
         if (!personData[name]) {
-          personData[name] = { months: [], dept: '', lastRow: null, ci: ci };
+          personData[name] = { months: [], dept: '', ci: ci, sums: { baseSalary:0, totalSalary:0, totalPay:0, labor:0, health:0, pension:0, empTotal:0 } };
         }
         personData[name].months.push(ms.month);
         var dept = ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : '';
         personData[name].dept = dept || personData[name].dept;
-        personData[name].lastRow = row;
-        personData[name].lastMonth = ms.month;
+        // Accumulate for averaging
+        var s = personData[name].sums;
+        s.baseSalary += ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
+        s.totalSalary += ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : 0;
+        s.totalPay += ci.totalPay >= 0 ? (parseFloat(row[ci.totalPay]) || 0) : 0;
+        s.labor += ci.labor >= 0 ? (parseFloat(row[ci.labor]) || 0) : 0;
+        s.health += ci.health >= 0 ? (parseFloat(row[ci.health]) || 0) : 0;
+        s.pension += ci.pension >= 0 ? (parseFloat(row[ci.pension]) || 0) : 0;
+        s.empTotal += ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0;
       }
     });
 
@@ -2129,16 +2136,17 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     var employees = [];
     Object.keys(personData).forEach(function(name) {
       var pd = personData[name];
-      var row = pd.lastRow;
-      var ci = pd.ci || colIdx;
-      if (!row || !ci) return;
-      var baseSalary = ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
-      var totalSalary = ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : 0;
-      var totalPay = ci.totalPay >= 0 ? (parseFloat(row[ci.totalPay]) || 0) : 0;
-      var empLabor = ci.labor >= 0 ? (parseFloat(row[ci.labor]) || 0) : 0;
-      var empHealth = ci.health >= 0 ? (parseFloat(row[ci.health]) || 0) : 0;
-      var empPension = ci.pension >= 0 ? (parseFloat(row[ci.pension]) || 0) : 0;
-      var empTotal = ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0;
+      if (!pd.sums) return;
+      var mc = pd.months.length; // active month count
+      if (mc === 0) return;
+      // Calculate monthly averages
+      var baseSalary = Math.round(pd.sums.baseSalary / mc);
+      var totalSalary = Math.round(pd.sums.totalSalary / mc);
+      var totalPay = Math.round(pd.sums.totalPay / mc);
+      var empLabor = Math.round(pd.sums.labor / mc);
+      var empHealth = Math.round(pd.sums.health / mc);
+      var empPension = Math.round(pd.sums.pension / mc);
+      var empTotal = Math.round(pd.sums.empTotal / mc);
 
       // Determine first/last active month
       var activeMonths = pd.months.sort(function(a,b){return a-b;});
