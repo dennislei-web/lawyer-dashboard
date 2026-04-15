@@ -1007,10 +1007,15 @@
       .header-right {
         width: 100%;
         justify-content: flex-end;
-        gap: 8px;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
       }
-      .user-name { font-size: 0.75rem; }
-      .header-right .btn { font-size: 0.72rem; padding: 3px 8px; }
+      .header-right::-webkit-scrollbar { display: none; }
+      .user-name { font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
+      .header-right .btn { font-size: 0.72rem; padding: 3px 8px; white-space: nowrap; flex-shrink: 0; }
 
       /* --- Page content --- */
       .page { padding: 12px; }

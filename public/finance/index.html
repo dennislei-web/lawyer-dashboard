@@ -284,16 +284,135 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* RESPONSIVE */
+    /* --- Tablet --- */
     @media (max-width: 900px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .chart-row { grid-template-columns: 1fr; }
+      .chart-container { height: 260px; }
+      .main { padding: 16px; }
+      #dashboardFrame { height: calc(100vh - 100px); }
     }
+
+    /* --- Mobile --- */
     @media (max-width: 640px) {
-      .kpi-row { grid-template-columns: 1fr; }
-      .header { padding: 0 12px; }
+      body { font-size: 13px; }
+
+      /* Header: two-row layout */
+      .header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 12px;
+        gap: 6px;
+      }
+      .header-left {
+        width: 100%;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .header-brand { font-size: 0.95rem; letter-spacing: 0.5px; }
+      .header-subtitle { display: none; }
+      .nav-links {
+        gap: 4px;
+        flex: 1;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-link {
+        padding: 4px 10px;
+        font-size: 0.72rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .header-right {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .header-right .btn-icon { font-size: 0.72rem; padding: 4px 8px; }
+      .user-badge { font-size: 0.72rem; padding: 3px 8px; white-space: nowrap; }
+
+      /* iframe: account for taller header */
+      #dashboardFrame { height: calc(100vh - 108px); }
+
+      /* Tabs: horizontal scroll */
+      .tabs { padding: 6px 12px; gap: 2px; -webkit-overflow-scrolling: touch; }
+      .tab-btn { padding: 6px 12px; font-size: 0.78rem; }
+
+      /* Main */
       .main { padding: 12px; }
-      .tabs { padding: 8px 12px; }
-      .filter-bar { flex-direction: column; align-items: stretch; }
+
+      /* KPI: 2 columns on phone */
+      .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+      .kpi-card { padding: 12px; }
+      .kpi-label { font-size: 0.7rem; margin-bottom: 4px; }
+      .kpi-value { font-size: 1.15rem; }
+      .kpi-sub { font-size: 0.68rem; }
+
+      /* Charts */
+      .chart-row { gap: 12px; margin-bottom: 16px; }
+      .chart-card { padding: 14px; }
+      .chart-title { font-size: 0.82rem; margin-bottom: 10px; }
+      .chart-container { height: 240px; }
+
+      /* Filter bar */
+      .filter-bar {
+        gap: 8px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+      }
+      .filter-bar .table-actions { margin-left: 0 !important; width: 100%; justify-content: flex-end; }
+      .year-btns { flex-wrap: wrap; gap: 4px; }
+      .year-btn { padding: 4px 10px; font-size: 0.75rem; }
+      .filter-select, .filter-input { font-size: 0.8rem; padding: 5px 10px; max-width: 100%; }
+
+      /* Tables */
+      .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
+      .table-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+      .table-title { font-size: 0.85rem; }
+      thead th { padding: 8px 10px; font-size: 0.7rem; }
+      tbody td { padding: 8px 10px; font-size: 0.78rem; }
+      .btn-sm { padding: 4px 10px; font-size: 0.72rem; }
+      .btn-primary { padding: 5px 12px; font-size: 0.75rem; }
+
+      /* Finance grid: keep sticky first column working, shrink padding */
+      .finance-grid th, .finance-grid td { padding: 5px 8px; font-size: 0.74rem; }
+      .finance-grid td:first-child { min-width: 130px; }
+      .finance-grid table { min-width: 900px; }
+      .cell-input { font-size: 0.72rem; padding: 2px 4px; }
+
+      /* Upload section */
+      .upload-section { padding: 16px; margin-bottom: 16px; }
+      .upload-title { font-size: 0.85rem; margin-bottom: 10px; }
+      .upload-row {
+        gap: 8px;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .upload-row select, .upload-row input, .upload-row button {
+        width: 100%;
+        font-size: 0.82rem !important;
+      }
+      .upload-row input[type="file"] {
+        padding: 6px 8px !important;
+      }
+
+      /* Login */
+      .login-card { padding: 28px 20px; max-width: 100%; }
+      .login-logo .firm-name { font-size: 1.3rem; letter-spacing: 1px; }
+    }
+
+    /* --- Very small (≤400px) --- */
+    @media (max-width: 400px) {
+      .kpi-row { gap: 8px; }
+      .kpi-value { font-size: 1rem; }
+      .header-brand { font-size: 0.85rem; }
+      .tab-btn { padding: 5px 10px; font-size: 0.72rem; }
+      .nav-link { font-size: 0.68rem; padding: 3px 8px; }
+      .chart-container { height: 220px; }
+      #dashboardFrame { height: calc(100vh - 104px); }
     }
   </style>
 </head>
