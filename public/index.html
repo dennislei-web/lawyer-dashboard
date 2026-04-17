@@ -1475,8 +1475,9 @@
 
       <!-- Step 1: ZIP file (optional) -->
       <div class="upload-step">
-        <div class="upload-step-label">步驟 1：上傳案件檔案 (ZIP，選填)</div>
-        <div class="upload-step-desc">將會議記錄與逐字稿打包成 ZIP 上傳。檔名格式：律師名_成案/未成案_日期_案件類型(會議記錄/逐字稿).docx</div>
+        <div class="upload-step-label">步驟 1：上傳會議記錄／逐字稿 ZIP（補內容用）</div>
+        <div class="upload-step-desc">將會議記錄與逐字稿打包成 ZIP 上傳。檔名格式：律師名_成案/未成案_日期_案件類型(會議記錄/逐字稿).docx<br>
+          <strong>⚠ 注意：</strong>ZIP 上傳<strong>只會把內容補到已存在的 CRM 案件</strong>（不新增案件、不改簽約/金額）。若 CRM 尚未同步該案件，請等 CRM 爬蟲跑完後再上傳。</div>
         <div class="upload-dropzone" id="zipDropzone">
           <div class="upload-icon">📁</div>
           <div>拖拉 ZIP 檔案到此處，或<label class="upload-browse" for="zipInput">點擊選擇</label></div>
@@ -3448,11 +3449,43 @@ async function parseUploadedFiles() {
     nameToId[entry[1].name] = entry[0];
   });
 
+  // 判斷這次是否為「純 ZIP 模式」（只補會議記錄/逐字稿到現有 CRM 案件）
+  var pureZipMode = !xlsxCases;
+
+  // 純 ZIP 模式需要 allCases 來匹配 CRM 案件，若仍在背景載入則提醒並中止
+  if (pureZipMode && (!allCases || allCases.length === 0)) {
+    alert('案件清單仍在背景載入中，請稍候 10 秒後再按「解析檔案」。');
+    btn.disabled = false;
+    btn.textContent = '解析檔案';
+    return;
+  }
+
   parsedCases.forEach(function(c) {
     c.lawyer_id = nameToId[c.lawyer_name] || null;
-    c.status = c.lawyer_id ? 'ready' : 'no_lawyer';
-    // 純 xlsx 模式不要求會議記錄
-    if (!xlsxCases && !c.meeting_record && !c.transcript) c.status = 'no_content';
+    if (!c.lawyer_id) { c.status = 'no_lawyer'; return; }
+
+    if (pureZipMode) {
+      // ZIP 模式：必須有內容
+      if (!c.meeting_record && !c.transcript) { c.status = 'no_content'; return; }
+
+      // 嘗試匹配 CRM 已存在的案件（只更新 meeting_record/transcript，不動其他欄位）
+      var match = findMatchingCrmCase(c, allCases);
+      if (match.kind === 'none') {
+        c.status = 'no_match';
+        c.match_info = 'CRM 查無同日案件';
+      } else if (match.kind === 'ambiguous') {
+        c.status = 'ambiguous';
+        c.match_info = '同日有 ' + match.matches.length + ' 個案件，無法判斷';
+        c.ambiguous_candidates = match.matches;
+      } else {
+        c.status = 'ready';
+        c.matched_case_id = match.matches[0].id;
+        c.matched_case_number = match.matches[0].case_number;
+      }
+    } else {
+      // xlsx 模式：直接 upsert 整筆案件
+      c.status = 'ready';
+    }
   });
 
   // 5. Show preview
@@ -3462,30 +3495,73 @@ async function parseUploadedFiles() {
   btn.textContent = '解析檔案';
 }
 
+// 在 allCases 中尋找匹配的 CRM 案件（for 純 ZIP 模式）
+function findMatchingCrmCase(c, cases) {
+  var sameDay = cases.filter(function(x) {
+    return x.lawyer_id === c.lawyer_id && x.case_date === c.case_date;
+  });
+  if (sameDay.length === 0) return { kind: 'none', matches: [] };
+  if (sameDay.length === 1) return { kind: 'one', matches: sameDay };
+
+  // 同日多筆：用 case_type 收斂
+  var ct = (c.case_type || '').trim();
+  var byType = sameDay.filter(function(x) {
+    var xt = (x.case_type || '').trim();
+    if (!ct || !xt) return false;
+    return xt === ct || xt.indexOf(ct) >= 0 || ct.indexOf(xt) >= 0;
+  });
+  if (byType.length === 1) return { kind: 'one', matches: byType };
+
+  // type 收斂後還是多筆，再用 is_signed 收斂
+  if (byType.length > 1) {
+    var bySign = byType.filter(function(x) { return x.is_signed === c.is_signed; });
+    if (bySign.length === 1) return { kind: 'one', matches: bySign };
+    return { kind: 'ambiguous', matches: byType };
+  }
+
+  // type 都對不上 → 全部同日候選列出
+  return { kind: 'ambiguous', matches: sameDay };
+}
+
 // --- Render preview table ---
 function renderUploadPreview() {
   var preview = document.getElementById('uploadPreview');
   preview.style.display = 'block';
 
-  var ready = parsedCases.filter(function(c) { return c.status === 'ready'; }).length;
-  var noLawyer = parsedCases.filter(function(c) { return c.status === 'no_lawyer'; }).length;
-  var noContent = parsedCases.filter(function(c) { return c.status === 'no_content'; }).length;
+  var counts = { ready: 0, no_lawyer: 0, no_content: 0, no_match: 0, ambiguous: 0 };
+  parsedCases.forEach(function(c) { if (counts[c.status] !== undefined) counts[c.status]++; });
 
   document.getElementById('uploadStats').innerHTML =
     '<div style="display:flex;gap:20px;flex-wrap:wrap;">' +
     '<div style="font-size:0.9rem;">總案件：<strong>' + parsedCases.length + '</strong></div>' +
-    '<div style="font-size:0.9rem;color:var(--green);">可匯入：<strong>' + ready + '</strong></div>' +
-    (noLawyer > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">律師不存在：<strong>' + noLawyer + '</strong></div>' : '') +
-    (noContent > 0 ? '<div style="font-size:0.9rem;color:var(--red);">無內容：<strong>' + noContent + '</strong></div>' : '') +
-    '</div>';
+    '<div style="font-size:0.9rem;color:var(--green);">可匯入：<strong>' + counts.ready + '</strong></div>' +
+    (counts.no_lawyer > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">律師不存在：<strong>' + counts.no_lawyer + '</strong></div>' : '') +
+    (counts.no_content > 0 ? '<div style="font-size:0.9rem;color:var(--red);">無內容：<strong>' + counts.no_content + '</strong></div>' : '') +
+    (counts.no_match > 0 ? '<div style="font-size:0.9rem;color:var(--red);">CRM 查無：<strong>' + counts.no_match + '</strong></div>' : '') +
+    (counts.ambiguous > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同日多筆無法判斷：<strong>' + counts.ambiguous + '</strong></div>' : '') +
+    '</div>' +
+    ((counts.no_match > 0 || counts.ambiguous > 0)
+      ? '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.5;">CRM 查無：請等 CRM 爬蟲把該案件同步過來後再上傳會議記錄。同日多筆無法判斷：同一律師同一天有多筆案件且案件類型無法對上，請人工確認。</div>'
+      : '');
 
   var tbody = document.getElementById('uploadPreviewBody');
   tbody.innerHTML = parsedCases.map(function(c) {
-    var statusHtml = c.status === 'ready'
-      ? '<span style="color:var(--green);">可匯入</span>'
-      : c.status === 'no_lawyer'
-      ? '<span style="color:var(--orange);">律師不存在</span>'
-      : '<span style="color:var(--red);">無內容</span>';
+    var statusHtml;
+    if (c.status === 'ready') {
+      statusHtml = c.matched_case_number
+        ? '<span style="color:var(--green);">可匯入</span><div style="font-size:0.7rem;color:var(--text-muted);">→ ' + escHtml(c.matched_case_number) + '</div>'
+        : '<span style="color:var(--green);">可匯入</span>';
+    } else if (c.status === 'no_lawyer') {
+      statusHtml = '<span style="color:var(--orange);">律師不存在</span>';
+    } else if (c.status === 'no_content') {
+      statusHtml = '<span style="color:var(--red);">無內容</span>';
+    } else if (c.status === 'no_match') {
+      statusHtml = '<span style="color:var(--red);">CRM 查無</span>';
+    } else if (c.status === 'ambiguous') {
+      statusHtml = '<span style="color:var(--orange);">' + escHtml(c.match_info || '無法判斷') + '</span>';
+    } else {
+      statusHtml = '<span style="color:var(--text-muted);">' + escHtml(c.status || '') + '</span>';
+    }
 
     return '<tr>' +
       '<td>' + escHtml(c.lawyer_name) + '</td>' +
@@ -3499,7 +3575,7 @@ function renderUploadPreview() {
   }).join('');
 
   var uploadBtn = document.getElementById('uploadBtn');
-  uploadBtn.style.display = ready > 0 ? '' : 'none';
+  uploadBtn.style.display = counts.ready > 0 ? '' : 'none';
   uploadBtn.disabled = false;
 }
 
@@ -3513,15 +3589,50 @@ async function submitUploadedCases() {
   progressSection.style.display = 'block';
 
   var readyCases = parsedCases.filter(function(c) { return c.status === 'ready'; });
-  var batchSize = 10;
-  var success = 0;
-  var errors = 0;
-  // 追蹤「(lawyer_id, YYYY-MM)」受影響組合，供後續重算 monthly_stats
-  var affectedPairs = new Set();
 
-  for (var i = 0; i < readyCases.length; i += batchSize) {
-    var batch = readyCases.slice(i, i + batchSize);
-    var rows = batch.map(function(c) {
+  // 分成兩組：
+  // - zipOnly：純 ZIP 模式、已匹配到 CRM 案件 → 只 update meeting_record/transcript
+  // - xlsxMode：xlsx 模式（CRM 手動匯入）→ 維持整筆 upsert 行為
+  var zipOnly = readyCases.filter(function(c) { return c.matched_case_id; });
+  var xlsxMode = readyCases.filter(function(c) { return !c.matched_case_id; });
+
+  var totalOps = readyCases.length;
+  var done = 0, success = 0, errors = 0;
+
+  function updateProgress() {
+    var pct = totalOps > 0 ? Math.round(done / totalOps * 100) : 0;
+    document.getElementById('uploadProgressFill').style.width = pct + '%';
+    document.getElementById('uploadProgressText').textContent = done + ' / ' + totalOps + ' 筆處理完成';
+  }
+
+  // --- 純 ZIP 模式：逐筆 UPDATE（只改 meeting_record / transcript） ---
+  for (var i = 0; i < zipOnly.length; i++) {
+    var c = zipOnly[i];
+    var patch = {};
+    if (c.meeting_record) patch.meeting_record = c.meeting_record;
+    if (c.transcript) patch.transcript = c.transcript;
+    if (Object.keys(patch).length === 0) { done++; continue; }
+
+    var upd = await sb
+      .from('consultation_cases')
+      .update(patch)
+      .eq('id', c.matched_case_id);
+
+    if (upd.error) {
+      console.error('update error for case', c.matched_case_id, upd.error);
+      errors++;
+    } else {
+      success++;
+    }
+    done++;
+    updateProgress();
+  }
+
+  // --- xlsx 模式：維持原 upsert 行為 ---
+  var xlsxBatchSize = 10;
+  for (var j = 0; j < xlsxMode.length; j += xlsxBatchSize) {
+    var batch = xlsxMode.slice(j, j + xlsxBatchSize);
+    var rows = batch.map(function(c, idx) {
       var row = {
         lawyer_id: c.lawyer_id,
         case_date: c.case_date,
@@ -3534,9 +3645,8 @@ async function submitUploadedCases() {
         meeting_record: c.meeting_record || null,
         transcript: c.transcript || null,
       };
-      // 沒有 case_number 時自動產生
       if (!row.case_number) {
-        row.case_number = 'UP_' + c.lawyer_id + '_' + c.case_date + '_' + (c.case_type || '').replace(/\s/g,'') + '_' + i + '_' + batch.indexOf(c);
+        row.case_number = 'UP_' + c.lawyer_id + '_' + c.case_date + '_' + (c.case_type || '').replace(/\s/g,'') + '_' + j + '_' + idx;
       }
       return row;
     });
@@ -3550,33 +3660,19 @@ async function submitUploadedCases() {
       errors += batch.length;
     } else {
       success += batch.length;
-      // 記錄這批成功 upsert 的 (lawyer_id, month) 組合
-      batch.forEach(function(c) {
-        if (c.lawyer_id && c.case_date && c.case_date.length >= 7) {
-          affectedPairs.add(c.lawyer_id + '|' + c.case_date.slice(0, 7));
-        }
-      });
     }
-
-    var pct = Math.round((i + batch.length) / readyCases.length * 100);
-    document.getElementById('uploadProgressFill').style.width = pct + '%';
-    document.getElementById('uploadProgressText').textContent = (success + errors) + ' / ' + readyCases.length + ' 筆處理完成';
+    done += batch.length;
+    updateProgress();
   }
 
-  // 重算受影響月份的 monthly_stats
-  var statsResult = { success: 0, errors: 0 };
-  if (affectedPairs.size > 0 && success > 0) {
-    document.getElementById('uploadProgressText').textContent = '案件匯入完成，重算月度統計中（' + affectedPairs.size + ' 組 律師×月份）...';
-    statsResult = await recomputeMonthlyStatsForPairs(Array.from(affectedPairs));
-  }
+  var msg = '';
+  if (zipOnly.length > 0) msg += '會議記錄/逐字稿更新：' + zipOnly.length + ' 筆（到已存在的 CRM 案件）；';
+  if (xlsxMode.length > 0) msg += 'CRM 案件匯入：' + xlsxMode.length + ' 筆；';
+  msg += '成功 ' + success + (errors > 0 ? '，失敗 ' + errors : '');
 
-  var msg = '案件匯入：成功 ' + success + ' 筆' + (errors > 0 ? '，失敗 ' + errors + ' 筆' : '');
-  if (affectedPairs.size > 0) {
-    msg += '；月度統計重算：' + statsResult.success + '/' + affectedPairs.size + ' 組' + (statsResult.errors > 0 ? '，失敗 ' + statsResult.errors + ' 組' : '');
-  }
   document.getElementById('uploadResult').innerHTML =
-    '<div class="insight-item ' + (errors === 0 && statsResult.errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
-    '<span class="insight-icon">' + (errors === 0 && statsResult.errors === 0 ? '✓' : '⚠') + '</span>' +
+    '<div class="insight-item ' + (errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
+    '<span class="insight-icon">' + (errors === 0 ? '✓' : '⚠') + '</span>' +
     '<span>' + msg + '</span>' +
     '</div>';
 
@@ -3584,96 +3680,6 @@ async function submitUploadedCases() {
   btn.disabled = true;
 
   await reloadCases();
-  // 重新載入 monthly_stats 讓總覽／年度追蹤即時反映
-  try {
-    var s = await sb.from('monthly_stats').select('*');
-    if (s.data) allStats = s.data;
-  } catch(e) { console.warn('reload monthly_stats failed:', e); }
-}
-
-// 從 consultation_cases 重算指定 (lawyer_id, YYYY-MM) 組合的 monthly_stats
-// 注意：這會把 CRM xlsx 爬蟲下次跑時覆寫 — 若要長期生效，需同步改 daily_update.py
-async function recomputeMonthlyStatsForPairs(pairs) {
-  var success = 0, errors = 0;
-  // 依月份分組，一次查一個月的全部律師減少請求數
-  var byMonth = {};
-  pairs.forEach(function(key) {
-    var parts = key.split('|');
-    var lid = parts[0], month = parts[1];
-    if (!byMonth[month]) byMonth[month] = new Set();
-    byMonth[month].add(lid);
-  });
-
-  for (var month in byMonth) {
-    var lawyerIds = Array.from(byMonth[month]);
-    var ym = month.split('-');
-    var year = parseInt(ym[0], 10), mon = parseInt(ym[1], 10);
-    var startDate = month + '-01';
-    var endDate = new Date(year, mon, 0).toISOString().slice(0, 10); // 月底
-
-    try {
-      // 撈該月所有相關律師的案件
-      var res = await sb
-        .from('consultation_cases')
-        .select('lawyer_id,is_signed,revenue,collected')
-        .in('lawyer_id', lawyerIds)
-        .gte('case_date', startDate)
-        .lte('case_date', endDate);
-
-      if (res.error) {
-        console.error('recompute fetch error for ' + month + ':', res.error);
-        errors += lawyerIds.length;
-        continue;
-      }
-
-      // 按 lawyer_id 聚合
-      var buckets = {};
-      lawyerIds.forEach(function(lid) {
-        buckets[lid] = { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
-      });
-      (res.data || []).forEach(function(c) {
-        var b = buckets[c.lawyer_id];
-        if (!b) return;
-        b.consult_count++;
-        if (c.is_signed) b.signed_count++;
-        b.revenue += Number(c.revenue) || 0;
-        b.collected += Number(c.collected) || 0;
-      });
-
-      // upsert 到 monthly_stats
-      var upsertRows = lawyerIds.map(function(lid) {
-        var b = buckets[lid];
-        var sign_rate = b.consult_count > 0
-          ? Math.round((b.signed_count / b.consult_count * 100) * 100) / 100
-          : 0;
-        return {
-          lawyer_id: lid,
-          month: month,
-          consult_count: b.consult_count,
-          signed_count: b.signed_count,
-          sign_rate: sign_rate,
-          revenue: b.revenue,
-          collected: b.collected,
-        };
-      });
-
-      var up = await sb
-        .from('monthly_stats')
-        .upsert(upsertRows, { onConflict: 'lawyer_id,month' });
-
-      if (up.error) {
-        console.error('recompute upsert error for ' + month + ':', up.error);
-        errors += lawyerIds.length;
-      } else {
-        success += lawyerIds.length;
-      }
-    } catch (e) {
-      console.error('recompute exception for ' + month + ':', e);
-      errors += lawyerIds.length;
-    }
-  }
-
-  return { success: success, errors: errors };
 }
 
 async function reloadCases() {
