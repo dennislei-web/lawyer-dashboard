@@ -3516,6 +3516,8 @@ async function submitUploadedCases() {
   var batchSize = 10;
   var success = 0;
   var errors = 0;
+  // 追蹤「(lawyer_id, YYYY-MM)」受影響組合，供後續重算 monthly_stats
+  var affectedPairs = new Set();
 
   for (var i = 0; i < readyCases.length; i += batchSize) {
     var batch = readyCases.slice(i, i + batchSize);
@@ -3548,6 +3550,12 @@ async function submitUploadedCases() {
       errors += batch.length;
     } else {
       success += batch.length;
+      // 記錄這批成功 upsert 的 (lawyer_id, month) 組合
+      batch.forEach(function(c) {
+        if (c.lawyer_id && c.case_date && c.case_date.length >= 7) {
+          affectedPairs.add(c.lawyer_id + '|' + c.case_date.slice(0, 7));
+        }
+      });
     }
 
     var pct = Math.round((i + batch.length) / readyCases.length * 100);
@@ -3555,16 +3563,117 @@ async function submitUploadedCases() {
     document.getElementById('uploadProgressText').textContent = (success + errors) + ' / ' + readyCases.length + ' 筆處理完成';
   }
 
+  // 重算受影響月份的 monthly_stats
+  var statsResult = { success: 0, errors: 0 };
+  if (affectedPairs.size > 0 && success > 0) {
+    document.getElementById('uploadProgressText').textContent = '案件匯入完成，重算月度統計中（' + affectedPairs.size + ' 組 律師×月份）...';
+    statsResult = await recomputeMonthlyStatsForPairs(Array.from(affectedPairs));
+  }
+
+  var msg = '案件匯入：成功 ' + success + ' 筆' + (errors > 0 ? '，失敗 ' + errors + ' 筆' : '');
+  if (affectedPairs.size > 0) {
+    msg += '；月度統計重算：' + statsResult.success + '/' + affectedPairs.size + ' 組' + (statsResult.errors > 0 ? '，失敗 ' + statsResult.errors + ' 組' : '');
+  }
   document.getElementById('uploadResult').innerHTML =
-    '<div class="insight-item ' + (errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
-    '<span class="insight-icon">' + (errors === 0 ? '✓' : '⚠') + '</span>' +
-    '<span>匯入完成：成功 ' + success + ' 筆' + (errors > 0 ? '，失敗 ' + errors + ' 筆' : '') + '</span>' +
+    '<div class="insight-item ' + (errors === 0 && statsResult.errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
+    '<span class="insight-icon">' + (errors === 0 && statsResult.errors === 0 ? '✓' : '⚠') + '</span>' +
+    '<span>' + msg + '</span>' +
     '</div>';
 
   btn.textContent = '確認匯入';
   btn.disabled = true;
 
   await reloadCases();
+  // 重新載入 monthly_stats 讓總覽／年度追蹤即時反映
+  try {
+    var s = await sb.from('monthly_stats').select('*');
+    if (s.data) allStats = s.data;
+  } catch(e) { console.warn('reload monthly_stats failed:', e); }
+}
+
+// 從 consultation_cases 重算指定 (lawyer_id, YYYY-MM) 組合的 monthly_stats
+// 注意：這會把 CRM xlsx 爬蟲下次跑時覆寫 — 若要長期生效，需同步改 daily_update.py
+async function recomputeMonthlyStatsForPairs(pairs) {
+  var success = 0, errors = 0;
+  // 依月份分組，一次查一個月的全部律師減少請求數
+  var byMonth = {};
+  pairs.forEach(function(key) {
+    var parts = key.split('|');
+    var lid = parts[0], month = parts[1];
+    if (!byMonth[month]) byMonth[month] = new Set();
+    byMonth[month].add(lid);
+  });
+
+  for (var month in byMonth) {
+    var lawyerIds = Array.from(byMonth[month]);
+    var ym = month.split('-');
+    var year = parseInt(ym[0], 10), mon = parseInt(ym[1], 10);
+    var startDate = month + '-01';
+    var endDate = new Date(year, mon, 0).toISOString().slice(0, 10); // 月底
+
+    try {
+      // 撈該月所有相關律師的案件
+      var res = await sb
+        .from('consultation_cases')
+        .select('lawyer_id,is_signed,revenue,collected')
+        .in('lawyer_id', lawyerIds)
+        .gte('case_date', startDate)
+        .lte('case_date', endDate);
+
+      if (res.error) {
+        console.error('recompute fetch error for ' + month + ':', res.error);
+        errors += lawyerIds.length;
+        continue;
+      }
+
+      // 按 lawyer_id 聚合
+      var buckets = {};
+      lawyerIds.forEach(function(lid) {
+        buckets[lid] = { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
+      });
+      (res.data || []).forEach(function(c) {
+        var b = buckets[c.lawyer_id];
+        if (!b) return;
+        b.consult_count++;
+        if (c.is_signed) b.signed_count++;
+        b.revenue += Number(c.revenue) || 0;
+        b.collected += Number(c.collected) || 0;
+      });
+
+      // upsert 到 monthly_stats
+      var upsertRows = lawyerIds.map(function(lid) {
+        var b = buckets[lid];
+        var sign_rate = b.consult_count > 0
+          ? Math.round((b.signed_count / b.consult_count * 100) * 100) / 100
+          : 0;
+        return {
+          lawyer_id: lid,
+          month: month,
+          consult_count: b.consult_count,
+          signed_count: b.signed_count,
+          sign_rate: sign_rate,
+          revenue: b.revenue,
+          collected: b.collected,
+        };
+      });
+
+      var up = await sb
+        .from('monthly_stats')
+        .upsert(upsertRows, { onConflict: 'lawyer_id,month' });
+
+      if (up.error) {
+        console.error('recompute upsert error for ' + month + ':', up.error);
+        errors += lawyerIds.length;
+      } else {
+        success += lawyerIds.length;
+      }
+    } catch (e) {
+      console.error('recompute exception for ' + month + ':', e);
+      errors += lawyerIds.length;
+    }
+  }
+
+  return { success: success, errors: errors };
 }
 
 async function reloadCases() {
