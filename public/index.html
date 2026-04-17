@@ -1732,7 +1732,7 @@ async function loadDashboard(user) {
     return all;
   }
 
-  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
 
   // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
