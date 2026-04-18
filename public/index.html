@@ -848,6 +848,124 @@
       cursor: pointer;
     }
 
+    /* ===== 單列 case row（點擊展開） ===== */
+    .case-row-list {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-card);
+    }
+    .case-row {
+      border-bottom: 1px solid var(--border);
+    }
+    .case-row:last-child { border-bottom: none; }
+    .case-row-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .case-row-head:hover { background: var(--bg-hover); }
+    .case-row-chevron {
+      flex-shrink: 0;
+      width: 14px;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      transition: transform 0.2s;
+    }
+    .case-row-date {
+      flex-shrink: 0;
+      width: 92px;
+      font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .case-row-type {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.88rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .case-row-client {
+      flex-shrink: 0;
+      width: 110px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+    }
+    .case-row-body {
+      background: var(--bg-main);
+      border-top: 1px solid var(--border);
+    }
+    .case-row-detail-inner {
+      padding: 14px 18px;
+    }
+    @media (max-width: 640px) {
+      .case-row-date { width: 78px; font-size: 0.72rem; }
+      .case-row-type { font-size: 0.8rem; }
+      .case-row-client { width: 80px; font-size: 0.7rem; }
+      .case-row-head { padding: 8px 10px; gap: 8px; }
+    }
+
+    /* ===== 季度評估 ===== */
+    .qr-list { display: flex; flex-direction: column; gap: 8px; }
+    .qr-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+    }
+    .qr-item-period {
+      flex-shrink: 0;
+      font-weight: 700;
+      color: var(--gold-light);
+      min-width: 80px;
+    }
+    .qr-item-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+    .qr-item-meta {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .qr-upload {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      background: var(--bg-row);
+      border: 1px dashed var(--border-light);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .qr-upload select, .qr-upload input {
+      padding: 5px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
     /* Case content modal */
     .case-content-modal {
       max-width: 720px;
@@ -1341,6 +1459,9 @@
 
     <!-- Case Cards (from quality detail) -->
     <div id="detailCaseCardsContainer"></div>
+
+    <!-- 1 on 1 會議季度評估 -->
+    <div id="detailQuarterlyContainer"></div>
   </div>
 
   <!-- ===== YEAR TRACKING PAGE ===== -->
@@ -2344,6 +2465,12 @@ function renderDetailContent() {
   if (caseCardsContainer) {
     caseCardsContainer.innerHTML = renderCaseCardsSection(detailLawyerId);
   }
+
+  // Quarterly reviews
+  const quarterlyContainer = document.getElementById('detailQuarterlyContainer');
+  if (quarterlyContainer) {
+    renderQuarterlyReviews(detailLawyerId, quarterlyContainer);
+  }
 }
 
 function renderDetailTable(stats) {
@@ -2881,77 +3008,34 @@ function renderCaseCardsSection(lawyerId) {
   const signedCases = cases.filter(c => c.is_signed);
   const unsignedCases = cases.filter(c => !c.is_signed);
 
-  const renderCards = (list, groupLabel) => {
+  const renderRows = (list, groupLabel) => {
     if (list.length === 0) return '';
-    return `<div style="margin-bottom:8px;font-size:0.85rem;font-weight:600;color:var(--text-muted);margin-top:12px;">${groupLabel} (${list.length})</div>
-    <div class="case-cards-grid">${list.map(c => {
-      const badgeClass = c.is_signed ? 'case-badge-signed' : 'case-badge-unsigned';
-      const badgeText = c.is_signed ? '成案' : '未成案';
+    return `<div style="margin-top:14px;margin-bottom:6px;font-size:0.85rem;font-weight:600;color:var(--text-muted);">${groupLabel} (${list.length})</div>
+    <div class="case-row-list">${list.map(c => {
       const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
       const hasTs = c.transcript && c.transcript.trim().length > 0;
       const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
-
-      // Score mini bars
-      let scoreBarsHtml = '';
-      if (analysis) {
-        const dims = [
-          { label: '需求掌握', val: analysis.scores.demands },
-          { label: '事實釐清', val: analysis.scores.facts },
-          { label: '法律建議', val: analysis.scores.advice },
-        ];
-        scoreBarsHtml = `<div class="case-mini-scores">${dims.map(d => {
-          const barColor = d.val >= 75 ? 'var(--green)' : d.val >= 50 ? 'var(--gold)' : 'var(--red)';
-          return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-            <span style="font-size:0.72rem;color:var(--text-muted);width:52px;text-align:right;flex-shrink:0;">${d.label}</span>
-            <div style="flex:1;height:5px;background:var(--bg-main);border-radius:3px;overflow:hidden;">
-              <div style="width:${d.val}%;height:100%;background:${barColor};border-radius:3px;"></div>
-            </div>
-            <span style="font-size:0.72rem;font-weight:600;width:24px;text-align:right;color:${barColor};">${d.val}</span>
-          </div>`;
-        }).join('')}</div>`;
-      }
-
-      // Strengths & weaknesses
-      let analysisHtml = '';
-      if (analysis) {
-        if (analysis.strengths.length > 0) {
-          analysisHtml += `<div class="case-strengths">${analysis.strengths.slice(0, 3).map(s =>
-            `<div class="case-point strength">${escHtml(s)}</div>`
-          ).join('')}</div>`;
-        }
-        if (analysis.weaknesses.length > 0) {
-          analysisHtml += `<div class="case-weaknesses">${analysis.weaknesses.slice(0, 3).map(w =>
-            `<div class="case-point weakness">${escHtml(w)}</div>`
-          ).join('')}</div>`;
-        }
-      }
-
-      // Score badge
-      const scoreBadge = analysis
-        ? `<span style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:6px;${
-            analysis.avgScore >= 75 ? 'background:var(--green-dim);color:var(--green);' :
-            analysis.avgScore >= 50 ? 'background:rgba(201,168,76,0.15);color:var(--gold-light);' :
-            'background:var(--red-dim);color:var(--red);'
-          }">${analysis.avgScore}</span>`
-        : '';
-
-      return `<div class="case-card">
-        <div class="case-card-header">
-          <div>
-            <div style="font-size:0.95rem;font-weight:600;color:var(--text);">${escHtml(c.case_type)}</div>
-            <div class="case-card-meta">${escHtml(c.case_date)}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            ${scoreBadge}
-            <span class="case-badge ${badgeClass}">${badgeText}</span>
-          </div>
+      const avgScore = analysis ? analysis.avgScore : null;
+      const scoreColor = avgScore === null ? 'var(--text-muted)' :
+                         avgScore >= 75 ? 'var(--green)' :
+                         avgScore >= 50 ? 'var(--gold-light)' :
+                         'var(--red)';
+      const scoreHtml = avgScore !== null
+        ? `<span style="font-size:0.78rem;font-weight:700;color:${scoreColor};width:28px;text-align:center;flex-shrink:0;">${avgScore}</span>`
+        : '<span style="width:28px;flex-shrink:0;"></span>';
+      const badgeHtml = c.is_signed
+        ? '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);">成</span>'
+        : '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--red-dim);color:var(--red);">未</span>';
+      return `<div class="case-row" data-case-id="${c.id}">
+        <div class="case-row-head" onclick="toggleCaseRow('${c.id}')">
+          <span class="case-row-chevron" id="chv-${c.id}">▶</span>
+          <span class="case-row-date">${escHtml(c.case_date)}</span>
+          <span class="case-row-type" title="${escHtml(c.case_type || '')}">${escHtml(c.case_type || '')}</span>
+          <span class="case-row-client">${escHtml(c.client_name || '')}</span>
+          ${scoreHtml}
+          ${badgeHtml}
         </div>
-        ${scoreBarsHtml}
-        ${analysisHtml}
-        <div class="case-links">
-          ${hasMr ? `<span class="case-link" onclick="openCaseContent('${c.id}', 'meeting_record')">會議記錄</span>` : '<span style="font-size:0.78rem;color:var(--text-muted);">無會議記錄</span>'}
-          ${hasTs ? `<span class="case-link" onclick="openCaseContent('${c.id}', 'transcript')">逐字稿</span>` : '<span style="font-size:0.78rem;color:var(--text-muted);">無逐字稿</span>'}
-        </div>
+        <div class="case-row-body" id="body-${c.id}" style="display:none;"></div>
       </div>`;
     }).join('')}</div>`;
   };
@@ -2961,9 +3045,76 @@ function renderCaseCardsSection(lawyerId) {
       <div class="section-header">
         <div class="section-title">諮詢案件評比 (${cases.length})</div>
       </div>
-      ${renderCards(signedCases, '成案')}
-      ${renderCards(unsignedCases, '未成案')}
+      ${renderRows(signedCases, '成案')}
+      ${renderRows(unsignedCases, '未成案')}
     </div>`;
+}
+
+// 展開/收合單列案件，第一次展開時才渲染詳情（lazy）
+function toggleCaseRow(caseId) {
+  const body = document.getElementById('body-' + caseId);
+  const chv = document.getElementById('chv-' + caseId);
+  if (!body) return;
+  if (body.style.display === 'none') {
+    // Lazy render：首次展開才生成詳情 HTML
+    if (!body.dataset.rendered) {
+      const c = allCases.find(x => x.id === caseId);
+      if (c) body.innerHTML = renderCaseRowDetail(c);
+      body.dataset.rendered = '1';
+    }
+    body.style.display = 'block';
+    if (chv) chv.textContent = '▼';
+  } else {
+    body.style.display = 'none';
+    if (chv) chv.textContent = '▶';
+  }
+}
+
+function renderCaseRowDetail(c) {
+  const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
+  const hasTs = c.transcript && c.transcript.trim().length > 0;
+  const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
+
+  let html = '<div class="case-row-detail-inner">';
+
+  if (analysis) {
+    const dims = [
+      { label: '需求掌握', val: analysis.scores.demands },
+      { label: '事實釐清', val: analysis.scores.facts },
+      { label: '法律建議', val: analysis.scores.advice },
+    ];
+    html += '<div class="case-row-scores">' + dims.map(d => {
+      const barColor = d.val >= 75 ? 'var(--green)' : d.val >= 50 ? 'var(--gold)' : 'var(--red)';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="font-size:0.75rem;color:var(--text-muted);width:64px;text-align:right;flex-shrink:0;">${d.label}</span>
+        <div style="flex:1;max-width:300px;height:6px;background:var(--bg-main);border-radius:3px;overflow:hidden;">
+          <div style="width:${d.val}%;height:100%;background:${barColor};border-radius:3px;"></div>
+        </div>
+        <span style="font-size:0.75rem;font-weight:700;width:26px;color:${barColor};">${d.val}</span>
+      </div>`;
+    }).join('') + '</div>';
+
+    if (analysis.strengths.length > 0) {
+      html += '<div style="margin-top:10px;"><div style="font-size:0.78rem;font-weight:600;color:var(--green);margin-bottom:4px;">優點</div>' +
+        analysis.strengths.map(s => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(s)}</div>`).join('') +
+        '</div>';
+    }
+    if (analysis.weaknesses.length > 0) {
+      html += '<div style="margin-top:8px;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);margin-bottom:4px;">可改進</div>' +
+        analysis.weaknesses.map(w => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(w)}</div>`).join('') +
+        '</div>';
+    }
+  } else {
+    html += '<div style="font-size:0.82rem;color:var(--text-muted);">無會議記錄可分析</div>';
+  }
+
+  html += '<div style="margin-top:12px;display:flex;gap:14px;">';
+  if (hasMr) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'meeting_record')">查看會議記錄</span>`;
+  if (hasTs) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'transcript')">查看逐字稿</span>`;
+  html += '</div>';
+
+  html += '</div>';
+  return html;
 }
 
 function openCaseContent(caseId, field) {
@@ -2977,6 +3128,191 @@ function openCaseContent(caseId, field) {
   document.getElementById('caseContentTitle').innerHTML = fullTitle;
   document.getElementById('caseContentBody').textContent = content || '（無內容）';
   document.getElementById('caseContentModal').classList.add('active');
+}
+
+// ==================== 1 on 1 會議季度評估 ====================
+
+async function renderQuarterlyReviews(lawyerId, container) {
+  if (!container) return;
+  container.innerHTML = `<div class="section" style="margin-top:20px;">
+    <div class="section-header">
+      <div class="section-title">1 on 1 會議季度評估</div>
+    </div>
+    <div id="qrContent" style="min-height:40px;color:var(--text-muted);font-size:0.85rem;">載入中…</div>
+  </div>`;
+
+  if (!sb) {
+    document.getElementById('qrContent').textContent = '尚未連線 Supabase';
+    return;
+  }
+
+  const res = await sb
+    .from('quarterly_reviews')
+    .select('id,year,quarter,file_name,file_size,uploaded_at,notes')
+    .eq('lawyer_id', lawyerId)
+    .order('year', { ascending: false })
+    .order('quarter', { ascending: false });
+
+  const content = document.getElementById('qrContent');
+  if (!content) return;
+
+  // 若表不存在（未跑 migration），res.error.code 會是 'PGRST205' 或類似
+  if (res.error) {
+    content.innerHTML = `<div style="padding:12px;background:var(--orange-dim);color:var(--orange);border-radius:8px;font-size:0.85rem;">
+      ⚠ quarterly_reviews 資料表尚未建立。<br>
+      請到 Supabase Dashboard → SQL Editor 執行
+      <code style="font-family:monospace;">supabase/migrations/20260418000000_add_quarterly_reviews.sql</code>
+      後重新整理本頁。
+    </div>`;
+    console.error('qr table missing:', res.error);
+    return;
+  }
+
+  const reviews = res.data || [];
+
+  let html = '';
+
+  // Admin 可上傳
+  const _isAdmin = currentLawyer && currentLawyer.role === 'admin';
+  if (_isAdmin) {
+    const years = [];
+    const nowROC = new Date().getFullYear() - 1911;
+    for (let y = nowROC; y >= nowROC - 3; y--) years.push(y);
+    const yearOpts = years.map(y => `<option value="${y}">${y}</option>`).join('');
+    html += `<div class="qr-upload">
+      <span style="font-size:0.82rem;color:var(--text-muted);">上傳 PDF：</span>
+      <select id="qrYear">${yearOpts}</select>
+      <select id="qrQuarter">
+        <option value="1">第 1 季</option>
+        <option value="2">第 2 季</option>
+        <option value="3">第 3 季</option>
+        <option value="4">第 4 季</option>
+      </select>
+      <input type="file" id="qrFile" accept="application/pdf">
+      <button class="btn btn-primary btn-sm" id="qrUploadBtn" onclick="uploadQuarterlyReviewPDF('${lawyerId}')">上傳</button>
+      <span id="qrUploadMsg" style="font-size:0.8rem;"></span>
+    </div>`;
+  }
+
+  if (reviews.length === 0) {
+    html += '<div style="font-size:0.85rem;color:var(--text-muted);padding:8px 0;">尚無已上傳的季度評估 PDF</div>';
+  } else {
+    html += '<div class="qr-list">' + reviews.map(r => {
+      const sizeStr = r.file_size ? (r.file_size < 1024*1024 ? (r.file_size/1024).toFixed(0) + ' KB' : (r.file_size/1024/1024).toFixed(1) + ' MB') : '';
+      return `<div class="qr-item">
+        <span class="qr-item-period">${r.year} Q${r.quarter}</span>
+        <span class="qr-item-name" title="${escHtml(r.file_name || '')}">${escHtml(r.file_name || '(未命名)')}</span>
+        <span class="qr-item-meta">${sizeStr} · ${(r.uploaded_at||'').slice(0,10)}</span>
+        <span class="case-link" onclick="viewQuarterlyReviewPDF('${r.id}')">開啟</span>
+        ${_isAdmin ? `<span class="case-link" style="background:var(--red-dim);color:var(--red);" onclick="deleteQuarterlyReview('${r.id}', '${lawyerId}')">刪除</span>` : ''}
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  content.innerHTML = html;
+}
+
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = reader.result || '';
+      const idx = s.indexOf(',');
+      resolve(idx >= 0 ? s.substring(idx + 1) : s);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadQuarterlyReviewPDF(lawyerId) {
+  const year = parseInt(document.getElementById('qrYear').value, 10);
+  const quarter = parseInt(document.getElementById('qrQuarter').value, 10);
+  const fileInput = document.getElementById('qrFile');
+  const msg = document.getElementById('qrUploadMsg');
+  const btn = document.getElementById('qrUploadBtn');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    msg.innerHTML = '<span style="color:var(--red);">請選擇 PDF 檔</span>';
+    return;
+  }
+  const file = fileInput.files[0];
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    msg.innerHTML = '<span style="color:var(--red);">只接受 PDF 檔</span>';
+    return;
+  }
+  // 檔案大小上限：15 MB（base64 後約 20 MB，避免 DB 過大）
+  if (file.size > 15 * 1024 * 1024) {
+    msg.innerHTML = '<span style="color:var(--red);">PDF 太大（> 15 MB）</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.innerHTML = '<span style="color:var(--text-muted);">讀取中…</span>';
+
+  try {
+    const base64 = await _fileToBase64(file);
+    msg.innerHTML = '<span style="color:var(--text-muted);">上傳中…</span>';
+
+    const payload = {
+      lawyer_id: lawyerId,
+      year: year,
+      quarter: quarter,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: file.type || 'application/pdf',
+      pdf_base64: base64,
+      uploaded_by: currentUser ? currentUser.id : null,
+    };
+
+    const res = await sb
+      .from('quarterly_reviews')
+      .upsert(payload, { onConflict: 'lawyer_id,year,quarter' });
+
+    if (res.error) {
+      msg.innerHTML = `<span style="color:var(--red);">失敗：${escHtml(res.error.message||'')}</span>`;
+      console.error('qr upload error:', res.error);
+    } else {
+      msg.innerHTML = '<span style="color:var(--green);">上傳成功</span>';
+      // reload list
+      const container = document.getElementById('detailQuarterlyContainer');
+      if (container) setTimeout(() => renderQuarterlyReviews(lawyerId, container), 400);
+    }
+  } catch (e) {
+    console.error(e);
+    msg.innerHTML = `<span style="color:var(--red);">錯誤：${escHtml(String(e))}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function viewQuarterlyReviewPDF(reviewId) {
+  if (!sb) return;
+  const res = await sb.from('quarterly_reviews')
+    .select('pdf_base64,file_name,mime_type')
+    .eq('id', reviewId)
+    .single();
+  if (res.error || !res.data || !res.data.pdf_base64) {
+    alert('載入 PDF 失敗：' + (res.error ? res.error.message : '無內容'));
+    return;
+  }
+  const bstr = atob(res.data.pdf_base64);
+  const len = bstr.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bstr.charCodeAt(i);
+  const blob = new Blob([bytes], { type: res.data.mime_type || 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  // 在新分頁開啟
+  window.open(url, '_blank');
+  // 稍後釋放
+  setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+}
+
+async function deleteQuarterlyReview(reviewId, lawyerId) {
+  if (!confirm('確定刪除這份季度評估 PDF？')) return;
+  const res = await sb.from('quarterly_reviews').delete().eq('id', reviewId);
+  if (res.error) { alert('刪除失敗：' + res.error.message); return; }
+  const container = document.getElementById('detailQuarterlyContainer');
+  if (container) renderQuarterlyReviews(lawyerId, container);
 }
 
 function closeCaseContentModal() {
