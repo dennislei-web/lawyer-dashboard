@@ -3225,6 +3225,11 @@ function _fileToBase64(file) {
   });
 }
 
+const QR_BUCKET = 'quarterly-reviews-pdfs';
+function _qrPath(lawyerId, year, quarter) {
+  return `${lawyerId}/${year}-Q${quarter}.pdf`;
+}
+
 async function uploadQuarterlyReviewPDF(lawyerId) {
   const year = parseInt(document.getElementById('qrYear').value, 10);
   const quarter = parseInt(document.getElementById('qrQuarter').value, 10);
@@ -3240,45 +3245,61 @@ async function uploadQuarterlyReviewPDF(lawyerId) {
     msg.innerHTML = '<span style="color:var(--red);">只接受 PDF 檔</span>';
     return;
   }
-  // 檔案大小上限：15 MB（base64 後約 20 MB，避免 DB 過大）
-  if (file.size > 15 * 1024 * 1024) {
-    msg.innerHTML = '<span style="color:var(--red);">PDF 太大（> 15 MB）</span>';
+  // 檔案大小上限：50 MB（Storage 可承受）
+  if (file.size > 50 * 1024 * 1024) {
+    msg.innerHTML = '<span style="color:var(--red);">PDF 太大（> 50 MB）</span>';
     return;
   }
 
   btn.disabled = true;
-  msg.innerHTML = '<span style="color:var(--text-muted);">讀取中…</span>';
+  msg.innerHTML = '<span style="color:var(--text-muted);">上傳 PDF 到 Storage…</span>';
+  console.log('[qr] upload start:', file.name, file.size, 'bytes');
 
   try {
-    const base64 = await _fileToBase64(file);
-    msg.innerHTML = '<span style="color:var(--text-muted);">上傳中…</span>';
+    const path = _qrPath(lawyerId, year, quarter);
 
+    // 1. 上傳 PDF 到 Supabase Storage（upsert=true 才能覆蓋同一路徑）
+    const up = await sb.storage.from(QR_BUCKET).upload(path, file, {
+      upsert: true,
+      contentType: 'application/pdf',
+    });
+    if (up.error) {
+      console.error('[qr] storage upload error:', up.error);
+      msg.innerHTML = `<span style="color:var(--red);">Storage 上傳失敗：${escHtml(up.error.message||'')}</span>`;
+      return;
+    }
+    console.log('[qr] storage upload ok:', up.data);
+
+    msg.innerHTML = '<span style="color:var(--text-muted);">寫入資料庫…</span>';
+
+    // 2. 寫入 quarterly_reviews metadata
     const payload = {
       lawyer_id: lawyerId,
       year: year,
       quarter: quarter,
       file_name: file.name,
       file_size: file.size,
-      mime_type: file.type || 'application/pdf',
-      pdf_base64: base64,
+      mime_type: 'application/pdf',
+      file_path: path,
       uploaded_by: currentUser ? currentUser.id : null,
     };
-
     const res = await sb
       .from('quarterly_reviews')
       .upsert(payload, { onConflict: 'lawyer_id,year,quarter' });
 
     if (res.error) {
-      msg.innerHTML = `<span style="color:var(--red);">失敗：${escHtml(res.error.message||'')}</span>`;
-      console.error('qr upload error:', res.error);
-    } else {
-      msg.innerHTML = '<span style="color:var(--green);">上傳成功</span>';
-      // reload list
-      const container = document.getElementById('detailQuarterlyContainer');
-      if (container) setTimeout(() => renderQuarterlyReviews(lawyerId, container), 400);
+      console.error('[qr] db upsert error:', res.error);
+      msg.innerHTML = `<span style="color:var(--red);">資料庫寫入失敗：${escHtml(res.error.message||'')}</span>`;
+      return;
     }
+
+    msg.innerHTML = '<span style="color:var(--green);">✓ 上傳成功</span>';
+    console.log('[qr] all done');
+    // reload list
+    const container = document.getElementById('detailQuarterlyContainer');
+    if (container) setTimeout(() => renderQuarterlyReviews(lawyerId, container), 400);
   } catch (e) {
-    console.error(e);
+    console.error('[qr] exception:', e);
     msg.innerHTML = `<span style="color:var(--red);">錯誤：${escHtml(String(e))}</span>`;
   } finally {
     btn.disabled = false;
@@ -3288,29 +3309,32 @@ async function uploadQuarterlyReviewPDF(lawyerId) {
 async function viewQuarterlyReviewPDF(reviewId) {
   if (!sb) return;
   const res = await sb.from('quarterly_reviews')
-    .select('pdf_base64,file_name,mime_type')
+    .select('file_path,file_name')
     .eq('id', reviewId)
     .single();
-  if (res.error || !res.data || !res.data.pdf_base64) {
-    alert('載入 PDF 失敗：' + (res.error ? res.error.message : '無內容'));
+  if (res.error || !res.data || !res.data.file_path) {
+    alert('載入 PDF 失敗：' + (res.error ? res.error.message : '無檔案路徑'));
     return;
   }
-  const bstr = atob(res.data.pdf_base64);
-  const len = bstr.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) bytes[i] = bstr.charCodeAt(i);
-  const blob = new Blob([bytes], { type: res.data.mime_type || 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  // 在新分頁開啟
-  window.open(url, '_blank');
-  // 稍後釋放
-  setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+  // 產生暫時簽名 URL（60 秒有效）
+  const signed = await sb.storage.from(QR_BUCKET).createSignedUrl(res.data.file_path, 60);
+  if (signed.error || !signed.data) {
+    alert('取得 PDF URL 失敗：' + (signed.error ? signed.error.message : ''));
+    return;
+  }
+  window.open(signed.data.signedUrl, '_blank');
 }
 
 async function deleteQuarterlyReview(reviewId, lawyerId) {
   if (!confirm('確定刪除這份季度評估 PDF？')) return;
+  // 先撈 file_path 才能刪 Storage
+  const q = await sb.from('quarterly_reviews').select('file_path').eq('id', reviewId).single();
   const res = await sb.from('quarterly_reviews').delete().eq('id', reviewId);
-  if (res.error) { alert('刪除失敗：' + res.error.message); return; }
+  if (res.error) { alert('刪除資料庫記錄失敗：' + res.error.message); return; }
+  if (q.data && q.data.file_path) {
+    const sd = await sb.storage.from(QR_BUCKET).remove([q.data.file_path]);
+    if (sd.error) console.warn('[qr] 刪除 Storage 檔案失敗（紀錄已刪）:', sd.error);
+  }
   const container = document.getElementById('detailQuarterlyContainer');
   if (container) renderQuarterlyReviews(lawyerId, container);
 }
