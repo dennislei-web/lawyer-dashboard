@@ -3475,16 +3475,40 @@ async function parseUploadedFiles() {
         c.match_info = 'CRM 查無同日案件';
       } else if (match.kind === 'ambiguous') {
         c.status = 'ambiguous';
-        c.match_info = '同日有 ' + match.matches.length + ' 個案件，無法判斷';
+        // 顯示前 2 個候選的分數供參考
+        var top = (match.topScored || []).slice(0, 2).map(function(x) {
+          return (x.real.client_name || '?') + '(' + x.score + ')';
+        }).join(' vs ');
+        c.match_info = '同日 ' + match.matches.length + ' 筆無法自動判斷：' + top;
         c.ambiguous_candidates = match.matches;
       } else {
+        // kind === 'one'
         c.status = 'ready';
         c.matched_case_id = match.matches[0].id;
         c.matched_case_number = match.matches[0].case_number;
+        c.matched_client_name = match.matches[0].client_name;
+        c.match_confidence = match.confidence || 'low';
+        c.match_reasons = match.reasons || [];
+        // 記錄真案件目前內容狀況（不覆蓋時會用到）
+        c.matched_has_mr = !!match.matches[0].meeting_record;
+        c.matched_has_ts = !!match.matches[0].transcript;
       }
     } else {
       // xlsx 模式：直接 upsert 整筆案件
       c.status = 'ready';
+    }
+  });
+
+  // 偵測同批重複：多筆 UP_ 指向同一個 CRM 案件（前一筆採用，後面改標 'duplicate'）
+  var seenTarget = {};
+  parsedCases.forEach(function(c) {
+    if (c.status !== 'ready' || !c.matched_case_id) return;
+    if (seenTarget[c.matched_case_id]) {
+      c.status = 'duplicate';
+      c.match_info = '本次上傳中已有另一筆指向 ' + c.matched_case_number + '（' + (c.matched_client_name||'') + '）';
+      c.duplicate_of = seenTarget[c.matched_case_id];
+    } else {
+      seenTarget[c.matched_case_id] = c;
     }
   });
 
@@ -3496,31 +3520,131 @@ async function parseUploadedFiles() {
 }
 
 // 在 allCases 中尋找匹配的 CRM 案件（for 純 ZIP 模式）
+// 策略：以 (lawyer_id, case_date) 為一定條件，多筆候選時用評分排序
+//   +10~20  當事人完整姓名在會議記錄/逐字稿出現（多客戶以逗號分隔時逐個檢查）
+//   + 8     2~4 字人名「姓 + 名末字」嚴格部分匹配（跳過公司名）
+//   + 4     case_type 去除「現場諮詢/視訊諮詢」等通用詞後有重疊
+//   + 3     case_type 完全相等
+//   + 2     is_signed 相同
+// 決策：最高分 ≥10 且領先次高 ≥5 → 採用；其餘退回舊 type/sign 收斂邏輯
+var COMPANY_KEYWORDS = ['公司','股份','有限','集團','企業','商行','工業','科技','國際','事務所','協會','基金會'];
+
+function isCompanyName(cn) {
+  for (var i=0; i<COMPANY_KEYWORDS.length; i++) if (cn.indexOf(COMPANY_KEYWORDS[i]) >= 0) return true;
+  return false;
+}
+
+function scoreCrmMatch(up, real) {
+  var text = ((up.meeting_record || '') + '\n' + (up.transcript || '')).slice(0, 3000);
+  var s = 0, reasons = [];
+
+  var cnRaw = (real.client_name || '').trim();
+  if (cnRaw) {
+    // 多客戶名 (以 ,、＋ 等分隔) 逐個比對
+    var names = cnRaw.split(/[,、＋+]\s*/).map(function(n){return n.trim();}).filter(function(n){return n.length>=2;});
+    names.forEach(function(cn) {
+      var fullHits = text.split(cn).length - 1;
+      if (fullHits > 0) {
+        var pts = Math.min(10 + 3 * (fullHits - 1), 20);
+        s += pts;
+        reasons.push('「' + cn + '」×' + fullHits);
+      } else if (!isCompanyName(cn) && cn.length >= 2 && cn.length <= 4) {
+        // 嚴格部分匹配：姓 + 1~2 字 + 名末字
+        var surname = cn.charAt(0);
+        var last = cn.charAt(cn.length - 1);
+        if (surname !== last) {
+          var re = new RegExp(escapeRegex(surname) + '.{1,2}' + escapeRegex(last), 'g');
+          var m = text.match(re);
+          var partial = m ? m.length : 0;
+          if (partial > 0) {
+            var pts2 = Math.min(8, 4 * partial);
+            s += pts2;
+            reasons.push('「' + surname + '…' + last + '」×' + partial);
+          }
+        }
+      }
+    });
+  }
+
+  // case_type 去通用詞後的 token overlap
+  var GENERIC = ['現場諮詢','視訊諮詢','電話諮詢','諮詢','諮商'];
+  var tokenize = function(t) {
+    return (t||'').split(/[,\s、+]+/).map(function(x){return x.trim();})
+      .filter(function(x){return x && GENERIC.indexOf(x)<0;});
+  };
+  var upTokens = tokenize(up.case_type);
+  var realTokens = tokenize(real.case_type);
+  var overlap = [];
+  upTokens.forEach(function(t){ if (realTokens.indexOf(t) >= 0) overlap.push(t); });
+  if (overlap.length > 0) { s += 4; reasons.push('type共通:' + overlap.join('/')); }
+
+  // case_type 完全相等
+  if (up.case_type && real.case_type && up.case_type === real.case_type) {
+    s += 3; reasons.push('type相等');
+  }
+
+  // is_signed 相同
+  if (up.is_signed === real.is_signed) { s += 2; reasons.push('簽約一致'); }
+
+  return { score: s, reasons: reasons };
+}
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 function findMatchingCrmCase(c, cases) {
   var sameDay = cases.filter(function(x) {
     return x.lawyer_id === c.lawyer_id && x.case_date === c.case_date;
   });
   if (sameDay.length === 0) return { kind: 'none', matches: [] };
-  if (sameDay.length === 1) return { kind: 'one', matches: sameDay };
+  if (sameDay.length === 1) {
+    return { kind: 'one', matches: sameDay, confidence: 'unique_day', reasons: ['同日唯一案件'] };
+  }
 
-  // 同日多筆：用 case_type 收斂
+  // 多筆候選：逐個算分
+  var scored = sameDay.map(function(r) {
+    var sr = scoreCrmMatch(c, r);
+    return { score: sr.score, reasons: sr.reasons, real: r };
+  });
+  scored.sort(function(a,b){return b.score - a.score;});
+
+  var best = scored[0];
+  var second = scored[1] || { score: 0 };
+
+  // 高信心：≥10 且領先 ≥5
+  if (best.score >= 10 && best.score - second.score >= 5) {
+    return { kind: 'one', matches: [best.real], confidence: 'high', score: best.score, reasons: best.reasons };
+  }
+
+  // 中信心：領先 ≥4 且最高分 ≥ 6（case_type overlap + is_signed 等）
+  if (best.score >= 6 && best.score - second.score >= 4) {
+    return { kind: 'one', matches: [best.real], confidence: 'medium', score: best.score, reasons: best.reasons };
+  }
+
+  // 退回舊邏輯 fallback
   var ct = (c.case_type || '').trim();
   var byType = sameDay.filter(function(x) {
     var xt = (x.case_type || '').trim();
     if (!ct || !xt) return false;
     return xt === ct || xt.indexOf(ct) >= 0 || ct.indexOf(xt) >= 0;
   });
-  if (byType.length === 1) return { kind: 'one', matches: byType };
-
-  // type 收斂後還是多筆，再用 is_signed 收斂
+  if (byType.length === 1) {
+    return { kind: 'one', matches: byType, confidence: 'low', reasons: ['type fuzzy'] };
+  }
   if (byType.length > 1) {
     var bySign = byType.filter(function(x) { return x.is_signed === c.is_signed; });
-    if (bySign.length === 1) return { kind: 'one', matches: bySign };
-    return { kind: 'ambiguous', matches: byType };
+    if (bySign.length === 1) {
+      return { kind: 'one', matches: bySign, confidence: 'low', reasons: ['type+sign'] };
+    }
+    return { kind: 'ambiguous', matches: byType, topScored: scored };
   }
 
-  // type 都對不上 → 全部同日候選列出
-  return { kind: 'ambiguous', matches: sameDay };
+  // 全部都對不上：如果有一個 is_signed 相同，退而使用之
+  var signOnly = sameDay.filter(function(x){ return x.is_signed === c.is_signed; });
+  if (signOnly.length === 1) {
+    return { kind: 'one', matches: signOnly, confidence: 'low', reasons: ['僅 is_signed 對得上'] };
+  }
+
+  return { kind: 'ambiguous', matches: sameDay, topScored: scored };
 }
 
 // --- Render preview table ---
@@ -3528,29 +3652,44 @@ function renderUploadPreview() {
   var preview = document.getElementById('uploadPreview');
   preview.style.display = 'block';
 
-  var counts = { ready: 0, no_lawyer: 0, no_content: 0, no_match: 0, ambiguous: 0 };
+  var counts = { ready: 0, no_lawyer: 0, no_content: 0, no_match: 0, ambiguous: 0, duplicate: 0 };
   parsedCases.forEach(function(c) { if (counts[c.status] !== undefined) counts[c.status]++; });
 
   document.getElementById('uploadStats').innerHTML =
     '<div style="display:flex;gap:20px;flex-wrap:wrap;">' +
     '<div style="font-size:0.9rem;">總案件：<strong>' + parsedCases.length + '</strong></div>' +
     '<div style="font-size:0.9rem;color:var(--green);">可匯入：<strong>' + counts.ready + '</strong></div>' +
+    (counts.duplicate > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同批重複：<strong>' + counts.duplicate + '</strong></div>' : '') +
     (counts.no_lawyer > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">律師不存在：<strong>' + counts.no_lawyer + '</strong></div>' : '') +
     (counts.no_content > 0 ? '<div style="font-size:0.9rem;color:var(--red);">無內容：<strong>' + counts.no_content + '</strong></div>' : '') +
     (counts.no_match > 0 ? '<div style="font-size:0.9rem;color:var(--red);">CRM 查無：<strong>' + counts.no_match + '</strong></div>' : '') +
     (counts.ambiguous > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同日多筆無法判斷：<strong>' + counts.ambiguous + '</strong></div>' : '') +
     '</div>' +
-    ((counts.no_match > 0 || counts.ambiguous > 0)
-      ? '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.5;">CRM 查無：請等 CRM 爬蟲把該案件同步過來後再上傳會議記錄。同日多筆無法判斷：同一律師同一天有多筆案件且案件類型無法對上，請人工確認。</div>'
+    ((counts.no_match > 0 || counts.ambiguous > 0 || counts.duplicate > 0)
+      ? '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.5;">' +
+        (counts.no_match > 0 ? 'CRM 查無：該案件 CRM 還沒同步，請等爬蟲跑完再上傳。<br>' : '') +
+        (counts.ambiguous > 0 ? '同日多筆無法判斷：同一律師同一天有多筆 CRM 案件且當事人名字沒在會議記錄出現，請人工確認。<br>' : '') +
+        (counts.duplicate > 0 ? '同批重複：本次上傳中有多個檔案對應到同一 CRM 案件（通常是檔名略有差異的重複），會自動只匯入第一筆。' : '') +
+        '</div>'
       : '');
 
   var tbody = document.getElementById('uploadPreviewBody');
   tbody.innerHTML = parsedCases.map(function(c) {
     var statusHtml;
     if (c.status === 'ready') {
-      statusHtml = c.matched_case_number
-        ? '<span style="color:var(--green);">可匯入</span><div style="font-size:0.7rem;color:var(--text-muted);">→ ' + escHtml(c.matched_case_number) + '</div>'
-        : '<span style="color:var(--green);">可匯入</span>';
+      var conf = c.match_confidence || '';
+      var confBadge = conf === 'high' ? '<span style="background:var(--green-dim);color:var(--green);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">高信心</span>'
+                    : conf === 'medium' ? '<span style="background:rgba(201,168,76,0.15);color:var(--gold);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">中信心</span>'
+                    : conf === 'low' ? '<span style="background:rgba(224,149,74,0.15);color:var(--orange);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">低信心</span>'
+                    : '';
+      var contentNote = '';
+      if (c.matched_has_mr && c.meeting_record) contentNote += '<div style="font-size:0.68rem;color:var(--orange);">會議記錄：真案件已有內容，將保留原本，不覆蓋</div>';
+      if (c.matched_has_ts && c.transcript) contentNote += '<div style="font-size:0.68rem;color:var(--orange);">逐字稿：真案件已有內容，將保留原本，不覆蓋</div>';
+      statusHtml = '<span style="color:var(--green);">可匯入</span>' + confBadge +
+                   (c.matched_case_number ? '<div style="font-size:0.7rem;color:var(--text-muted);">→ ' + escHtml(c.matched_case_number) + ' (' + escHtml(c.matched_client_name || '') + ')</div>' : '') +
+                   contentNote;
+    } else if (c.status === 'duplicate') {
+      statusHtml = '<span style="color:var(--orange);">同批重複</span><div style="font-size:0.7rem;color:var(--text-muted);">' + escHtml(c.match_info || '') + '</div>';
     } else if (c.status === 'no_lawyer') {
       statusHtml = '<span style="color:var(--orange);">律師不存在</span>';
     } else if (c.status === 'no_content') {
@@ -3611,12 +3750,16 @@ async function submitUploadedCases() {
   console.log('[upload] submit start: zipOnly=' + zipOnly.length + ', xlsxMode=' + xlsxMode.length);
 
   // --- 純 ZIP 模式：逐筆 UPDATE（只改 meeting_record / transcript） ---
+  var preserved = 0;  // 因真案件已有內容而保留的欄位計數
   for (var i = 0; i < zipOnly.length; i++) {
     var c = zipOnly[i];
     var patch = {};
-    if (c.meeting_record) patch.meeting_record = c.meeting_record;
-    if (c.transcript) patch.transcript = c.transcript;
-    if (Object.keys(patch).length === 0) { done++; updateProgress(); continue; }
+    // 真案件若已有內容則保留，不覆蓋（c.matched_has_mr/ts 在 parse 時記錄）
+    if (c.meeting_record && !c.matched_has_mr) patch.meeting_record = c.meeting_record;
+    else if (c.meeting_record && c.matched_has_mr) preserved++;
+    if (c.transcript && !c.matched_has_ts) patch.transcript = c.transcript;
+    else if (c.transcript && c.matched_has_ts) preserved++;
+    if (Object.keys(patch).length === 0) { done++; updateProgress('跳過（真案件已有內容）'); continue; }
 
     updateProgress('更新 ' + (c.matched_case_number || c.matched_case_id));
     console.log('[upload] updating', c.matched_case_id, 'patch=', Object.keys(patch),
@@ -3688,6 +3831,7 @@ async function submitUploadedCases() {
   if (zipOnly.length > 0) msg += '會議記錄/逐字稿更新：' + zipOnly.length + ' 筆（到已存在的 CRM 案件）；';
   if (xlsxMode.length > 0) msg += 'CRM 案件匯入：' + xlsxMode.length + ' 筆；';
   msg += '成功 ' + success + (errors > 0 ? '，失敗 ' + errors : '');
+  if (preserved > 0) msg += '；' + preserved + ' 個欄位因真案件已有內容而保留原本';
 
   document.getElementById('uploadResult').innerHTML =
     '<div class="insight-item ' + (errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
