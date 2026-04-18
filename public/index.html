@@ -3599,11 +3599,16 @@ async function submitUploadedCases() {
   var totalOps = readyCases.length;
   var done = 0, success = 0, errors = 0;
 
-  function updateProgress() {
+  function updateProgress(note) {
     var pct = totalOps > 0 ? Math.round(done / totalOps * 100) : 0;
     document.getElementById('uploadProgressFill').style.width = pct + '%';
-    document.getElementById('uploadProgressText').textContent = done + ' / ' + totalOps + ' 筆處理完成';
+    document.getElementById('uploadProgressText').textContent =
+      done + ' / ' + totalOps + ' 筆處理完成' + (note ? '  （' + note + '）' : '');
   }
+
+  // 立刻顯示初始進度，避免看起來當機
+  updateProgress('開始處理');
+  console.log('[upload] submit start: zipOnly=' + zipOnly.length + ', xlsxMode=' + xlsxMode.length);
 
   // --- 純 ZIP 模式：逐筆 UPDATE（只改 meeting_record / transcript） ---
   for (var i = 0; i < zipOnly.length; i++) {
@@ -3611,18 +3616,27 @@ async function submitUploadedCases() {
     var patch = {};
     if (c.meeting_record) patch.meeting_record = c.meeting_record;
     if (c.transcript) patch.transcript = c.transcript;
-    if (Object.keys(patch).length === 0) { done++; continue; }
+    if (Object.keys(patch).length === 0) { done++; updateProgress(); continue; }
 
-    var upd = await sb
-      .from('consultation_cases')
-      .update(patch)
-      .eq('id', c.matched_case_id);
+    updateProgress('更新 ' + (c.matched_case_number || c.matched_case_id));
+    console.log('[upload] updating', c.matched_case_id, 'patch=', Object.keys(patch),
+                'sizes=', (patch.meeting_record||'').length, (patch.transcript||'').length);
 
-    if (upd.error) {
-      console.error('update error for case', c.matched_case_id, upd.error);
+    try {
+      var upd = await sb
+        .from('consultation_cases')
+        .update(patch)
+        .eq('id', c.matched_case_id);
+
+      if (upd && upd.error) {
+        console.error('[upload] update error', c.matched_case_id, upd.error);
+        errors++;
+      } else {
+        success++;
+      }
+    } catch (e) {
+      console.error('[upload] update exception', c.matched_case_id, e);
       errors++;
-    } else {
-      success++;
     }
     done++;
     updateProgress();
@@ -3651,15 +3665,20 @@ async function submitUploadedCases() {
       return row;
     });
 
-    var result = await sb
-      .from('consultation_cases')
-      .upsert(rows, { onConflict: 'case_number' });
+    try {
+      var result = await sb
+        .from('consultation_cases')
+        .upsert(rows, { onConflict: 'case_number' });
 
-    if (result.error) {
-      console.error('Upsert error:', result.error);
+      if (result && result.error) {
+        console.error('[upload] upsert error', result.error);
+        errors += batch.length;
+      } else {
+        success += batch.length;
+      }
+    } catch (e) {
+      console.error('[upload] upsert exception', e);
       errors += batch.length;
-    } else {
-      success += batch.length;
     }
     done += batch.length;
     updateProgress();
