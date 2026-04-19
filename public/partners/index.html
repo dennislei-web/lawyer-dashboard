@@ -738,7 +738,8 @@ if (window.location.search.indexOf('embed=1') > -1) {
             <tr><td>續委(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>舊客戶後續委任衍生的分潤</td></tr>
             <tr><td>合作(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>多律師合作案的分潤</td></tr>
             <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">附屬</span></td><td>（資深諮詢律師）諮詢後由他人承辦，抽成 5% 獎金</td></tr>
-            <tr><td>其他 / 其他-自案</td><td><span class="badge badge-blue">附屬</span></td><td>解析時未對上標準比例的案件（如 0.35、0.4、0.6 等），保留供後續釐清</td></tr>
+            <tr><td>其他（左表）</td><td><span class="badge badge-blue">附屬</span></td><td>資深律師端的左表（喆律收款）比例非標準 0.7 / 0.6 / 1.0 的案件，僅 11 筆（主要陳璽仲 115/3 的 0.4 案、蕭予馨 2 筆 0.9 等）</td></tr>
+            <tr><td>其他-自案（右表）</td><td><span class="badge badge-blue">附屬</span></td><td>資深律師端右表（律師收款付喆律）但比例既非 0.1（標準自案）也非 0.3 / 0.35（法律010 轉案）的案件，全庫僅 5 筆：4 筆 40%（含林昀法扶舊案、退款、吳柏慶/蕭予馨各 1 筆）+ 1 筆 60%（陳璽仲王斯弘特殊協議）</td></tr>
           </tbody>
         </table>
       </div>
@@ -1385,10 +1386,27 @@ function renderDrill() {
       }
     }
   }
+  // 附屬 tier 的 hover 解釋
+  const TIER_TIP = {
+    '諮詢': '諮詢費（100% 歸律師），通常 $2,000/場',
+    '成案獎金': '諮詢律師後由他人承辦時，原諮詢律師抽 5% 獎金',
+    '介紹': '律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金',
+    '追溯': '過去介紹費事後補/扣的修正',
+    '受僱': '律師替他人承辦的案件分潤',
+    '續委': '舊客戶後續委任衍生的分潤',
+    '轉案': '律師之間或與喆律之間的案件轉介分潤（非主案轉案）',
+    '合作': '多律師合作案的分潤',
+    '其他': '解析時未對上標準比例（左表非 0.7/0.6/1.0）的特殊案件',
+    '其他-自案': '右表特殊比例案件（全庫僅 5 筆：4 筆 40% 含法扶舊案/退款等、1 筆 60% 特殊協議）'
+  };
   function fmtBreak(obj) {
     const entries = Object.entries(obj).filter(([,v]) => Math.abs(v) > 0.5);
     entries.sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
-    return entries.map(([k,v]) => `${k} $${fmt(v)}`).join('、');
+    return entries.map(([k,v]) => {
+      const tip = TIER_TIP[k] ? ` title="${TIER_TIP[k]}"` : '';
+      const label = TIER_TIP[k] ? `<span style="text-decoration:underline dotted; cursor:help"${tip}>${k}</span>` : k;
+      return `${label} $${fmt(v)}`;
+    }).join('、');
   }
 
   const dSubHtml = isJudicial
