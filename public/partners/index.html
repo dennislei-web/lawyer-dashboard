@@ -1332,21 +1332,41 @@ function renderDrill() {
   const OWN_L_TIERS = ['委任-咨詢(律師)','委任-利潤(律師)','自案(律師)',
                        '諮詢成案(律師)','喆律轉案(律師)','法律010轉案(律師)'];
   let ztOwn = 0, ltOwn = 0, ztMisc = 0, ltMisc = 0;
+  const zMiscBreak = {};  // tier base name → amount
+  const lMiscBreak = {};
   for (const m of monthly) {
     for (const [k, v] of Object.entries(m.tier || {})) {
       if (OWN_Z_TIERS.indexOf(k) !== -1) ztOwn += v;
       else if (OWN_L_TIERS.indexOf(k) !== -1) ltOwn += v;
-      else if (k.endsWith('(喆律)')) ztMisc += v;
-      else ltMisc += v;  // 諮詢、成案獎金(律師)、其他(律師) 等
+      else if (k.endsWith('(喆律)')) {
+        ztMisc += v;
+        const base = k.replace('(喆律)', '');
+        zMiscBreak[base] = (zMiscBreak[base] || 0) + v;
+      } else {
+        // 諮詢、成案獎金(律師)、介紹(律師)、追溯(律師) 等律師端附屬
+        ltMisc += v;
+        const base = k.replace('(律師)', '');
+        lMiscBreak[base] = (lMiscBreak[base] || 0) + v;
+      }
     }
   }
-  const balance = totalBase - procD - ztOwn - ltOwn;  // 應接近 0
+  function fmtBreak(obj) {
+    const entries = Object.entries(obj).filter(([,v]) => Math.abs(v) > 0.5);
+    entries.sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+    return entries.map(([k,v]) => `${k} $${fmt(v)}`).join('、');
+  }
 
   const dSubHtml = isJudicial
     ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律主案分潤 + 律師主案分潤">＝ D $${fmt(procD)} + 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`
     : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`;
-  const zMiscHtml = ztMisc > 0 ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">附屬佣金 $${fmt(ztMisc)}</span>` : `全部來自主案分潤`;
-  const lMiscHtml = ltMisc > 0 ? `主案 $${fmt(ltOwn)} + <span style="color:var(--orange)">附屬 $${fmt(ltMisc)}</span><br><span style="color:var(--text-muted);font-size:0.7rem">附屬＝諮詢費 + 介紹/追溯佣金等</span>` : `全部來自主案分潤`;
+  const zMiscBreakStr = fmtBreak(zMiscBreak);
+  const lMiscBreakStr = fmtBreak(lMiscBreak);
+  const zMiscHtml = ztMisc > 0
+    ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">附屬 $${fmt(ztMisc)}</span>${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">附屬明細：${zMiscBreakStr}</span>` : ''}`
+    : `全部來自主案分潤`;
+  const lMiscHtml = ltMisc > 0
+    ? `主案 $${fmt(ltOwn)} + <span style="color:var(--orange)">附屬 $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">附屬明細：${lMiscBreakStr}</span>` : ''}`
+    : `全部來自主案分潤`;
 
   document.getElementById('drill-kpi').innerHTML = `
     <div class="kpi">
