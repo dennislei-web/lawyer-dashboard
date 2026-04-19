@@ -1,0 +1,4779 @@
+<!DOCTYPE html>
+<!-- v2.1 -->
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 諮詢分析儀表板</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg-main:    #020b18;
+      --bg-card:    #0a1628;
+      --bg-row:     #111b2e;
+      --bg-hover:   #16253d;
+      --border:     #1e3050;
+      --border-light: #243a5e;
+      --gold:       #c9a84c;
+      --gold-light: #e8c97a;
+      --text:       #e0e0e0;
+      --text-muted: #8899aa;
+      --blue:       #4f8ef7;
+      --blue-dim:   rgba(79,142,247,0.15);
+      --green:      #4caf82;
+      --green-dim:  rgba(76,175,130,0.15);
+      --red:        #e05c5c;
+      --red-dim:    rgba(224,92,92,0.15);
+      --orange:     #e0954a;
+      --orange-dim: rgba(224,149,74,0.15);
+      --brand-color: #e8c97a;
+      --header-bg:  rgba(10,22,40,0.95);
+      --login-shadow: rgba(0,0,0,0.5);
+      --tab-active-bg: rgba(201,168,76,0.12);
+      --tab-active-border: rgba(201,168,76,0.2);
+      --tab-active-color: var(--gold-light);
+      --ghost-bg: rgba(255,255,255,0.07);
+      --ghost-hover-bg: rgba(255,255,255,0.12);
+    }
+
+    [data-theme="light"] {
+      --bg-main:    #f5f6fa;
+      --bg-card:    #ffffff;
+      --bg-row:     #f0f2f5;
+      --bg-hover:   #e8eaf0;
+      --border:     #d0d5dd;
+      --border-light: #e0e4eb;
+      --gold:       #a3842a;
+      --gold-light: #8b6f1e;
+      --text:       #1a1a2e;
+      --text-muted: #6b7280;
+      --blue:       #2563eb;
+      --blue-dim:   rgba(37,99,235,0.1);
+      --green:      #15803d;
+      --green-dim:  rgba(21,128,61,0.12);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.1);
+      --orange:     #d97706;
+      --orange-dim: rgba(217,119,6,0.1);
+      --brand-color: #1a1a2e;
+      --header-bg:  rgba(255,255,255,0.95);
+      --login-shadow: rgba(0,0,0,0.12);
+      --tab-active-bg: rgba(37,99,235,0.1);
+      --tab-active-border: rgba(37,99,235,0.25);
+      --tab-active-color: #2563eb;
+      --ghost-bg: rgba(0,0,0,0.04);
+      --ghost-hover-bg: rgba(0,0,0,0.08);
+    }
+
+    /* Embed mode: hide header brand/user info, keep tabs visible */
+    .embed-mode #loginPage { display: none !important; }
+    .embed-mode #dashboard { display: block !important; }
+    .embed-mode body { padding-top: 0 !important; }
+    .embed-mode .header-brand,
+    .embed-mode .header-subtitle,
+    .embed-mode .header-right { display: none !important; }
+    .embed-mode .header-left { flex: 1; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background: var(--bg-main);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    /* ===================== SCROLLBAR ===================== */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+    /* ===================== LOGIN PAGE ===================== */
+    #loginPage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+        var(--bg-main);
+    }
+
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 24px 64px var(--login-shadow);
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .login-logo .firm-name {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--gold-light);
+      letter-spacing: 2px;
+    }
+
+    .login-logo .subtitle {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    .login-divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--border-light), transparent);
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--bg-row);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-group input::placeholder { color: var(--text-muted); }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(79,142,247,0.15);
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      color: #020b18;
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(201,168,76,0.35);
+    }
+
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-sm {
+      padding: 6px 14px;
+      font-size: 0.8rem;
+    }
+
+    .btn-ghost {
+      background: var(--ghost-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover { background: var(--ghost-hover-bg); }
+
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      border: 1px solid var(--blue);
+    }
+    .btn-primary:hover { opacity: 0.85; }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-outline:hover { border-color: var(--text-muted); color: var(--text); }
+
+    .error-msg {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid rgba(224,92,92,0.25);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* ===================== MAIN LAYOUT ===================== */
+    #dashboard { display: none; min-height: 100vh; }
+
+    /* ===================== HEADER / NAV ===================== */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--header-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      min-width: 0;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .header-brand {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--brand-color, var(--gold-light));
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      padding: 6px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .tab-btn:hover { color: var(--text); background: var(--bg-row); }
+
+    .tab-btn.active {
+      color: var(--tab-active-color);
+      background: var(--tab-active-bg);
+      border: 1px solid var(--tab-active-border);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .user-name {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* ===================== CONTENT ===================== */
+    .page {
+      display: none;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page.active { display: block; }
+
+    /* ===================== YEAR FILTERS ===================== */
+    .year-filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .year-filter-bar .filter-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    .year-btn {
+      padding: 5px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .year-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    .year-btn.active {
+      background: rgba(201,168,76,0.15);
+      border-color: var(--gold);
+      color: var(--gold-light);
+      font-weight: 600;
+    }
+
+    /* ===================== KPI CARDS ===================== */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .kpi-card .kpi-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+    }
+
+    .kpi-card .kpi-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .kpi-card .kpi-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
+
+    .kpi-value.gold  { color: var(--gold-light); }
+    .kpi-value.blue  { color: var(--blue); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.red   { color: var(--red); }
+
+    /* ===================== SECTION CARD ===================== */
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--gold-light);
+      letter-spacing: 0.5px;
+    }
+
+    /* ===================== TABLES ===================== */
+    .table-wrap { overflow-x: auto; }
+    #unsignedTable td, #unsignedTable th { padding: 8px 6px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      padding: 9px 12px;
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th.sortable:hover { color: var(--gold); }
+
+    th.sort-asc::after  { content: " ↑"; color: var(--gold); }
+    th.sort-desc::after { content: " ↓"; color: var(--gold); }
+
+    th.num, td.num { text-align: right; }
+
+    td {
+      padding: 10px 12px;
+      font-size: 0.88rem;
+      border-bottom: 1px solid rgba(30,48,80,0.5);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr { background: transparent; transition: background 0.15s; }
+    tbody tr:nth-child(even) { background: rgba(17,27,46,0.5); }
+    tbody tr:hover { background: var(--bg-hover); cursor: pointer; }
+
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .rank-1 { background: var(--gold); color: #020b18; }
+    .rank-2 { background: #9baabb; color: #020b18; }
+    .rank-3 { background: #a07850; color: #fff; }
+    .rank-other { background: var(--bg-row); color: var(--text-muted); }
+
+    .sign-rate-green  { color: var(--green);  font-weight: 600; }
+    .sign-rate-orange { color: var(--orange); font-weight: 600; }
+    .sign-rate-red    { color: var(--red);    font-weight: 600; }
+
+    /* ===================== CHART ===================== */
+    .chart-wrap {
+      position: relative;
+      height: 300px;
+    }
+
+    /* ===================== DETAIL PAGE ===================== */
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-bottom: 20px;
+      transition: color 0.2s;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+
+    .back-btn:hover { color: var(--gold); }
+
+    .detail-profile {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .detail-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), var(--blue));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #020b18;
+      flex-shrink: 0;
+    }
+
+    .detail-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .detail-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ===================== YEAR TRACKING PAGE ===================== */
+    .yoy-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .yoy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .yoy-card .yoy-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .yoy-card .yoy-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--blue);
+    }
+
+    .yoy-card .yoy-change {
+      margin-top: 6px;
+      font-size: 0.78rem;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .yoy-change.up   { color: var(--green); }
+    .yoy-change.down { color: var(--red); }
+    .yoy-change.flat { color: var(--text-muted); }
+
+    .month-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+    }
+
+    .month-expand-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .month-expand-card:hover { border-color: var(--border-light); }
+
+    .month-card-header {
+      padding: 16px 18px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .month-card-header:hover { background: var(--bg-hover); }
+
+    .month-card-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--gold-light);
+    }
+
+    .month-card-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px 16px;
+      margin-top: 8px;
+    }
+
+    .month-stat {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .month-stat span {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .expand-icon {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      transition: transform 0.2s;
+    }
+
+    .month-expand-card.open .expand-icon { transform: rotate(180deg); }
+
+    .month-card-body {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 12px 18px;
+    }
+
+    .month-expand-card.open .month-card-body { display: block; }
+    .month-expand-card.open { grid-column: 1 / -1; }
+
+    .month-body-table { width: 100%; }
+
+    .month-body-table th,
+    .month-body-table td {
+      padding: 7px 8px;
+      font-size: 0.8rem;
+    }
+    .month-body-table td:first-child {
+      white-space: nowrap;
+    }
+
+    /* ===================== MODAL ===================== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2,11,24,0.8);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 420px;
+      margin: 20px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+
+    .modal h2 {
+      font-size: 1.1rem;
+      color: var(--gold-light);
+      margin-bottom: 22px;
+    }
+
+    .success-msg {
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(76,175,130,0.25);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* ===================== MISC ===================== */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-muted);
+    }
+
+    .benchmark-val {
+      font-size: 0.78rem;
+      font-weight: 600;
+      width: 28px;
+      text-align: right;
+    }
+
+    /* Case cards */
+    .case-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .case-card {
+      background: var(--bg-row);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+
+    .case-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .case-card-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .case-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+
+    .case-badge-signed { background: var(--green-dim); color: var(--green); }
+    .case-badge-unsigned { background: var(--red-dim); color: var(--red); }
+
+    .case-mini-scores { margin-bottom: 10px; }
+
+    .case-strengths, .case-weaknesses {
+      margin-bottom: 8px;
+    }
+
+    .case-point {
+      font-size: 0.8rem;
+      color: var(--text);
+      margin-bottom: 4px;
+      padding-left: 16px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .case-point::before {
+      position: absolute;
+      left: 0;
+      top: 2px;
+      font-size: 0.7rem;
+    }
+
+    .case-point.strength::before {
+      content: "●";
+      color: var(--green);
+    }
+
+    .case-point.weakness::before {
+      content: "●";
+      color: var(--red);
+    }
+
+    .case-key-moment {
+      background: rgba(201,168,76,0.08);
+      border: 1px solid rgba(201,168,76,0.15);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      color: var(--text);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+
+    .case-key-moment-label {
+      color: var(--gold-light);
+      font-weight: 700;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+
+    .case-links {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .case-link {
+      font-size: 0.78rem;
+      color: var(--blue);
+      text-decoration: none;
+      padding: 4px 10px;
+      background: var(--blue-dim);
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .case-link:hover {
+      background: rgba(79,142,247,0.25);
+      cursor: pointer;
+    }
+
+    /* ===== 單列 case row（點擊展開） ===== */
+    .case-row-list {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-card);
+    }
+    .case-row {
+      border-bottom: 1px solid var(--border);
+    }
+    .case-row:last-child { border-bottom: none; }
+    .case-row-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .case-row-head:hover { background: var(--bg-hover); }
+    .case-row-chevron {
+      flex-shrink: 0;
+      width: 14px;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      transition: transform 0.2s;
+    }
+    .case-row-date {
+      flex-shrink: 0;
+      width: 92px;
+      font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .case-row-type {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.88rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .case-row-client {
+      flex-shrink: 0;
+      width: 110px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+    }
+    .case-row-body {
+      background: var(--bg-main);
+      border-top: 1px solid var(--border);
+    }
+    .case-row-detail-inner {
+      padding: 14px 18px;
+    }
+    @media (max-width: 640px) {
+      .case-row-date { width: 78px; font-size: 0.72rem; }
+      .case-row-type { font-size: 0.8rem; }
+      .case-row-client { width: 80px; font-size: 0.7rem; }
+      .case-row-head { padding: 8px 10px; gap: 8px; }
+    }
+
+    /* ===== 季度評估 ===== */
+    .qr-list { display: flex; flex-direction: column; gap: 8px; }
+    .qr-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+    }
+    .qr-item-period {
+      flex-shrink: 0;
+      font-weight: 700;
+      color: var(--gold-light);
+      min-width: 80px;
+    }
+    .qr-item-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+    .qr-item-meta {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .qr-upload {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      background: var(--bg-row);
+      border: 1px dashed var(--border-light);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .qr-upload select, .qr-upload input {
+      padding: 5px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    /* Case content modal */
+    .case-content-modal {
+      max-width: 720px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .case-content-body {
+      flex: 1;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-size: 0.88rem;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg-row);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      max-height: 60vh;
+    }
+
+    /* Personal advice */
+    .advice-list {
+      list-style: none;
+      counter-reset: advice-counter;
+    }
+
+    .advice-item {
+      counter-increment: advice-counter;
+      font-size: 0.85rem;
+      color: var(--text);
+      line-height: 1.6;
+      padding: 10px 12px 10px 36px;
+      position: relative;
+      border-bottom: 1px solid rgba(30,48,80,0.3);
+    }
+
+    .advice-item:last-child { border-bottom: none; }
+
+    .advice-item::before {
+      content: counter(advice-counter);
+      position: absolute;
+      left: 8px;
+      top: 10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.15);
+      color: var(--gold-light);
+      font-size: 0.72rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Insights section */
+    .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .insight-icon {
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .insight-success {
+      background: var(--green-dim);
+      border: 1px solid rgba(76,175,130,0.2);
+      color: var(--text);
+    }
+    .insight-success .insight-icon { color: var(--green); }
+
+    .insight-info {
+      background: var(--blue-dim);
+      border: 1px solid rgba(79,142,247,0.2);
+      color: var(--text);
+    }
+    .insight-info .insight-icon { color: var(--blue); }
+
+    .insight-warning {
+      background: var(--orange-dim);
+      border: 1px solid rgba(224,149,74,0.2);
+      color: var(--text);
+    }
+    .insight-warning .insight-icon { color: var(--orange); }
+
+    .insight-danger {
+      background: var(--red-dim);
+      border: 1px solid rgba(224,92,92,0.2);
+      color: var(--text);
+    }
+    .insight-danger .insight-icon { color: var(--red); }
+
+    /* ===================== UPLOAD PAGE ===================== */
+    .upload-step { margin-bottom: 24px; }
+    .upload-step-label { font-size: 0.95rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .upload-step-desc { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+    .upload-dropzone {
+      border: 2px dashed var(--border-light);
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .upload-dropzone:hover, .upload-dropzone.drag-over {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.05);
+    }
+    .upload-dropzone.has-file {
+      border-color: var(--green);
+      background: rgba(76,175,130,0.05);
+    }
+    .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+    .upload-browse { color: var(--blue); cursor: pointer; text-decoration: underline; }
+    .upload-file-name { margin-top: 8px; font-size: 0.85rem; font-weight: 600; color: var(--green); }
+
+    /* ===================== RESPONSIVE ===================== */
+    /* ===================== RWD: TABLET ===================== */
+    @media (max-width: 900px) {
+      .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+      .yoy-grid  { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ===================== RWD: MOBILE ===================== */
+    @media (max-width: 640px) {
+      /* --- Header: 兩列佈局 --- */
+      .header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 12px;
+        gap: 4px;
+      }
+      .header-left {
+        width: 100%;
+        gap: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-shrink: 0;
+      }
+      .header-brand { font-size: 0.8rem; }
+      .tab-nav { gap: 2px; }
+      .tab-btn { padding: 4px 8px; font-size: 0.72rem; white-space: nowrap; }
+      .header-right {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+      }
+      .header-right::-webkit-scrollbar { display: none; }
+      .user-name { font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
+      .header-right .btn { font-size: 0.72rem; padding: 3px 8px; white-space: nowrap; flex-shrink: 0; }
+
+      /* --- Page content --- */
+      .page { padding: 12px; }
+      .page-title { font-size: 1.1rem; }
+      .section { padding: 12px; }
+      .section-title { font-size: 0.9rem; }
+
+      /* --- KPI Cards --- */
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .kpi-card { padding: 12px; }
+      .kpi-card:first-child { grid-column: 1 / -1; }
+      .kpi-label { font-size: 0.72rem; }
+      .kpi-value { font-size: 1.2rem; }
+      .kpi-sub { font-size: 0.7rem; }
+
+      /* --- Year filter --- */
+      .year-filter-bar { flex-wrap: wrap; gap: 4px; }
+      .year-filter-bar .year-btn { padding: 4px 10px; font-size: 0.75rem; }
+
+      /* --- Tables --- */
+      .table-wrap { -webkit-overflow-scrolling: touch; }
+      .table-wrap table { font-size: 0.75rem; }
+      .table-wrap th, .table-wrap td { padding: 6px 8px; }
+      .rank-table th { font-size: 0.72rem; }
+
+      /* --- YoY grid --- */
+      .yoy-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+      /* --- Month & Case cards --- */
+      .month-cards-grid { grid-template-columns: 1fr; }
+      .case-cards-grid { grid-template-columns: 1fr; }
+
+      /* --- 未成案追蹤 filters --- */
+      .unsigned-filters {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+      }
+      .unsigned-filters select { font-size: 0.78rem; max-width: 120px; }
+
+      /* --- Login --- */
+      .login-card { padding: 24px 16px; max-width: 95vw; }
+      .firm-name { font-size: 1.3rem; }
+
+      /* --- Upload --- */
+      .upload-dropzone { padding: 16px; }
+      .upload-step-desc { font-size: 0.75rem; }
+
+      /* --- Admin table --- */
+      .admin-table { font-size: 0.75rem; }
+      .admin-table th, .admin-table td { padding: 6px 8px; }
+    }
+
+    /* ===================== RWD: VERY SMALL ===================== */
+    @media (max-width: 400px) {
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+      .kpi-value { font-size: 1rem; }
+      .header-brand { display: none; }
+      .tab-btn { padding: 4px 6px; font-size: 0.68rem; }
+      .header-right .user-name { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===================== LOGIN PAGE ===================== -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">諮詢分析儀表板</div>
+    </div>
+    <div class="login-divider"></div>
+    <div class="error-msg" id="loginError"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" placeholder="name@zhelv.com" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">密碼</label>
+        <input type="password" id="loginPassword" placeholder="請輸入密碼" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary" id="loginBtn">登 入</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div id="dashboard">
+
+  <!-- Sticky Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-brand">喆律 儀表板</div>
+      <div class="tab-nav" id="tabNav">
+        <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">總覽</button>
+        <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
+        <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
+        <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="user-name" id="userName"></span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeToggleBtn" title="切換明暗主題">🌙</button>
+      <a href="/lawyer-dashboard/revenue/" class="btn btn-ghost btn-sm" style="text-decoration:none">營運</a>
+      <a href="/lawyer-dashboard/finance/" class="btn btn-ghost btn-sm" style="text-decoration:none">財務規劃</a>
+      <a href="/lawyer-dashboard/partners/" class="btn btn-ghost btn-sm" style="text-decoration:none">合署律師</a>
+      <a id="adminLink" href="/lawyer-dashboard/admin/" class="btn btn-ghost btn-sm" style="display:none;text-decoration:none" title="帳號管理">🔑 帳號管理</a>
+      <button class="btn btn-ghost btn-sm" onclick="handleChangePassword()">修改密碼</button>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">登出</button>
+    </div>
+  </div>
+
+  <!-- ===== OVERVIEW PAGE ===== -->
+  <div class="page active" id="pageOverview">
+    <div class="year-filter-bar" id="overviewYearBar">
+      <span class="filter-label">篩選年份</span>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="kpi-grid" id="overviewKpiGrid">
+      <div class="kpi-card">
+        <div class="kpi-label">總諮詢數</div>
+        <div class="kpi-value blue" id="ov-consults">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">總簽約數</div>
+        <div class="kpi-value green" id="ov-signed">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">簽約率</div>
+        <div class="kpi-value" id="ov-sign-rate">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">諮詢效益</div>
+        <div class="kpi-value" id="ov-consult-eff">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">累計已收金額</div>
+        <div class="kpi-value gold" id="ov-collected">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">平均簽約收款</div>
+        <div class="kpi-value" id="ov-avg-collected">—</div>
+      </div>
+    </div>
+
+    <!-- Ranking Table (admin) / Own Stats (lawyer) -->
+    <div class="section" id="overviewTableSection">
+      <div class="section-header">
+        <div class="section-title" id="overviewTableTitle">律師排名</div>
+      </div>
+      <div class="table-wrap">
+        <table id="rankingTable">
+          <thead>
+            <tr>
+              <th style="width:44px">#</th>
+              <th class="sortable" data-col="name">律師</th>
+              <th class="sortable num" data-col="consult_eff">諮詢效益</th>
+              <th class="sortable num" data-col="consult_count">諮詢數</th>
+              <th class="sortable num" data-col="signed_count">簽約數</th>
+              <th class="sortable num" data-col="sign_rate">簽約率</th>
+              <th class="sortable num" data-col="collected">已收金額</th>
+              <th class="sortable num" data-col="avg_collected">平均簽約收款</th>
+            </tr>
+          </thead>
+          <tbody id="rankingTableBody">
+            <tr><td colspan="8" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Resigned Lawyers Section (collapsible) -->
+    <div class="section" id="resignedSection" style="display:none;">
+      <div class="section-header" style="cursor:pointer;" onclick="toggleResigned()">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px;">
+          <span id="resignedToggleIcon" style="font-size:12px;transition:transform 0.2s;">&#9654;</span>
+          離職律師歷史數據
+          <span id="resignedCount" style="font-size:12px;color:var(--text-muted);font-weight:400;"></span>
+        </div>
+      </div>
+      <div id="resignedContent" style="display:none;">
+        <div class="table-wrap">
+          <table id="resignedTable">
+            <thead>
+              <tr>
+                <th style="width:44px">#</th>
+                <th>律師</th>
+                <th class="num">諮詢效益</th>
+                <th class="num">諮詢數</th>
+                <th class="num">簽約數</th>
+                <th class="num">簽約率</th>
+                <th class="num">已收金額</th>
+                <th class="num">平均簽約收款</th>
+              </tr>
+            </thead>
+            <tbody id="resignedTableBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Amount Range Analysis -->
+    <div class="section" id="amountRangeSection">
+      <div class="section-header">
+        <div class="section-title">成案金額區間分析</div>
+      </div>
+      <div id="amountRangeContent"></div>
+    </div>
+  </div>
+
+  <!-- ===== DETAIL PAGE ===== -->
+  <div class="page" id="pageDetail">
+    <button class="back-btn" id="detailBackBtn" onclick="goBackFromDetail()">← 返回總覽</button>
+
+    <div class="detail-profile">
+      <div class="detail-avatar" id="detailAvatar">律</div>
+      <div>
+        <div class="detail-name" id="detailName">律師姓名</div>
+        <div class="detail-meta" id="detailMeta"></div>
+      </div>
+    </div>
+
+    <div class="year-filter-bar" id="detailYearBar">
+      <span class="filter-label">篩選年份</span>
+    </div>
+
+    <div class="kpi-grid" id="detailKpiGrid">
+      <div class="kpi-card">
+        <div class="kpi-label">總諮詢數</div>
+        <div class="kpi-value blue" id="dt-consults">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">簽約數</div>
+        <div class="kpi-value green" id="dt-signed">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">簽約率</div>
+        <div class="kpi-value" id="dt-sign-rate">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">累計已收金額</div>
+        <div class="kpi-value gold" id="dt-collected">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">平均簽約收款</div>
+        <div class="kpi-value" id="dt-avg-collected">—</div>
+      </div>
+    </div>
+
+    <!-- Insights section -->
+    <div class="section" id="detailInsightsSection" style="display:none;">
+      <div class="section-header">
+        <div class="section-title">分析建議</div>
+      </div>
+      <div id="detailInsightsContent"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">每月趨勢</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="detailChart"></canvas>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header" style="cursor:pointer;" onclick="toggleDetailMonthly()">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px;">
+          <span id="detailMonthlyToggleIcon" style="font-size:12px;transition:transform 0.2s;">&#9654;</span>
+          每月明細
+        </div>
+      </div>
+      <div id="detailMonthlyContent" style="display:none;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th class="num">諮詢數</th>
+                <th class="num">簽約數</th>
+                <th class="num">簽約率</th>
+                <th class="num">已收金額</th>
+                <th class="num">平均簽約收款</th>
+              </tr>
+            </thead>
+            <tbody id="detailTableBody">
+              <tr><td colspan="6" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Year-over-Year Comparison -->
+    <div class="section" id="detailYoySection">
+      <div class="section-header">
+        <div class="section-title">年度比較</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="yoyYearA" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailYoy(detailLawyerId)"></select>
+        <span style="color:var(--text-muted);">vs</span>
+        <select id="yoyYearB" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailYoy(detailLawyerId)"></select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.8rem;color:var(--text-muted);margin-left:8px;">
+          <input type="checkbox" id="yoySamePeriod" checked onchange="renderDetailYoy(detailLawyerId)"> 僅比較同期月份
+        </label>
+      </div>
+      <div id="detailYoyContent"></div>
+    </div>
+
+    <!-- 成案金額區間分析 (from quality detail) -->
+    <div class="section" style="margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">成案金額區間分析</div>
+      </div>
+      <div class="year-filter-bar" id="lawyerAmountYearBar" style="margin-bottom:12px;">
+        <span class="filter-label">篩選年度</span>
+      </div>
+      <div id="lawyerAmountRangeContent"></div>
+    </div>
+
+    <!-- Case Cards (from quality detail) -->
+    <div id="detailCaseCardsContainer"></div>
+
+    <!-- 1 on 1 會議季度評估 -->
+    <div id="detailQuarterlyContainer"></div>
+  </div>
+
+  <!-- ===== YEAR TRACKING PAGE ===== -->
+  <div class="page" id="pageTracking">
+    <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-title" style="font-size:1.1rem;" id="trackingTitle">2026 年度追蹤</div>
+    </div>
+
+    <!-- YoY KPI -->
+    <div class="yoy-grid" id="yoyGrid">
+      <div class="yoy-card">
+        <div class="yoy-label">總諮詢數</div>
+        <div class="yoy-value" id="yoy-consults">—</div>
+        <div class="yoy-change flat" id="yoy-consults-change">vs 上一年</div>
+      </div>
+      <div class="yoy-card">
+        <div class="yoy-label">總簽約數</div>
+        <div class="yoy-value" id="yoy-signed">—</div>
+        <div class="yoy-change flat" id="yoy-signed-change">vs 上一年</div>
+      </div>
+      <div class="yoy-card">
+        <div class="yoy-label">累計已收金額</div>
+        <div class="yoy-value" id="yoy-collected">—</div>
+        <div class="yoy-change flat" id="yoy-collected-change">vs 上一年</div>
+      </div>
+      <div class="yoy-card">
+        <div class="yoy-label">簽約率</div>
+        <div class="yoy-value" id="yoy-rate">—</div>
+        <div class="yoy-change flat" id="yoy-rate-change">vs 上一年</div>
+      </div>
+      <div class="yoy-card">
+        <div class="yoy-label">諮詢效益</div>
+        <div class="yoy-value" id="yoy-eff">—</div>
+        <div class="yoy-change flat" id="yoy-eff-change">vs 上一年</div>
+      </div>
+    </div>
+
+    <!-- Monthly expand cards -->
+    <div class="month-cards-grid" id="monthCardsGrid">
+      <div class="loading"><span class="loading-spinner"></span>載入中...</div>
+    </div>
+  </div>
+
+  <!-- ===== UNSIGNED CASES TRACKING PAGE ===== -->
+  <div id="pageUnsigned" class="page">
+    <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-title" style="font-size:1.1rem;">未成案追蹤</div>
+    </div>
+    <div class="year-filter-bar unsigned-filters" id="unsignedFilterBar" style="margin-bottom:16px;">
+      <span class="filter-label">時間範圍</span>
+      <button class="year-btn active" onclick="setUnsignedRange(1)">近1個月</button>
+      <button class="year-btn" onclick="setUnsignedRange(3)">近3個月</button>
+      <button class="year-btn" onclick="setUnsignedRange(6)">近6個月</button>
+      <span class="filter-label" id="unsignedLawyerFilterLabel" style="margin-left:20px;display:none;">律師</span>
+      <select id="unsignedLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
+      </select>
+      <span class="filter-label" id="unsignedStaffFilterLabel" style="margin-left:20px;display:none;">法務</span>
+      <select id="unsignedStaffSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
+      </select>
+    </div>
+    <div id="unsignedSummary" style="margin-bottom:16px;"></div>
+    <div class="section">
+      <div class="table-wrap">
+        <table id="unsignedTable">
+          <thead><tr id="unsignedTableHead"></tr></thead>
+          <tbody id="unsignedTableBody">
+            <tr><td colspan="5"><div class="empty-state">暫無資料</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ADMIN PAGE (admin only) ===== -->
+  <div id="pageAdmin" class="page">
+    <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-title" style="font-size:1.1rem;">總帳號管理</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">統一管理 4 個儀表板（諮詢分析 / 營運 / 財務規劃 / 合署律師）的登入權限</div>
+    </div>
+
+    <!-- 權限對照矩陣 -->
+    <div class="section" style="margin-bottom:16px;">
+      <div class="section-header">
+        <div class="section-title">📊 權限對照</div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 4 個儀表板能看到的範圍與額外功能。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">角色</th>
+              <th style="text-align:center;">諮詢分析</th>
+              <th style="text-align:center;">營運</th>
+              <th style="text-align:center;">財務規劃</th>
+              <th style="text-align:center;">合署律師</th>
+              <th style="text-align:left;">額外功能</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料、編列預算、管理帳號</td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--blue);font-weight:600;">📊 主管 (manager)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料</td>
+            </tr>
+            <tr>
+              <td>👁 律師 + 全部資料（can_view_all）</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td>🔒 律師（預設）</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-muted);">✗ 無 auth 帳號</td>
+              <td colspan="4" style="text-align:center;color:var(--text-muted);">無法登入任一儀表板</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">需 admin 建立 auth user 才能登入</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">👥 律師帳號設定</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 4 個儀表板。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;cursor:pointer;" onclick="adminSortBy='name';renderAdminPage();">律師 <span id="adminSortName">▼</span></th>
+              <th style="text-align:left;">Email</th>
+              <th style="text-align:center;">角色</th>
+              <th style="text-align:center;font-size:0.75rem;">諮詢分析</th>
+              <th style="text-align:center;font-size:0.75rem;">營運</th>
+              <th style="text-align:center;font-size:0.75rem;">財務規劃</th>
+              <th style="text-align:center;font-size:0.75rem;">合署律師</th>
+              <th style="text-align:center;">狀態</th>
+              <th style="text-align:center;">密碼</th>
+            </tr>
+          </thead>
+          <tbody id="adminLawyerTableBody">
+            <tr><td colspan="9"><div class="loading"><span class="loading-spinner"></span>載入中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== UPLOAD PAGE (admin only) ===== -->
+  <div id="pageUpload" class="page">
+    <h1 class="page-title">資料上傳</h1>
+
+    <!-- Existing data summary -->
+    <div id="uploadDataSummary" class="section" style="margin-bottom:20px;">
+      <div class="section-header" style="cursor:pointer;" onclick="const c=document.getElementById('uploadSummaryContent');const a=this.querySelector('.collapse-arrow');if(c.style.display==='none'){c.style.display='';a.style.transform='rotate(0deg)';}else{c.style.display='none';a.style.transform='rotate(-90deg)';}">
+        <div class="section-title">已匯入會議紀錄 / 逐字稿總覽</div>
+        <span class="collapse-arrow" style="transition:transform 0.2s;display:inline-block;">▼</span>
+      </div>
+      <div id="uploadSummaryContent" style="display:none;"></div>
+    </div>
+
+    <!-- Sync Status -->
+    <div id="syncStatusSection" class="section" style="margin-bottom:20px;">
+      <div class="section-header">
+        <div class="section-title">自動同步狀態</div>
+      </div>
+      <div id="syncStatusContent" style="padding:4px 0;color:var(--text-muted);">載入中...</div>
+    </div>
+
+    <!-- Upload Area -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">上傳諮詢案件</div>
+      </div>
+
+      <!-- Step 1: ZIP file (optional) -->
+      <div class="upload-step">
+        <div class="upload-step-label">步驟 1：上傳會議記錄／逐字稿 ZIP（補內容用）</div>
+        <div class="upload-step-desc">將會議記錄與逐字稿打包成 ZIP 上傳。檔名格式：律師名_成案/未成案_日期_案件類型(會議記錄/逐字稿).docx<br>
+          <strong>⚠ 注意：</strong>ZIP 上傳<strong>只會把內容補到已存在的 CRM 案件</strong>（不新增案件、不改簽約/金額）。若 CRM 尚未同步該案件，請等 CRM 爬蟲跑完後再上傳。</div>
+        <div class="upload-dropzone" id="zipDropzone">
+          <div class="upload-icon">📁</div>
+          <div>拖拉 ZIP 檔案到此處，或<label class="upload-browse" for="zipInput">點擊選擇</label></div>
+          <input type="file" id="zipInput" accept=".zip" style="display:none">
+          <div id="zipFileName" class="upload-file-name"></div>
+        </div>
+      </div>
+
+      <!-- Step 2: Excel (optional, or standalone for CRM data) -->
+      <div class="upload-step">
+        <div class="upload-step-label">步驟 2：上傳案件清單 Excel（可單獨上傳 CRM 匯出檔）</div>
+        <div class="upload-step-desc">支援 CRM 匯出的 xlsx（含案件編號、當事人等欄位）。只上傳 Excel 不上傳 ZIP 也可以匯入案件資料。</div>
+        <div class="upload-dropzone" id="xlsxDropzone">
+          <div class="upload-icon">📊</div>
+          <div>拖拉 Excel 檔案到此處，或<label class="upload-browse" for="xlsxInput">點擊選擇</label></div>
+          <input type="file" id="xlsxInput" accept=".xlsx,.xls" style="display:none">
+          <div id="xlsxFileName" class="upload-file-name"></div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:12px;margin-top:20px;">
+        <button class="btn btn-primary" id="parseBtn" onclick="parseUploadedFiles()" disabled>解析檔案</button>
+        <button class="btn btn-outline" id="uploadBtn" onclick="submitUploadedCases()" disabled style="display:none;">確認匯入</button>
+      </div>
+    </div>
+
+    <!-- Parse results / preview -->
+    <div id="uploadPreview" class="section" style="display:none;margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">解析結果</div>
+      </div>
+      <div id="uploadStats" style="margin-bottom:16px;"></div>
+      <div style="overflow-x:auto;">
+        <table class="detail-table" id="uploadPreviewTable">
+          <thead>
+            <tr>
+              <th>律師</th>
+              <th>日期</th>
+              <th>案件類型</th>
+              <th>成案</th>
+              <th>會議記錄</th>
+              <th>逐字稿</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="uploadPreviewBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Upload progress -->
+    <div id="uploadProgress" class="section" style="display:none;margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">匯入進度</div>
+      </div>
+      <div id="uploadProgressBar" style="height:8px;background:var(--bg-row);border-radius:4px;overflow:hidden;margin-bottom:12px;">
+        <div id="uploadProgressFill" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width 0.3s;"></div>
+      </div>
+      <div id="uploadProgressText" style="font-size:0.85rem;color:var(--text-muted);"></div>
+      <div id="uploadResult" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+</div><!-- end #dashboard -->
+
+<!-- ===================== PASSWORD MODAL ===================== -->
+<div class="modal-overlay" id="passwordModal">
+  <div class="modal">
+    <h2>修改密碼</h2>
+    <div class="error-msg" id="pwdError"></div>
+    <div class="success-msg" id="pwdSuccess">密碼修改成功！</div>
+    <form id="passwordForm">
+      <div class="form-group">
+        <label>新密碼</label>
+        <input type="password" id="newPassword" minlength="6" placeholder="至少 6 個字元" required>
+      </div>
+      <div class="form-group">
+        <label>確認新密碼</label>
+        <input type="password" id="confirmPassword" minlength="6" placeholder="再次輸入新密碼" required>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:4px;">
+        <button type="submit" class="btn btn-primary" style="flex:1">確認修改</button>
+        <button type="button" class="btn btn-outline" onclick="closePasswordModal()">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== CASE CONTENT MODAL ===================== -->
+<div class="modal-overlay" id="caseContentModal">
+  <div class="modal case-content-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h2 id="caseContentTitle" style="margin-bottom:0;"></h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeCaseContentModal()" style="font-size:1.1rem;line-height:1;padding:4px 10px;">&times;</button>
+    </div>
+    <div id="caseContentBody" class="case-content-body"></div>
+  </div>
+</div>
+
+<script>
+// Embed mode detection
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+// ===================== CONFIG =====================
+const SUPABASE_URL     = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+
+let sb = null;
+try {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  console.warn('Supabase 初始化失敗，使用預覽模式', e);
+}
+
+// ===================== STATE =====================
+let currentUser   = null;
+let currentLawyer = null;
+let allStats      = [];      // all monthly_stats rows visible to this user
+let allLawyersMap = {};      // id -> lawyer record (active)
+let resignedLawyersMap = {}; // id -> lawyer record (resigned)
+let detailLawyerId = null;
+let detailChart   = null;
+let detailBackTarget = 'overview';
+
+// ===================== THEME TOGGLE =====================
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  html.setAttribute('data-theme', next === 'dark' ? '' : 'light');
+  document.getElementById('themeToggleBtn').textContent = next === 'light' ? '☀️' : '🌙';
+  localStorage.setItem('theme', next);
+  // 重新渲染圖表以套用新主題色
+  if (detailLawyerId && document.getElementById('pageDetail').classList.contains('active')) {
+    const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
+    const filtered = filterByYear(lawyerStats, detailYear);
+    renderDetailChart(filtered);
+  }
+}
+
+// Apply saved theme on load
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+  // Button text will be set when DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.textContent = saved === 'light' ? '☀️' : '🌙';
+  });
+})();
+
+// 聆聽其他同源 tab/iframe 或父頁 postMessage 過來的 theme 變更
+function _applyConsultationTheme(v) {
+  document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : '');
+  var btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = v === 'light' ? '☀️' : '🌙';
+  // 重新渲染圖表以套用新主題色（若目前在 detail page）
+  try {
+    if (typeof detailLawyerId !== 'undefined' && detailLawyerId
+        && document.getElementById('pageDetail')
+        && document.getElementById('pageDetail').classList.contains('active')) {
+      var stats = allStats.filter(function(s) { return s.lawyer_id === detailLawyerId; });
+      var filtered = filterByYear(stats, detailYear);
+      renderDetailChart(filtered);
+    }
+  } catch(e) {}
+}
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) _applyConsultationTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    _applyConsultationTheme(e.data.value);
+    localStorage.setItem('theme', e.data.value);
+  }
+});
+
+function getChartColors() {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    text: style.getPropertyValue('--text-muted').trim() || '#8899aa',
+    grid: style.getPropertyValue('--border').trim() || 'rgba(30,48,80,0.5)',
+    gold: style.getPropertyValue('--gold-light').trim() || '#e8c97a',
+  };
+}
+
+let allCases      = [];      // all consultation_cases rows visible to this user
+
+let overviewYear = 'all';
+let detailYear   = 'all';
+
+// Ranking table sort
+let sortCol = 'collected';
+let sortDir = 'desc';
+
+// ===================== INIT =====================
+async function init() {
+  if (!sb) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await loadDashboard(session.user);
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) await loadDashboard(session.user);
+    else if (event === 'SIGNED_OUT') showLoginPage();
+  });
+}
+
+// ===================== LOGIN =====================
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!sb) {
+    showErr('loginError', 'Supabase 尚未設定');
+    return;
+  }
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const btn      = document.getElementById('loginBtn');
+  const errEl    = document.getElementById('loginError');
+
+  btn.disabled    = true;
+  btn.textContent = '登入中...';
+  errEl.style.display = 'none';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    showErr('loginError', '登入失敗：帳號或密碼錯誤');
+    btn.disabled    = false;
+    btn.textContent = '登 入';
+    return;
+  }
+  await loadDashboard(data.user);
+});
+
+// ===================== LOAD DASHBOARD =====================
+async function loadDashboard(user) {
+  currentUser = user;
+
+  const { data: lawyers, error } = await sb
+    .from('lawyers')
+    .select('*')
+    .eq('auth_user_id', user.id);
+
+  if (error || !lawyers || lawyers.length === 0) {
+    showErr('loginError', '找不到律師資料，請聯繫管理員');
+    await sb.auth.signOut();
+    return;
+  }
+
+  currentLawyer = lawyers[0];
+  document.getElementById('userName').textContent = currentLawyer.name;
+
+  // Fetch all rows with batched parallelism (5 concurrent requests max)
+  async function fetchAllPages(table, select, orderCol, ascending, maxPages) {
+    const ps = 1000, batch = 5;
+    let all = [];
+    for (let b = 0; b < maxPages; b += batch) {
+      const promises = [];
+      for (let i = b; i < Math.min(b + batch, maxPages); i++) {
+        promises.push(
+          sb.from(table).select(select)
+            .order(orderCol, { ascending })
+            .range(i * ps, (i + 1) * ps - 1)
+            .then(r => ({ idx: i, data: r.data || [], err: r.error }))
+        );
+      }
+      const results = (await Promise.all(promises)).sort((a, b) => a.idx - b.idx);
+      let done = false;
+      for (const r of results) {
+        if (r.err || r.data.length === 0) { done = true; break; }
+        all = all.concat(r.data);
+        if (r.data.length < ps) { done = true; break; }
+      }
+      if (done) break;
+    }
+    return all;
+  }
+
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
+
+  // Step 1: Load stats + lawyers first (fast, ~1-2s)
+  const lawyerPromise = canViewAll()
+    ? sb.from('lawyers').select('id,name,email,office,role,is_active,can_view_all,auth_user_id').order('name')
+    : Promise.resolve({ data: null });
+
+  const [statsResult, lawyersResult] = await Promise.all([
+    fetchAllPages('monthly_stats', '*', 'month', true, 3),
+    lawyerPromise
+  ]);
+
+  allStats = statsResult;
+
+  if (canViewAll() && lawyersResult.data) {
+    lawyersResult.data.forEach(l => {
+      if (l.is_active === false) resignedLawyersMap[l.id] = l;
+      else allLawyersMap[l.id] = l;
+    });
+  } else if (!canViewAll()) {
+    allLawyersMap[currentLawyer.id] = currentLawyer;
+  }
+
+  // Step 2: Show dashboard immediately (before cases load)
+  hidePage('loginPage');
+  showDashboard();
+
+  // Step 3: Load cases in background
+  fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20).then(cases => {
+    allCases = cases;
+    console.log('[DEBUG] cases loaded:', cases.length);
+  });
+}
+
+// ===================== TAB NAVIGATION =====================
+function showTab(tab) {
+  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+
+  document.getElementById('pageOverview').classList.toggle('active', tab === 'overview');
+  document.getElementById('pageDetail').classList.toggle('active',   tab === 'detail');
+  document.getElementById('pageTracking').classList.toggle('active', tab === 'tracking');
+  document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
+  document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
+  document.getElementById('pageAdmin').classList.toggle('active', tab === 'admin');
+
+  if (tab === 'overview')  renderOverviewPage();
+  if (tab === 'tracking')  renderTrackingPage();
+  if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
+  if (tab === 'unsigned')  renderUnsignedPage();
+  if (tab === 'admin') {
+    if (!currentLawyer || currentLawyer.role !== 'admin') return;
+    renderAdminPage();
+  }
+}
+
+function showDetailPage(lawyerId) {
+  detailLawyerId = lawyerId;
+  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.classList.remove('active');
+  });
+  document.getElementById('pageOverview').classList.remove('active');
+  document.getElementById('pageTracking').classList.remove('active');
+  document.getElementById('pageUpload').classList.remove('active');
+  document.getElementById('pageUnsigned').classList.remove('active');
+  document.getElementById('pageAdmin').classList.remove('active');
+  document.getElementById('pageDetail').classList.add('active');
+  renderDetailPage();
+}
+
+function goBackFromDetail() {
+  showTab('overview');
+}
+
+// 判斷當前使用者是否可以看全部資料（admin、manager 或 can_view_all）
+function canViewAll() {
+  return currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager' || currentLawyer.can_view_all === true);
+}
+
+function showDashboard() {
+  document.getElementById('dashboard').style.display = 'block';
+
+  // Show tabs based on role: admin/manager see upload; admin sees 帳號管理 link
+  const isAdmin = currentLawyer && currentLawyer.role === 'admin';
+  const isManager = currentLawyer && currentLawyer.role === 'manager';
+  const uploadTab = document.getElementById('tab-upload');
+  if (uploadTab) uploadTab.style.display = (isAdmin || isManager) ? '' : 'none';
+  const adminLink = document.getElementById('adminLink');
+  if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
+
+  // Build year filter options from data
+  const years = getAvailableYears(allStats);
+  buildYearButtons('overviewYearBar', years, overviewYear, (y) => {
+    overviewYear = y;
+    renderOverviewPage();
+  });
+
+  renderOverviewPage();
+
+  // 支援 URL ?tab=xxx 自動切換 tab（用於其他儀表板跳來這裡的 admin 連結）
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const initTab = params.get('tab');
+    if (initTab) {
+      const tabBtn = document.getElementById('tab-' + initTab);
+      if (tabBtn && tabBtn.style.display !== 'none') {
+        setTimeout(() => showTab(initTab), 100);
+      }
+    }
+  } catch(e) {}
+}
+
+// ===================== YEAR HELPERS =====================
+function getAvailableYears(stats) {
+  const set = new Set();
+  stats.forEach(s => {
+    if (s.month) set.add(s.month.slice(0, 4));
+  });
+  return ['all', ...Array.from(set).sort().reverse()];
+}
+
+function buildYearButtons(containerId, years, activeYear, onSelect) {
+  const bar = document.getElementById(containerId);
+  // Remove old buttons (keep label)
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+
+  years.forEach(y => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (y === activeYear ? ' active' : '');
+    btn.textContent = y === 'all' ? '全部' : y;
+    btn.onclick = () => {
+      onSelect(y);
+      buildYearButtons(containerId, years, y, onSelect);
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function filterByYear(stats, year) {
+  if (year === 'all') return stats;
+  return stats.filter(s => s.month && s.month.startsWith(year));
+}
+
+// ===================== OVERVIEW PAGE =====================
+function renderOverviewPage() {
+  const filtered = filterByYear(allStats, overviewYear);
+
+  // Aggregate totals
+  const totals = aggregateStats(filtered);
+  renderKpiCards(totals, 'ov');
+
+  // Build lawyer rows
+  if (canViewAll()) {
+    document.getElementById('overviewTableTitle').textContent = '律師排名';
+    renderRankingTable(filtered);
+    renderResignedSection(filtered);
+  } else {
+    document.getElementById('overviewTableTitle').textContent = '我的統計';
+    renderSelfTable(filtered);
+    document.getElementById('resignedSection').style.display = 'none';
+  }
+
+  // Amount range analysis
+  renderAmountRange(overviewYear);
+}
+
+function aggregateStats(stats) {
+  const t = stats.reduce((acc, s) => {
+    acc.consult_count += s.consult_count || 0;
+    acc.signed_count  += s.signed_count  || 0;
+    acc.revenue       += s.revenue       || 0;
+    acc.collected     += s.collected     || 0;
+    return acc;
+  }, { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 });
+  t.sign_rate    = t.consult_count > 0 ? (t.signed_count / t.consult_count * 100) : 0;
+  t.avg_collected = t.signed_count > 0 ? (t.collected / t.signed_count) : 0;
+  t.consult_eff  = t.consult_count > 0 ? (t.collected / t.consult_count) : 0;
+  return t;
+}
+
+function renderKpiCards(totals, prefix) {
+  const rateEl = document.getElementById(prefix + '-sign-rate');
+  const rate   = totals.sign_rate;
+
+  setText(prefix + '-consults',     totals.consult_count.toLocaleString());
+  setText(prefix + '-signed',       totals.signed_count.toLocaleString());
+  setText(prefix + '-consult-eff',  '$' + Math.round(totals.consult_eff).toLocaleString());
+  setText(prefix + '-collected',    '$' + Math.round(totals.collected).toLocaleString());
+  setText(prefix + '-avg-collected','$' + Math.round(totals.avg_collected).toLocaleString());
+
+  rateEl.textContent = rate.toFixed(1) + '%';
+  rateEl.className = 'kpi-value ' + rateColor(rate);
+}
+
+function rateColor(rate) {
+  if (rate >= 45) return 'green';
+  if (rate >= 38) return 'orange';
+  return 'red';
+}
+
+// Aggregate per lawyer from a stats array
+function buildLawyerRows(stats) {
+  const byLawyer = {};
+  stats.forEach(s => {
+    if (!byLawyer[s.lawyer_id]) {
+      byLawyer[s.lawyer_id] = { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
+    }
+    const r = byLawyer[s.lawyer_id];
+    r.consult_count += s.consult_count || 0;
+    r.signed_count  += s.signed_count  || 0;
+    r.revenue       += s.revenue       || 0;
+    r.collected     += s.collected     || 0;
+  });
+
+  return Object.entries(byLawyer).map(([id, d]) => {
+    const lawyer = allLawyersMap[id] || resignedLawyersMap[id] || { name: '(未知)', office: '' };
+    return {
+      id,
+      name:         lawyer.name,
+      consult_count: d.consult_count,
+      signed_count:  d.signed_count,
+      sign_rate:    d.consult_count > 0 ? d.signed_count / d.consult_count * 100 : 0,
+      revenue:      d.revenue,
+      collected:    d.collected,
+      avg_collected: d.signed_count > 0 ? d.collected / d.signed_count : 0,
+      consult_eff:  d.consult_count > 0 ? d.collected / d.consult_count : 0,
+    };
+  });
+}
+
+function renderRankingTable(stats) {
+  let rows = buildLawyerRows(stats).filter(r => !resignedLawyersMap[r.id]);
+  rows = sortRows(rows, sortCol, sortDir);
+
+  // Update column sort indicators
+  document.querySelectorAll('#rankingTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === sortCol) {
+      th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  const tbody = document.getElementById('rankingTableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const rank = i + 1;
+    const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+    const rateClass = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    return `<tr onclick="showDetailPage('${r.id}')">
+      <td><span class="rank-badge ${rClass}">${rank}</span></td>
+      <td><strong>${escHtml(r.name)}</strong></td>
+      <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+      <td class="num">${r.consult_count.toLocaleString()}</td>
+      <td class="num">${r.signed_count.toLocaleString()}</td>
+      <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
+      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSelfTable(stats) {
+  // Lawyer sees their own data as a single row
+  const rows = buildLawyerRows(stats);
+  const tbody = document.getElementById('rankingTableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料</div></td></tr>';
+    return;
+  }
+  const r = rows[0];
+  const rateClass = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+  tbody.innerHTML = `<tr onclick="showDetailPage('${r.id}')">
+    <td><span class="rank-badge rank-1">1</span></td>
+    <td><strong>${escHtml(r.name)}</strong></td>
+    <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+    <td class="num">${r.consult_count.toLocaleString()}</td>
+    <td class="num">${r.signed_count.toLocaleString()}</td>
+    <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
+    <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+    <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+  </tr>`;
+}
+
+// ===================== RESIGNED LAWYERS SECTION =====================
+let resignedOpen = false;
+let detailMonthlyOpen = false;
+
+function toggleDetailMonthly() {
+  detailMonthlyOpen = !detailMonthlyOpen;
+  document.getElementById('detailMonthlyContent').style.display = detailMonthlyOpen ? 'block' : 'none';
+  document.getElementById('detailMonthlyToggleIcon').style.transform = detailMonthlyOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
+function toggleResigned() {
+  resignedOpen = !resignedOpen;
+  document.getElementById('resignedContent').style.display = resignedOpen ? 'block' : 'none';
+  document.getElementById('resignedToggleIcon').style.transform = resignedOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
+function renderResignedSection(stats) {
+  const section = document.getElementById('resignedSection');
+  const resignedIds = Object.keys(resignedLawyersMap);
+  if (resignedIds.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // Build rows only for resigned lawyers
+  let rows = buildLawyerRows(stats).filter(r => !!resignedLawyersMap[r.id]);
+  // Update name from resignedLawyersMap
+  rows.forEach(r => {
+    if (resignedLawyersMap[r.id]) r.name = resignedLawyersMap[r.id].name;
+  });
+  rows = sortRows(rows, sortCol, sortDir);
+
+  section.style.display = '';
+  document.getElementById('resignedCount').textContent = `(${rows.length} 人)`;
+
+  const tbody = document.getElementById('resignedTableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料（需先匯入離職律師的歷史數據）</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const rank = i + 1;
+    const rateClass = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    return `<tr onclick="showDetailPage('${r.id}')" style="opacity:0.75;">
+      <td><span class="rank-badge rank-other">${rank}</span></td>
+      <td><strong>${escHtml(r.name)}</strong> <span style="font-size:11px;color:var(--text-muted);">（離職）</span></td>
+      <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+      <td class="num">${r.consult_count.toLocaleString()}</td>
+      <td class="num">${r.signed_count.toLocaleString()}</td>
+      <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
+      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ===================== AMOUNT RANGE ANALYSIS =====================
+function renderAmountRange(year) {
+  const container = document.getElementById('amountRangeContent');
+  // Filter signed cases by year
+  let signedCases = allCases.filter(c => c.is_signed && (c.collected > 0 || c.revenue > 0));
+  if (year !== 'all') {
+    signedCases = signedCases.filter(c => c.case_date && c.case_date.startsWith(year));
+  }
+
+  // Non-admin and non-view-all: only own cases
+  if (!canViewAll()) {
+    signedCases = signedCases.filter(c => c.lawyer_id === currentLawyer.id);
+  }
+
+  if (signedCases.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
+    return;
+  }
+
+  // Define ranges
+  const ranges = [
+    { label: '5萬以下',       min: 0,       max: 50000 },
+    { label: '5-10萬',        min: 50000,   max: 100000 },
+    { label: '10-20萬',       min: 100000,  max: 200000 },
+    { label: '20-50萬',       min: 200000,  max: 500000 },
+    { label: '50-100萬',      min: 500000,  max: 1000000 },
+    { label: '100萬以上',     min: 1000000, max: Infinity },
+  ];
+
+  // Count cases per range using collected amount
+  const rangeCounts = ranges.map(r => ({
+    label: r.label,
+    count: 0,
+    totalCollected: 0,
+  }));
+
+  signedCases.forEach(c => {
+    const amt = Number(c.collected) || 0;
+    for (let i = 0; i < ranges.length; i++) {
+      if (amt >= ranges[i].min && amt < ranges[i].max) {
+        rangeCounts[i].count++;
+        rangeCounts[i].totalCollected += amt;
+        break;
+      }
+    }
+  });
+
+  const totalCases = signedCases.length;
+  const maxCount = Math.max(...rangeCounts.map(r => r.count), 1);
+
+  // Bar colors
+  const barColors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
+
+  container.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">成案總數</div>
+        <div class="kpi-value">${totalCases}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">總收款金額</div>
+        <div class="kpi-value gold">$${Math.round(signedCases.reduce((s, c) => s + (Number(c.collected) || 0), 0)).toLocaleString()}</div>
+      </div>
+      <div class="kpi-card" style="min-width:140px;">
+        <div class="kpi-label">平均成案金額</div>
+        <div class="kpi-value">$${Math.round(signedCases.reduce((s, c) => s + (Number(c.collected) || 0), 0) / totalCases).toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:320px;">
+        <table style="width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">金額區間</th>
+              <th class="num">案件數</th>
+              <th class="num">佔比</th>
+              <th class="num">區間收款</th>
+              <th style="min-width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rangeCounts.map((r, i) => {
+              const pct = totalCases > 0 ? (r.count / totalCases * 100) : 0;
+              const barW = maxCount > 0 ? (r.count / maxCount * 100) : 0;
+              return `<tr>
+                <td>${r.label}</td>
+                <td class="num">${r.count}</td>
+                <td class="num">${pct.toFixed(1)}%</td>
+                <td class="num">$${Math.round(r.totalCollected).toLocaleString()}</td>
+                <td><div style="background:${barColors[i]};height:16px;border-radius:3px;width:${barW}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ===================== LAWYER DETAIL AMOUNT RANGE =====================
+let lawyerAmountYear = 'all';
+
+function renderLawyerAmountRange(lawyerId) {
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+  const years = new Set();
+  lawyerStats.forEach(s => { if (s.month) years.add(s.month.slice(0, 4)); });
+  const yearList = ['all', ...Array.from(years).sort().reverse()];
+  lawyerAmountYear = 'all';
+  buildYearButtons('lawyerAmountYearBar', yearList, lawyerAmountYear, (y) => {
+    lawyerAmountYear = y;
+    renderLawyerAmountContent(lawyerId, y);
+  });
+  renderLawyerAmountContent(lawyerId, lawyerAmountYear);
+}
+
+function renderLawyerAmountContent(lawyerId, year) {
+  const container = document.getElementById('lawyerAmountRangeContent');
+
+  // 優先使用個案金額（精確模式）
+  let casesWithAmount = allCases.filter(c => c.lawyer_id === lawyerId && c.is_signed && (c.collected > 0 || c.revenue > 0));
+  if (year !== 'all') casesWithAmount = casesWithAmount.filter(c => c.case_date && c.case_date.startsWith(year));
+
+  if (casesWithAmount.length > 0) {
+    // ===== 個案金額模式 =====
+    const ranges = [
+      { label: '3萬以下',   min: 0,       max: 30000 },
+      { label: '3-5萬',     min: 30000,   max: 50000 },
+      { label: '5-10萬',    min: 50000,   max: 100000 },
+      { label: '10-20萬',   min: 100000,  max: 200000 },
+      { label: '20-50萬',   min: 200000,  max: 500000 },
+      { label: '50萬以上',   min: 500000,  max: Infinity },
+    ];
+    const rangeCounts = ranges.map(r => ({ label: r.label, count: 0, total: 0 }));
+    casesWithAmount.forEach(c => {
+      const amt = Number(c.collected) || Number(c.revenue) || 0;
+      for (let i = 0; i < ranges.length; i++) {
+        if (amt >= ranges[i].min && amt < ranges[i].max) {
+          rangeCounts[i].count++;
+          rangeCounts[i].total += amt;
+          break;
+        }
+      }
+    });
+    const total = casesWithAmount.length;
+    const totalAmt = casesWithAmount.reduce((s, c) => s + (Number(c.collected) || Number(c.revenue) || 0), 0);
+    const maxC = Math.max(...rangeCounts.map(r => r.count), 1);
+    const colors = ['#4f8ef7', '#4caf82', '#c9a84c', '#e0954a', '#e05c5c', '#a855f7'];
+
+    container.innerHTML = `
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">成案總數</div><div class="kpi-value">${total}</div></div>
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總收款金額</div><div class="kpi-value gold">$${Math.round(totalAmt).toLocaleString()}</div></div>
+        <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">平均成案金額</div><div class="kpi-value">$${Math.round(totalAmt / total).toLocaleString()}</div></div>
+      </div>
+      <div style="flex:1;min-width:320px;">
+        <table style="width:100%;"><thead><tr>
+          <th style="text-align:left;">成案金額區間</th><th class="num">案件數</th><th class="num">佔比</th><th class="num">區間收款</th><th style="min-width:120px;"></th>
+        </tr></thead><tbody>
+          ${rangeCounts.map((r, i) => {
+            const pct = total > 0 ? (r.count / total * 100) : 0;
+            const bw = maxC > 0 ? (r.count / maxC * 100) : 0;
+            return `<tr><td>${r.label}</td><td class="num">${r.count}</td><td class="num">${pct.toFixed(1)}%</td><td class="num">$${Math.round(r.total).toLocaleString()}</td>
+              <td><div style="background:${colors[i]};height:16px;border-radius:3px;width:${bw}%;min-width:${r.count > 0 ? 4 : 0}px;opacity:0.7;"></div></td></tr>`;
+          }).join('')}
+        </tbody></table>
+      </div>`;
+    return;
+  }
+
+  // ===== Fallback: 月度彙總估算 =====
+  let stats = allStats.filter(s => s.lawyer_id === lawyerId && s.signed_count > 0 && s.collected > 0);
+  if (year !== 'all') stats = stats.filter(s => s.month && s.month.startsWith(year));
+
+  if (stats.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:24px;">此年度無成案金額資料</div>';
+    return;
+  }
+
+  const totalSigned = stats.reduce((s, r) => s + r.signed_count, 0);
+  const totalCollected = stats.reduce((s, r) => s + r.collected, 0);
+  const overallAvg = totalSigned > 0 ? totalCollected / totalSigned : 0;
+  const monthEntries = stats.map(s => ({
+    month: s.month, signed: s.signed_count, collected: s.collected,
+    avg: s.signed_count > 0 ? s.collected / s.signed_count : 0,
+  }));
+  const sortedMonths = [...monthEntries].sort((a, b) => b.month.localeCompare(a.month));
+
+  container.innerHTML = `
+    <div style="padding:8px 12px;background:var(--orange-dim);border:1px solid var(--orange);border-radius:8px;margin-bottom:16px;font-size:0.82rem;color:var(--orange);">
+      ⚠ 個案金額資料尚未匯入，以下為各月收款彙總。重新執行 daily_update.py --months 75 後將顯示精確個案金額分佈。
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總成案數</div><div class="kpi-value">${totalSigned}</div></div>
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">總收款金額</div><div class="kpi-value gold">$${Math.round(totalCollected).toLocaleString()}</div></div>
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">平均簽約收款</div><div class="kpi-value">$${Math.round(overallAvg).toLocaleString()}</div></div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-size:0.9rem;font-weight:600;color:var(--gold-light);margin-bottom:8px;">各月成案收款明細</div>
+      <table style="width:100%;"><thead><tr>
+        <th style="text-align:left;">月份</th><th class="num">成案數</th><th class="num">收款金額</th><th class="num">平均簽約收款</th>
+      </tr></thead><tbody>${sortedMonths.map(m => `<tr>
+        <td>${m.month}</td><td class="num">${m.signed}</td>
+        <td class="num">$${Math.round(m.collected).toLocaleString()}</td>
+        <td class="num">$${Math.round(m.avg).toLocaleString()}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>
+  `;
+}
+
+// Column header click → sort
+document.querySelectorAll('#rankingTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) {
+      sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      sortCol = col;
+      sortDir = 'desc';
+    }
+    renderOverviewPage();
+  });
+});
+
+function sortRows(rows, col, dir) {
+  return [...rows].sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+// ===================== DETAIL PAGE =====================
+function renderDetailPage() {
+  const lawyer  = allLawyersMap[detailLawyerId] || resignedLawyersMap[detailLawyerId];
+  const name    = lawyer ? lawyer.name : '律師';
+  const initials = name.slice(-1);
+
+  document.getElementById('detailName').textContent   = name;
+  document.getElementById('detailAvatar').textContent = initials;
+  document.getElementById('detailMeta').textContent   = lawyer ? (lawyer.office || '') : '';
+  document.getElementById('detailBackBtn').textContent = '← 返回總覽';
+
+  const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
+  const years       = getAvailableYears(lawyerStats);
+
+  // Validate detailYear still applies
+  if (detailYear !== 'all' && !years.includes(detailYear)) detailYear = 'all';
+
+  buildYearButtons('detailYearBar', years, detailYear, (y) => {
+    detailYear = y;
+    renderDetailContent();
+  });
+
+  renderDetailContent();
+}
+
+function renderDetailContent() {
+  const lawyerStats = allStats.filter(s => s.lawyer_id === detailLawyerId);
+  const filtered    = filterByYear(lawyerStats, detailYear);
+  const totals      = aggregateStats(filtered);
+
+  renderKpiCards(totals, 'dt');
+  renderDetailTable(filtered);
+  renderDetailChart(filtered);
+  renderDetailInsights(detailLawyerId);
+  renderDetailYoy(detailLawyerId);
+  renderLawyerAmountRange(detailLawyerId);
+
+  // Case cards
+  const caseCardsContainer = document.getElementById('detailCaseCardsContainer');
+  if (caseCardsContainer) {
+    caseCardsContainer.innerHTML = renderCaseCardsSection(detailLawyerId);
+  }
+
+  // Quarterly reviews
+  const quarterlyContainer = document.getElementById('detailQuarterlyContainer');
+  if (quarterlyContainer) {
+    renderQuarterlyReviews(detailLawyerId, quarterlyContainer);
+  }
+}
+
+function renderDetailTable(stats) {
+  const months = [...new Set(stats.map(s => s.month))].sort().reverse();
+  const tbody  = document.getElementById('detailTableBody');
+
+  if (months.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暫無資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = months.map(month => {
+    const rows = stats.filter(s => s.month === month);
+    const t = rows.reduce((acc, s) => {
+      acc.consult_count += s.consult_count || 0;
+      acc.signed_count  += s.signed_count  || 0;
+      acc.collected     += s.collected     || 0;
+      return acc;
+    }, { consult_count: 0, signed_count: 0, collected: 0 });
+
+    const rate = t.consult_count > 0 ? (t.signed_count / t.consult_count * 100) : 0;
+    const avg  = t.signed_count > 0  ? (t.collected / t.signed_count)            : 0;
+    const rateClass = rate >= 45 ? 'sign-rate-green' : rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+
+    return `<tr>
+      <td>${month}</td>
+      <td class="num">${t.consult_count.toLocaleString()}</td>
+      <td class="num">${t.signed_count.toLocaleString()}</td>
+      <td class="num ${rateClass}">${rate.toFixed(1)}%</td>
+      <td class="num">$${Math.round(t.collected).toLocaleString()}</td>
+      <td class="num">$${Math.round(avg).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDetailChart(stats) {
+  const months    = [...new Set(stats.map(s => s.month))].sort();
+  const byMonth   = {};
+  stats.forEach(s => {
+    if (!byMonth[s.month]) byMonth[s.month] = { c: 0, sig: 0, col: 0 };
+    byMonth[s.month].c   += s.consult_count || 0;
+    byMonth[s.month].sig += s.signed_count  || 0;
+    byMonth[s.month].col += s.collected     || 0;
+  });
+
+  const consultData = months.map(m => byMonth[m].c);
+  const signedData  = months.map(m => byMonth[m].sig);
+  const rateData    = months.map(m =>
+    byMonth[m].c > 0 ? +(byMonth[m].sig / byMonth[m].c * 100).toFixed(1) : 0
+  );
+
+  if (detailChart) detailChart.destroy();
+
+  const ctx = document.getElementById('detailChart').getContext('2d');
+  detailChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: [
+        {
+          label: '諮詢數',
+          data: consultData,
+          backgroundColor: 'rgba(79,142,247,0.55)',
+          borderColor: 'rgba(79,142,247,0.85)',
+          borderWidth: 1,
+          borderRadius: 5,
+          yAxisID: 'y',
+        },
+        {
+          label: '簽約數',
+          data: signedData,
+          backgroundColor: 'rgba(76,175,130,0.55)',
+          borderColor: 'rgba(76,175,130,0.85)',
+          borderWidth: 1,
+          borderRadius: 5,
+          yAxisID: 'y',
+        },
+        {
+          label: '簽約率 (%)',
+          data: rateData,
+          type: 'line',
+          borderColor: '#e8c97a',
+          backgroundColor: 'rgba(232,201,122,0.12)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#e8c97a',
+          tension: 0.3,
+          fill: true,
+          yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: {
+          labels: { color: getChartColors().text, font: { size: 12 } },
+        },
+        tooltip: {
+          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#0a1628',
+          borderColor: getChartColors().grid,
+          borderWidth: 1,
+          titleColor: getChartColors().gold,
+          bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0e0e0',
+        },
+      },
+      scales: {
+        x: {
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
+        },
+        y: {
+          beginAtZero: true,
+          position: 'left',
+          ticks:  { color: getChartColors().text, font: { size: 11 } },
+          grid:   { color: getChartColors().grid },
+          title:  { display: true, text: '件數', color: getChartColors().text, font: { size: 11 } },
+        },
+        y1: {
+          beginAtZero: true,
+          max: 100,
+          position: 'right',
+          ticks:  { color: getChartColors().gold, font: { size: 11 } },
+          grid:   { drawOnChartArea: false },
+          title:  { display: true, text: '簽約率 (%)', color: getChartColors().gold, font: { size: 11 } },
+        },
+      },
+    },
+  });
+}
+
+// ===================== YEAR TRACKING PAGE =====================
+const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function renderTrackingPage() {
+  const currentYear = new Date().getFullYear().toString();
+  const prevYear    = (parseInt(currentYear) - 1).toString();
+
+  document.getElementById('trackingTitle').textContent = currentYear + ' 年度追蹤';
+
+  const currStats = allStats.filter(s => s.month && s.month.startsWith(currentYear));
+  const prevStats = allStats.filter(s => s.month && s.month.startsWith(prevYear));
+
+  // Limit prev to same months as current year
+  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
+  const prevSame   = prevStats.filter(s => currMonths.has(s.month.slice(5, 7)));
+
+  const currT = aggregateStats(currStats);
+  const prevT = aggregateStats(prevSame);
+
+  // YoY KPIs
+  setYoy('yoy-consults',   currT.consult_count, prevT.consult_count, false,  currT.consult_count.toLocaleString());
+  setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false,  currT.signed_count.toLocaleString());
+  setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, '$' + Math.round(currT.collected).toLocaleString());
+  setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  currT.sign_rate.toFixed(1) + '%');
+  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, '$' + Math.round(currT.consult_eff).toLocaleString());
+
+  // Month cards
+  renderMonthCards(currStats, currentYear);
+}
+
+function setYoy(id, curr, prev, isPercent, display) {
+  document.getElementById(id).textContent = display;
+  const changeEl = document.getElementById(id + '-change');
+  if (prev === 0) {
+    changeEl.textContent = 'vs 上一年 (N/A)';
+    changeEl.className = 'yoy-change flat';
+    return;
+  }
+  const diff   = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
+  const sign   = diff > 0 ? '+' : '';
+  const label  = isPercent ? (sign + diff.toFixed(1) + '%') : (sign + diff.toFixed(1) + '%');
+  changeEl.textContent = 'vs 上一年 ' + label;
+  changeEl.className   = 'yoy-change ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
+}
+
+function renderMonthCards(stats, year) {
+  const grid = document.getElementById('monthCardsGrid');
+
+  // Get unique months present in data, in order
+  const monthsWithData = [];
+  for (let m = 1; m <= 12; m++) {
+    const key = year + '-' + String(m).padStart(2, '0');
+    const ms  = stats.filter(s => s.month === key);
+    if (ms.length > 0) monthsWithData.push({ key, ms });
+  }
+
+  if (monthsWithData.length === 0) {
+    grid.innerHTML = '<div class="empty-state">暫無 ' + year + ' 年資料</div>';
+    return;
+  }
+
+  grid.innerHTML = monthsWithData.map(({ key, ms }) => {
+    const mNum = parseInt(key.slice(5, 7));
+    const mLabel = MONTH_NAMES[mNum - 1];
+    const t = aggregateStats(ms);
+    const rateClass = t.sign_rate >= 45 ? 'sign-rate-green' : t.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+
+    // Per-lawyer rows for this month (store for sorting)
+    const lawyerRows = buildLawyerRows(ms);
+
+    return `<div class="month-expand-card" id="mcard-${key}" data-month="${key}">
+      <div class="month-card-header" onclick="toggleMonthCard('${key}')">
+        <div>
+          <div class="month-card-name">${year}年 ${mLabel}</div>
+          <div class="month-card-stats">
+            <div class="month-stat">諮詢效益 <span>$${Math.round(t.consult_eff).toLocaleString()}</span></div>
+            <div class="month-stat">諮詢 <span>${t.consult_count}</span></div>
+            <div class="month-stat">簽約 <span>${t.signed_count}</span></div>
+            <div class="month-stat">簽約率 <span class="${rateClass}">${t.sign_rate.toFixed(1)}%</span></div>
+            <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
+            <div class="month-stat">平均收款 <span>$${Math.round(t.avg_collected).toLocaleString()}</span></div>
+          </div>
+        </div>
+        <div class="expand-icon">▼</div>
+      </div>
+      <div class="month-card-body">
+        <table class="month-body-table">
+          <thead>
+            <tr>
+              <th>律師</th>
+              <th class="sortable num" data-col="consult_eff" data-month="${key}">諮詢效益</th>
+              <th class="sortable num" data-col="consult_count" data-month="${key}">諮詢數</th>
+              <th class="sortable num" data-col="signed_count" data-month="${key}">簽約數</th>
+              <th class="sortable num" data-col="sign_rate" data-month="${key}">簽約率</th>
+              <th class="sortable num" data-col="collected" data-month="${key}">已收金額</th>
+              <th class="sortable num" data-col="avg_collected" data-month="${key}">平均簽約收款</th>
+            </tr>
+          </thead>
+          <tbody>${renderMonthBodyRows(lawyerRows, 'collected', 'desc')}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Bind sort events for month card tables
+  document.querySelectorAll('.month-body-table th.sortable').forEach(th => {
+    th.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const col = th.dataset.col;
+      const monthKey = th.dataset.month;
+      const card = document.getElementById('mcard-' + monthKey);
+      const tbody = card.querySelector('tbody');
+      const table = th.closest('table');
+
+      // Toggle sort direction
+      let dir = 'desc';
+      if (th.classList.contains('sort-desc')) dir = 'asc';
+
+      // Clear sort indicators in this table
+      table.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+
+      // Re-sort data
+      const monthStats = allStats.filter(s => s.month === monthKey);
+      const rows = buildLawyerRows(monthStats);
+      tbody.innerHTML = renderMonthBodyRows(rows, col, dir);
+    });
+  });
+}
+
+function renderMonthBodyRows(lawyerRows, sortCol, sortDir) {
+  const sorted = sortRows(lawyerRows, sortCol, sortDir);
+  return sorted.map((r, i) => {
+    const rc = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    return `<tr>
+      <td>${i + 1}. ${escHtml(r.name)}</td>
+      <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+      <td class="num">${r.consult_count}</td>
+      <td class="num">${r.signed_count}</td>
+      <td class="num ${rc}">${r.sign_rate.toFixed(1)}%</td>
+      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleMonthCard(key) {
+  const el = document.getElementById('mcard-' + key);
+  if (el) el.classList.toggle('open');
+}
+
+function generateInsights(lawyerId) {
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+  const totals = aggregateStats(lawyerStats);
+  const insights = [];
+
+  // 諮詢效益 (per consultation revenue)
+  const eff = totals.consult_eff;
+  if (eff >= 45000) {
+    insights.push({ type: 'success', icon: '\u2713', text: '核心產值擔當：每場諮詢平均產值 $' + Math.round(eff).toLocaleString() + '，遠超平均水準' });
+  } else if (eff >= 35000) {
+    insights.push({ type: 'info', icon: '\u2139', text: '轉化效率良好：每場諮詢平均產值 $' + Math.round(eff).toLocaleString() });
+  } else if (eff >= 25000) {
+    insights.push({ type: 'warning', icon: '\u26A0', text: '建議提升成案率或單價：每場諮詢平均產值 $' + Math.round(eff).toLocaleString() });
+  } else {
+    insights.push({ type: 'danger', icon: '\u2715', text: '需檢討成案率或案件金額：每場諮詢平均產值 $' + Math.round(eff).toLocaleString() });
+  }
+
+  // 成案率
+  const signRate = totals.sign_rate;
+  if (signRate >= 48) {
+    insights.push({ type: 'success', icon: '\u2713', text: '成案率表現優異：' + signRate.toFixed(1) + '%' });
+  } else if (signRate >= 42) {
+    insights.push({ type: 'info', icon: '\u2139', text: '略高於平均，表現穩健：' + signRate.toFixed(1) + '%' });
+  } else if (signRate >= 35) {
+    insights.push({ type: 'warning', icon: '\u26A0', text: '建議強化轉換技巧：成案率 ' + signRate.toFixed(1) + '%' });
+  } else {
+    insights.push({ type: 'danger', icon: '\u2715', text: '建議安排一對一輔導：成案率 ' + signRate.toFixed(1) + '%' });
+  }
+
+  // 趨勢 (year-over-year)
+  const currentYear = new Date().getFullYear().toString();
+  const prevYear = (parseInt(currentYear) - 1).toString();
+  const currStats = lawyerStats.filter(s => s.month && s.month.startsWith(currentYear));
+  const prevStats = lawyerStats.filter(s => s.month && s.month.startsWith(prevYear));
+  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
+  const prevSame = prevStats.filter(s => currMonths.has(s.month.slice(5, 7)));
+
+  if (currStats.length > 0 && prevSame.length > 0) {
+    const currT = aggregateStats(currStats);
+    const prevT = aggregateStats(prevSame);
+    const diff = currT.sign_rate - prevT.sign_rate;
+    if (diff <= -8) {
+      insights.push({ type: 'danger', icon: '\u2715', text: '成案率明顯下滑：較去年同期下降 ' + Math.abs(diff).toFixed(1) + ' 個百分點' });
+    } else if (diff <= -3) {
+      insights.push({ type: 'warning', icon: '\u26A0', text: '成案率微幅下降：較去年同期下降 ' + Math.abs(diff).toFixed(1) + ' 個百分點' });
+    } else if (diff > 3) {
+      insights.push({ type: 'success', icon: '\u2713', text: '成案率呈成長趨勢：較去年同期上升 ' + diff.toFixed(1) + ' 個百分點' });
+    }
+  }
+
+  // 平均成案金額
+  const avgCollected = totals.avg_collected;
+  if (avgCollected >= 80000) {
+    insights.push({ type: 'success', icon: '\u2713', text: '高單價律師，擅長複雜大案：平均成案金額 $' + Math.round(avgCollected).toLocaleString() });
+  } else if (avgCollected > 0 && avgCollected <= 45000) {
+    insights.push({ type: 'info', icon: '\u2139', text: '可嘗試提升附加服務：平均成案金額 $' + Math.round(avgCollected).toLocaleString() });
+  }
+
+  return insights;
+}
+
+function renderInsightsHtml(insights) {
+  if (insights.length === 0) return '<div class="empty-state">暫無分析資料</div>';
+  return insights.map(i =>
+    `<div class="insight-item insight-${i.type}">
+      <span class="insight-icon">${i.icon}</span>
+      <span>${escHtml(i.text)}</span>
+    </div>`
+  ).join('');
+}
+
+// 從會議記錄分析諮詢品質
+// isSigned: 成案案件用不同評分邏輯 — 當事人意願明確時，高效簽約是正確判斷
+function analyzeMeetingRecord(text, isSigned) {
+  if (!text || text.trim().length < 50) return null;
+
+  const sections = {
+    demands:  { label: '需求掌握', found: false, len: 0 },
+    facts:    { label: '事實釐清', found: false, len: 0 },
+    advice:   { label: '法律建議', found: false, len: 0 },
+    extra:    { label: '延伸分析', found: false, len: 0 },
+  };
+
+  // 偵測各區段
+  const demandMatch = text.match(/[壹一]、.*?(?:主要)?訴求([\s\S]*?)(?=[貳二]、|$)/);
+  if (demandMatch) { sections.demands.found = true; sections.demands.len = demandMatch[1].length; }
+
+  const factsMatch = text.match(/[貳二]、.*?(?:案件)?事實([\s\S]*?)(?=[參三叄]、|$)/);
+  if (factsMatch) { sections.facts.found = true; sections.facts.len = factsMatch[1].length; }
+
+  const adviceMatch = text.match(/[參三叄]、.*?(?:律師)?建議([\s\S]*?)(?=[肆四]、|$)/);
+  if (adviceMatch) { sections.advice.found = true; sections.advice.len = adviceMatch[1].length; }
+
+  const extraMatch = text.match(/[肆四]、([\s\S]*?)(?=[伍五]、|$)/);
+  if (extraMatch) { sections.extra.found = true; sections.extra.len = extraMatch[1].length; }
+
+  // ====== 成案 vs 未成案：不同評分邏輯 ======
+  if (isSigned) {
+    // 成案：當事人已決定委任，重點在「效率」與「關鍵資訊掌握」
+    // 記錄較短不扣分 — 快速成案代表律師判斷力佳
+
+    const score = (sec, thresholds) => {
+      if (!sec.found) return 50; // 成案時區段缺失不嚴重扣分
+      if (sec.len >= thresholds[1]) return 95;
+      if (sec.len >= thresholds[0]) return 80;
+      return 65; // 成案時即使內容少也給合理分
+    };
+
+    const scores = {
+      demands: score(sections.demands, [80, 200]),
+      facts:   score(sections.facts,   [100, 400]),
+      advice:  score(sections.advice,  [100, 300]),
+    };
+
+    const strengths = [];
+    const weaknesses = [];
+
+    // 成案核心優勢
+    strengths.push('成功促成委任，展現良好的溝通與信任建立能力');
+
+    if (text.length < 1500) {
+      strengths.push('諮詢流程精簡高效，快速掌握當事人需求並進入簽約');
+    } else {
+      strengths.push('即使案件複雜仍成功說服當事人委任');
+    }
+
+    // 法條引用
+    const lawRefs = (text.match(/第\d+條|民法|刑法|民事訴訟法|刑事訴訟法|土地法|勞基法/g) || []);
+    if (lawRefs.length >= 3) strengths.push('法條引用充分（' + lawRefs.length + '處），專業度高');
+
+    // 金額分析
+    if (/\d+萬|費用|賠償金|扶養費/.test(text)) strengths.push('有明確的金額與費用分析');
+
+    // 風險提示
+    if (/風險|注意|但書|例外|困難|不利/.test(text)) strengths.push('有提示法律風險，讓當事人做出知情決定');
+
+    // 證據指引
+    if (/證據|舉證|金流|截圖|錄音|存證信函/.test(text)) strengths.push('有指導證據蒐集方向');
+
+    // 成案建議改善 — 語氣溫和，著重「更好」而非「不足」
+    // 所有建議都放入候選池，最後確保至少取 2 個
+    const candidateWeaknesses = [];
+    if (lawRefs.length < 2) candidateWeaknesses.push('可考慮補充更多法條依據，提升當事人對案件的理解');
+    if (!/風險|注意|但書|例外|困難|不利/.test(text)) candidateWeaknesses.push('建議適度提醒潛在風險，降低委任後的認知落差');
+    if (!/期限|時效|天內|個月|期間|時程/.test(text)) candidateWeaknesses.push('可補充案件預估時程，幫助當事人建立合理期待');
+    if (!/證據|舉證|金流|截圖|錄音|存證信函/.test(text)) candidateWeaknesses.push('可提前引導當事人準備相關證據，加速後續作業');
+    if (!sections.demands.found) candidateWeaknesses.push('建議補充記錄當事人核心訴求，利於後續案件管理');
+
+    // 保底建議：即使全部通過，仍提供改善方向
+    const fallbacks = [
+      '可在會議記錄中補充當事人的情緒狀態與關注重點，利於後續溝通策略擬定',
+      '建議記錄當事人猶豫或擔心的點，有助於團隊經驗傳承',
+      '可補充對造可能的抗辯方向，讓當事人對訴訟過程有更完整的預期',
+      '建議記錄初步的案件處理優先順序，加速委任後的工作啟動',
+      '可記錄當事人期望的結案時間與預算上限，確保服務方向一致',
+    ];
+    // 從 fallbacks 中依序補足到至少 2 個
+    let fi = 0;
+    while (candidateWeaknesses.length < 2 && fi < fallbacks.length) {
+      candidateWeaknesses.push(fallbacks[fi++]);
+    }
+    weaknesses.push(...candidateWeaknesses);
+
+    const avgScore = Math.round((scores.demands + scores.facts + scores.advice) / 3);
+    return { scores, avgScore, strengths, weaknesses, totalLen: text.length };
+
+  } else {
+    // 未成案：重點在「為什麼沒成案」— 哪些環節可以改善以提升轉換率
+
+    const score = (sec, thresholds) => {
+      if (!sec.found) return 20;
+      if (sec.len >= thresholds[2]) return 95;
+      if (sec.len >= thresholds[1]) return 75;
+      if (sec.len >= thresholds[0]) return 55;
+      return 35;
+    };
+
+    const scores = {
+      demands: score(sections.demands, [100, 300, 600]),
+      facts:   score(sections.facts,   [200, 500, 1000]),
+      advice:  score(sections.advice,  [150, 400, 800]),
+    };
+
+    const strengths = [];
+    const weaknesses = [];
+
+    // 法條引用
+    const lawRefs = (text.match(/第\d+條|民法|刑法|民事訴訟法|刑事訴訟法|土地法|勞基法/g) || []);
+    if (lawRefs.length >= 3) strengths.push('法條引用充分（' + lawRefs.length + '處）');
+    else weaknesses.push('法條引用不足，可能影響當事人對專業度的信心');
+
+    // 金額分析
+    if (/\d+萬|費用|賠償金|扶養費/.test(text)) strengths.push('有涉及金額與費用分析');
+    else weaknesses.push('未提供具體金額估算，當事人可能因不確定性而猶豫');
+
+    // 風險提示
+    if (/風險|注意|但書|例外|困難|不利/.test(text)) strengths.push('有提示法律風險與注意事項');
+    else weaknesses.push('未見風險提示，當事人可能覺得不夠專業或務實');
+
+    // 行動方案
+    if (/建議.*?[：:]|方案|策略|步驟|程序/.test(text)) strengths.push('有提供具體行動方案');
+    else weaknesses.push('未提供明確行動方案，當事人可能不知道下一步該怎麼做');
+
+    // 證據指引
+    if (/證據|舉證|金流|截圖|錄音|存證信函/.test(text)) strengths.push('有指導證據蒐集方向');
+    else weaknesses.push('缺乏證據蒐集指引，可能讓當事人覺得案件準備不夠充分');
+
+    // 時程規劃
+    if (/期限|時效|天內|個月|期間|時程/.test(text)) strengths.push('有提及法律時效或時程規劃');
+    else weaknesses.push('未說明時效或時程，當事人可能因缺乏急迫感而延遲決定');
+
+    // 替代方案
+    if (/或者|另外|其他方式|替代|調解|和解|協商/.test(text)) strengths.push('有提供替代解決方案');
+    else weaknesses.push('僅提供單一方案，可考慮提出多種途徑讓當事人選擇');
+
+    // 費用說明
+    if (/律師費|訴訟費|裁判費|委任|報酬/.test(text)) strengths.push('有說明律師費用或訴訟成本');
+    else weaknesses.push('未說明預期法律費用，費用不透明可能是未成案的原因之一');
+
+    // 記錄完整性
+    if (text.length > 3000) strengths.push('會議記錄內容詳實完整');
+    else if (text.length < 500) weaknesses.push('會議記錄過於簡略，可能未充分了解當事人需求');
+
+    // 需求確認
+    if (!sections.demands.found || sections.demands.len < 100) weaknesses.push('當事人需求記錄不完整，可能未精準掌握核心訴求');
+
+    const avgScore = Math.round((scores.demands + scores.facts + scores.advice) / 3);
+    return { scores, avgScore, strengths, weaknesses, totalLen: text.length };
+  }
+}
+
+function renderCaseCardsSection(lawyerId) {
+  // 只顯示有會議紀錄或逐字稿的案件
+  const cases = allCases.filter(c => c.lawyer_id === lawyerId && (c.meeting_record || c.transcript));
+  if (cases.length === 0) {
+    return `
+      <div class="section" style="margin-top:20px;">
+        <div class="section-header">
+          <div class="section-title">諮詢案件評比</div>
+        </div>
+        <div class="empty-state">尚無已上傳會議紀錄或逐字稿的案件</div>
+      </div>`;
+  }
+
+  // Sort: 成案 first, then by date descending
+  cases.sort((a, b) => {
+    if (a.is_signed !== b.is_signed) return a.is_signed ? -1 : 1;
+    return b.case_date.localeCompare(a.case_date);
+  });
+
+  const signedCases = cases.filter(c => c.is_signed);
+  const unsignedCases = cases.filter(c => !c.is_signed);
+
+  const renderRows = (list, groupLabel) => {
+    if (list.length === 0) return '';
+    return `<div style="margin-top:14px;margin-bottom:6px;font-size:0.85rem;font-weight:600;color:var(--text-muted);">${groupLabel} (${list.length})</div>
+    <div class="case-row-list">${list.map(c => {
+      const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
+      const hasTs = c.transcript && c.transcript.trim().length > 0;
+      const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
+      const avgScore = analysis ? analysis.avgScore : null;
+      const scoreColor = avgScore === null ? 'var(--text-muted)' :
+                         avgScore >= 75 ? 'var(--green)' :
+                         avgScore >= 50 ? 'var(--gold-light)' :
+                         'var(--red)';
+      const scoreHtml = avgScore !== null
+        ? `<span style="font-size:0.78rem;font-weight:700;color:${scoreColor};width:28px;text-align:center;flex-shrink:0;">${avgScore}</span>`
+        : '<span style="width:28px;flex-shrink:0;"></span>';
+      const badgeHtml = c.is_signed
+        ? '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);">成</span>'
+        : '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--red-dim);color:var(--red);">未</span>';
+      return `<div class="case-row" data-case-id="${c.id}">
+        <div class="case-row-head" onclick="toggleCaseRow('${c.id}')">
+          <span class="case-row-chevron" id="chv-${c.id}">▶</span>
+          <span class="case-row-date">${escHtml(c.case_date)}</span>
+          <span class="case-row-type" title="${escHtml(c.case_type || '')}">${escHtml(c.case_type || '')}</span>
+          <span class="case-row-client">${escHtml(c.client_name || '')}</span>
+          ${scoreHtml}
+          ${badgeHtml}
+        </div>
+        <div class="case-row-body" id="body-${c.id}" style="display:none;"></div>
+      </div>`;
+    }).join('')}</div>`;
+  };
+
+  return `
+    <div class="section" style="margin-top:20px;">
+      <div class="section-header">
+        <div class="section-title">諮詢案件評比 (${cases.length})</div>
+      </div>
+      ${renderRows(signedCases, '成案')}
+      ${renderRows(unsignedCases, '未成案')}
+    </div>`;
+}
+
+// 展開/收合單列案件，第一次展開時才渲染詳情（lazy）
+function toggleCaseRow(caseId) {
+  const body = document.getElementById('body-' + caseId);
+  const chv = document.getElementById('chv-' + caseId);
+  if (!body) return;
+  if (body.style.display === 'none') {
+    // Lazy render：首次展開才生成詳情 HTML
+    if (!body.dataset.rendered) {
+      const c = allCases.find(x => x.id === caseId);
+      if (c) body.innerHTML = renderCaseRowDetail(c);
+      body.dataset.rendered = '1';
+    }
+    body.style.display = 'block';
+    if (chv) chv.textContent = '▼';
+  } else {
+    body.style.display = 'none';
+    if (chv) chv.textContent = '▶';
+  }
+}
+
+function renderCaseRowDetail(c) {
+  const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
+  const hasTs = c.transcript && c.transcript.trim().length > 0;
+  const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
+
+  let html = '<div class="case-row-detail-inner">';
+
+  if (analysis) {
+    const dims = [
+      { label: '需求掌握', val: analysis.scores.demands },
+      { label: '事實釐清', val: analysis.scores.facts },
+      { label: '法律建議', val: analysis.scores.advice },
+    ];
+    html += '<div class="case-row-scores">' + dims.map(d => {
+      const barColor = d.val >= 75 ? 'var(--green)' : d.val >= 50 ? 'var(--gold)' : 'var(--red)';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="font-size:0.75rem;color:var(--text-muted);width:64px;text-align:right;flex-shrink:0;">${d.label}</span>
+        <div style="flex:1;max-width:300px;height:6px;background:var(--bg-main);border-radius:3px;overflow:hidden;">
+          <div style="width:${d.val}%;height:100%;background:${barColor};border-radius:3px;"></div>
+        </div>
+        <span style="font-size:0.75rem;font-weight:700;width:26px;color:${barColor};">${d.val}</span>
+      </div>`;
+    }).join('') + '</div>';
+
+    if (analysis.strengths.length > 0) {
+      html += '<div style="margin-top:10px;"><div style="font-size:0.78rem;font-weight:600;color:var(--green);margin-bottom:4px;">優點</div>' +
+        analysis.strengths.map(s => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(s)}</div>`).join('') +
+        '</div>';
+    }
+    if (analysis.weaknesses.length > 0) {
+      html += '<div style="margin-top:8px;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);margin-bottom:4px;">可改進</div>' +
+        analysis.weaknesses.map(w => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(w)}</div>`).join('') +
+        '</div>';
+    }
+  } else {
+    html += '<div style="font-size:0.82rem;color:var(--text-muted);">無會議記錄可分析</div>';
+  }
+
+  html += '<div style="margin-top:12px;display:flex;gap:14px;">';
+  if (hasMr) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'meeting_record')">查看會議記錄</span>`;
+  if (hasTs) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'transcript')">查看逐字稿</span>`;
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function openCaseContent(caseId, field) {
+  const caseItem = allCases.find(c => c.id === caseId);
+  if (!caseItem) return;
+
+  const title = field === 'meeting_record' ? '會議記錄' : '逐字稿';
+  const fullTitle = `${escHtml(caseItem.case_type)} - ${title} (${escHtml(caseItem.case_date)})`;
+  const content = field === 'meeting_record' ? caseItem.meeting_record : caseItem.transcript;
+
+  document.getElementById('caseContentTitle').innerHTML = fullTitle;
+  document.getElementById('caseContentBody').textContent = content || '（無內容）';
+  document.getElementById('caseContentModal').classList.add('active');
+}
+
+// ==================== 1 on 1 會議季度評估 ====================
+
+async function renderQuarterlyReviews(lawyerId, container) {
+  if (!container) return;
+  container.innerHTML = `<div class="section" style="margin-top:20px;">
+    <div class="section-header">
+      <div class="section-title">1 on 1 會議季度評估</div>
+    </div>
+    <div id="qrContent" style="min-height:40px;color:var(--text-muted);font-size:0.85rem;">載入中…</div>
+  </div>`;
+
+  if (!sb) {
+    document.getElementById('qrContent').textContent = '尚未連線 Supabase';
+    return;
+  }
+
+  const res = await sb
+    .from('quarterly_reviews')
+    .select('id,year,quarter,file_name,file_size,uploaded_at,notes')
+    .eq('lawyer_id', lawyerId)
+    .order('year', { ascending: false })
+    .order('quarter', { ascending: false });
+
+  const content = document.getElementById('qrContent');
+  if (!content) return;
+
+  // 若表不存在（未跑 migration），res.error.code 會是 'PGRST205' 或類似
+  if (res.error) {
+    content.innerHTML = `<div style="padding:12px;background:var(--orange-dim);color:var(--orange);border-radius:8px;font-size:0.85rem;">
+      ⚠ quarterly_reviews 資料表尚未建立。<br>
+      請到 Supabase Dashboard → SQL Editor 執行
+      <code style="font-family:monospace;">supabase/migrations/20260418000000_add_quarterly_reviews.sql</code>
+      後重新整理本頁。
+    </div>`;
+    console.error('qr table missing:', res.error);
+    return;
+  }
+
+  const reviews = res.data || [];
+
+  let html = '';
+
+  // Admin 可上傳
+  const _isAdmin = currentLawyer && currentLawyer.role === 'admin';
+  if (_isAdmin) {
+    const years = [];
+    const nowROC = new Date().getFullYear() - 1911;
+    for (let y = nowROC; y >= nowROC - 3; y--) years.push(y);
+    const yearOpts = years.map(y => `<option value="${y}">${y}</option>`).join('');
+    html += `<div class="qr-upload">
+      <span style="font-size:0.82rem;color:var(--text-muted);">上傳 PDF：</span>
+      <select id="qrYear">${yearOpts}</select>
+      <select id="qrQuarter">
+        <option value="1">第 1 季</option>
+        <option value="2">第 2 季</option>
+        <option value="3">第 3 季</option>
+        <option value="4">第 4 季</option>
+      </select>
+      <input type="file" id="qrFile" accept="application/pdf">
+      <button class="btn btn-primary btn-sm" id="qrUploadBtn" onclick="uploadQuarterlyReviewPDF('${lawyerId}')">上傳</button>
+      <span id="qrUploadMsg" style="font-size:0.8rem;"></span>
+    </div>`;
+  }
+
+  if (reviews.length === 0) {
+    html += '<div style="font-size:0.85rem;color:var(--text-muted);padding:8px 0;">尚無已上傳的季度評估 PDF</div>';
+  } else {
+    html += '<div class="qr-list">' + reviews.map(r => {
+      const sizeStr = r.file_size ? (r.file_size < 1024*1024 ? (r.file_size/1024).toFixed(0) + ' KB' : (r.file_size/1024/1024).toFixed(1) + ' MB') : '';
+      return `<div class="qr-item">
+        <span class="qr-item-period">${r.year} Q${r.quarter}</span>
+        <span class="qr-item-name" title="${escHtml(r.file_name || '')}">${escHtml(r.file_name || '(未命名)')}</span>
+        <span class="qr-item-meta">${sizeStr} · ${(r.uploaded_at||'').slice(0,10)}</span>
+        <span class="case-link" onclick="viewQuarterlyReviewPDF('${r.id}')">開啟</span>
+        ${_isAdmin ? `<span class="case-link" style="background:var(--red-dim);color:var(--red);" onclick="deleteQuarterlyReview('${r.id}', '${lawyerId}')">刪除</span>` : ''}
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  content.innerHTML = html;
+}
+
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = reader.result || '';
+      const idx = s.indexOf(',');
+      resolve(idx >= 0 ? s.substring(idx + 1) : s);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const QR_BUCKET = 'quarterly-reviews-pdfs';
+function _qrPath(lawyerId, year, quarter) {
+  return `${lawyerId}/${year}-Q${quarter}.pdf`;
+}
+
+async function uploadQuarterlyReviewPDF(lawyerId) {
+  const year = parseInt(document.getElementById('qrYear').value, 10);
+  const quarter = parseInt(document.getElementById('qrQuarter').value, 10);
+  const fileInput = document.getElementById('qrFile');
+  const msg = document.getElementById('qrUploadMsg');
+  const btn = document.getElementById('qrUploadBtn');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    msg.innerHTML = '<span style="color:var(--red);">請選擇 PDF 檔</span>';
+    return;
+  }
+  const file = fileInput.files[0];
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    msg.innerHTML = '<span style="color:var(--red);">只接受 PDF 檔</span>';
+    return;
+  }
+  // 檔案大小上限：50 MB（Storage 可承受）
+  if (file.size > 50 * 1024 * 1024) {
+    msg.innerHTML = '<span style="color:var(--red);">PDF 太大（> 50 MB）</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.innerHTML = '<span style="color:var(--text-muted);">上傳 PDF 到 Storage…</span>';
+  console.log('[qr] upload start:', file.name, file.size, 'bytes');
+
+  try {
+    const path = _qrPath(lawyerId, year, quarter);
+
+    // 1. 上傳 PDF 到 Supabase Storage（upsert=true 才能覆蓋同一路徑）
+    const up = await sb.storage.from(QR_BUCKET).upload(path, file, {
+      upsert: true,
+      contentType: 'application/pdf',
+    });
+    if (up.error) {
+      console.error('[qr] storage upload error:', up.error);
+      msg.innerHTML = `<span style="color:var(--red);">Storage 上傳失敗：${escHtml(up.error.message||'')}</span>`;
+      return;
+    }
+    console.log('[qr] storage upload ok:', up.data);
+
+    msg.innerHTML = '<span style="color:var(--text-muted);">寫入資料庫…</span>';
+
+    // 2. 寫入 quarterly_reviews metadata
+    const payload = {
+      lawyer_id: lawyerId,
+      year: year,
+      quarter: quarter,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: 'application/pdf',
+      file_path: path,
+      uploaded_by: currentUser ? currentUser.id : null,
+    };
+    const res = await sb
+      .from('quarterly_reviews')
+      .upsert(payload, { onConflict: 'lawyer_id,year,quarter' });
+
+    if (res.error) {
+      console.error('[qr] db upsert error:', res.error);
+      msg.innerHTML = `<span style="color:var(--red);">資料庫寫入失敗：${escHtml(res.error.message||'')}</span>`;
+      return;
+    }
+
+    msg.innerHTML = '<span style="color:var(--green);">✓ 上傳成功</span>';
+    console.log('[qr] all done');
+    // reload list
+    const container = document.getElementById('detailQuarterlyContainer');
+    if (container) setTimeout(() => renderQuarterlyReviews(lawyerId, container), 400);
+  } catch (e) {
+    console.error('[qr] exception:', e);
+    msg.innerHTML = `<span style="color:var(--red);">錯誤：${escHtml(String(e))}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function viewQuarterlyReviewPDF(reviewId) {
+  if (!sb) return;
+  const res = await sb.from('quarterly_reviews')
+    .select('file_path,file_name')
+    .eq('id', reviewId)
+    .single();
+  if (res.error || !res.data || !res.data.file_path) {
+    alert('載入 PDF 失敗：' + (res.error ? res.error.message : '無檔案路徑'));
+    return;
+  }
+  // 產生暫時簽名 URL（60 秒有效）
+  const signed = await sb.storage.from(QR_BUCKET).createSignedUrl(res.data.file_path, 60);
+  if (signed.error || !signed.data) {
+    alert('取得 PDF URL 失敗：' + (signed.error ? signed.error.message : ''));
+    return;
+  }
+  window.open(signed.data.signedUrl, '_blank');
+}
+
+async function deleteQuarterlyReview(reviewId, lawyerId) {
+  if (!confirm('確定刪除這份季度評估 PDF？')) return;
+  // 先撈 file_path 才能刪 Storage
+  const q = await sb.from('quarterly_reviews').select('file_path').eq('id', reviewId).single();
+  const res = await sb.from('quarterly_reviews').delete().eq('id', reviewId);
+  if (res.error) { alert('刪除資料庫記錄失敗：' + res.error.message); return; }
+  if (q.data && q.data.file_path) {
+    const sd = await sb.storage.from(QR_BUCKET).remove([q.data.file_path]);
+    if (sd.error) console.warn('[qr] 刪除 Storage 檔案失敗（紀錄已刪）:', sd.error);
+  }
+  const container = document.getElementById('detailQuarterlyContainer');
+  if (container) renderQuarterlyReviews(lawyerId, container);
+}
+
+function closeCaseContentModal() {
+  document.getElementById('caseContentModal').classList.remove('active');
+}
+
+document.getElementById('caseContentModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeCaseContentModal();
+});
+
+function renderYoyRow(label, curr, prev, isPercent) {
+  const fmtVal = (v) => {
+    if (isPercent) return v.toFixed(1) + '%';
+    if (Math.abs(v) >= 1000) return '$' + Math.round(v).toLocaleString();
+    return v.toLocaleString();
+  };
+
+  let changeText = '—';
+  let changeClass = '';
+  let arrow = '';
+  if (prev > 0) {
+    if (isPercent) {
+      const diff = curr - prev;
+      changeText = (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%';
+      changeClass = diff > 0 ? 'green' : diff < 0 ? 'red' : '';
+      arrow = diff > 0 ? '▲ ' : diff < 0 ? '▼ ' : '';
+    } else {
+      const pct = ((curr - prev) / prev * 100);
+      changeText = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+      changeClass = pct > 0 ? 'green' : pct < 0 ? 'red' : '';
+      arrow = pct > 0 ? '▲ ' : pct < 0 ? '▼ ' : '';
+    }
+  }
+
+  return `<tr>
+    <td>${escHtml(label)}</td>
+    <td class="num">${fmtVal(curr)}</td>
+    <td class="num">${fmtVal(prev)}</td>
+    <td class="num" style="color:var(--${changeClass || 'text-muted'});font-weight:${changeClass ? '600' : '400'};">${arrow}${changeText}</td>
+  </tr>`;
+}
+
+function renderDetailInsights(lawyerId) {
+  const section = document.getElementById('detailInsightsSection');
+  const content = document.getElementById('detailInsightsContent');
+  const insights = generateInsights(lawyerId);
+
+  if (insights.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  content.innerHTML = renderInsightsHtml(insights);
+}
+
+let yoyYearsInitialized = false;
+
+function renderDetailYoy(lawyerId) {
+  const content = document.getElementById('detailYoyContent');
+  const selectA = document.getElementById('yoyYearA');
+  const selectB = document.getElementById('yoyYearB');
+  const samePeriod = document.getElementById('yoySamePeriod').checked;
+
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+
+  // Build available years
+  const yearsSet = new Set();
+  lawyerStats.forEach(s => { if (s.month) yearsSet.add(s.month.slice(0, 4)); });
+  const years = Array.from(yearsSet).sort().reverse();
+
+  if (years.length < 2) {
+    content.innerHTML = '<div class="empty-state">需要至少兩個年度的資料才能比較</div>';
+    selectA.innerHTML = '';
+    selectB.innerHTML = '';
+    return;
+  }
+
+  // Initialize or refresh dropdowns (preserve selection if valid)
+  const prevA = selectA.value;
+  const prevB = selectB.value;
+  const defaultA = years[0];
+  const defaultB = years[1];
+
+  selectA.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  selectB.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+  selectA.value = years.includes(prevA) ? prevA : defaultA;
+  selectB.value = years.includes(prevB) ? prevB : defaultB;
+
+  const yearA = selectA.value;
+  const yearB = selectB.value;
+
+  const statsA = lawyerStats.filter(s => s.month && s.month.startsWith(yearA));
+  let statsB = lawyerStats.filter(s => s.month && s.month.startsWith(yearB));
+
+  // Same period filtering
+  if (samePeriod) {
+    const monthsA = new Set(statsA.map(s => s.month.slice(5, 7)));
+    statsB = statsB.filter(s => monthsA.has(s.month.slice(5, 7)));
+  }
+
+  const tA = aggregateStats(statsA);
+  const tB = aggregateStats(statsB);
+
+  const periodNote = samePeriod ? `（同期 ${statsA.length > 0 ? statsA.map(s => s.month.slice(5,7)).sort()[0] : '?'}~${statsA.length > 0 ? statsA.map(s => s.month.slice(5,7)).sort().pop() : '?'} 月）` : '';
+
+  content.innerHTML = `
+    ${samePeriod && statsA.length > 0 ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">比較範圍：${yearA} 有 ${statsA.length} 個月資料，${yearB} 取同期 ${statsB.length} 個月${periodNote}</div>` : ''}
+    <div style="overflow-x:auto;">
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th class="num">${yearA}</th>
+            <th class="num">${yearB}</th>
+            <th class="num">變化</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderYoyRow('諮詢數', tA.consult_count, tB.consult_count, false)}
+          ${renderYoyRow('簽約數', tA.signed_count, tB.signed_count, false)}
+          ${renderYoyRow('簽約率', tA.sign_rate, tB.sign_rate, true)}
+          ${renderYoyRow('已收金額', tA.collected, tB.collected, false)}
+          ${renderYoyRow('平均成案金額', tA.avg_collected, tB.avg_collected, false)}
+          ${renderYoyRow('諮詢效益', tA.consult_eff, tB.consult_eff, false)}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ===================== UPLOAD (admin only) =====================
+let uploadZipFile = null;
+let uploadXlsxFile = null;
+let parsedCases = [];
+
+// --- Drag-and-drop + file input setup ---
+document.addEventListener('DOMContentLoaded', function() {
+  setupDropzone('zipDropzone', 'zipInput', 'zipFileName', function(file) {
+    uploadZipFile = file;
+    document.getElementById('parseBtn').disabled = false;
+  });
+  setupDropzone('xlsxDropzone', 'xlsxInput', 'xlsxFileName', function(file) {
+    uploadXlsxFile = file;
+    // 只有 Excel 也可以解析（CRM 資料匯入）
+    document.getElementById('parseBtn').disabled = false;
+  });
+});
+
+async function renderSyncStatus() {
+  const el = document.getElementById('syncStatusContent');
+  if (!el || !sb) return;
+  try {
+    const { data, error } = await sb.from('sync_status').select('*').eq('id', 'daily_update').single();
+    if (error || !data) {
+      el.innerHTML = '<span style="color:var(--text-muted);">尚未設定自動同步</span>';
+      return;
+    }
+
+    const statusMap = {
+      success: { icon: '\u2705', label: '同步成功', color: 'var(--green)' },
+      error:   { icon: '\u274C', label: '同步失敗', color: 'var(--red)' },
+      running: { icon: '\u23F3', label: '同步中...', color: 'var(--gold)' },
+      pending: { icon: '\u23F8\uFE0F', label: '尚未執行', color: 'var(--text-muted)' },
+    };
+    const s = statusMap[data.status] || statusMap.pending;
+
+    // 計算時間差
+    let timeAgo = '';
+    if (data.finished_at) {
+      const diff = Date.now() - new Date(data.finished_at).getTime();
+      const mins = Math.floor(diff / 60000);
+      const hours = Math.floor(mins / 60);
+      const days = Math.floor(hours / 24);
+      if (days > 0) timeAgo = days + ' 天前';
+      else if (hours > 0) timeAgo = hours + ' 小時前';
+      else if (mins > 0) timeAgo = mins + ' 分鐘前';
+      else timeAgo = '剛剛';
+    }
+
+    let html = '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;">';
+    html += '<span style="font-size:1.2rem;">' + s.icon + '</span>';
+    html += '<span style="font-weight:600;color:' + s.color + ';">' + s.label + '</span>';
+    html += '</div>';
+
+    if (data.message) {
+      html += '<span style="color:var(--text-muted);font-size:0.85rem;">' + data.message + '</span>';
+    }
+    html += '</div>';
+
+    // 詳細資訊
+    html += '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px;font-size:0.85rem;color:var(--text-muted);">';
+    if (data.scraped_months) {
+      html += '<div>更新月份：<strong style="color:var(--text-primary);">' + data.scraped_months + '</strong></div>';
+    }
+    if (data.rows_scraped > 0) {
+      html += '<div>爬取筆數：<strong style="color:var(--text-primary);">' + data.rows_scraped + '</strong></div>';
+    }
+    if (data.rows_updated > 0) {
+      html += '<div>更新筆數：<strong style="color:var(--text-primary);">' + data.rows_updated + '</strong></div>';
+    }
+    if (timeAgo) {
+      html += '<div>完成時間：<strong style="color:var(--text-primary);">' + timeAgo + '</strong></div>';
+    }
+    if (data.finished_at) {
+      const dt = new Date(data.finished_at);
+      const local = dt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+      html += '<div>(' + local + ')</div>';
+    }
+    html += '</div>';
+
+    // 下次排程提示
+    html += '<div style="margin-top:10px;font-size:0.8rem;color:var(--text-muted);">排程：每日中午 12:00 自動爬取 CRM 並更新儀表板資料</div>';
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--text-muted);">無法讀取同步狀態</span>';
+  }
+}
+
+function renderUploadSummary() {
+  const el = document.getElementById('uploadSummaryContent');
+  if (!el) return;
+  // 只統計有會議紀錄或逐字稿的案件
+  const docCases = allCases.filter(c => c.meeting_record || c.transcript);
+  if (!docCases || docCases.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">尚未匯入任何會議紀錄或逐字稿</div>';
+    return;
+  }
+
+  // Group by year-month
+  const monthMap = {};
+  docCases.forEach(c => {
+    const ym = c.case_date.substring(0, 7);
+    if (!monthMap[ym]) monthMap[ym] = { total: 0, signed: 0, unsigned: 0 };
+    monthMap[ym].total++;
+    if (c.is_signed) monthMap[ym].signed++;
+    else monthMap[ym].unsigned++;
+  });
+
+  const months = Object.keys(monthMap).sort().reverse();
+  const totalSigned = docCases.filter(c => c.is_signed).length;
+  const totalUnsigned = docCases.length - totalSigned;
+  const signRate = docCases.length > 0 ? (totalSigned / docCases.length * 100).toFixed(1) : '0';
+
+  let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">';
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">案件總數</span><div style="font-size:1.3rem;font-weight:700;">${docCases.length}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--green);">${totalSigned}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">未成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--red);">${totalUnsigned}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案率</span><div style="font-size:1.3rem;font-weight:700;">${signRate}%</div></div>`;
+  html += '</div>';
+
+  html += '<div style="overflow-x:auto;"><table class="detail-table"><thead><tr>';
+  html += '<th>年月</th><th>案件數</th><th>成案</th><th>未成案</th><th>成案率</th>';
+  html += '</tr></thead><tbody>';
+  months.forEach(ym => {
+    const m = monthMap[ym];
+    const rate = (m.signed / m.total * 100).toFixed(1);
+    html += `<tr><td style="white-space:nowrap;">${ym}</td><td>${m.total}</td><td style="color:var(--green);">${m.signed}</td><td style="color:var(--red);">${m.unsigned}</td><td>${rate}%</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  el.innerHTML = html;
+}
+
+function setupDropzone(dropzoneId, inputId, nameId, onFile) {
+  const dz = document.getElementById(dropzoneId);
+  const inp = document.getElementById(inputId);
+  const nameEl = document.getElementById(nameId);
+  if (!dz || !inp) return;
+
+  dz.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'LABEL') inp.click();
+  });
+
+  dz.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dz.classList.add('drag-over');
+  });
+  dz.addEventListener('dragleave', function() {
+    dz.classList.remove('drag-over');
+  });
+  dz.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  inp.addEventListener('change', function() {
+    if (inp.files.length > 0) handleFile(inp.files[0]);
+  });
+
+  function handleFile(file) {
+    nameEl.textContent = file.name;
+    dz.classList.add('has-file');
+    onFile(file);
+  }
+}
+
+// --- Filename parser ---
+function parseUploadFilename(filename) {
+  const clean = filename.replace(/\s*的副本/g, '');
+  const pattern = /^(.+?)_(成案|未成案)_?(\d{8})_?(.+?)\((會議記錄|會議紀錄|逐字稿)\)\.(docx|txt)$/;
+  const m = clean.match(pattern);
+  if (!m) return null;
+  return {
+    lawyer: m[1].trim(),
+    isSigned: m[2] === '成案',
+    date: m[3].slice(0,4) + '-' + m[3].slice(4,6) + '-' + m[3].slice(6,8),
+    caseType: m[4].trim(),
+    contentType: (m[5] === '逐字稿') ? 'transcript' : 'meeting',
+  };
+}
+
+// --- Read docx from ArrayBuffer ---
+async function readDocxFromArrayBuffer(ab) {
+  try {
+    const docZip = await JSZip.loadAsync(ab);
+    const docXml = await docZip.file('word/document.xml').async('string');
+    return docXml
+      .replace(/<w:br[^>]*\/>/g, '\n')
+      .replace(/<\/w:p>/g, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  } catch (e) {
+    console.warn('Failed to read docx:', e);
+    return '';
+  }
+}
+
+// --- Read text blob with encoding detection ---
+async function readTextBlob(blob) {
+  try {
+    const text = await blob.text();
+    if (!text.includes('\uFFFD')) return text;
+  } catch(e) {}
+  try {
+    const ab = await blob.arrayBuffer();
+    const decoder = new TextDecoder('big5');
+    return decoder.decode(ab);
+  } catch(e) {}
+  return await blob.text();
+}
+
+// --- Excel date parser ---
+function parseExcelDate(val) {
+  if (!val) return '';
+  if (typeof val === 'number') {
+    const d = new Date((val - 25569) * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{8}$/.test(s)) return s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8);
+  return s;
+}
+
+// --- Parse uploaded files ---
+async function parseUploadedFiles() {
+  const btn = document.getElementById('parseBtn');
+  btn.disabled = true;
+  btn.textContent = '解析中...';
+
+  parsedCases = [];
+
+  // 1. If xlsx provided, parse it
+  let xlsxCases = null;
+  if (uploadXlsxFile) {
+    const ab = await uploadXlsxFile.arrayBuffer();
+    const wb = XLSX.read(ab);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws);
+    // 過濾「是否列入計算=否」
+    var filtered = rows.filter(function(r) {
+      var v = (r['是否列入計算'] || '').toString().trim();
+      return v !== '否';
+    });
+    xlsxCases = filtered.map(function(r) {
+      // 支援 CRM xlsx 格式：簽約狀態 → is_signed
+      var signStatus = (r['簽約狀態'] || r['成案與否'] || '').toString().trim();
+      var signed = signStatus !== '' && signStatus !== 'nan' && !signStatus.includes('未');
+      // 如果有「成案與否」欄位，用原本邏輯
+      if (r['成案與否']) {
+        signed = (r['成案與否'] || '').includes('成案') && !(r['成案與否'] || '').includes('未');
+      }
+      var revKey = Object.keys(r).find(function(k) { return k.includes('應收'); });
+      var colKey = Object.keys(r).find(function(k) { return k.includes('已收'); });
+      return {
+        lawyer_name: r['律師姓名'] || r['諮詢律師'] || '',
+        case_date: parseExcelDate(r['諮詢日期']),
+        case_type: r['案件類型'] || r['服務項目'] || '',
+        case_number: (r['案件編號'] || '').toString().trim(),
+        client_name: (r['當事人'] || '').toString().trim(),
+        is_signed: signed,
+        revenue: revKey ? (parseInt(r[revKey]) || 0) : 0,
+        collected: colKey ? (parseInt(r[colKey]) || 0) : 0,
+        mr_filename: r['會議記錄檔名'] || '',
+        ts_filename: r['逐字稿檔名'] || '',
+      };
+    });
+  }
+
+  // 2. Extract ZIP (if provided)
+  const fileEntries = {};
+  if (uploadZipFile) {
+    const zip = await JSZip.loadAsync(uploadZipFile);
+
+    for (const path of Object.keys(zip.files)) {
+      const zipEntry = zip.files[path];
+      if (zipEntry.dir) continue;
+      const filename = path.split('/').pop();
+      if (!filename) continue;
+
+      const ext = filename.split('.').pop().toLowerCase();
+      if (!['docx', 'txt'].includes(ext)) continue;
+
+      const parsed = parseUploadFilename(filename);
+      if (!parsed) continue;
+
+      let content = '';
+      if (ext === 'txt') {
+        const blob = await zipEntry.async('blob');
+        content = await readTextBlob(blob);
+      } else if (ext === 'docx') {
+        const ab = await zipEntry.async('arraybuffer');
+        content = await readDocxFromArrayBuffer(ab);
+      }
+
+      const key = parsed.lawyer + '_' + parsed.date + '_' + parsed.caseType + '_' + parsed.isSigned;
+      if (!fileEntries[key]) {
+        fileEntries[key] = {
+          lawyer_name: parsed.lawyer,
+          case_date: parsed.date,
+          case_type: parsed.caseType,
+          is_signed: parsed.isSigned,
+          meeting_record: '',
+          transcript: '',
+        };
+      }
+
+      if (parsed.contentType === 'meeting') {
+        fileEntries[key].meeting_record = content;
+      } else {
+        fileEntries[key].transcript = content;
+      }
+    }
+  }
+
+  // 3. Merge: xlsx-only mode (CRM data) or ZIP + xlsx
+  if (xlsxCases && Object.keys(fileEntries).length === 0) {
+    // 純 xlsx 模式（CRM 資料匯入，不需要會議記錄）
+    parsedCases = xlsxCases;
+  } else {
+    parsedCases = Object.values(fileEntries);
+  }
+
+  // 4. Check lawyer names against allLawyersMap
+  const nameToId = {};
+  Object.entries(allLawyersMap).forEach(function(entry) {
+    nameToId[entry[1].name] = entry[0];
+  });
+
+  // 判斷這次是否為「純 ZIP 模式」（只補會議記錄/逐字稿到現有 CRM 案件）
+  var pureZipMode = !xlsxCases;
+
+  // 純 ZIP 模式需要 allCases 來匹配 CRM 案件，若仍在背景載入則提醒並中止
+  if (pureZipMode && (!allCases || allCases.length === 0)) {
+    alert('案件清單仍在背景載入中，請稍候 10 秒後再按「解析檔案」。');
+    btn.disabled = false;
+    btn.textContent = '解析檔案';
+    return;
+  }
+
+  parsedCases.forEach(function(c) {
+    c.lawyer_id = nameToId[c.lawyer_name] || null;
+    if (!c.lawyer_id) { c.status = 'no_lawyer'; return; }
+
+    if (pureZipMode) {
+      // ZIP 模式：必須有內容
+      if (!c.meeting_record && !c.transcript) { c.status = 'no_content'; return; }
+
+      // 嘗試匹配 CRM 已存在的案件（只更新 meeting_record/transcript，不動其他欄位）
+      var match = findMatchingCrmCase(c, allCases);
+      if (match.kind === 'none') {
+        c.status = 'no_match';
+        c.match_info = 'CRM 查無同日案件';
+      } else if (match.kind === 'ambiguous') {
+        c.status = 'ambiguous';
+        // 顯示前 2 個候選的分數供參考
+        var top = (match.topScored || []).slice(0, 2).map(function(x) {
+          return (x.real.client_name || '?') + '(' + x.score + ')';
+        }).join(' vs ');
+        c.match_info = '同日 ' + match.matches.length + ' 筆無法自動判斷：' + top;
+        c.ambiguous_candidates = match.matches;
+      } else {
+        // kind === 'one'
+        c.status = 'ready';
+        c.matched_case_id = match.matches[0].id;
+        c.matched_case_number = match.matches[0].case_number;
+        c.matched_client_name = match.matches[0].client_name;
+        c.match_confidence = match.confidence || 'low';
+        c.match_reasons = match.reasons || [];
+        // 記錄真案件目前內容狀況（不覆蓋時會用到）
+        c.matched_has_mr = !!match.matches[0].meeting_record;
+        c.matched_has_ts = !!match.matches[0].transcript;
+      }
+    } else {
+      // xlsx 模式：直接 upsert 整筆案件
+      c.status = 'ready';
+    }
+  });
+
+  // 偵測同批重複：多筆 UP_ 指向同一個 CRM 案件（前一筆採用，後面改標 'duplicate'）
+  var seenTarget = {};
+  parsedCases.forEach(function(c) {
+    if (c.status !== 'ready' || !c.matched_case_id) return;
+    if (seenTarget[c.matched_case_id]) {
+      c.status = 'duplicate';
+      c.match_info = '本次上傳中已有另一筆指向 ' + c.matched_case_number + '（' + (c.matched_client_name||'') + '）';
+      c.duplicate_of = seenTarget[c.matched_case_id];
+    } else {
+      seenTarget[c.matched_case_id] = c;
+    }
+  });
+
+  // 5. Show preview
+  renderUploadPreview();
+
+  btn.disabled = false;
+  btn.textContent = '解析檔案';
+}
+
+// 在 allCases 中尋找匹配的 CRM 案件（for 純 ZIP 模式）
+// 策略：以 (lawyer_id, case_date) 為一定條件，多筆候選時用評分排序
+//   +10~20  當事人完整姓名在會議記錄/逐字稿出現（多客戶以逗號分隔時逐個檢查）
+//   + 8     2~4 字人名「姓 + 名末字」嚴格部分匹配（跳過公司名）
+//   + 4     case_type 去除「現場諮詢/視訊諮詢」等通用詞後有重疊
+//   + 3     case_type 完全相等
+//   + 2     is_signed 相同
+// 決策：最高分 ≥10 且領先次高 ≥5 → 採用；其餘退回舊 type/sign 收斂邏輯
+var COMPANY_KEYWORDS = ['公司','股份','有限','集團','企業','商行','工業','科技','國際','事務所','協會','基金會'];
+
+function isCompanyName(cn) {
+  for (var i=0; i<COMPANY_KEYWORDS.length; i++) if (cn.indexOf(COMPANY_KEYWORDS[i]) >= 0) return true;
+  return false;
+}
+
+function scoreCrmMatch(up, real) {
+  var text = ((up.meeting_record || '') + '\n' + (up.transcript || '')).slice(0, 3000);
+  var s = 0, reasons = [];
+
+  var cnRaw = (real.client_name || '').trim();
+  if (cnRaw) {
+    // 多客戶名 (以 ,、＋ 等分隔) 逐個比對
+    var names = cnRaw.split(/[,、＋+]\s*/).map(function(n){return n.trim();}).filter(function(n){return n.length>=2;});
+    names.forEach(function(cn) {
+      var fullHits = text.split(cn).length - 1;
+      if (fullHits > 0) {
+        var pts = Math.min(10 + 3 * (fullHits - 1), 20);
+        s += pts;
+        reasons.push('「' + cn + '」×' + fullHits);
+      } else if (!isCompanyName(cn) && cn.length >= 2 && cn.length <= 4) {
+        // 嚴格部分匹配：姓 + 1~2 字 + 名末字
+        var surname = cn.charAt(0);
+        var last = cn.charAt(cn.length - 1);
+        if (surname !== last) {
+          var re = new RegExp(escapeRegex(surname) + '.{1,2}' + escapeRegex(last), 'g');
+          var m = text.match(re);
+          var partial = m ? m.length : 0;
+          if (partial > 0) {
+            var pts2 = Math.min(8, 4 * partial);
+            s += pts2;
+            reasons.push('「' + surname + '…' + last + '」×' + partial);
+          }
+        }
+      }
+    });
+  }
+
+  // case_type 去通用詞後的 token overlap
+  var GENERIC = ['現場諮詢','視訊諮詢','電話諮詢','諮詢','諮商'];
+  var tokenize = function(t) {
+    return (t||'').split(/[,\s、+]+/).map(function(x){return x.trim();})
+      .filter(function(x){return x && GENERIC.indexOf(x)<0;});
+  };
+  var upTokens = tokenize(up.case_type);
+  var realTokens = tokenize(real.case_type);
+  var overlap = [];
+  upTokens.forEach(function(t){ if (realTokens.indexOf(t) >= 0) overlap.push(t); });
+  if (overlap.length > 0) { s += 4; reasons.push('type共通:' + overlap.join('/')); }
+
+  // case_type 完全相等
+  if (up.case_type && real.case_type && up.case_type === real.case_type) {
+    s += 3; reasons.push('type相等');
+  }
+
+  // is_signed 相同
+  if (up.is_signed === real.is_signed) { s += 2; reasons.push('簽約一致'); }
+
+  return { score: s, reasons: reasons };
+}
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function findMatchingCrmCase(c, cases) {
+  var sameDay = cases.filter(function(x) {
+    return x.lawyer_id === c.lawyer_id && x.case_date === c.case_date;
+  });
+  if (sameDay.length === 0) return { kind: 'none', matches: [] };
+  if (sameDay.length === 1) {
+    return { kind: 'one', matches: sameDay, confidence: 'unique_day', reasons: ['同日唯一案件'] };
+  }
+
+  // 多筆候選：逐個算分
+  var scored = sameDay.map(function(r) {
+    var sr = scoreCrmMatch(c, r);
+    return { score: sr.score, reasons: sr.reasons, real: r };
+  });
+  scored.sort(function(a,b){return b.score - a.score;});
+
+  var best = scored[0];
+  var second = scored[1] || { score: 0 };
+
+  // 高信心：≥10 且領先 ≥5
+  if (best.score >= 10 && best.score - second.score >= 5) {
+    return { kind: 'one', matches: [best.real], confidence: 'high', score: best.score, reasons: best.reasons };
+  }
+
+  // 中信心：領先 ≥4 且最高分 ≥ 6（case_type overlap + is_signed 等）
+  if (best.score >= 6 && best.score - second.score >= 4) {
+    return { kind: 'one', matches: [best.real], confidence: 'medium', score: best.score, reasons: best.reasons };
+  }
+
+  // 退回舊邏輯 fallback
+  var ct = (c.case_type || '').trim();
+  var byType = sameDay.filter(function(x) {
+    var xt = (x.case_type || '').trim();
+    if (!ct || !xt) return false;
+    return xt === ct || xt.indexOf(ct) >= 0 || ct.indexOf(xt) >= 0;
+  });
+  if (byType.length === 1) {
+    return { kind: 'one', matches: byType, confidence: 'low', reasons: ['type fuzzy'] };
+  }
+  if (byType.length > 1) {
+    var bySign = byType.filter(function(x) { return x.is_signed === c.is_signed; });
+    if (bySign.length === 1) {
+      return { kind: 'one', matches: bySign, confidence: 'low', reasons: ['type+sign'] };
+    }
+    return { kind: 'ambiguous', matches: byType, topScored: scored };
+  }
+
+  // 全部都對不上：如果有一個 is_signed 相同，退而使用之
+  var signOnly = sameDay.filter(function(x){ return x.is_signed === c.is_signed; });
+  if (signOnly.length === 1) {
+    return { kind: 'one', matches: signOnly, confidence: 'low', reasons: ['僅 is_signed 對得上'] };
+  }
+
+  return { kind: 'ambiguous', matches: sameDay, topScored: scored };
+}
+
+// --- Render preview table ---
+function renderUploadPreview() {
+  var preview = document.getElementById('uploadPreview');
+  preview.style.display = 'block';
+
+  var counts = { ready: 0, no_lawyer: 0, no_content: 0, no_match: 0, ambiguous: 0, duplicate: 0 };
+  parsedCases.forEach(function(c) { if (counts[c.status] !== undefined) counts[c.status]++; });
+
+  document.getElementById('uploadStats').innerHTML =
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;">' +
+    '<div style="font-size:0.9rem;">總案件：<strong>' + parsedCases.length + '</strong></div>' +
+    '<div style="font-size:0.9rem;color:var(--green);">可匯入：<strong>' + counts.ready + '</strong></div>' +
+    (counts.duplicate > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同批重複：<strong>' + counts.duplicate + '</strong></div>' : '') +
+    (counts.no_lawyer > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">律師不存在：<strong>' + counts.no_lawyer + '</strong></div>' : '') +
+    (counts.no_content > 0 ? '<div style="font-size:0.9rem;color:var(--red);">無內容：<strong>' + counts.no_content + '</strong></div>' : '') +
+    (counts.no_match > 0 ? '<div style="font-size:0.9rem;color:var(--red);">CRM 查無：<strong>' + counts.no_match + '</strong></div>' : '') +
+    (counts.ambiguous > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同日多筆無法判斷：<strong>' + counts.ambiguous + '</strong></div>' : '') +
+    '</div>' +
+    ((counts.no_match > 0 || counts.ambiguous > 0 || counts.duplicate > 0)
+      ? '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.5;">' +
+        (counts.no_match > 0 ? 'CRM 查無：該案件 CRM 還沒同步，請等爬蟲跑完再上傳。<br>' : '') +
+        (counts.ambiguous > 0 ? '同日多筆無法判斷：同一律師同一天有多筆 CRM 案件且當事人名字沒在會議記錄出現，請人工確認。<br>' : '') +
+        (counts.duplicate > 0 ? '同批重複：本次上傳中有多個檔案對應到同一 CRM 案件（通常是檔名略有差異的重複），會自動只匯入第一筆。' : '') +
+        '</div>'
+      : '');
+
+  var tbody = document.getElementById('uploadPreviewBody');
+  tbody.innerHTML = parsedCases.map(function(c) {
+    var statusHtml;
+    if (c.status === 'ready') {
+      var conf = c.match_confidence || '';
+      var confBadge = conf === 'high' ? '<span style="background:var(--green-dim);color:var(--green);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">高信心</span>'
+                    : conf === 'medium' ? '<span style="background:rgba(201,168,76,0.15);color:var(--gold);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">中信心</span>'
+                    : conf === 'low' ? '<span style="background:rgba(224,149,74,0.15);color:var(--orange);padding:1px 5px;border-radius:3px;font-size:0.65rem;margin-left:4px;">低信心</span>'
+                    : '';
+      var contentNote = '';
+      if (c.matched_has_mr && c.meeting_record) contentNote += '<div style="font-size:0.68rem;color:var(--orange);">會議記錄：真案件已有內容，將保留原本，不覆蓋</div>';
+      if (c.matched_has_ts && c.transcript) contentNote += '<div style="font-size:0.68rem;color:var(--orange);">逐字稿：真案件已有內容，將保留原本，不覆蓋</div>';
+      statusHtml = '<span style="color:var(--green);">可匯入</span>' + confBadge +
+                   (c.matched_case_number ? '<div style="font-size:0.7rem;color:var(--text-muted);">→ ' + escHtml(c.matched_case_number) + ' (' + escHtml(c.matched_client_name || '') + ')</div>' : '') +
+                   contentNote;
+    } else if (c.status === 'duplicate') {
+      statusHtml = '<span style="color:var(--orange);">同批重複</span><div style="font-size:0.7rem;color:var(--text-muted);">' + escHtml(c.match_info || '') + '</div>';
+    } else if (c.status === 'no_lawyer') {
+      statusHtml = '<span style="color:var(--orange);">律師不存在</span>';
+    } else if (c.status === 'no_content') {
+      statusHtml = '<span style="color:var(--red);">無內容</span>';
+    } else if (c.status === 'no_match') {
+      statusHtml = '<span style="color:var(--red);">CRM 查無</span>';
+    } else if (c.status === 'ambiguous') {
+      statusHtml = '<span style="color:var(--orange);">' + escHtml(c.match_info || '無法判斷') + '</span>';
+    } else {
+      statusHtml = '<span style="color:var(--text-muted);">' + escHtml(c.status || '') + '</span>';
+    }
+
+    return '<tr>' +
+      '<td>' + escHtml(c.lawyer_name) + '</td>' +
+      '<td>' + escHtml(c.case_date) + '</td>' +
+      '<td>' + escHtml(c.case_type) + '</td>' +
+      '<td>' + (c.is_signed ? '<span style="color:var(--green);">成案</span>' : '<span style="color:var(--red);">未成案</span>') + '</td>' +
+      '<td>' + (c.meeting_record ? '<span style="color:var(--green);">有</span>' : '<span style="color:var(--text-muted);">無</span>') + '</td>' +
+      '<td>' + (c.transcript ? '<span style="color:var(--green);">有</span>' : '<span style="color:var(--text-muted);">無</span>') + '</td>' +
+      '<td>' + statusHtml + '</td>' +
+      '</tr>';
+  }).join('');
+
+  var uploadBtn = document.getElementById('uploadBtn');
+  uploadBtn.style.display = counts.ready > 0 ? '' : 'none';
+  uploadBtn.disabled = false;
+}
+
+// --- Submit to Supabase ---
+async function submitUploadedCases() {
+  var btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.textContent = '匯入中...';
+
+  var progressSection = document.getElementById('uploadProgress');
+  progressSection.style.display = 'block';
+
+  var readyCases = parsedCases.filter(function(c) { return c.status === 'ready'; });
+
+  // 分成兩組：
+  // - zipOnly：純 ZIP 模式、已匹配到 CRM 案件 → 只 update meeting_record/transcript
+  // - xlsxMode：xlsx 模式（CRM 手動匯入）→ 維持整筆 upsert 行為
+  var zipOnly = readyCases.filter(function(c) { return c.matched_case_id; });
+  var xlsxMode = readyCases.filter(function(c) { return !c.matched_case_id; });
+
+  var totalOps = readyCases.length;
+  var done = 0, success = 0, errors = 0;
+
+  function updateProgress(note) {
+    var pct = totalOps > 0 ? Math.round(done / totalOps * 100) : 0;
+    document.getElementById('uploadProgressFill').style.width = pct + '%';
+    document.getElementById('uploadProgressText').textContent =
+      done + ' / ' + totalOps + ' 筆處理完成' + (note ? '  （' + note + '）' : '');
+  }
+
+  // 立刻顯示初始進度，避免看起來當機
+  updateProgress('開始處理');
+  console.log('[upload] submit start: zipOnly=' + zipOnly.length + ', xlsxMode=' + xlsxMode.length);
+
+  // --- 純 ZIP 模式：逐筆 UPDATE（只改 meeting_record / transcript） ---
+  var preserved = 0;  // 因真案件已有內容而保留的欄位計數
+  for (var i = 0; i < zipOnly.length; i++) {
+    var c = zipOnly[i];
+    var patch = {};
+    // 真案件若已有內容則保留，不覆蓋（c.matched_has_mr/ts 在 parse 時記錄）
+    if (c.meeting_record && !c.matched_has_mr) patch.meeting_record = c.meeting_record;
+    else if (c.meeting_record && c.matched_has_mr) preserved++;
+    if (c.transcript && !c.matched_has_ts) patch.transcript = c.transcript;
+    else if (c.transcript && c.matched_has_ts) preserved++;
+    if (Object.keys(patch).length === 0) { done++; updateProgress('跳過（真案件已有內容）'); continue; }
+
+    updateProgress('更新 ' + (c.matched_case_number || c.matched_case_id));
+    console.log('[upload] updating', c.matched_case_id, 'patch=', Object.keys(patch),
+                'sizes=', (patch.meeting_record||'').length, (patch.transcript||'').length);
+
+    try {
+      var upd = await sb
+        .from('consultation_cases')
+        .update(patch)
+        .eq('id', c.matched_case_id);
+
+      if (upd && upd.error) {
+        console.error('[upload] update error', c.matched_case_id, upd.error);
+        errors++;
+      } else {
+        success++;
+      }
+    } catch (e) {
+      console.error('[upload] update exception', c.matched_case_id, e);
+      errors++;
+    }
+    done++;
+    updateProgress();
+  }
+
+  // --- xlsx 模式：維持原 upsert 行為 ---
+  var xlsxBatchSize = 10;
+  for (var j = 0; j < xlsxMode.length; j += xlsxBatchSize) {
+    var batch = xlsxMode.slice(j, j + xlsxBatchSize);
+    var rows = batch.map(function(c, idx) {
+      var row = {
+        lawyer_id: c.lawyer_id,
+        case_date: c.case_date,
+        case_type: c.case_type,
+        case_number: c.case_number || null,
+        client_name: c.client_name || null,
+        is_signed: c.is_signed,
+        revenue: c.revenue || 0,
+        collected: c.collected || 0,
+        meeting_record: c.meeting_record || null,
+        transcript: c.transcript || null,
+      };
+      if (!row.case_number) {
+        row.case_number = 'UP_' + c.lawyer_id + '_' + c.case_date + '_' + (c.case_type || '').replace(/\s/g,'') + '_' + j + '_' + idx;
+      }
+      return row;
+    });
+
+    try {
+      var result = await sb
+        .from('consultation_cases')
+        .upsert(rows, { onConflict: 'case_number' });
+
+      if (result && result.error) {
+        console.error('[upload] upsert error', result.error);
+        errors += batch.length;
+      } else {
+        success += batch.length;
+      }
+    } catch (e) {
+      console.error('[upload] upsert exception', e);
+      errors += batch.length;
+    }
+    done += batch.length;
+    updateProgress();
+  }
+
+  var msg = '';
+  if (zipOnly.length > 0) msg += '會議記錄/逐字稿更新：' + zipOnly.length + ' 筆（到已存在的 CRM 案件）；';
+  if (xlsxMode.length > 0) msg += 'CRM 案件匯入：' + xlsxMode.length + ' 筆；';
+  msg += '成功 ' + success + (errors > 0 ? '，失敗 ' + errors : '');
+  if (preserved > 0) msg += '；' + preserved + ' 個欄位因真案件已有內容而保留原本';
+
+  document.getElementById('uploadResult').innerHTML =
+    '<div class="insight-item ' + (errors === 0 ? 'insight-success' : 'insight-warning') + '">' +
+    '<span class="insight-icon">' + (errors === 0 ? '✓' : '⚠') + '</span>' +
+    '<span>' + msg + '</span>' +
+    '</div>';
+
+  btn.textContent = '確認匯入';
+  btn.disabled = true;
+
+  await reloadCases();
+}
+
+async function reloadCases() {
+  var casesFetched = [];
+  var from = 0;
+  var pageSize = 1000;
+  while (true) {
+    var resp = await sb
+      .from('consultation_cases')
+      .select('*')
+      .order('case_date', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (!resp.data || resp.data.length === 0) break;
+    casesFetched = casesFetched.concat(resp.data);
+    if (resp.data.length < pageSize) break;
+    from += pageSize;
+  }
+  allCases = casesFetched;
+}
+
+// ===================== LOGOUT =====================
+async function handleLogout() {
+  try { if (sb) await sb.auth.signOut(); } catch(e) { console.warn('signOut error', e); }
+  // Clear local storage session
+  try { localStorage.removeItem('sb-zpbkeyhxyykbvownrngf-auth-token'); } catch(e) {}
+  showLoginPage();
+}
+// Bind logout via addEventListener (more reliable than inline onclick)
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('logoutBtn');
+  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); handleLogout(); });
+});
+
+function showLoginPage() {
+  document.getElementById('dashboard').style.display  = 'none';
+  document.getElementById('loginPage').style.display  = 'flex';
+  document.getElementById('loginPassword').value      = '';
+  document.getElementById('loginError').style.display = 'none';
+  currentUser = currentLawyer = null;
+  allStats = [];
+  allCases = [];
+  allLawyersMap = {};
+  resignedLawyersMap = {};
+}
+
+// ===================== PASSWORD CHANGE =====================
+function handleChangePassword() {
+  document.getElementById('passwordModal').classList.add('active');
+  document.getElementById('pwdError').style.display   = 'none';
+  document.getElementById('pwdSuccess').style.display = 'none';
+  document.getElementById('newPassword').value    = '';
+  document.getElementById('confirmPassword').value = '';
+}
+
+function closePasswordModal() {
+  document.getElementById('passwordModal').classList.remove('active');
+}
+
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const newPwd     = document.getElementById('newPassword').value;
+  const confirmPwd = document.getElementById('confirmPassword').value;
+
+  document.getElementById('pwdError').style.display   = 'none';
+  document.getElementById('pwdSuccess').style.display = 'none';
+
+  if (newPwd !== confirmPwd) {
+    showErr('pwdError', '兩次密碼不一致');
+    return;
+  }
+
+  if (!sb) { showErr('pwdError', 'Supabase 未設定'); return; }
+
+  const { error } = await sb.auth.updateUser({ password: newPwd });
+  if (error) {
+    showErr('pwdError', '修改失敗：' + error.message);
+  } else {
+    document.getElementById('pwdSuccess').style.display = 'block';
+    setTimeout(closePasswordModal, 1500);
+  }
+});
+
+document.getElementById('passwordModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closePasswordModal();
+});
+
+// ===================== UNSIGNED CASES TRACKING =====================
+var unsignedRange = 1;
+var unsignedSortCol = 'case_date';
+var unsignedSortDir = 'desc';
+
+function setUnsignedRange(months) {
+  unsignedRange = months;
+  document.querySelectorAll('#unsignedFilterBar .year-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.includes(months + '個月'));
+  });
+  renderUnsignedPage();
+}
+
+// ===================== ADMIN PAGE =====================
+let adminSortBy = 'name';
+
+// 計算該 lawyer 在指定儀表板的存取狀態
+// dashboard: 'consultation' | 'revenue' | 'finance' | 'partners'
+function lawyerAccessCell(l, dashboard) {
+  if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
+  const role = l.role || 'lawyer';
+  const canViewAll = l.can_view_all === true;
+  // admin / manager / can_view_all 四個儀表板全部可看
+  if (role === 'admin' || role === 'manager' || canViewAll) {
+    return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
+  }
+  // 預設律師只能看諮詢分析（且只看自己的）
+  if (dashboard === 'consultation') {
+    return '<span style="color:var(--gold-light);font-size:0.78rem;">僅自己</span>';
+  }
+  return '<span style="color:var(--red);">✗</span>';
+}
+
+function renderAdminPage() {
+  const tbody = document.getElementById('adminLawyerTableBody');
+  if (!tbody) return;
+
+  // Update sort indicators
+  const sn = document.getElementById('adminSortName');
+  if (sn) sn.textContent = '▼';
+
+  // Collect all active lawyers
+  const lawyers = Object.values(allLawyersMap)
+    .filter(l => l.id !== currentLawyer.id && l.role !== 'legal_staff')
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+
+  if (lawyers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暫無律師資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lawyers.map(l => {
+    const role = l.role || 'lawyer';
+    return `<tr>
+      <td style="font-weight:600;">${escHtml(l.name)}</td>
+      <td style="color:var(--text-muted);font-size:0.82rem;">${escHtml(l.email || '-')}</td>
+      <td style="text-align:center;">
+        <select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;"
+                onchange="changeRole('${l.id}', this.value)">
+          <option value="lawyer" ${role === 'lawyer' ? 'selected' : ''}>🔒 律師</option>
+          <option value="manager" ${role === 'manager' ? 'selected' : ''}>📊 主管</option>
+          <option value="admin" ${role === 'admin' ? 'selected' : ''}>🔑 管理員</option>
+        </select>
+      </td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'consultation')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'revenue')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'finance')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'partners')}</td>
+      <td style="text-align:center;">
+        <span style="font-size:0.78rem;color:var(--${l.is_active ? 'green' : 'text-muted'});">
+          ${l.is_active ? '在職' : '離職'}
+        </span>
+      </td>
+      <td style="text-align:center;">
+        ${l.auth_user_id ? `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword('${l.auth_user_id}', '${escHtml(l.name)}')">🔄 重設</button>` : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function changeRole(lawyerId, newRole) {
+  const lawyer = allLawyersMap[lawyerId];
+  if (!lawyer) return;
+
+  // Parse the composite value
+  let role, canViewAll;
+  if (newRole === 'admin') {
+    role = 'admin'; canViewAll = true;
+  } else if (newRole === 'manager') {
+    role = 'manager'; canViewAll = true;
+  } else {
+    role = 'lawyer'; canViewAll = true;
+  }
+
+  const roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : '律師';
+  if (!confirm(`確定將「${lawyer.name}」設為「${roleLabel}」嗎？`)) {
+    renderAdminPage(); // reset dropdown
+    return;
+  }
+
+  const { error } = await sb
+    .from('lawyers')
+    .update({ role, can_view_all: canViewAll })
+    .eq('id', lawyerId);
+
+  if (error) {
+    alert('更新失敗：' + error.message);
+    renderAdminPage();
+    return;
+  }
+
+  // Update local state
+  allLawyersMap[lawyerId].role = role;
+  allLawyersMap[lawyerId].can_view_all = canViewAll;
+
+  renderAdminPage();
+}
+
+const DEFAULT_PASSWORD = 'ChangeMe123!';
+async function resetPassword(authUserId, name) {
+  if (!confirm(`確定要將「${name}」的密碼重設為預設密碼（${DEFAULT_PASSWORD}）嗎？`)) return;
+
+  try {
+    const { error } = await sb.rpc('admin_reset_password', {
+      target_user_id: authUserId,
+      new_password: DEFAULT_PASSWORD
+    });
+    if (error) throw error;
+    alert(`「${name}」的密碼已重設為：${DEFAULT_PASSWORD}`);
+  } catch (e) {
+    alert('重設失敗：' + (e.message || e));
+    console.error('resetPassword error:', e);
+  }
+}
+
+function renderUnsignedPage() {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - unsignedRange);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  // Filter unsigned cases within date range
+  let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+
+  // Admin: show lawyer filter
+  const showAllData = canViewAll();
+  const filterLabel = document.getElementById('unsignedLawyerFilterLabel');
+  const filterSelect = document.getElementById('unsignedLawyerSelect');
+  const staffLabel = document.getElementById('unsignedStaffFilterLabel');
+  const staffSelect = document.getElementById('unsignedStaffSelect');
+  if (showAllData) {
+    filterLabel.style.display = '';
+    filterSelect.style.display = '';
+    staffLabel.style.display = '';
+    staffSelect.style.display = '';
+    // Build lawyer options if empty
+    if (filterSelect.options.length <= 1) {
+      filterSelect.innerHTML = '<option value="">全部律師</option>';
+      const lawyers = Object.values(allLawyersMap).filter(l => l.role !== 'legal_staff').sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+      lawyers.forEach(l => {
+        filterSelect.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
+      });
+    }
+    // Build staff filter from tracking_staff data
+    if (staffSelect.options.length <= 1) {
+      staffSelect.innerHTML = '<option value="">全部法務</option>';
+      const staffSet = new Set();
+      allCases.forEach(c => {
+        if (c.tracking_staff) c.tracking_staff.split(',').forEach(s => { const t = s.trim(); if (t) staffSet.add(t); });
+      });
+      [...staffSet].sort((a, b) => a.localeCompare(b, 'zh')).forEach(s => {
+        staffSelect.innerHTML += `<option value="${s}">${escHtml(s)}</option>`;
+      });
+    }
+    const selectedLawyer = filterSelect.value;
+    if (selectedLawyer) {
+      cases = cases.filter(c => c.lawyer_id === selectedLawyer);
+    }
+    const selectedStaff = staffSelect.value;
+    if (selectedStaff) {
+      cases = cases.filter(c => c.tracking_staff && c.tracking_staff.includes(selectedStaff));
+    }
+  } else {
+    filterLabel.style.display = 'none';
+    filterSelect.style.display = 'none';
+    staffLabel.style.display = 'none';
+    staffSelect.style.display = 'none';
+    cases = cases.filter(c => c.lawyer_id === currentLawyer.id);
+  }
+
+  // Summary
+  const totalCount = cases.length;
+  const lawyerSet = new Set(cases.map(c => c.lawyer_id));
+  document.getElementById('unsignedSummary').innerHTML =
+    `<div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${totalCount}</div></div>
+      ${showAllData ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
+    </div>`;
+
+  // Sort
+  cases = sortUnsignedRows(cases, unsignedSortCol, unsignedSortDir);
+
+  // Table header
+  const headRow = document.getElementById('unsignedTableHead');
+  const cols = [
+    { key: 'case_date', label: '日期(天)' },
+    { key: 'client_name', label: '當事人' },
+    { key: 'case_type', label: '類型' },
+  ];
+  if (showAllData) cols.push({ key: 'lawyer_name', label: '律師' });
+  cols.push({ key: 'tracking_staff', label: '法務' });
+  cols.push({ key: 'tracking_status', label: '狀態' });
+  cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
+  cols.push({ key: 'tracking_notes', label: '備註' });
+
+  const tbl = document.getElementById('unsignedTable');
+  tbl.style.tableLayout = 'fixed';
+  tbl.style.width = '100%';
+  tbl.style.fontSize = '0.82rem';
+  // Width allocation: left columns tight, notes get remaining space
+  const colW = { case_date:'86px', client_name:'5em', case_type:'3em',
+    lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em' };
+  headRow.innerHTML = cols.map(c => {
+    const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    const w = colW[c.key] ? `width:${colW[c.key]};` : '';
+    return `<th class="sortable" data-col="${c.key}" style="cursor:pointer;font-size:0.8rem;${w}">${c.label}${arrow}</th>`;
+  }).join('');
+
+  // Bind sort
+  headRow.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (unsignedSortCol === col) {
+        unsignedSortDir = unsignedSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        unsignedSortCol = col;
+        unsignedSortDir = col === 'case_date' || col === 'days_ago' ? 'desc' : 'asc';
+      }
+      renderUnsignedPage();
+    });
+  });
+
+  // Table body
+  const tbody = document.getElementById('unsignedTableBody');
+  if (cases.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" style="text-align:center;color:#aaa;padding:32px;">此期間無未成案案件</td></tr>`;
+    return;
+  }
+
+  const todayMs = now.getTime();
+  tbody.innerHTML = cases.map(c => {
+    const daysAgo = Math.floor((todayMs - new Date(c.case_date).getTime()) / 86400000);
+    const lawyerName = allLawyersMap[c.lawyer_id] ? allLawyersMap[c.lawyer_id].name : '—';
+    const daysClass = daysAgo > 90 ? 'sign-rate-red' : daysAgo > 30 ? 'sign-rate-orange' : '';
+    const notes = c.tracking_notes || '';
+    const shortNotes = notes.length > 60 ? notes.slice(0, 60) + '…' : notes;
+    const statusColor = (c.tracking_status || '').includes('未') ? 'var(--text-muted)' : 'var(--green)';
+    return `<tr>
+      <td style="font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.case_number || '')}&#10;${c.case_date}">${c.case_date.slice(5)} <span class="num ${daysClass}" style="font-size:0.7rem;">(${daysAgo}天)</span></td>
+      <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(c.client_name || '')}">${escHtml(c.client_name || '—')}</td>
+      <td style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(c.case_type || '')}">${escHtml((c.case_type || '—').replace(/諮詢/g,'').split(/[,，]/)[0].slice(0,2))}</td>
+      ${showAllData ? `<td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lawyerName)}</td>` : ''}
+      <td style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_staff || '—')}</td>
+      <td style="color:${statusColor};font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.tracking_status || '—')}</td>
+      <td style="overflow-wrap:break-word;min-width:140px;">
+        <div class="lawyer-note-cell" data-case-id="${c.id}"
+             onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
+          <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(c.lawyer_notes || '') || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>'}</span>
+          <textarea style="display:none;width:100%;min-height:60px;background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:0.78rem;font-family:inherit;resize:vertical;"
+                    onblur="saveLawyerNote('${c.id}', this.value, this.parentElement)"
+                    onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
+          >${escHtml(c.lawyer_notes || '')}</textarea>
+          <div class="note-hint" style="display:none;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">按 Enter 儲存 · Shift+Enter 換行 · Esc 取消</div>
+        </div>
+      </td>
+      <td style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:break-word;${notes.length > 60 ? 'cursor:pointer;' : ''}"
+          ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
+          >${escHtml(shortNotes) || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveLawyerNote(caseId, note, cellEl) {
+  // Always close textarea first
+  const span = cellEl.querySelector('span');
+  const ta = cellEl.querySelector('textarea');
+  const hint = cellEl.querySelector('.note-hint');
+  span.innerHTML = escHtml(note) || '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
+  span.style.display = 'block';
+  ta.style.display = 'none';
+  if (hint) hint.style.display = 'none';
+
+  try {
+    const { error } = await sb
+      .from('consultation_cases')
+      .update({ lawyer_notes: note })
+      .eq('id', caseId);
+    if (error) {
+      const msg = document.createElement('div');
+      msg.textContent = '✗ 儲存失敗';
+      msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+      cellEl.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+      console.error('saveLawyerNote error:', error);
+      return;
+    }
+    // Update local data
+    const c = allCases.find(c => c.id === caseId);
+    if (c) c.lawyer_notes = note;
+    // Show save confirmation
+    const saved = document.createElement('div');
+    saved.textContent = '✓ 已儲存';
+    saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(saved);
+    setTimeout(() => saved.remove(), 2000);
+  } catch (e) {
+    console.error('saveLawyerNote exception:', e);
+    const msg = document.createElement('div');
+    msg.textContent = '✗ 網路錯誤';
+    msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }
+}
+
+function sortUnsignedRows(cases, col, dir) {
+  const todayMs = Date.now();
+  return [...cases].sort((a, b) => {
+    let va, vb;
+    if (col === 'days_ago') {
+      va = new Date(a.case_date).getTime();
+      vb = new Date(b.case_date).getTime();
+      // days_ago desc = date asc
+      return dir === 'desc' ? va - vb : vb - va;
+    }
+    if (col === 'lawyer_name') {
+      va = allLawyersMap[a.lawyer_id] ? allLawyersMap[a.lawyer_id].name : '';
+      vb = allLawyersMap[b.lawyer_id] ? allLawyersMap[b.lawyer_id].name : '';
+    } else {
+      va = a[col] || '';
+      vb = b[col] || '';
+    }
+    if (typeof va === 'string') {
+      const cmp = va.localeCompare(vb, 'zh');
+      return dir === 'asc' ? cmp : -cmp;
+    }
+    return dir === 'asc' ? va - vb : vb - va;
+  });
+}
+
+// ===================== HELPERS =====================
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent    = msg;
+  el.style.display  = 'block';
+}
+
+function hidePage(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ===================== START =====================
+init();
+</script>
+</body>
+</html>
