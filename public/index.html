@@ -1539,14 +1539,79 @@
   <!-- ===== ADMIN PAGE (admin only) ===== -->
   <div id="pageAdmin" class="page">
     <div class="section-header" style="margin-bottom:20px;">
-      <div class="section-title" style="font-size:1.1rem;">帳號管理</div>
+      <div class="section-title" style="font-size:1.1rem;">總帳號管理</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">統一管理 4 個儀表板（諮詢分析 / 營運 / 財務規劃 / 合署律師）的登入權限</div>
     </div>
+
+    <!-- 權限對照矩陣 -->
+    <div class="section" style="margin-bottom:16px;">
+      <div class="section-header">
+        <div class="section-title">📊 權限對照</div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 4 個儀表板能看到的範圍與額外功能。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">角色</th>
+              <th style="text-align:center;">諮詢分析</th>
+              <th style="text-align:center;">營運</th>
+              <th style="text-align:center;">財務規劃</th>
+              <th style="text-align:center;">合署律師</th>
+              <th style="text-align:left;">額外功能</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料、編列預算、管理帳號</td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--blue);font-weight:600;">📊 主管 (manager)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料</td>
+            </tr>
+            <tr>
+              <td>👁 律師 + 全部資料（can_view_all）</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td>🔒 律師（預設）</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-muted);">✗ 無 auth 帳號</td>
+              <td colspan="4" style="text-align:center;color:var(--text-muted);">無法登入任一儀表板</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">需 admin 建立 auth user 才能登入</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="section">
       <div class="section-header">
-        <div class="section-title">律師權限設定</div>
+        <div class="section-title">👥 律師帳號設定</div>
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
-        控制每位律師登入後看到「全部律師資料」或「僅自己的資料」
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 4 個儀表板。
       </div>
       <div class="table-wrap">
         <table>
@@ -1982,6 +2047,18 @@ function showDashboard() {
   });
 
   renderOverviewPage();
+
+  // 支援 URL ?tab=xxx 自動切換 tab（用於其他儀表板跳來這裡的 admin 連結）
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const initTab = params.get('tab');
+    if (initTab) {
+      const tabBtn = document.getElementById('tab-' + initTab);
+      if (tabBtn && tabBtn.style.display !== 'none') {
+        setTimeout(() => showTab(initTab), 100);
+      }
+    }
+  } catch(e) {}
 }
 
 // ===================== YEAR HELPERS =====================

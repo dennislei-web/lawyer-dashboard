@@ -613,6 +613,7 @@ if (window.location.search.indexOf('embed=1') > -1) {
       <a href="/lawyer-dashboard/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">諮詢分析</a>
       <a href="/lawyer-dashboard/revenue/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">營運</a>
       <a href="/lawyer-dashboard/finance/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">財務規劃</a>
+      <a id="adminLink" href="/lawyer-dashboard/?tab=admin" class="btn-icon" style="display:none;text-decoration:none;font-size:0.75rem" title="帳號管理">🔑 帳號管理</a>
       <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
       <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
     </div>
@@ -780,6 +781,9 @@ async function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('userBadge').textContent =
     currentLawyer ? currentLawyer.name : (currentUser ? currentUser.email : '');
+  // admin 才顯示「帳號管理」連結
+  var adminLink = document.getElementById('adminLink');
+  if (adminLink && isAdmin) adminLink.style.display = '';
   // Defer dashboard init until DOM is visible (Chart.js needs layout)
   if (typeof window.__partnersInit === 'function') window.__partnersInit();
 }
