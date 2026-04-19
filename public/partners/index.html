@@ -710,7 +710,7 @@ if (window.location.search.indexOf('embed=1') > -1) {
     <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap">
       <label style="color:var(--fg-dim)">選擇律師</label>
       <select id="drill-lawyer"></select>
-      <button id="tier-def-toggle" class="btn-sm" style="margin-left:auto; cursor:pointer">📖 tier 類型說明</button>
+      <button id="tier-def-toggle" type="button" class="btn-sm" style="margin-left:auto; cursor:pointer">tier 類型說明 ▾</button>
     </div>
     <div id="tier-def-panel" class="card" style="display:none; margin-bottom:16px">
       <h3 style="margin-bottom:10px">tier 類型速查（用來對照 KPI 的「主案／附屬」分類）</h3>
@@ -1802,7 +1802,9 @@ function renderRepeatMoved() {
     var p = document.getElementById('tier-def-panel');
     var open = p.style.display !== 'none';
     p.style.display = open ? 'none' : 'block';
-    btn.textContent = open ? '📖 tier 類型說明' : '✕ 關閉說明';
+    btn.textContent = open ? 'tier 類型說明 \u25be' : 'tier 類型說明 \u25b4';
+    // 展開時 scroll 讓 panel 可見
+    if (!open) setTimeout(function(){ p.scrollIntoView({behavior:'smooth', block:'nearest'}); }, 50);
   });
 })();
 
