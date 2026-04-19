@@ -40,6 +40,11 @@
       --ghost-bg:rgba(0,0,0,0.04);
       --ghost-hover-bg:rgba(0,0,0,0.08);
     }
+    /* Embed mode — 被其他儀表板 iframe 進來時隱藏自己的 header */
+    .embed-mode .header { display: none !important; }
+    .embed-mode #loginPage { display: none !important; }
+    .embed-mode body { padding-top: 0 !important; }
+
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
