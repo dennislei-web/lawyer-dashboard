@@ -64,6 +64,13 @@
       --ghost-bg: rgba(0,0,0,0.04);
       --ghost-hover-bg: rgba(0,0,0,0.08);
     }
+    /* Embed mode: hide own header when loaded in shell iframe */
+    .embed-mode .header { display: none !important; }
+    .embed-mode #loginPage { display: none !important; }
+    .embed-mode #dashboard { display: block !important; }
+    .embed-mode #dashboardFrame { display: none !important; }
+    .embed-mode body { padding-top: 0 !important; }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
@@ -625,6 +632,11 @@
 </div>
 
 <script>
+// ═══ EMBED MODE ═══
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+
 // ═══════════════════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════════════════
