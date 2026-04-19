@@ -707,9 +707,44 @@ if (window.location.search.indexOf('embed=1') > -1) {
   </section>
 
 <section class="page" id="page-drill">
-    <div style="margin-bottom:16px">
-      <label style="color:var(--fg-dim); margin-right:8px">選擇律師</label>
+    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+      <label style="color:var(--fg-dim)">選擇律師</label>
       <select id="drill-lawyer"></select>
+      <button id="tier-def-toggle" class="btn-sm" style="margin-left:auto; cursor:pointer">📖 tier 類型說明</button>
+    </div>
+    <div id="tier-def-panel" class="card" style="display:none; margin-bottom:16px">
+      <h3 style="margin-bottom:10px">tier 類型速查（用來對照 KPI 的「主案／附屬」分類）</h3>
+      <div style="overflow-x:auto">
+        <table style="min-width:640px">
+          <thead><tr><th style="width:18%">tier</th><th style="width:14%">類別</th><th>意義</th></tr></thead>
+          <tbody>
+            <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 司法官合署 —</td></tr>
+            <tr><td>委任-引案(喆律)</td><td><span class="badge badge-orange">主案 B</span></td><td>委任費 A × 30%，客戶由喆律帶來的引案費，歸喆律</td></tr>
+            <tr><td>委任-咨詢(律師)</td><td><span class="badge badge-blue">主案 C</span></td><td>委任費 A × 10%，律師諮詢貢獻歸律師</td></tr>
+            <tr><td>委任-利潤 E（喆律/律師）</td><td><span class="badge badge-green">主案 E</span></td><td>A − B − C − D 剩餘利潤，按合約比例分（50/50 或 15/85）</td></tr>
+            <tr><td>處理費 D</td><td><span class="badge badge-orange">主案成本</span></td><td>共擔成本（人事薪資、員工交通、閱卷、刷卡手續費等），從 A 扣除</td></tr>
+            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>律師自招案件，劉/方 10/90、孫/許 5/95 分</td></tr>
+            <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 資深轉合署 —</td></tr>
+            <tr><td>諮詢成案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>律師諮詢後自己承辦的案件，30/70 分</td></tr>
+            <tr><td>喆律轉案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>喆律轉入由資深律師承辦，40/60 分</td></tr>
+            <tr><td>法律010轉案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>法律010 品牌轉入的案件，30/70 分（部分律師後調為 35/65）</td></tr>
+            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>資深律師自招案件，10/90 分</td></tr>
+            <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 附屬收入（雙 cohort 共通）—</td></tr>
+            <tr><td>諮詢</td><td><span class="badge badge-blue">附屬</span></td><td>律師為客戶諮詢的諮詢費（100% 歸律師，通常 $2,000/場）</td></tr>
+            <tr><td>介紹(律師)</td><td><span class="badge badge-blue">附屬</span></td><td>律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金</td></tr>
+            <tr><td>追溯(律師)</td><td><span class="badge badge-blue">附屬</span></td><td>過去介紹費事後補/扣的修正</td></tr>
+            <tr><td>轉案(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>律師之間或與喆律之間的案件轉介分潤（非主案轉案）</td></tr>
+            <tr><td>受僱(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>律師替他人承辦的案件分潤</td></tr>
+            <tr><td>續委(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>舊客戶後續委任衍生的分潤</td></tr>
+            <tr><td>合作(喆律/律師)</td><td><span class="badge badge-blue">附屬</span></td><td>多律師合作案的分潤</td></tr>
+            <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">附屬</span></td><td>（資深諮詢律師）諮詢後由他人承辦，抽成 5% 獎金</td></tr>
+            <tr><td>其他 / 其他-自案</td><td><span class="badge badge-blue">附屬</span></td><td>解析時未對上標準比例的案件（如 0.35、0.4、0.6 等），保留供後續釐清</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note" style="margin-top:10px">
+        「主案」收入全部來自「主案件金額」（委任 + 自案）的拆分；「附屬」收入另外發生，不在主案件金額範圍內。
+      </div>
     </div>
     <div class="grid grid-4" id="drill-kpi" style="margin-bottom:16px"></div>
     <div class="grid grid-2">
@@ -1740,6 +1775,18 @@ function renderRepeatMoved() {
   }
   document.getElementById('repeat-moved-cases').innerHTML = html + '</tbody>';
 }
+
+// ---- tier 類型說明 toggle ----
+(function(){
+  var btn = document.getElementById('tier-def-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    var p = document.getElementById('tier-def-panel');
+    var open = p.style.display !== 'none';
+    p.style.display = open ? 'none' : 'block';
+    btn.textContent = open ? '📖 tier 類型說明' : '✕ 關閉說明';
+  });
+})();
 
 // ---- tabs ----
 document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => {
