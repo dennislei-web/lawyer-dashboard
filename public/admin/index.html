@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 帳號管理</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a;
+      --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+      --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+      --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+      --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+      --header-bg:rgba(10,22,40,0.95);
+      --login-shadow:rgba(0,0,0,0.5);
+      --tab-active-bg:rgba(201,168,76,0.12);
+      --tab-active-border:rgba(201,168,76,0.2);
+      --tab-active-color:var(--gold-light);
+      --ghost-bg:rgba(255,255,255,0.07);
+      --ghost-hover-bg:rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e;
+      --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.1);
+      --green:#15803d; --green-dim:rgba(21,128,61,0.12);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.1);
+      --orange:#d97706; --orange-dim:rgba(217,119,6,0.1);
+      --header-bg:rgba(255,255,255,0.95);
+      --login-shadow:rgba(0,0,0,0.12);
+      --tab-active-bg:rgba(37,99,235,0.1);
+      --tab-active-border:rgba(37,99,235,0.25);
+      --tab-active-color:#2563eb;
+      --ghost-bg:rgba(0,0,0,0.04);
+      --ghost-hover-bg:rgba(0,0,0,0.08);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main); color:var(--text); min-height:100vh; font-size:14px;
+    }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background: radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+                  var(--bg-main);
+    }
+    .login-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+      padding:44px 40px; width:100%; max-width:420px; box-shadow:0 24px 64px var(--login-shadow);
+    }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .firm-name { font-size:1.6rem; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+    .subtitle { margin-top:6px; font-size:0.85rem; color:var(--text-muted); letter-spacing:1px; }
+    .login-divider { height:1px; background:linear-gradient(to right,transparent,var(--border-light),transparent); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+    .form-group input {
+      width:100%; padding:12px 16px; background:var(--bg-row); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-size:0.95rem; transition:border-color 0.2s;
+    }
+    .form-group input:focus { outline:none; border-color:var(--gold); }
+    .btn-login {
+      width:100%; padding:13px; background:linear-gradient(135deg,var(--gold),#b8942e);
+      color:#0a0a0a; font-weight:700; font-size:0.95rem; border:none; border-radius:8px;
+      cursor:pointer; transition:opacity 0.2s; margin-top:8px;
+    }
+    .btn-login:hover { opacity:0.9; }
+    .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+    .login-error { color:var(--red); font-size:0.85rem; margin-top:12px; text-align:center; display:none; }
+
+    /* HEADER */
+    .header {
+      position:sticky; top:0; z-index:100;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 24px; height:56px;
+      background:var(--header-bg); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+    }
+    .header-left { display:flex; align-items:center; gap:16px; }
+    .header-brand { font-size:1.1rem; font-weight:700; color:var(--gold-light); letter-spacing:1px; }
+    .header-subtitle { font-size:0.78rem; color:var(--text-muted); }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .user-badge { font-size:0.8rem; color:var(--text-muted); padding:4px 10px; background:var(--ghost-bg); border-radius:6px; }
+    .btn-icon {
+      background:var(--ghost-bg); border:1px solid var(--border); border-radius:8px;
+      color:var(--text-muted); cursor:pointer; padding:6px 10px; font-size:0.85rem;
+      transition:all 0.15s;
+    }
+    .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
+    .btn-icon.active {
+      background:var(--tab-active-bg); border-color:var(--tab-active-border);
+      color:var(--tab-active-color); font-weight:600;
+    }
+
+    /* MAIN */
+    .main { padding:20px 24px; max-width:1400px; margin:0 auto; }
+    .section {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+      padding:20px; margin-bottom:16px;
+    }
+    .section-header { margin-bottom:16px; }
+    .section-title { font-size:1rem; font-weight:600; }
+    .page-title { font-size:1.3rem; font-weight:700; margin-bottom:8px; }
+
+    /* Tables */
+    .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table { width:100%; border-collapse:collapse; }
+    thead th {
+      padding:10px 12px; text-align:left; font-size:0.75rem; font-weight:600;
+      color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    tbody td { padding:10px 12px; font-size:0.85rem; border-bottom:1px solid var(--border); }
+    tbody tr:hover { background:var(--bg-hover); }
+
+    .text-green { color:var(--green); }
+    .text-red { color:var(--red); }
+    .text-gold { color:var(--gold-light); }
+    .text-blue { color:var(--blue); }
+    .text-muted { color:var(--text-muted); }
+
+    /* No-access */
+    #noAccessPage {
+      display:none; min-height:100vh; align-items:center; justify-content:center; padding:20px;
+    }
+    .no-access-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+      padding:40px; max-width:480px; text-align:center;
+    }
+
+    /* Loading */
+    .loading { text-align:center; padding:40px; color:var(--text-muted); }
+    .spinner {
+      display:inline-block; width:24px; height:24px;
+      border:2px solid var(--border); border-top-color:var(--gold);
+      border-radius:50%; animation:spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Button helper */
+    .btn-ghost {
+      background:var(--ghost-bg); border:1px solid var(--border); border-radius:6px;
+      color:var(--text); cursor:pointer; transition:all 0.15s;
+    }
+    .btn-ghost:hover { background:var(--ghost-hover-bg); }
+
+    /* RESPONSIVE */
+    @media (max-width:640px) {
+      body { font-size:13px; }
+      .header { flex-wrap:wrap; height:auto; padding:8px 12px; gap:6px; }
+      .header-left { width:100%; gap:8px; }
+      .header-subtitle { display:none; }
+      .header-right {
+        width:100%; justify-content:flex-end; gap:6px;
+        overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap;
+      }
+      .header-right .btn-icon, .header-right a.btn-icon {
+        font-size:0.72rem !important; padding:4px 8px !important; white-space:nowrap;
+      }
+      .main { padding:12px; }
+      .section { padding:14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">帳號管理</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage">
+  <div class="no-access-card">
+    <div style="font-size:2.4rem;margin-bottom:12px;">🔒</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:10px;">無權限存取帳號管理</div>
+    <div style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:24px;">
+      帳號管理僅限<strong style="color:var(--gold-light);">管理員</strong>使用。<br>
+      您的帳號（<span id="noAccessUser"></span>）不具備此權限，請聯繫管理員。
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/lawyer-dashboard/" class="btn-login" style="text-decoration:none;display:inline-block;max-width:200px;padding:10px 20px;">返回諮詢分析</a>
+      <button class="btn-icon" id="noAccessLogout" style="padding:10px 20px;">登出</button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">帳號管理</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <a href="/lawyer-dashboard/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">諮詢分析</a>
+      <a href="/lawyer-dashboard/revenue/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">營運</a>
+      <a href="/lawyer-dashboard/finance/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">財務規劃</a>
+      <a href="/lawyer-dashboard/partners/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">合署律師</a>
+      <a href="/lawyer-dashboard/admin/" class="btn-icon active" style="text-decoration:none;font-size:0.75rem">帳號管理</a>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div style="margin-bottom:20px;">
+      <div class="page-title">總帳號管理</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 4 個儀表板（諮詢分析 / 營運 / 財務規劃 / 合署律師）的登入權限</div>
+    </div>
+
+    <!-- 權限對照 -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">📊 權限對照</div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 4 個儀表板能看到的範圍與額外功能。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>角色</th>
+              <th style="text-align:center;">諮詢分析</th>
+              <th style="text-align:center;">營運</th>
+              <th style="text-align:center;">財務規劃</th>
+              <th style="text-align:center;">合署律師</th>
+              <th>額外功能</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料、編列預算、管理帳號</td>
+            </tr>
+            <tr>
+              <td><span style="color:var(--blue);font-weight:600;">📊 主管 (manager)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料</td>
+            </tr>
+            <tr>
+              <td>👁 律師 + 全部資料 (can_view_all)</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td>🔒 律師（預設）</td>
+              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-muted);">✗ 無 auth 帳號</td>
+              <td colspan="4" style="text-align:center;color:var(--text-muted);">無法登入任一儀表板</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">需 admin 建立 auth user 才能登入</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 律師帳號設定 -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">👥 律師帳號設定</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 4 個儀表板。
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>律師</th>
+              <th>Email</th>
+              <th style="text-align:center;">角色</th>
+              <th style="text-align:center;font-size:0.72rem;">諮詢分析</th>
+              <th style="text-align:center;font-size:0.72rem;">營運</th>
+              <th style="text-align:center;font-size:0.72rem;">財務規劃</th>
+              <th style="text-align:center;font-size:0.72rem;">合署律師</th>
+              <th style="text-align:center;">狀態</th>
+              <th style="text-align:center;">密碼</th>
+            </tr>
+          </thead>
+          <tbody id="adminLawyerTableBody">
+            <tr><td colspan="9"><div class="loading"><span class="spinner"></span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ EMBED MODE ═══
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer, isAdmin = false;
+var allLawyers = [];
+
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══ THEME ═══
+function _applyTheme(v) {
+  document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : '');
+  var b = document.getElementById('themeToggle');
+  if (b) b.innerHTML = v === 'light' ? '&#9728;' : '&#x1f313;';
+}
+_applyTheme(localStorage.getItem('theme') || 'dark');
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'light' ? 'dark' : 'light';
+  _applyTheme(next);
+  localStorage.setItem('theme', next);
+});
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) _applyTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    _applyTheme(e.data.value);
+    localStorage.setItem('theme', e.data.value);
+  }
+});
+
+// ═══ ESC HTML ═══
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ═══ AUTH ═══
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) {
+    currentUser = s.data.session.user;
+    await loadUserProfile();
+    if (!isAdmin) { showNoAccess(); return; }
+    showDashboard();
+  } else {
+    showLogin();
+  }
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) {
+    currentLawyer = r.data;
+    isAdmin = r.data.role === 'admin';
+  }
+}
+function showLogin() {
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('noAccessPage').style.display = 'none';
+}
+function showNoAccess() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  var p = document.getElementById('noAccessPage');
+  p.style.display = 'flex';
+  var u = document.getElementById('noAccessUser');
+  if (u) u.textContent = currentLawyer ? currentLawyer.name : (currentUser ? currentUser.email : '');
+}
+async function showDashboard() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('noAccessPage').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  await loadLawyers();
+  renderAdminPage();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display = 'none'; btn.disabled = true; btn.textContent = '登入中...';
+  try {
+    var email = document.getElementById('loginEmail').value.trim();
+    var pwd = document.getElementById('loginPassword').value;
+    var r = await sb.auth.signInWithPassword({ email: email, password: pwd });
+    if (r.error) throw r.error;
+    currentUser = r.data.user;
+    await loadUserProfile();
+    if (!isAdmin) { showNoAccess(); return; }
+    showDashboard();
+  } catch (ex) {
+    err.textContent = '登入失敗：' + (ex.message || '請確認帳號密碼');
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut();
+  currentUser = null; currentLawyer = null; isAdmin = false;
+  showLogin();
+});
+document.getElementById('noAccessLogout').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut();
+  location.reload();
+});
+
+// ═══ LOAD LAWYERS ═══
+async function loadLawyers() {
+  var r = await sb.from('lawyers').select('*').order('name');
+  allLawyers = r.data || [];
+}
+
+// ═══ ACCESS CELL ═══
+function accessCell(l, dashboard) {
+  if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
+  var role = l.role || 'lawyer';
+  var canViewAll = l.can_view_all === true;
+  if (role === 'admin' || role === 'manager' || canViewAll) {
+    return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
+  }
+  if (dashboard === 'consultation') {
+    return '<span style="color:var(--gold-light);font-size:0.78rem;">僅自己</span>';
+  }
+  return '<span style="color:var(--red);">✗</span>';
+}
+
+// ═══ RENDER ═══
+function renderAdminPage() {
+  var tbody = document.getElementById('adminLawyerTableBody');
+  var lawyers = allLawyers
+    .filter(function(l) { return l.id !== (currentLawyer && currentLawyer.id) && l.role !== 'legal_staff'; })
+    .sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'zh'); });
+
+  if (lawyers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lawyers.map(function(l) {
+    var role = l.role || 'lawyer';
+    return '<tr>' +
+      '<td style="font-weight:600;">' + escHtml(l.name) + '</td>' +
+      '<td style="color:var(--text-muted);font-size:0.82rem;">' + escHtml(l.email || '-') + '</td>' +
+      '<td style="text-align:center;">' +
+        '<select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;" ' +
+          'onchange="changeRole(\'' + l.id + '\', this.value)">' +
+          '<option value="lawyer"' + (role === 'lawyer' ? ' selected' : '') + '>🔒 律師</option>' +
+          '<option value="manager"' + (role === 'manager' ? ' selected' : '') + '>📊 主管</option>' +
+          '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>🔑 管理員</option>' +
+        '</select>' +
+      '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'consultation') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'revenue') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
+      '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
+      '<td style="text-align:center;">' +
+        (l.auth_user_id
+          ? '<button class="btn-ghost" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword(\'' + l.auth_user_id + '\',\'' + escHtml(l.name).replace(/'/g,"\\'") + '\')">🔄 重設</button>'
+          : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ═══ ACTIONS ═══
+async function changeRole(lawyerId, newRole) {
+  var lawyer = allLawyers.find(function(x){ return x.id === lawyerId; });
+  if (!lawyer) return;
+  var roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : '律師';
+  if (!confirm('確定將「' + lawyer.name + '」設為「' + roleLabel + '」嗎？')) {
+    renderAdminPage(); return;
+  }
+  // admin/manager/lawyer 都設定 can_view_all=true（維持原本的行為）
+  var canViewAll = true;
+  var res = await sb.from('lawyers').update({ role: newRole, can_view_all: canViewAll }).eq('id', lawyerId);
+  if (res.error) { alert('更新失敗：' + res.error.message); renderAdminPage(); return; }
+  lawyer.role = newRole;
+  lawyer.can_view_all = canViewAll;
+  renderAdminPage();
+}
+
+var DEFAULT_PASSWORD = 'ChangeMe123!';
+async function resetPassword(authUserId, name) {
+  if (!confirm('確定要將「' + name + '」的密碼重設為預設密碼（' + DEFAULT_PASSWORD + '）嗎？')) return;
+  try {
+    var res = await sb.rpc('admin_reset_password', {
+      target_user_id: authUserId,
+      new_password: DEFAULT_PASSWORD
+    });
+    if (res.error) { alert('重設失敗：' + res.error.message); return; }
+    alert('已重設「' + name + '」的密碼為預設密碼：' + DEFAULT_PASSWORD);
+  } catch (e) { alert('重設失敗：' + e.message); }
+}
+
+// ═══ START ═══
+checkSession();
+</script>
+</body>
+</html>

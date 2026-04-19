@@ -1233,15 +1233,15 @@
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
-        <button class="tab-btn" onclick="showTab('admin')" id="tab-admin" style="display:none;">帳號管理</button>
       </div>
     </div>
     <div class="header-right">
       <span class="user-name" id="userName"></span>
       <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeToggleBtn" title="切換明暗主題">🌙</button>
-      <a href="/revenue/" class="btn btn-ghost btn-sm" style="text-decoration:none">營運</a>
-      <a href="/finance/" class="btn btn-ghost btn-sm" style="text-decoration:none">財務規劃</a>
+      <a href="/lawyer-dashboard/revenue/" class="btn btn-ghost btn-sm" style="text-decoration:none">營運</a>
+      <a href="/lawyer-dashboard/finance/" class="btn btn-ghost btn-sm" style="text-decoration:none">財務規劃</a>
       <a href="/lawyer-dashboard/partners/" class="btn btn-ghost btn-sm" style="text-decoration:none">合署律師</a>
+      <a id="adminLink" href="/lawyer-dashboard/admin/" class="btn btn-ghost btn-sm" style="display:none;text-decoration:none" title="帳號管理">🔑 帳號管理</a>
       <button class="btn btn-ghost btn-sm" onclick="handleChangePassword()">修改密碼</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn">登出</button>
     </div>
@@ -1591,9 +1591,9 @@
             <tr>
               <td>🔒 律師（預設）</td>
               <td style="text-align:center;" class="text-muted">僅自己</td>
-              <td style="text-align:center;" class="text-muted">僅自己</td>
-              <td style="text-align:center;" class="text-muted">僅自己</td>
-              <td style="text-align:center;" class="text-muted">僅自己</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
             </tr>
             <tr>
@@ -1618,15 +1618,18 @@
           <thead>
             <tr>
               <th style="text-align:left;cursor:pointer;" onclick="adminSortBy='name';renderAdminPage();">律師 <span id="adminSortName">▼</span></th>
-              <th style="text-align:left;cursor:pointer;" onclick="adminSortBy='office';renderAdminPage();">所屬事務所 <span id="adminSortOffice"></span></th>
               <th style="text-align:left;">Email</th>
-              <th style="text-align:center;">資料範圍</th>
+              <th style="text-align:center;">角色</th>
+              <th style="text-align:center;font-size:0.75rem;">諮詢分析</th>
+              <th style="text-align:center;font-size:0.75rem;">營運</th>
+              <th style="text-align:center;font-size:0.75rem;">財務規劃</th>
+              <th style="text-align:center;font-size:0.75rem;">合署律師</th>
               <th style="text-align:center;">狀態</th>
               <th style="text-align:center;">密碼</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
-            <tr><td colspan="5"><div class="loading"><span class="loading-spinner"></span>載入中...</div></td></tr>
+            <tr><td colspan="9"><div class="loading"><span class="loading-spinner"></span>載入中...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -2031,13 +2034,13 @@ function canViewAll() {
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
-  // Show tabs based on role: admin sees all, manager sees upload but not admin
+  // Show tabs based on role: admin/manager see upload; admin sees 帳號管理 link
   const isAdmin = currentLawyer && currentLawyer.role === 'admin';
   const isManager = currentLawyer && currentLawyer.role === 'manager';
   const uploadTab = document.getElementById('tab-upload');
   if (uploadTab) uploadTab.style.display = (isAdmin || isManager) ? '' : 'none';
-  const adminTab = document.getElementById('tab-admin');
-  if (adminTab) adminTab.style.display = isAdmin ? '' : 'none';
+  const adminLink = document.getElementById('adminLink');
+  if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
 
   // Build year filter options from data
   const years = getAvailableYears(allStats);
@@ -4408,53 +4411,59 @@ function setUnsignedRange(months) {
 
 // ===================== ADMIN PAGE =====================
 let adminSortBy = 'name';
+
+// 計算該 lawyer 在指定儀表板的存取狀態
+// dashboard: 'consultation' | 'revenue' | 'finance' | 'partners'
+function lawyerAccessCell(l, dashboard) {
+  if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
+  const role = l.role || 'lawyer';
+  const canViewAll = l.can_view_all === true;
+  // admin / manager / can_view_all 四個儀表板全部可看
+  if (role === 'admin' || role === 'manager' || canViewAll) {
+    return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
+  }
+  // 預設律師只能看諮詢分析（且只看自己的）
+  if (dashboard === 'consultation') {
+    return '<span style="color:var(--gold-light);font-size:0.78rem;">僅自己</span>';
+  }
+  return '<span style="color:var(--red);">✗</span>';
+}
+
 function renderAdminPage() {
   const tbody = document.getElementById('adminLawyerTableBody');
   if (!tbody) return;
 
   // Update sort indicators
   const sn = document.getElementById('adminSortName');
-  const so = document.getElementById('adminSortOffice');
-  if (sn) sn.textContent = adminSortBy === 'name' ? '▼' : '';
-  if (so) so.textContent = adminSortBy === 'office' ? '▼' : '';
+  if (sn) sn.textContent = '▼';
 
   // Collect all active lawyers
   const lawyers = Object.values(allLawyersMap)
     .filter(l => l.id !== currentLawyer.id && l.role !== 'legal_staff')
-    .sort((a, b) => {
-      if (adminSortBy === 'office') {
-        const cmp = (a.office || '').localeCompare(b.office || '', 'zh');
-        return cmp !== 0 ? cmp : a.name.localeCompare(b.name, 'zh');
-      }
-      return a.name.localeCompare(b.name, 'zh');
-    });
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
 
   if (lawyers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暫無律師資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暫無律師資料</div></td></tr>';
     return;
   }
 
   tbody.innerHTML = lawyers.map(l => {
     const role = l.role || 'lawyer';
-    const viewAll = l.can_view_all === true;
-    // 角色顯示：admin=管理員, manager=主管, lawyer=律師
-    const roleBadge = role === 'admin' ? '🔑 管理員'
-      : role === 'manager' ? '📊 主管'
-      : viewAll ? '👁 全部資料' : '🔒 僅自己';
-    const roleColor = role === 'admin' ? 'var(--gold-light)'
-      : role === 'manager' ? 'var(--blue)' : 'var(--text-muted)';
     return `<tr>
       <td style="font-weight:600;">${escHtml(l.name)}</td>
-      <td style="color:var(--text-muted);">${escHtml(l.office || '-')}</td>
       <td style="color:var(--text-muted);font-size:0.82rem;">${escHtml(l.email || '-')}</td>
       <td style="text-align:center;">
         <select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;"
                 onchange="changeRole('${l.id}', this.value)">
-          <option value="lawyer" ${role === 'lawyer' ? 'selected' : ''}>👁 律師</option>
+          <option value="lawyer" ${role === 'lawyer' ? 'selected' : ''}>🔒 律師</option>
           <option value="manager" ${role === 'manager' ? 'selected' : ''}>📊 主管</option>
           <option value="admin" ${role === 'admin' ? 'selected' : ''}>🔑 管理員</option>
         </select>
       </td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'consultation')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'revenue')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'finance')}</td>
+      <td style="text-align:center;">${lawyerAccessCell(l, 'partners')}</td>
       <td style="text-align:center;">
         <span style="font-size:0.78rem;color:var(--${l.is_active ? 'green' : 'text-muted'});">
           ${l.is_active ? '在職' : '離職'}
