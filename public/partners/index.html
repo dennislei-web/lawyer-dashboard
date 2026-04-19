@@ -571,6 +571,11 @@ select {
 <body>
 
 <script>
+// 若使用者直接打開這個 URL（非 shell iframe）→ redirect 回 shell
+if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
+  window.location.replace('/lawyer-dashboard/#/partners');
+  throw new Error('redirecting to shell');
+}
 // Embed mode detection (must run before body renders)
 if (window.location.search.indexOf('embed=1') > -1) {
   document.documentElement.classList.add('embed-mode');
