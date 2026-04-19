@@ -1754,6 +1754,32 @@ function toggleTheme() {
   });
 })();
 
+// 聆聽其他同源 tab/iframe 或父頁 postMessage 過來的 theme 變更
+function _applyConsultationTheme(v) {
+  document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : '');
+  var btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = v === 'light' ? '☀️' : '🌙';
+  // 重新渲染圖表以套用新主題色（若目前在 detail page）
+  try {
+    if (typeof detailLawyerId !== 'undefined' && detailLawyerId
+        && document.getElementById('pageDetail')
+        && document.getElementById('pageDetail').classList.contains('active')) {
+      var stats = allStats.filter(function(s) { return s.lawyer_id === detailLawyerId; });
+      var filtered = filterByYear(stats, detailYear);
+      renderDetailChart(filtered);
+    }
+  } catch(e) {}
+}
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) _applyConsultationTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    _applyConsultationTheme(e.data.value);
+    localStorage.setItem('theme', e.data.value);
+  }
+});
+
 function getChartColors() {
   const style = getComputedStyle(document.documentElement);
   return {

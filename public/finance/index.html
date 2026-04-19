@@ -681,7 +681,41 @@ document.getElementById('themeToggle').addEventListener('click', function() {
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('theme', next);
   this.innerHTML = next === 'light' ? '&#9728;' : '&#x1f313;';
+  // 若目前有開 iframe 子儀表板，同步 theme（postMessage fallback；storage 事件理應也會觸發）
+  var frame = document.getElementById('dashboardFrame');
+  if (frame && frame.src && frame.contentWindow) {
+    try { frame.contentWindow.postMessage({ type: 'theme', value: next }, '*'); } catch(e){}
+  }
 });
+
+// 聆聽其他同源 tab/iframe 或子 iframe postMessage 過來的 theme 變更
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) {
+    document.documentElement.setAttribute('data-theme', e.newValue);
+    var btn = document.getElementById('themeToggle');
+    if (btn) btn.innerHTML = e.newValue === 'light' ? '&#9728;' : '&#x1f313;';
+  }
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    document.documentElement.setAttribute('data-theme', e.data.value);
+    localStorage.setItem('theme', e.data.value);
+    var btn = document.getElementById('themeToggle');
+    if (btn) btn.innerHTML = e.data.value === 'light' ? '&#9728;' : '&#x1f313;';
+  }
+});
+
+// iframe 載入時立刻 push 當前 theme 給它（避免 iframe 讀到舊值）
+(function() {
+  var frame = document.getElementById('dashboardFrame');
+  if (!frame) return;
+  frame.addEventListener('load', function() {
+    var theme = localStorage.getItem('theme') || 'dark';
+    try {
+      if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'theme', value: theme }, '*');
+    } catch(e){}
+  });
+})();
 
 // ═══════════════════════════════════════════════════════════
 //  AUTH

@@ -1552,12 +1552,29 @@ function initMonthBtns() {
 }
 
 // ═══ THEME ═══
+function _applyRevenueTheme(v) {
+  document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : '');
+  var btn = document.getElementById('themeToggle');
+  if (btn) btn.innerHTML = v === 'light' ? '&#9728;' : '&#x1f313;';
+}
 document.getElementById('themeToggle').addEventListener('click', function() {
-  var c=document.documentElement.getAttribute('data-theme');
-  document.documentElement.setAttribute('data-theme',c==='light'?'':'light');
-  localStorage.setItem('theme',c==='light'?'dark':'light');
+  var c = document.documentElement.getAttribute('data-theme');
+  var next = c === 'light' ? 'dark' : 'light';
+  _applyRevenueTheme(next);
+  localStorage.setItem('theme', next);
 });
-if (localStorage.getItem('theme')==='light') document.documentElement.setAttribute('data-theme','light');
+// 載入時套用 localStorage 的值
+_applyRevenueTheme(localStorage.getItem('theme') || 'dark');
+// 聆聽其他同源 tab/iframe 或父頁 postMessage 過來的 theme 變更
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) _applyRevenueTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    _applyRevenueTheme(e.data.value);
+    localStorage.setItem('theme', e.data.value);
+  }
+});
 
 function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return n.toLocaleString('zh-TW'); }
 
