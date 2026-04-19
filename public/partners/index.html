@@ -571,11 +571,6 @@ select {
 <body>
 
 <script>
-// 若使用者直接打開這個 URL（非 shell iframe）→ redirect 回 shell
-if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
-  window.location.replace('/lawyer-dashboard/#/partners');
-  throw new Error('redirecting to shell');
-}
 // Embed mode detection (must run before body renders)
 if (window.location.search.indexOf('embed=1') > -1) {
   document.documentElement.classList.add('embed-mode');
@@ -1326,12 +1321,33 @@ function renderDrill() {
   const procD = monthly.reduce((s,m)=>s+(m.proc_D||0), 0);
   const totalBase = A + selfA;
   const ratio = lt > 0 ? zt / lt : 0;
-  const margin = totalBase > 0 ? zt / totalBase : 0;
   const share = (zt + lt) > 0 ? zt / (zt + lt) * 100 : 0;
   const isJudicial = selectedCohort === 'judicial';
+
+  // 拆分主案 vs 附屬收入
+  //   主案 tier = 委任 B/C/E + 自案 + (senior) 諮詢成案/喆律轉案/法律010轉案
+  //   附屬 tier = 諮詢費、介紹、追溯、受僱、續委、轉案、合作、其他、其他-自案、成案獎金
+  const OWN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)','自案(喆律)',
+                       '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)'];
+  const OWN_L_TIERS = ['委任-咨詢(律師)','委任-利潤(律師)','自案(律師)',
+                       '諮詢成案(律師)','喆律轉案(律師)','法律010轉案(律師)'];
+  let ztOwn = 0, ltOwn = 0, ztMisc = 0, ltMisc = 0;
+  for (const m of monthly) {
+    for (const [k, v] of Object.entries(m.tier || {})) {
+      if (OWN_Z_TIERS.indexOf(k) !== -1) ztOwn += v;
+      else if (OWN_L_TIERS.indexOf(k) !== -1) ltOwn += v;
+      else if (k.endsWith('(喆律)')) ztMisc += v;
+      else ltMisc += v;  // 諮詢、成案獎金(律師)、其他(律師) 等
+    }
+  }
+  const balance = totalBase - procD - ztOwn - ltOwn;  // 應接近 0
+
   const dSubHtml = isJudicial
-    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span>`
-    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span>`;
+    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律主案分潤 + 律師主案分潤">＝ D $${fmt(procD)} + 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`
+    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`;
+  const zMiscHtml = ztMisc > 0 ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">附屬佣金 $${fmt(ztMisc)}</span>` : `全部來自主案分潤`;
+  const lMiscHtml = ltMisc > 0 ? `主案 $${fmt(ltOwn)} + <span style="color:var(--orange)">附屬 $${fmt(ltMisc)}</span><br><span style="color:var(--text-muted);font-size:0.7rem">附屬＝諮詢費 + 介紹/追溯佣金等</span>` : `全部來自主案分潤`;
+
   document.getElementById('drill-kpi').innerHTML = `
     <div class="kpi">
       <div class="label">主案件金額</div>
@@ -1341,12 +1357,12 @@ function renderDrill() {
     <div class="kpi">
       <div class="label">喆律收入（全部 tier）</div>
       <div class="value" style="color:var(--gold)">$${fmt(zt)}</div>
-      <div class="sub">主案件分潤 + 轉案/介紹等佣金</div>
+      <div class="sub">${zMiscHtml}</div>
     </div>
     <div class="kpi">
       <div class="label">律師收入（全部 tier）</div>
       <div class="value" style="color:${COLORS[drillLawyer]||'#fff'}">$${fmt(lt)}</div>
-      <div class="sub">諮詢費 + 咨詢 + 分成 + 附屬 tier</div>
+      <div class="sub">${lMiscHtml}</div>
     </div>
     <div class="kpi">
       <div class="label">喆律佔比</div>
