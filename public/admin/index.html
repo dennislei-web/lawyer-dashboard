@@ -292,11 +292,6 @@
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
             </tr>
-            <tr>
-              <td style="color:var(--text-muted);">✗ 無 auth 帳號</td>
-              <td colspan="4" style="text-align:center;color:var(--text-muted);">無法登入任一儀表板</td>
-              <td style="color:var(--text-muted);font-size:0.82rem;">需 admin 建立 auth user 才能登入</td>
-            </tr>
           </tbody>
         </table>
       </div>
@@ -304,8 +299,9 @@
 
     <!-- 律師帳號設定 -->
     <div class="section">
-      <div class="section-header">
+      <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;">
         <div class="section-title">👥 律師帳號設定</div>
+        <button class="btn-login" style="max-width:140px;padding:6px 14px;font-size:0.82rem;" onclick="openNewAccountModal()">➕ 新增帳號</button>
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
         調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 4 個儀表板。
@@ -331,6 +327,47 @@
         </table>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 新增帳號 Modal -->
+<div id="newAccountModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:460px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--gold-light);">➕ 新增律師帳號</div>
+      <button class="btn-icon" style="padding:4px 10px;" onclick="closeNewAccountModal()">✕</button>
+    </div>
+    <form id="newAccountForm">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">姓名 *</label>
+        <input id="newAccName" required style="width:100%;padding:9px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Email *</label>
+        <input id="newAccEmail" type="email" required style="width:100%;padding:9px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;" placeholder="name@zhelu.tw">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">角色</label>
+        <select id="newAccRole" style="width:100%;padding:9px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;">
+          <option value="lawyer">🔒 律師</option>
+          <option value="manager">📊 主管</option>
+          <option value="admin">🔑 管理員</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">初始密碼</label>
+        <input id="newAccPassword" type="text" value="ChangeMe123!" style="width:100%;padding:9px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;font-family:monospace;">
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">建議使用者首次登入後自行修改</div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text-muted);background:var(--bg-row);padding:10px 12px;border-radius:6px;line-height:1.6;margin-bottom:16px;">
+        ⚠ 若 Supabase 開啟 Email 驗證，使用者會收到確認信；若無（內部工具通常關閉），建立後立即可登入。
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="btn-login" id="newAccSubmit" style="flex:1;padding:10px;">建立帳號</button>
+        <button type="button" class="btn-icon" style="padding:10px 20px;" onclick="closeNewAccountModal()">取消</button>
+      </div>
+      <div id="newAccMsg" style="margin-top:12px;font-size:0.85rem;text-align:center;"></div>
+    </form>
   </div>
 </div>
 
@@ -555,6 +592,120 @@ async function resetPassword(authUserId, name) {
     alert('已重設「' + name + '」的密碼為預設密碼：' + DEFAULT_PASSWORD);
   } catch (e) { alert('重設失敗：' + e.message); }
 }
+
+// ═══ 新增帳號 Modal ═══
+function openNewAccountModal() {
+  var modal = document.getElementById('newAccountModal');
+  var form = document.getElementById('newAccountForm');
+  var msg = document.getElementById('newAccMsg');
+  var pw = document.getElementById('newAccPassword');
+  if (form) form.reset();
+  if (pw) pw.value = DEFAULT_PASSWORD;
+  if (msg) { msg.textContent = ''; msg.style.color = ''; }
+  modal.style.display = 'flex';
+  // 聚焦到姓名
+  setTimeout(function() { document.getElementById('newAccName').focus(); }, 50);
+}
+function closeNewAccountModal() {
+  document.getElementById('newAccountModal').style.display = 'none';
+}
+
+async function handleNewAccount(e) {
+  e.preventDefault();
+  var name = document.getElementById('newAccName').value.trim();
+  var email = document.getElementById('newAccEmail').value.trim().toLowerCase();
+  var role = document.getElementById('newAccRole').value;
+  var password = document.getElementById('newAccPassword').value;
+  var btn = document.getElementById('newAccSubmit');
+  var msg = document.getElementById('newAccMsg');
+
+  // 驗證
+  if (!name || !email || !password) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '請填寫姓名、Email、密碼';
+    return;
+  }
+  if (password.length < 6) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '密碼至少 6 碼';
+    return;
+  }
+  // 檢查 email 是否已存在
+  if (allLawyers.some(function(l){ return (l.email || '').toLowerCase() === email; })) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Email「' + email + '」已經有帳號了';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '建立中...';
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = '呼叫 Supabase Auth...';
+
+  try {
+    // Step 1: 建立 Auth user（從瀏覽器端用 anon key + signUp）
+    var signUpRes = await sb.auth.signUp({
+      email: email,
+      password: password,
+      options: { data: { name: name } }
+    });
+
+    if (signUpRes.error) {
+      throw new Error('Auth 建立失敗：' + signUpRes.error.message);
+    }
+
+    var authUser = signUpRes.data && signUpRes.data.user;
+    if (!authUser || !authUser.id) {
+      throw new Error('Auth 建立成功但沒回傳 user ID（可能需要 email 確認）');
+    }
+
+    msg.textContent = 'Auth OK，寫入 lawyers 表...';
+
+    // Step 2: 插入 lawyers 表
+    var lawyerRow = {
+      name: name,
+      email: email,
+      role: role,
+      is_active: true,
+      office: '喆律法律事務所',  // 預設
+      auth_user_id: authUser.id,
+      can_view_all: true,  // 律師預設看全部（per new rules）
+    };
+    var insertRes = await sb.from('lawyers').insert(lawyerRow).select().single();
+
+    if (insertRes.error) {
+      throw new Error('寫入 lawyers 失敗：' + insertRes.error.message +
+                      '\n（auth user 已建立但無 lawyer row，請到 admin 或 DB 手動修正）');
+    }
+
+    msg.style.color = 'var(--green)';
+    msg.textContent = '✓ 已建立「' + name + '」，Email ' + email + '，密碼 ' + password;
+
+    // 重新載入律師清單
+    await loadLawyers();
+    renderAdminPage();
+
+    // 2 秒後自動關閉 modal
+    setTimeout(closeNewAccountModal, 2500);
+  } catch (e) {
+    console.error(e);
+    msg.style.color = 'var(--red)';
+    msg.textContent = '失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '建立帳號';
+  }
+}
+
+// 綁定 form submit + modal 背景點擊關閉
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('newAccountForm');
+  if (form) form.addEventListener('submit', handleNewAccount);
+  var modal = document.getElementById('newAccountModal');
+  if (modal) modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeNewAccountModal();
+  });
+});
 
 // ═══ START ═══
 checkSession();
