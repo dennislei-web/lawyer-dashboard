@@ -642,53 +642,76 @@ async function handleNewAccount(e) {
   msg.style.color = 'var(--text-muted)';
   msg.textContent = '呼叫 Supabase Auth...';
 
+  // 保存當前 admin session（signUp 會把 session 替換成新使用者）
+  var adminSessionRes = await sb.auth.getSession();
+  var adminSession = adminSessionRes.data && adminSessionRes.data.session;
+  var authUser = null;
+  var authCreated = false;
+
   try {
-    // Step 1: 建立 Auth user（從瀏覽器端用 anon key + signUp）
+    // Step 1: 建立 Auth user
     var signUpRes = await sb.auth.signUp({
       email: email,
       password: password,
       options: { data: { name: name } }
     });
-
     if (signUpRes.error) {
       throw new Error('Auth 建立失敗：' + signUpRes.error.message);
     }
-
-    var authUser = signUpRes.data && signUpRes.data.user;
+    authUser = signUpRes.data && signUpRes.data.user;
     if (!authUser || !authUser.id) {
-      throw new Error('Auth 建立成功但沒回傳 user ID（可能需要 email 確認）');
+      throw new Error('Auth 建立成功但沒回傳 user ID');
+    }
+    authCreated = true;
+
+    msg.textContent = '還原 admin session...';
+    // Step 2: 立刻把 session 切回 admin，否則 auth.uid() 會是剛建立的使用者
+    if (adminSession) {
+      var restoreRes = await sb.auth.setSession({
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token,
+      });
+      if (restoreRes.error) {
+        throw new Error('還原 admin session 失敗：' + restoreRes.error.message);
+      }
     }
 
-    msg.textContent = 'Auth OK，寫入 lawyers 表...';
+    msg.textContent = '寫入 lawyers 表...';
 
-    // Step 2: 插入 lawyers 表
+    // Step 3: 插入 lawyers 表（此時 auth.uid() 是 admin）
     var lawyerRow = {
       name: name,
       email: email,
       role: role,
       is_active: true,
-      office: '喆律法律事務所',  // 預設
+      office: '喆律法律事務所',
       auth_user_id: authUser.id,
-      can_view_all: true,  // 律師預設看全部（per new rules）
+      can_view_all: true,
     };
     var insertRes = await sb.from('lawyers').insert(lawyerRow).select().single();
 
     if (insertRes.error) {
       throw new Error('寫入 lawyers 失敗：' + insertRes.error.message +
-                      '\n（auth user 已建立但無 lawyer row，請到 admin 或 DB 手動修正）');
+                      (authCreated ? '\n（auth user 已建立但無 lawyer row，請到 admin 或 DB 手動修正）' : ''));
     }
 
     msg.style.color = 'var(--green)';
     msg.textContent = '✓ 已建立「' + name + '」，Email ' + email + '，密碼 ' + password;
 
-    // 重新載入律師清單
     await loadLawyers();
     renderAdminPage();
-
-    // 2 秒後自動關閉 modal
     setTimeout(closeNewAccountModal, 2500);
   } catch (e) {
     console.error(e);
+    // 確保失敗時也回到 admin session
+    if (adminSession && sb.auth.getSession) {
+      try {
+        await sb.auth.setSession({
+          access_token: adminSession.access_token,
+          refresh_token: adminSession.refresh_token,
+        });
+      } catch (restoreErr) { console.warn('restore admin session failed:', restoreErr); }
+    }
     msg.style.color = 'var(--red)';
     msg.textContent = '失敗：' + e.message;
   } finally {
