@@ -131,6 +131,8 @@
     }
     tbody td { padding:10px 12px; font-size:0.85rem; border-bottom:1px solid var(--border); }
     tbody tr:hover { background:var(--bg-hover); }
+    th.sortable:hover { background:var(--bg-row); }
+    .sort-ind { font-size:0.72rem; color:var(--gold-light); margin-left:4px; }
 
     .text-green { color:var(--green); }
     .text-red { color:var(--red); }
@@ -310,14 +312,14 @@
         <table>
           <thead>
             <tr>
-              <th>律師</th>
-              <th>Email</th>
-              <th style="text-align:center;">角色</th>
+              <th class="sortable" data-sort="name" style="cursor:pointer;user-select:none;">律師 <span class="sort-ind" data-for="name"></span></th>
+              <th class="sortable" data-sort="email" style="cursor:pointer;user-select:none;">Email <span class="sort-ind" data-for="email"></span></th>
+              <th class="sortable" data-sort="role" style="cursor:pointer;user-select:none;text-align:center;">角色 <span class="sort-ind" data-for="role">▼</span></th>
               <th style="text-align:center;font-size:0.72rem;">諮詢分析</th>
               <th style="text-align:center;font-size:0.72rem;">營運</th>
               <th style="text-align:center;font-size:0.72rem;">財務規劃</th>
               <th style="text-align:center;font-size:0.72rem;">合署律師</th>
-              <th style="text-align:center;">狀態</th>
+              <th class="sortable" data-sort="status" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
               <th style="text-align:center;">密碼</th>
             </tr>
           </thead>
@@ -519,6 +521,55 @@ function accessCell(l, dashboard) {
 }
 
 // ═══ RENDER ═══
+// 排序狀態（預設：角色從高到低）
+var adminSort = { col: 'role', dir: 'desc' };
+var ROLE_RANK = { admin: 3, manager: 2, lawyer: 1 };
+
+function compareLawyers(a, b, col, dir) {
+  var mul = dir === 'asc' ? 1 : -1;
+  if (col === 'role') {
+    var ra = ROLE_RANK[a.role] || 0, rb = ROLE_RANK[b.role] || 0;
+    if (ra !== rb) return (ra - rb) * mul;
+    // 同角色→次比 name（固定 asc）
+    return (a.name || '').localeCompare(b.name || '', 'zh');
+  }
+  if (col === 'name')  return (a.name || '').localeCompare(b.name || '', 'zh') * mul;
+  if (col === 'email') return (a.email || '').localeCompare(b.email || '') * mul;
+  if (col === 'status') {
+    var sa = a.is_active ? 1 : 0, sb = b.is_active ? 1 : 0;
+    if (sa !== sb) return (sa - sb) * mul;
+    return (a.name || '').localeCompare(b.name || '', 'zh');
+  }
+  return 0;
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('.sort-ind').forEach(function(el) {
+    var col = el.getAttribute('data-for');
+    if (col === adminSort.col) {
+      el.textContent = adminSort.dir === 'asc' ? '▲' : '▼';
+    } else {
+      el.textContent = '';
+    }
+  });
+}
+
+// 綁定 thead 排序點擊（只綁一次）
+document.addEventListener('click', function(e) {
+  var th = e.target.closest('th.sortable');
+  if (!th) return;
+  var col = th.getAttribute('data-sort');
+  if (!col) return;
+  if (adminSort.col === col) {
+    adminSort.dir = adminSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    adminSort.col = col;
+    // 新欄位：角色預設 desc（高到低），其他 asc
+    adminSort.dir = (col === 'role' || col === 'status') ? 'desc' : 'asc';
+  }
+  renderAdminPage();
+});
+
 function renderAdminPage() {
   var tbody = document.getElementById('adminLawyerTableBody');
   var lawyers = allLawyers
@@ -529,7 +580,9 @@ function renderAdminPage() {
       if (!l.auth_user_id) return false;
       return true;
     })
-    .sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'zh'); });
+    .sort(function(a, b) { return compareLawyers(a, b, adminSort.col, adminSort.dir); });
+
+  updateSortIndicators();
 
   if (lawyers.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
