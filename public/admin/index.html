@@ -286,10 +286,10 @@
             </tr>
             <tr>
               <td>👁 律師 + 全部資料 (can_view_all)</td>
-              <td style="text-align:center;" class="text-green">全部資料</td>
-              <td style="text-align:center;" class="text-green">全部資料</td>
-              <td style="text-align:center;" class="text-green">全部資料</td>
-              <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部律師資料</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">—</td>
             </tr>
             <tr>
@@ -471,15 +471,23 @@ async function loadLawyers() {
 }
 
 // ═══ ACCESS CELL ═══
+// 規則：
+//   - admin / manager：4 個儀表板都 ✓ 全部
+//   - 律師 + can_view_all：只能看「諮詢分析」但可看全部律師的資料
+//   - 律師（預設）：只能看「諮詢分析」且僅自己的資料
+//   - 無 auth 帳號：登不進任何儀表板（—）
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
   var role = l.role || 'lawyer';
   var canViewAll = l.can_view_all === true;
-  if (role === 'admin' || role === 'manager' || canViewAll) {
+  if (role === 'admin' || role === 'manager') {
     return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
   }
+  // lawyer 角色（含 can_view_all）→ 只能看諮詢
   if (dashboard === 'consultation') {
-    return '<span style="color:var(--gold-light);font-size:0.78rem;">僅自己</span>';
+    return canViewAll
+      ? '<span style="color:var(--green);font-weight:700;">✓ 全部律師</span>'
+      : '<span style="color:var(--gold-light);font-size:0.78rem;">僅自己</span>';
   }
   return '<span style="color:var(--red);">✗</span>';
 }

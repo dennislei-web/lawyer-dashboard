@@ -884,7 +884,8 @@ try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catc
 function hasAccess() {
   if (!currentLawyer) return false;
   var role = currentLawyer.role;
-  return role === 'admin' || role === 'manager' || currentLawyer.can_view_all === true;
+  // 只有 admin 和 manager 可存取此儀表板；can_view_all 只影響諮詢分析
+  return role === 'admin' || role === 'manager';
 }
 function showNoAccess() {
   document.getElementById('loginPage').style.display = 'none';

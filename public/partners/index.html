@@ -600,6 +600,22 @@ if (window.location.search.indexOf('embed=1') > -1) {
   </div>
 </div>
 
+<!-- NO ACCESS -->
+<div id="noAccessPage" style="display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:480px;text-align:center;">
+    <div style="font-size:2.4rem;margin-bottom:12px;">🔒</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:10px;">無權限存取此儀表板</div>
+    <div style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:24px;">
+      您的帳號（<span id="noAccessUser"></span>）目前僅能存取<strong style="color:var(--gold-light);">諮詢分析</strong>儀表板。<br>
+      如需存取此儀表板，請聯繫管理員調整權限。
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/lawyer-dashboard/" class="btn-login" style="text-decoration:none;display:inline-block;max-width:200px;padding:10px 20px;">返回儀表板</a>
+      <button class="btn-icon" id="noAccessLogout" style="padding:10px 20px;">登出</button>
+    </div>
+  </div>
+</div>
+
 <!-- DASHBOARD -->
 <div id="dashboard" style="display:none">
   <!-- Header -->
@@ -810,6 +826,23 @@ try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catc
 function showLogin() {
   document.getElementById('loginPage').style.display = 'flex';
   document.getElementById('dashboard').style.display = 'none';
+  var p = document.getElementById('noAccessPage'); if (p) p.style.display = 'none';
+}
+function hasAccess() {
+  if (!currentLawyer) return false;
+  var role = currentLawyer.role;
+  // 只有 admin 和 manager 可存取此儀表板；can_view_all 只影響諮詢分析
+  return role === 'admin' || role === 'manager';
+}
+function showNoAccess() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  var p = document.getElementById('noAccessPage');
+  if (p) {
+    p.style.display = 'flex';
+    var u = document.getElementById('noAccessUser');
+    if (u) u.textContent = currentLawyer ? currentLawyer.name : '';
+  }
 }
 async function showDashboard() {
   document.getElementById('loginPage').style.display = 'none';
@@ -827,6 +860,7 @@ async function checkSession() {
     var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
     currentLawyer = r.data;
     isAdmin = r.data && r.data.role === 'admin';
+    if (!hasAccess()) { showNoAccess(); return; }
     showDashboard();
   } else {
     showLogin();
@@ -846,6 +880,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     var lr = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
     currentLawyer = lr.data;
     isAdmin = lr.data && lr.data.role === 'admin';
+    if (!hasAccess()) { showNoAccess(); return; }
     showDashboard();
   } catch(ex) {
     err.textContent = '登入失敗：' + (ex.message || '請確認帳號密碼');
@@ -859,6 +894,8 @@ document.getElementById('logoutBtn').addEventListener('click', async function() 
   currentUser = null; currentLawyer = null;
   showLogin();
 });
+var _nal = document.getElementById('noAccessLogout');
+if (_nal) _nal.addEventListener('click', async function() { if(sb) await sb.auth.signOut(); location.reload(); });
 
 // ============================================================
 // Theme
