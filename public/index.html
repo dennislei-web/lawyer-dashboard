@@ -208,14 +208,14 @@ try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catc
 
 // ═══ ROUTES ═══
 var BASE = 'https://dennislei-web.github.io/lawyer-dashboard';
-// Cache-bust tag — 每小時換一次（per-session 之內同 URL 能被瀏覽器快取）
-var _CB = 'v=' + Math.floor(Date.now() / (60*60*1000));
+// 不主動 cache-bust，讓瀏覽器照 GitHub Pages 的 Cache-Control 做快取
+// 部署新版後使用者硬重整 shell 即可載到最新 iframe
 var ROUTES = {
-  consultation: BASE + '/consultation/?embed=1&' + _CB,
-  revenue:      BASE + '/revenue/?embed=1&' + _CB,
-  finance:      BASE + '/finance/?embed=1&' + _CB,
-  partners:     BASE + '/partners/?embed=1&' + _CB,
-  admin:        BASE + '/admin/?embed=1&' + _CB,
+  consultation: BASE + '/consultation/?embed=1',
+  revenue:      BASE + '/revenue/?embed=1',
+  finance:      BASE + '/finance/?embed=1',
+  partners:     BASE + '/partners/?embed=1',
+  admin:        BASE + '/admin/?embed=1',
 };
 
 function getRouteFromHash() {
