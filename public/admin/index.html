@@ -488,7 +488,13 @@ function accessCell(l, dashboard) {
 function renderAdminPage() {
   var tbody = document.getElementById('adminLawyerTableBody');
   var lawyers = allLawyers
-    .filter(function(l) { return l.id !== (currentLawyer && currentLawyer.id) && l.role !== 'legal_staff'; })
+    .filter(function(l) {
+      // 隱藏：自己、legal_staff、無 auth 帳號者
+      if (l.id === (currentLawyer && currentLawyer.id)) return false;
+      if (l.role === 'legal_staff') return false;
+      if (!l.auth_user_id) return false;
+      return true;
+    })
     .sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'zh'); });
 
   if (lawyers.length === 0) {
