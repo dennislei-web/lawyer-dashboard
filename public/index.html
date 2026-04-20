@@ -120,13 +120,23 @@
     }
     .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
 
-    #contentFrame {
+    #framesHost {
       flex:1 1 auto;
+      position:relative;
       width:100%;
+      min-height:0;
+      background:var(--bg-main);
+    }
+    .route-frame {
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
       border:none;
       background:var(--bg-main);
-      display:block;
+      display:none;
     }
+    .route-frame.active { display:block; }
 
     /* RESPONSIVE */
     @media (max-width:640px) {
@@ -197,7 +207,13 @@
       <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
     </div>
   </div>
-  <iframe id="contentFrame" src="" title="dashboard"></iframe>
+  <div id="framesHost">
+    <iframe class="route-frame" data-route="consultation" src="" title="consultation"></iframe>
+    <iframe class="route-frame" data-route="revenue"      src="" title="revenue"></iframe>
+    <iframe class="route-frame" data-route="finance"      src="" title="finance"></iframe>
+    <iframe class="route-frame" data-route="partners"     src="" title="partners"></iframe>
+    <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
+  </div>
 </div>
 
 <script>
@@ -224,6 +240,9 @@ function getRouteFromHash() {
   return ROUTES[r] ? r : 'consultation';
 }
 
+// 追蹤每個 route 是否已經載入（避免重複 fetch）
+var loadedRoutes = {};
+
 function switchRoute(route) {
   if (!ROUTES[route]) route = 'consultation';
   // 權限檢查：沒權限的路由直接拒絕
@@ -231,22 +250,37 @@ function switchRoute(route) {
     alert('您沒有權限存取此儀表板');
     return;
   }
-  var iframe = document.getElementById('contentFrame');
-  if (iframe.src !== ROUTES[route]) iframe.src = ROUTES[route];
-  // 更新 active
+
+  // 更新 nav active
   document.querySelectorAll('.nav-link').forEach(function(l) {
     l.classList.toggle('active', l.getAttribute('data-route') === route);
   });
+
+  // show/hide iframes（首次訪問才設 src）
+  document.querySelectorAll('.route-frame').forEach(function(f) {
+    f.classList.remove('active');
+  });
+  var target = document.querySelector('.route-frame[data-route="' + route + '"]');
+  if (target) {
+    if (!loadedRoutes[route]) {
+      target.src = ROUTES[route];
+      loadedRoutes[route] = true;
+    }
+    target.classList.add('active');
+
+    // 推 theme 給當前 iframe
+    setTimeout(function() {
+      try {
+        var theme = localStorage.getItem('theme') || 'dark';
+        if (target.contentWindow) target.contentWindow.postMessage({ type:'theme', value:theme }, '*');
+      } catch(e) {}
+    }, 300);
+  }
+
+  // update hash
   if (window.location.hash !== '#/' + route) {
     try { history.replaceState(null, '', '#/' + route); } catch(e) { window.location.hash = '#/' + route; }
   }
-  // iframe 載入後推 theme
-  setTimeout(function() {
-    try {
-      var theme = localStorage.getItem('theme') || 'dark';
-      if (iframe.contentWindow) iframe.contentWindow.postMessage({ type:'theme', value:theme }, '*');
-    } catch(e) {}
-  }, 300);
 }
 
 function canAccessRoute(route) {
@@ -347,11 +381,12 @@ document.getElementById('themeToggle').addEventListener('click', function() {
   var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
   _applyTheme(next);
   localStorage.setItem('theme', next);
-  // 推給 iframe
-  try {
-    var f = document.getElementById('contentFrame');
-    if (f && f.contentWindow) f.contentWindow.postMessage({ type:'theme', value:next }, '*');
-  } catch(e) {}
+  // 推給所有已載入的 iframe
+  document.querySelectorAll('.route-frame').forEach(function(f) {
+    try {
+      if (f.contentWindow && f.src) f.contentWindow.postMessage({ type:'theme', value:next }, '*');
+    } catch(e) {}
+  });
 });
 window.addEventListener('storage', function(e) {
   if (e.key === 'theme' && e.newValue) _applyTheme(e.newValue);
@@ -363,13 +398,14 @@ window.addEventListener('message', function(e) {
   }
 });
 
-// iframe 載入完成時推送 theme
-document.getElementById('contentFrame').addEventListener('load', function() {
-  try {
-    var theme = localStorage.getItem('theme') || 'dark';
-    var f = document.getElementById('contentFrame');
-    if (f && f.contentWindow) f.contentWindow.postMessage({ type:'theme', value:theme }, '*');
-  } catch(e) {}
+// 各 iframe 載入完成時推送 theme
+document.querySelectorAll('.route-frame').forEach(function(frame) {
+  frame.addEventListener('load', function() {
+    try {
+      var theme = localStorage.getItem('theme') || 'dark';
+      if (frame.contentWindow) frame.contentWindow.postMessage({ type:'theme', value:theme }, '*');
+    } catch(e) {}
+  });
 });
 
 // ═══ START ═══
