@@ -574,8 +574,7 @@ function renderAdminPage() {
   var tbody = document.getElementById('adminLawyerTableBody');
   var lawyers = allLawyers
     .filter(function(l) {
-      // 隱藏：自己、legal_staff、無 auth 帳號者
-      if (l.id === (currentLawyer && currentLawyer.id)) return false;
+      // 隱藏：legal_staff、無 auth 帳號者（自己會顯示但不可修改）
       if (l.role === 'legal_staff') return false;
       if (!l.auth_user_id) return false;
       return true;
@@ -591,12 +590,23 @@ function renderAdminPage() {
 
   tbody.innerHTML = lawyers.map(function(l) {
     var role = l.role || 'lawyer';
-    return '<tr>' +
-      '<td style="font-weight:600;">' + escHtml(l.name) + '</td>' +
+    var isSelf = currentLawyer && l.id === currentLawyer.id;
+    var rowBg = isSelf ? 'background:rgba(201,168,76,0.08);' : '';
+    var selfTag = isSelf ? ' <span style="font-size:0.7rem;color:var(--gold-light);font-weight:400;">(你)</span>' : '';
+    var roleSelectAttrs = isSelf
+      ? ' disabled title="無法修改自己的角色（避免把自己降級失去權限）"'
+      : ' onchange="changeRole(\'' + l.id + '\', this.value)"';
+    var passwordBtnHtml = isSelf
+      ? '<span style="font-size:0.72rem;color:var(--text-muted);">—</span>'
+      : (l.auth_user_id
+          ? '<button class="btn-ghost" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword(\'' + l.auth_user_id + '\',\'' + escHtml(l.name).replace(/'/g,"\\'") + '\')">🔄 重設</button>'
+          : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>');
+    return '<tr style="' + rowBg + '">' +
+      '<td style="font-weight:600;">' + escHtml(l.name) + selfTag + '</td>' +
       '<td style="color:var(--text-muted);font-size:0.82rem;">' + escHtml(l.email || '-') + '</td>' +
       '<td style="text-align:center;">' +
-        '<select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;cursor:pointer;" ' +
-          'onchange="changeRole(\'' + l.id + '\', this.value)">' +
+        '<select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;' + (isSelf ? 'cursor:not-allowed;opacity:0.6;' : 'cursor:pointer;') + '"' +
+          roleSelectAttrs + '>' +
           '<option value="lawyer"' + (role === 'lawyer' ? ' selected' : '') + '>🔒 律師</option>' +
           '<option value="manager"' + (role === 'manager' ? ' selected' : '') + '>📊 主管</option>' +
           '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>🔑 管理員</option>' +
@@ -607,11 +617,7 @@ function renderAdminPage() {
       '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
       '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
-      '<td style="text-align:center;">' +
-        (l.auth_user_id
-          ? '<button class="btn-ghost" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword(\'' + l.auth_user_id + '\',\'' + escHtml(l.name).replace(/'/g,"\\'") + '\')">🔄 重設</button>'
-          : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>') +
-      '</td>' +
+      '<td style="text-align:center;">' + passwordBtnHtml + '</td>' +
     '</tr>';
   }).join('');
 }
