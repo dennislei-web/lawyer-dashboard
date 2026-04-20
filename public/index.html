@@ -208,8 +208,8 @@ try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catc
 
 // ═══ ROUTES ═══
 var BASE = 'https://dennislei-web.github.io/lawyer-dashboard';
-// Cache-bust tag — 每小時換一次，避免部署後使用者看到舊 iframe 內容
-var _CB = 'v=' + Math.floor(Date.now() / (60*60*1000));
+// Cache-bust tag — 每分鐘換一次，避免部署後使用者看到舊 iframe 內容
+var _CB = 'v=' + Math.floor(Date.now() / 60000);
 var ROUTES = {
   consultation: BASE + '/consultation/?embed=1&' + _CB,
   revenue:      BASE + '/revenue/?embed=1&' + _CB,
