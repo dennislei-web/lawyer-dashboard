@@ -1184,6 +1184,11 @@
       /* --- Admin table --- */
       .admin-table { font-size: 0.75rem; }
       .admin-table th, .admin-table td { padding: 6px 8px; }
+
+      /* 部門比較圖表 2 欄 → 1 欄 */
+      #deptComparisonSection > div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+      }
     }
 
     /* ===================== RWD: VERY SMALL ===================== */
@@ -1252,6 +1257,9 @@
     <div class="year-filter-bar" id="overviewYearBar">
       <span class="filter-label">篩選年份</span>
     </div>
+    <div class="year-filter-bar" id="overviewDeptBar" style="margin-top:8px;">
+      <span class="filter-label">篩選部門</span>
+    </div>
 
     <!-- KPI Summary Cards -->
     <div class="kpi-grid" id="overviewKpiGrid">
@@ -1304,6 +1312,31 @@
             <tr><td colspan="8" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Department Comparison Charts -->
+    <div class="section" id="deptComparisonSection">
+      <div class="section-header">
+        <div class="section-title">各部門比較</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+        <div style="background:var(--bg-row);border-radius:8px;padding:14px;">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">諮詢數 / 簽約數</div>
+          <div style="position:relative;height:260px;"><canvas id="deptCountsChart"></canvas></div>
+        </div>
+        <div style="background:var(--bg-row);border-radius:8px;padding:14px;">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">簽約率（%）</div>
+          <div style="position:relative;height:260px;"><canvas id="deptSignRateChart"></canvas></div>
+        </div>
+        <div style="background:var(--bg-row);border-radius:8px;padding:14px;">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">已收金額</div>
+          <div style="position:relative;height:260px;"><canvas id="deptCollectedChart"></canvas></div>
+        </div>
+        <div style="background:var(--bg-row);border-radius:8px;padding:14px;">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">諮詢效益（每諮詢平均收款）</div>
+          <div style="position:relative;height:260px;"><canvas id="deptEffChart"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -1782,6 +1815,82 @@ if (window.location.search.indexOf('embed=1') > -1) {
 const SUPABASE_URL     = 'https://zpbkeyhxyykbvownrngf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
 
+// ===================== 律師 → 部門對應（由 scripts/compute_lawyer_departments.py 產生）=====================
+var DEPARTMENT_ORDER = ['台北','桃園','新竹','台中','台南','高雄','合署','合署(司法官)'];
+var LAWYER_DEPARTMENTS = {
+  "8b9bd84b-67eb-4a4c-bfd1-1b4941880991": "桃園",  // 丁巧欣
+  "396c3550-ff13-4ad2-af72-1583662b4f7d": "台中",  // 劉奕靖
+  "2a5d914a-ce97-45e0-baaf-80b16db7c089": "合署(司法官)",  // 劉明潔
+  "a40aaca2-9a0d-41f3-9b02-cd6805ca9cd7": "台北",  // 劉羽芯
+  "54bfd849-7e19-49fe-a838-d83cae85752f": "合署(司法官)",  // 劉誠夫
+  "c144b2d8-6297-41ad-b0ef-547cf74a6d02": "桃園",  // 劉雅涵
+  "19668da5-1219-45a1-9835-2919c5012300": "台北",  // 吳書晴
+  "da25b0fc-132c-4120-b3c1-d840394c2ed4": "合署",  // 吳柏慶
+  "38f75ab6-90e7-417d-9680-3ad9ed99d323": "新竹",  // 唐于淇
+  "f3a6e8bb-7a99-4a0b-8908-ec3f29883985": "桃園",  // 嚴心吟
+  "1feec3c1-acd2-4c1d-b6e1-a75117163345": "合署(司法官)",  // 孫少輔
+  "beab9b2b-c430-423c-83c2-c936415e63d9": "高雄",  // 廖懿涵
+  "316fc804-4e13-4dd8-a67f-905b69b5b534": "桃園",  // 張佳榕
+  "b26c0018-a7ba-4f02-9b0f-53116aeef8e7": "桃園",  // 張元毓
+  "4ba425e3-dd3b-4a1e-a13b-23d1a00a78de": "台北",  // 張又仁
+  "855872db-eb2e-4e7d-8c55-2e29ddd0b392": "台北",  // 張紹成
+  "0ceb59a8-4b79-41e9-9f44-ebdfa9a9997b": "台北",  // 徐佳緯
+  "d3dc89b4-303f-420a-984f-5f620203e580": "台北",  // 徐品軒
+  "93368933-3017-4c7c-af49-5ff0ea5ec3a6": "合署",  // 徐棠娜
+  "70623a0d-c3dd-47d5-abd7-9061fb39f8a8": "台北",  // 方心瑜
+  "3a344792-891a-4321-b71b-1eeb252a7c59": "台北",  // 方浚煜
+  "3822ab76-80f0-4234-afef-2814a834ca70": "台南",  // 曾靖雯
+  "af8c683a-8a6d-4151-965a-e11089848976": "台北",  // 李仁傑
+  "a5bf7a25-f576-4d61-8bf5-79800075051e": "桃園",  // 李家徹
+  "96e5042a-fc58-45ad-9ddd-a97dcc181e38": "台北",  // 李家泓
+  "21e50125-59e7-4ac8-8729-470b7eea40f0": "合署",  // 李昭萱
+  "9072cdcd-87ac-4e85-840a-6b8b64292a15": "桃園",  // 李杰峰
+  "1b303691-1f1b-4b18-8e35-b777fe17f040": "新竹",  // 李音忻
+  "783aa1ca-543f-400c-9732-c2395550c457": "台中",  // 林佳穎
+  "e0482fe2-ed41-4c9f-a297-b83d3d0f5238": "台北",  // 林俐妤
+  "e19e0019-1e9b-437e-a4f7-76262809f406": "合署",  // 林昀
+  "2893bab1-2830-4cc6-ba1c-c0cfb91ea18d": "台北",  // 林桑羽
+  "49a8f3ce-2aa6-4a81-96a1-c8e7669fa524": "台北",  // 林貝珍
+  "f24677e3-8227-46c5-95c9-8eabe92a864d": "台北",  // 林雨辰
+  "9383d84a-cc19-40f8-bb81-f6264c97b5b3": "台北",  // 柯雪莉
+  "301daf4e-912b-41c2-a2f3-12fe0195c177": "台北",  // 楊于瑾
+  "1442b99a-2598-48c1-8083-7aee0ec08c1d": "高雄",  // 楊喬伊
+  "835b26bd-adb7-4467-bc0c-29fca8855428": "台北",  // 楊筑鈞
+  "62a18b12-394a-44af-b9c8-1538626a84df": "台北",  // 江欣柔
+  "0ec39f62-859d-4892-8939-5475fb8251f9": "台中",  // 洪琬琪
+  "ad8d5d65-1d3b-4528-ba23-99900eae82b7": "台南",  // 王湘閔
+  "2170c0af-db43-48e4-a40f-edb5cf58f5d7": "高雄",  // 王郁萱
+  "c30a3ee6-eb38-4356-b3d7-93f820462beb": "台中",  // 紀宜君
+  "6b8d7f2f-9df1-4ef4-9504-cdecf833d658": "桃園",  // 紀淑卿
+  "b2f90475-b4f4-466b-bb85-708542b9a9d2": "台北",  // 莊清翊
+  "b7a29a80-3123-4bdb-935a-da22b88543f9": "新竹",  // 葉芷羽
+  "5b1d9857-df6f-4106-afd3-5482fa14b56a": "高雄",  // 董沐穎
+  "2af9e903-314d-4c66-8539-892f91ac65ba": "台北",  // 蔡宛陵
+  "8b501630-09d1-4fdd-b303-de8f741b668b": "台北",  // 蔡愷凌
+  "2c58a141-206d-42fe-abb6-d25ca67d2b01": "台北",  // 蕭予馨
+  "dcf0b714-b3de-46c8-bc77-bcc7593eee83": "高雄",  // 蘇端雅
+  "fdf9947c-b2be-4101-877a-d6c242931b63": "台北",  // 蘇萱
+  "912dbdab-bb02-4a7d-9d12-d01fc26099a8": "合署",  // 許煜婕
+  "a7a129d8-1dad-4209-a4a9-f316c0d67ccf": "合署(司法官)",  // 許致維
+  "9409dfa5-4a02-45c0-9981-6b561a13141e": "桃園",  // 謝依璇
+  "00068630-51ba-4239-890e-59bfb8e69cbd": "台中",  // 賴佳瑩
+  "27a016e7-fbf6-45e8-a60e-3d5ce40c0b3a": "台北",  // 郭玟樺
+  "b62531f5-3904-4867-bac8-bb629de8488d": "台北",  // 陳宛婷
+  "7cbde431-40ae-40ef-bd57-bb7d01b25829": "台北",  // 陳寧馨
+  "24e84ba2-662e-4620-9a53-6cb5784ff531": "高雄",  // 陳映臻
+  "657b2c56-1bce-40a2-88cd-2f30a1940e8c": "高雄",  // 陳沛羲
+  "163713b3-50bc-4ef3-a1f2-dc811749569e": "合署",  // 陳璽仲
+  "ff68344a-e5ad-492a-83cf-cca6dfc5d4a8": "新竹",  // 陶光星
+  "2e1202a9-eafe-445d-abe3-f2d566cda9cc": "台北",  // 雷皓明
+  "bdc424c8-fa2e-430c-a3ec-6a1aeebdcab2": "新竹",  // 黃惠群
+  "523d0d38-4325-47da-996f-0574c8e8aeb0": "台北",  // 黃杰
+  "b876a773-b8ed-4a35-9b73-05620df4ae9e": "桃園",  // 黃裕恆
+  "27d25c54-6fa5-4b30-8367-851007e0a845": "台北",  // 黃逸庭
+  "57172606-7f84-44dc-b284-3c708dd50399": "新竹",  // 黃鈺婷
+  "ffbcc1d8-1f60-4336-9cb9-4a78af59fc7b": "台北",  // 黃顯皓
+  "b5902edd-857a-4fad-97d0-d246ff9b8074": "台南",  // 黃馨儀
+};
+
 let sb = null;
 try {
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1866,7 +1975,10 @@ function getChartColors() {
 let allCases      = [];      // all consultation_cases rows visible to this user
 
 let overviewYear = 'all';
+let overviewDept = 'all';  // 部門篩選：'all' 或 DEPARTMENT_ORDER 其中一個
 let detailYear   = 'all';
+// 部門比較圖表（同一 ID 重建時要先 destroy 舊的）
+let deptCharts = { counts: null, signRate: null, collected: null, eff: null };
 
 // Ranking table sort
 let sortCol = 'collected';
@@ -2054,6 +2166,9 @@ function showDashboard() {
     renderOverviewPage();
   });
 
+  // Build department filter buttons
+  buildDeptButtons();
+
   renderOverviewPage();
 
   // 支援 URL ?tab=xxx 自動切換 tab（用於其他儀表板跳來這裡的 admin 連結）
@@ -2100,9 +2215,36 @@ function filterByYear(stats, year) {
   return stats.filter(s => s.month && s.month.startsWith(year));
 }
 
+// ===================== DEPARTMENT FILTER =====================
+function buildDeptButtons() {
+  const bar = document.getElementById('overviewDeptBar');
+  if (!bar) return;
+  // Remove old buttons (keep label)
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+
+  const items = ['all'].concat(DEPARTMENT_ORDER);
+  items.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (d === overviewDept ? ' active' : '');
+    btn.textContent = d === 'all' ? '全部' : d;
+    btn.onclick = () => {
+      overviewDept = d;
+      buildDeptButtons();
+      renderOverviewPage();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function filterByDept(stats, dept) {
+  if (!dept || dept === 'all') return stats;
+  return stats.filter(s => LAWYER_DEPARTMENTS[s.lawyer_id] === dept);
+}
+
 // ===================== OVERVIEW PAGE =====================
 function renderOverviewPage() {
-  const filtered = filterByYear(allStats, overviewYear);
+  let filtered = filterByYear(allStats, overviewYear);
+  filtered = filterByDept(filtered, overviewDept);
 
   // Aggregate totals
   const totals = aggregateStats(filtered);
@@ -2110,7 +2252,8 @@ function renderOverviewPage() {
 
   // Build lawyer rows
   if (canViewAll()) {
-    document.getElementById('overviewTableTitle').textContent = '律師排名';
+    const deptSuffix = overviewDept === 'all' ? '' : '（' + overviewDept + '）';
+    document.getElementById('overviewTableTitle').textContent = '律師排名' + deptSuffix;
     renderRankingTable(filtered);
     renderResignedSection(filtered);
   } else {
@@ -2121,6 +2264,121 @@ function renderOverviewPage() {
 
   // Amount range analysis
   renderAmountRange(overviewYear);
+
+  // 部門比較圖表（只依年份篩選，不依部門，這樣可以跨部門比較）
+  if (canViewAll()) {
+    document.getElementById('deptComparisonSection').style.display = '';
+    renderDeptComparison(filterByYear(allStats, overviewYear));
+  } else {
+    document.getElementById('deptComparisonSection').style.display = 'none';
+  }
+}
+
+// ===================== DEPARTMENT COMPARISON CHARTS =====================
+function renderDeptComparison(yearFilteredStats) {
+  if (typeof Chart === 'undefined') return;
+
+  // Aggregate by department
+  const byDept = {};
+  DEPARTMENT_ORDER.forEach(d => {
+    byDept[d] = { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
+  });
+  yearFilteredStats.forEach(s => {
+    const dept = LAWYER_DEPARTMENTS[s.lawyer_id];
+    if (!dept || !byDept[dept]) return;
+    byDept[dept].consult_count += s.consult_count || 0;
+    byDept[dept].signed_count  += s.signed_count  || 0;
+    byDept[dept].revenue       += s.revenue       || 0;
+    byDept[dept].collected     += s.collected     || 0;
+  });
+  DEPARTMENT_ORDER.forEach(d => {
+    const b = byDept[d];
+    b.sign_rate = b.consult_count > 0 ? (b.signed_count / b.consult_count * 100) : 0;
+    b.consult_eff = b.consult_count > 0 ? (b.collected / b.consult_count) : 0;
+  });
+
+  const labels = DEPARTMENT_ORDER;
+  const colors = getChartColors();
+  const gridColor = colors.grid;
+  const textColor = colors.text;
+
+  // 依選取部門高亮
+  const activeIdx = DEPARTMENT_ORDER.indexOf(overviewDept);
+  const makeBgColors = (base) => labels.map((_, i) =>
+    (activeIdx === -1 || i === activeIdx) ? base : base.replace(/,\s*0?\.?\d+\)/, ',0.25)')
+  );
+
+  // Chart 1: consult_count + signed_count (stacked-ish bars)
+  const cd1 = {
+    labels: labels,
+    datasets: [
+      { label:'諮詢數', data: labels.map(d => byDept[d].consult_count),
+        backgroundColor: makeBgColors('rgba(79,142,247,0.75)'),
+        borderColor: 'rgba(79,142,247,1)', borderWidth: 1 },
+      { label:'簽約數', data: labels.map(d => byDept[d].signed_count),
+        backgroundColor: makeBgColors('rgba(76,175,130,0.75)'),
+        borderColor: 'rgba(76,175,130,1)', borderWidth: 1 },
+    ]
+  };
+  _renderDeptChart('counts', 'deptCountsChart', cd1, textColor, gridColor);
+
+  // Chart 2: sign rate (%)
+  const cd2 = {
+    labels: labels,
+    datasets: [{ label:'簽約率', data: labels.map(d => byDept[d].sign_rate),
+      backgroundColor: makeBgColors('rgba(201,168,76,0.75)'),
+      borderColor: 'rgba(201,168,76,1)', borderWidth: 1 }]
+  };
+  _renderDeptChart('signRate', 'deptSignRateChart', cd2, textColor, gridColor, '%');
+
+  // Chart 3: collected
+  const cd3 = {
+    labels: labels,
+    datasets: [{ label:'已收金額', data: labels.map(d => byDept[d].collected),
+      backgroundColor: makeBgColors('rgba(232,201,122,0.75)'),
+      borderColor: 'rgba(232,201,122,1)', borderWidth: 1 }]
+  };
+  _renderDeptChart('collected', 'deptCollectedChart', cd3, textColor, gridColor, '$');
+
+  // Chart 4: consult_eff
+  const cd4 = {
+    labels: labels,
+    datasets: [{ label:'諮詢效益', data: labels.map(d => byDept[d].consult_eff),
+      backgroundColor: makeBgColors('rgba(224,149,74,0.75)'),
+      borderColor: 'rgba(224,149,74,1)', borderWidth: 1 }]
+  };
+  _renderDeptChart('eff', 'deptEffChart', cd4, textColor, gridColor, '$');
+}
+
+function _renderDeptChart(key, canvasId, data, textColor, gridColor, fmt) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  if (deptCharts[key]) { try { deptCharts[key].destroy(); } catch(e){} deptCharts[key] = null; }
+
+  const tickCb = fmt === '$' ? (v) => '$' + Number(v).toLocaleString()
+               : fmt === '%' ? (v) => v + '%'
+               : (v) => Number(v).toLocaleString();
+
+  deptCharts[key] = new Chart(el, {
+    type: 'bar',
+    data: data,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.dataset.label + ': ' + tickCb(Math.round(ctx.parsed.y))
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor } },
+        y: { ticks: { color: textColor, font: { size: 11 }, callback: tickCb }, grid: { color: gridColor }, beginAtZero: true }
+      }
+    }
+  });
 }
 
 function aggregateStats(stats) {
