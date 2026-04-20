@@ -252,22 +252,20 @@ function switchRoute(route) {
 function canAccessRoute(route) {
   if (!currentLawyer) return false;
   if (route === 'consultation') return true; // 所有登入者都可看
-  if (route === 'admin') return currentLawyer.role === 'admin';
-  // revenue / finance / partners → admin / manager / can_view_all
-  var role = currentLawyer.role;
-  return role === 'admin' || role === 'manager' || currentLawyer.can_view_all === true;
+  // 其他 3 個儀表板 + admin 頁：只有 admin
+  return currentLawyer.role === 'admin';
 }
 
 function updateNavVisibility() {
   var role = currentLawyer ? currentLawyer.role : null;
-  var canViewAll = currentLawyer && currentLawyer.can_view_all === true;
-  var canSeeFull = role === 'admin' || role === 'manager' || canViewAll;
+  var isAdmin = role === 'admin';
 
+  // 律師/主管只看到「諮詢分析」，其他 nav 全部隱藏（含 restricted 和 admin）
   document.querySelectorAll('.nav-link[data-restricted]').forEach(function(l) {
-    l.style.display = canSeeFull ? '' : 'none';
+    l.style.display = isAdmin ? '' : 'none';
   });
   var navAdmin = document.getElementById('navAdmin');
-  if (navAdmin) navAdmin.style.display = role === 'admin' ? '' : 'none';
+  if (navAdmin) navAdmin.style.display = isAdmin ? '' : 'none';
 }
 
 // ═══ AUTH ═══

@@ -2143,9 +2143,9 @@ function goBackFromDetail() {
   showTab('overview');
 }
 
-// 判斷當前使用者是否可以看全部資料（admin、manager 或 can_view_all）
+// 新規則：所有登入者都能看諮詢分析的全部資料（lawyer/manager/admin 無差別）
 function canViewAll() {
-  return currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager' || currentLawyer.can_view_all === true);
+  return !!currentLawyer;
 }
 
 function showDashboard() {
