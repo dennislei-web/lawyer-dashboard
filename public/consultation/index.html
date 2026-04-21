@@ -6084,13 +6084,36 @@ async function showQaDetail(qaId) {
         <button class="qa-action-btn" onclick="rateQa('${e.id}', -1, this)">👎 沒用</button>
         <button class="qa-action-btn" onclick="reaskFromDetail(${JSON.stringify(e.scenario).replace(/"/g, '&quot;')})" title="把這題放回發問框，用最新語料重新生成一個新答案（舊答不會被覆蓋）">🔄 用最新語料重問</button>
         ${(e.asked_by === currentLawyer?.id || ['admin','manager'].includes(currentLawyer?.role)) ? `
-          <button class="qa-action-btn" onclick="showRefineForm('${e.id}')">✏️ 補充/修正</button>` : ''}
+          <button class="qa-action-btn" onclick="showRefineForm('${e.id}')">✏️ 補充/修正</button>
+          <button class="qa-action-btn" style="color:var(--red,#e56565);border-color:var(--red,#e56565);" onclick="deleteQaVersion('${e.id}')" title="只刪這個版本，其他版本保留">🗑️ 刪本版</button>
+          ${versions.length > 1 ? `
+            <button class="qa-action-btn" style="color:var(--red,#e56565);border-color:var(--red,#e56565);" onclick="deleteQaAllVersions(${JSON.stringify(e.scenario).replace(/"/g, '&quot;')})" title="把這題的所有 ${versions.length} 個版本全部刪除，不可復原">🗑️ 刪整題</button>` : ''}
+        ` : ''}
       </div>
       <div id="qaRefineBox-${e.id}" style="display:none;"></div>
     </div>`;
 
   // 捲到結果區
   resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 刪除單一版本（僅 admin/manager/asked_by 有權限；按鈕本身就有權限守門）
+async function deleteQaVersion(qaId) {
+  if (!confirm('確定刪除這個版本的答案？\n（其他版本如有會保留）')) return;
+  const { error } = await sb.from('qa_entries').delete().eq('id', qaId);
+  if (error) { alert('刪除失敗：' + error.message); return; }
+  document.getElementById('qaResult').innerHTML = '<div class="qa-empty">✓ 已刪除此版本</div>';
+  loadQaList();
+}
+
+// 刪除整題（所有版本）
+async function deleteQaAllVersions(scenario) {
+  const preview = scenario.length > 50 ? scenario.slice(0, 50) + '...' : scenario;
+  if (!confirm(`確定刪除「${preview}」的所有版本？\n\n此操作無法復原。`)) return;
+  const { error } = await sb.from('qa_entries').delete().eq('scenario', scenario);
+  if (error) { alert('刪除失敗：' + error.message); return; }
+  document.getElementById('qaResult').innerHTML = '<div class="qa-empty">✓ 已刪除整題及所有版本</div>';
+  loadQaList();
 }
 
 // 從 QA 詳情點「用最新語料重問」：把原 scenario 放回發問框，自動 force_new 重跑
