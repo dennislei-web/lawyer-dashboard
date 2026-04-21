@@ -2006,6 +2006,8 @@ function getChartColors() {
 }
 
 let allCases      = [];      // all consultation_cases rows visible to this user
+let casesLoadState = 'pending'; // 'pending' | 'loaded' | 'error' — tracks the background allCases fetch
+let casesLoadError = null;
 
 let overviewYear = 'all';
 let overviewDept = 'all';  // 部門篩選：'all' 或 DEPARTMENT_ORDER 其中一個
@@ -2076,9 +2078,12 @@ async function loadDashboard(user) {
   document.getElementById('userName').textContent = currentLawyer.name;
 
   // Fetch all rows with batched parallelism (5 concurrent requests max)
+  // Returns { data, error } — error is non-null if any page failed, so callers
+  // can distinguish "no data" (empty array, error: null) from "fetch failed".
   async function fetchAllPages(table, select, orderCol, ascending, maxPages) {
     const ps = 1000, batch = 5;
     let all = [];
+    let firstError = null;
     for (let b = 0; b < maxPages; b += batch) {
       const promises = [];
       for (let i = b; i < Math.min(b + batch, maxPages); i++) {
@@ -2087,18 +2092,20 @@ async function loadDashboard(user) {
             .order(orderCol, { ascending })
             .range(i * ps, (i + 1) * ps - 1)
             .then(r => ({ idx: i, data: r.data || [], err: r.error }))
+            .catch(e => ({ idx: i, data: [], err: e }))
         );
       }
       const results = (await Promise.all(promises)).sort((a, b) => a.idx - b.idx);
       let done = false;
       for (const r of results) {
-        if (r.err || r.data.length === 0) { done = true; break; }
+        if (r.err) { firstError = firstError || r.err; done = true; break; }
+        if (r.data.length === 0) { done = true; break; }
         all = all.concat(r.data);
         if (r.data.length < ps) { done = true; break; }
       }
       if (done) break;
     }
-    return all;
+    return { data: all, error: firstError };
   }
 
   const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
@@ -2113,7 +2120,10 @@ async function loadDashboard(user) {
     lawyerPromise
   ]);
 
-  allStats = statsResult;
+  if (statsResult.error) {
+    console.error('[loadDashboard] monthly_stats fetch failed:', statsResult.error);
+  }
+  allStats = statsResult.data;
 
   if (canViewAll() && lawyersResult.data) {
     lawyersResult.data.forEach(l => {
@@ -2128,11 +2138,41 @@ async function loadDashboard(user) {
   hidePage('loginPage');
   showDashboard();
 
-  // Step 3: Load cases in background
-  fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20).then(cases => {
-    allCases = cases;
-    console.log('[DEBUG] cases loaded:', cases.length);
+  // Step 3: Load cases in background — must re-render the active page when done,
+  // because user may have already clicked into a tab that depends on allCases.
+  casesLoadState = 'pending';
+  casesLoadError = null;
+  fetchAllPages('consultation_cases', caseCols, 'case_date', false, 20).then(result => {
+    if (result.error) {
+      casesLoadState = 'error';
+      casesLoadError = result.error;
+      console.error('[loadDashboard] consultation_cases fetch failed:', result.error);
+    } else {
+      allCases = result.data;
+      casesLoadState = 'loaded';
+      console.log('[DEBUG] cases loaded:', result.data.length);
+    }
+    reRenderActivePage();
+  }).catch(e => {
+    casesLoadState = 'error';
+    casesLoadError = e;
+    console.error('[loadDashboard] cases fetch threw:', e);
+    reRenderActivePage();
   });
+}
+
+// Re-render whichever page is currently active (used after background data arrives).
+function reRenderActivePage() {
+  const active = document.querySelector('.page.active');
+  if (!active) return;
+  switch (active.id) {
+    case 'pageOverview':  renderOverviewPage(); break;
+    case 'pageTracking':  renderTrackingPage(); break;
+    case 'pageUnsigned':  renderUnsignedPage(); break;
+    case 'pageDetail':    renderDetailPage();   break;
+    case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
+    // pageAdmin does not depend on allCases
+  }
 }
 
 // ===================== TAB NAVIGATION =====================
@@ -2731,6 +2771,12 @@ function renderResignedSection(stats) {
 // ===================== AMOUNT RANGE ANALYSIS =====================
 function renderAmountRange(year) {
   const container = document.getElementById('amountRangeContent');
+  if (casesLoadState !== 'loaded') {
+    container.innerHTML = casesLoadState === 'error'
+      ? '<div class="empty-state" style="padding:24px;color:var(--red);">案件資料載入失敗</div>'
+      : '<div class="empty-state" style="padding:24px;">案件資料載入中…</div>';
+    return;
+  }
   // Filter signed cases by year
   let signedCases = allCases.filter(c => c.is_signed && (c.collected > 0 || c.revenue > 0));
   if (year !== 'all') {
@@ -4978,6 +5024,24 @@ async function resetPassword(authUserId, name) {
 }
 
 function renderUnsignedPage() {
+  // If cases haven't finished loading, show a status banner instead of a misleading "0".
+  if (casesLoadState !== 'loaded') {
+    const summary = document.getElementById('unsignedSummary');
+    const tbody = document.getElementById('unsignedTableBody');
+    const headRow = document.getElementById('unsignedTableHead');
+    if (headRow) headRow.innerHTML = '';
+    if (tbody) tbody.innerHTML = '';
+    if (summary) {
+      summary.innerHTML = casesLoadState === 'error'
+        ? `<div class="empty-state" style="color:var(--red);">
+             案件資料載入失敗${casesLoadError && casesLoadError.message ? '：' + escHtml(casesLoadError.message) : ''}
+             <button onclick="location.reload()" style="margin-left:12px;padding:4px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;">重新載入</button>
+           </div>`
+        : '<div class="empty-state">案件資料載入中…</div>';
+    }
+    return;
+  }
+
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - unsignedRange);
