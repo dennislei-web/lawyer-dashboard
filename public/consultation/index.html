@@ -5930,13 +5930,30 @@ async function loadQaList() {
     return { ...d, _score: score };
   });
 
-  if (qaListState.sort === 'rated') {
-    scored.sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at));
+  // Group by scenario（同一題只顯示最新版為卡片、其他版本藏在 primary._versions）
+  const groups = new Map();
+  for (const entry of scored) {
+    const key = (entry.scenario || '').trim();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  const displayEntries = [];
+  for (const list of groups.values()) {
+    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const primary = { ...list[0], _versions: list };
+    displayEntries.push(primary);
   }
 
-  countEl.textContent = scored.length;
-  renderQaTagsBar(scored);
-  renderQaCards(scored);
+  // 排序：recent 按最新版 created_at、rated 按最新版 score
+  if (qaListState.sort === 'rated') {
+    displayEntries.sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at));
+  } else {
+    displayEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  countEl.textContent = displayEntries.length;
+  renderQaTagsBar(displayEntries);
+  renderQaCards(displayEntries);
 }
 
 function renderQaTagsBar(entries) {
@@ -5972,9 +5989,12 @@ function renderQaCards(entries) {
     const name = e.lawyers?.name || '';
     const scoreLabel = e._score > 0 ? `👍 ${e._score}` : (e._score < 0 ? `👎 ${Math.abs(e._score)}` : '');
     const refineBadge = e.lawyer_refined_answer ? '<span style="color:var(--gold);font-size:0.7rem;">✓ 律師有修正</span>' : '';
+    const versionBadge = (e._versions && e._versions.length > 1)
+      ? `<span style="background:var(--blue,#5b8def);color:white;font-size:0.68rem;padding:1px 6px;border-radius:10px;margin-left:6px;vertical-align:middle;" title="此問題共有 ${e._versions.length} 個答案版本">📜 ${e._versions.length} 版</span>`
+      : '';
     return `
       <div class="qa-card" onclick="showQaDetail('${e.id}')">
-        <div class="qa-card-scenario">Q：${escHtml(e.scenario)}</div>
+        <div class="qa-card-scenario">Q：${escHtml(e.scenario)}${versionBadge}</div>
         <div class="qa-card-answer-preview">${escHtml(answer)}</div>
         <div class="qa-tags">${tags}</div>
         <div class="qa-card-meta">
@@ -5995,6 +6015,13 @@ async function showQaDetail(qaId) {
   if (entry.error || !entry.data) { alert('載入失敗'); return; }
   const e = entry.data;
 
+  // 查同 scenario 所有版本（新→舊）
+  const { data: allVersions } = await sb.from('qa_entries')
+    .select('id, created_at')
+    .eq('scenario', e.scenario)
+    .order('created_at', { ascending: false });
+  const versions = allVersions || [];
+
   // 抓引用的 case_chunks（by id 直接查，不用 vector search RPC）
   let chunks = [];
   if (e.source_chunk_ids && e.source_chunk_ids.length > 0) {
@@ -6008,6 +6035,23 @@ async function showQaDetail(qaId) {
   const when = e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : '';
   const answer = e.lawyer_refined_answer || e.ai_answer || '';
 
+  // Version tabs（只在多版時出現）
+  let versionTabsHtml = '';
+  if (versions.length > 1) {
+    const total = versions.length;
+    versionTabsHtml = `
+      <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-right:4px;">📜 答案版本：</span>
+        ${versions.map((v, i) => {
+          const vNum = total - i;
+          const vDate = new Date(v.created_at).toISOString().slice(0, 10);
+          const isActive = v.id === qaId;
+          const latest = i === 0 ? ' 最新' : '';
+          return `<button class="qa-action-btn ${isActive ? 'active' : ''}" onclick="showQaDetail('${v.id}')">v${vNum}${latest} · ${vDate}</button>`;
+        }).join('')}
+      </div>`;
+  }
+
   const citedHtml = chunks.map(ch => {
     const cc = ch.consultation_cases || {};
     const law = cc.lawyers?.name || '';
@@ -6020,6 +6064,7 @@ async function showQaDetail(qaId) {
 
   const resultEl = document.getElementById('qaResult');
   resultEl.innerHTML = `
+    ${versionTabsHtml}
     <div class="qa-result-card">
       <div class="qa-label">${escHtml(e.lawyers?.name || '')} · ${when}</div>
       <div class="qa-content" style="font-weight:500;margin-bottom:10px;">Q：${escHtml(e.scenario)}</div>
