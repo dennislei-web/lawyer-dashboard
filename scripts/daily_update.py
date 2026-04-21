@@ -356,22 +356,15 @@ def update_supabase(target_months):
     # 保留原始 df 給 consultation_cases 用（多律師案件指派給第一位律師）
     df_original = df.copy()
 
-    # 處理多律師合併名稱（例："林昀, 吳柏慶"），拆開後每位律師各記一筆
-    # 這只影響 monthly_stats（每位律師都計入諮詢次數）
-    expanded_rows = []
-    for _, row in df.iterrows():
-        names = [n.strip() for n in str(row["諮詢律師"]).replace("、", ",").split(",") if n.strip()]
-        if len(names) <= 1:
-            expanded_rows.append(row)
-        else:
-            for name in names:
-                new_row = row.copy()
-                new_row["諮詢律師"] = name
-                expanded_rows.append(new_row)
-    df_expanded = pd.DataFrame(expanded_rows)
-    print(f"  拆分多律師後：{len(df_expanded)} 筆（用於 monthly_stats）")
+    # 多律師諮詢（例："林昀, 吳柏慶"）一律只計給第一位律師，金額全額歸他；
+    # 這樣 monthly_stats 與 consultation_cases（本來就只存第一位）會一致。
+    df_first = df.copy()
+    df_first["諮詢律師"] = df_first["諮詢律師"].apply(
+        lambda x: str(x).replace("、", ",").split(",")[0].strip()
+    )
+    print(f"  多律師案件歸第一位後：{len(df_first)} 筆（用於 monthly_stats）")
 
-    grouped = df_expanded.groupby(["諮詢律師", "month"]).agg(
+    grouped = df_first.groupby(["諮詢律師", "month"]).agg(
         consult_count=("諮詢律師", "count"),
         signed_count=("已簽約", "sum"),
         revenue=("revenue", "sum") if "revenue" in df.columns else ("諮詢律師", "count"),
