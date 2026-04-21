@@ -2115,7 +2115,7 @@ async function loadDashboard(user) {
     return { data: all, error: firstError };
   }
 
-  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes';
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at';
 
   // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
@@ -4247,9 +4247,10 @@ function renderUploadSummary() {
     p.total++;
     if (c.meeting_record) p.mr++;
     if (c.transcript) p.ts++;
-    if (c.llm_analyzed_at) {
-      p.llm++;
-      if (!p.latestUpload || c.llm_analyzed_at > p.latestUpload) p.latestUpload = c.llm_analyzed_at;
+    if (c.llm_analyzed_at) p.llm++;
+    // Track the most recent doc upload across this lawyer's cases
+    if (c.doc_uploaded_at && (!p.latestUpload || c.doc_uploaded_at > p.latestUpload)) {
+      p.latestUpload = c.doc_uploaded_at;
     }
   });
 
@@ -4264,7 +4265,7 @@ function renderUploadSummary() {
 
   html += '<div style="font-size:0.9rem;font-weight:600;margin-top:20px;margin-bottom:8px;">按律師上傳狀況（點律師列展開案件明細）</div>';
   html += '<div style="overflow-x:auto;"><table class="detail-table" id="uploadLawyerTable"><thead><tr>';
-  html += '<th>律師</th><th class="num">案件總數</th><th class="num">會議記錄</th><th class="num">逐字稿</th><th class="num">LLM</th><th class="num">會議記錄覆蓋</th><th>最後 LLM 時間</th>';
+  html += '<th>律師</th><th class="num">案件總數</th><th class="num">會議記錄</th><th class="num">逐字稿</th><th class="num">LLM</th><th class="num">會議記錄覆蓋</th><th>最後上傳</th>';
   html += '</tr></thead><tbody>';
   lawyerRows.forEach(r => {
     const cov = r.total > 0 ? (r.mr / r.total * 100).toFixed(1) : '0';
@@ -4282,14 +4283,15 @@ function renderUploadSummary() {
     if (isOpen) {
       const cases = allCases
         .filter(c => c.lawyer_id === r.id && (c.meeting_record || c.transcript))
-        .sort((a, b) => (b.case_date || '').localeCompare(a.case_date || ''));
-      html += `<tr><td colspan="7" style="padding:8px 12px;background:var(--bg-row);"><div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">${r.name} 已上傳 ${cases.length} 筆（最新排前）</div><table class="detail-table" style="font-size:0.82rem;"><thead><tr><th>日期</th><th>案號</th><th>當事人</th><th>類型</th><th>成案</th><th class="num">MR</th><th class="num">TS</th><th class="num">LLM</th></tr></thead><tbody>`;
+        .sort((a, b) => (b.doc_uploaded_at || b.case_date || '').localeCompare(a.doc_uploaded_at || a.case_date || ''));
+      html += `<tr><td colspan="7" style="padding:8px 12px;background:var(--bg-row);"><div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">${r.name} 已上傳 ${cases.length} 筆（最近上傳排前）</div><table class="detail-table" style="font-size:0.82rem;"><thead><tr><th>案件日</th><th>案號</th><th>當事人</th><th>類型</th><th>成案</th><th class="num">MR</th><th class="num">TS</th><th class="num">LLM</th><th>上傳日</th></tr></thead><tbody>`;
       cases.forEach(c => {
         const mrOk = c.meeting_record ? '✓' : '—';
         const tsOk = c.transcript ? '✓' : '—';
         const llmOk = c.llm_analyzed_at ? c.llm_analyzed_at.slice(5, 10) : '—';
+        const upld = c.doc_uploaded_at ? c.doc_uploaded_at.slice(0, 10) : '—';
         const signBadge = c.is_signed ? '<span style="color:var(--green);">成案</span>' : '<span style="color:var(--red);">未成案</span>';
-        html += `<tr><td style="white-space:nowrap;">${c.case_date || '-'}</td><td>${escHtml(c.case_number || '-')}</td><td>${escHtml(c.client_name || '-')}</td><td>${escHtml(c.case_type || '-')}</td><td>${signBadge}</td><td class="num">${mrOk}</td><td class="num">${tsOk}</td><td class="num">${llmOk}</td></tr>`;
+        html += `<tr><td style="white-space:nowrap;">${c.case_date || '-'}</td><td>${escHtml(c.case_number || '-')}</td><td>${escHtml(c.client_name || '-')}</td><td>${escHtml(c.case_type || '-')}</td><td>${signBadge}</td><td class="num">${mrOk}</td><td class="num">${tsOk}</td><td class="num">${llmOk}</td><td style="white-space:nowrap;font-size:0.78rem;color:var(--text-muted);">${upld}</td></tr>`;
       });
       html += '</tbody></table></td></tr>';
     }
@@ -4843,6 +4845,8 @@ async function submitUploadedCases() {
     if (c.transcript && !c.matched_has_ts) patch.transcript = c.transcript;
     else if (c.transcript && c.matched_has_ts) preserved++;
     if (Object.keys(patch).length === 0) { done++; updateProgress('跳過（真案件已有內容）'); continue; }
+    // Stamp upload time so the dashboard can show "最後上傳 YYYY-MM-DD"
+    patch.doc_uploaded_at = new Date().toISOString();
 
     updateProgress('更新 ' + (c.matched_case_number || c.matched_case_id));
     console.log('[upload] updating', c.matched_case_id, 'patch=', Object.keys(patch),
@@ -4885,6 +4889,7 @@ async function submitUploadedCases() {
         meeting_record: c.meeting_record || null,
         transcript: c.transcript || null,
       };
+      if (c.meeting_record || c.transcript) row.doc_uploaded_at = new Date().toISOString();
       if (!row.case_number) {
         row.case_number = 'UP_' + c.lawyer_id + '_' + c.case_date + '_' + (c.case_type || '').replace(/\s/g,'') + '_' + j + '_' + idx;
       }
