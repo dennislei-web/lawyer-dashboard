@@ -135,6 +135,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const scenario: string = (body.scenario ?? '').trim();
+    const forceNew: boolean = !!body.force_new;  // 律師主動「用最新語料重問」時跳過既有 QA 比對
     if (scenario.length < 5 || scenario.length > 300) {
       return Response.json(
         { error: 'scenario must be 5-300 characters', length: scenario.length },
@@ -150,21 +151,23 @@ serve(async (req) => {
     // 2. Embed scenario
     const embedding = await embedQuery(scenario);
 
-    // 3. 先搜既有 QA（題 4：同樣問題直接貼）
-    const { data: matches, error: matchErr } = await sb.rpc('match_qa_entries', {
-      query_embedding: embedding,
-      match_threshold: QA_MATCH_THRESHOLD,
-      match_count: QA_MATCH_COUNT,
-    });
-    if (matchErr) {
-      console.error('match_qa_entries error', matchErr);
-    }
+    // 3. 非 forceNew 時先搜既有 QA（題 4：同樣問題直接貼舊答，省 token + 維持知識一致）
+    if (!forceNew) {
+      const { data: matches, error: matchErr } = await sb.rpc('match_qa_entries', {
+        query_embedding: embedding,
+        match_threshold: QA_MATCH_THRESHOLD,
+        match_count: QA_MATCH_COUNT,
+      });
+      if (matchErr) {
+        console.error('match_qa_entries error', matchErr);
+      }
 
-    if (matches && matches.length > 0) {
-      return Response.json({
-        type: 'reused',
-        matches,
-      }, { headers: CORS_HEADERS });
+      if (matches && matches.length > 0) {
+        return Response.json({
+          type: 'reused',
+          matches,
+        }, { headers: CORS_HEADERS });
+      }
     }
 
     // 4. 沒命中 → RAG over case_chunks

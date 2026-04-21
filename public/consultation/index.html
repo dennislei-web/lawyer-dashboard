@@ -5721,7 +5721,7 @@ function renderQaPage() {
   loadQaList();
 }
 
-async function askAI() {
+async function askAI(forceNew = false) {
   const scenario = (document.getElementById('qaScenario').value || '').trim();
   if (scenario.length < 5) { alert('情境至少 5 字'); return; }
   if (scenario.length > 300) { alert('情境最多 300 字'); return; }
@@ -5729,8 +5729,8 @@ async function askAI() {
   const btn = document.getElementById('qaAskBtn');
   const resultEl = document.getElementById('qaResult');
   btn.disabled = true;
-  btn.textContent = '思考中…';
-  resultEl.innerHTML = '<div class="qa-loading">AI 正在從語料庫找相似案例</div>';
+  btn.textContent = forceNew ? '重新生成中…' : '思考中…';
+  resultEl.innerHTML = `<div class="qa-loading">${forceNew ? 'AI 正在用最新語料重新解析' : 'AI 正在從語料庫找相似案例'}</div>`;
 
   try {
     const { data: { session } } = await sb.auth.getSession();
@@ -5743,12 +5743,14 @@ async function askAI() {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ scenario }),
+      body: JSON.stringify({ scenario, force_new: forceNew }),
     });
     const result = await resp.json();
 
     if (!resp.ok) {
-      resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-label">錯誤</div><div class="qa-content">${escHtml(result.error || 'unknown error')}</div></div>`;
+      const errMsg = result.error || result.message || result.msg || JSON.stringify(result);
+      resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-label">錯誤 (HTTP ${resp.status})</div><div class="qa-content">${escHtml(errMsg)}</div></div>`;
+      console.error('qa_ask response:', result);
       return;
     }
 
@@ -5789,21 +5791,10 @@ function renderReusedMatches(matches, scenarioAsked) {
   }).join('');
   resultEl.innerHTML = banner + cards + `
     <div style="text-align:center;padding:8px;">
-      <button class="btn btn-ghost btn-sm" onclick="forceNewAsk()">這些都不太對，仍然問 AI 重新生成</button>
+      <button class="btn btn-ghost btn-sm" onclick="askAI(true)" title="跳過既有 QA 比對，用目前所有諮詢語料重新生成一個新答案">
+        🔄 用最新語料重新生成答案
+      </button>
     </div>`;
-}
-
-async function forceNewAsk() {
-  // 加一個前綴讓 embedding 和既有 QA 不那麼相似（hack 但有效）
-  // 最簡單做法：偷偷把當下 scenario 多加空格，打破 match_threshold
-  const scenarioEl = document.getElementById('qaScenario');
-  const current = scenarioEl.value;
-  scenarioEl.value = current + '\n（重新生成）';
-  // 暫時提高 server-side threshold 做不到，我們直接刪既有 QA 不現實。
-  // 實務上：讓使用者改寫 scenario 讓語意不同
-  alert('請稍微改寫一下你的情境描述，讓 AI 知道你想要不同角度的答案');
-  scenarioEl.value = current;
-  scenarioEl.focus();
 }
 
 function renderNewAnswer(result) {
@@ -6048,6 +6039,7 @@ async function showQaDetail(qaId) {
       <div class="qa-actions">
         <button class="qa-action-btn" onclick="rateQa('${e.id}', 1, this)">👍 有用</button>
         <button class="qa-action-btn" onclick="rateQa('${e.id}', -1, this)">👎 沒用</button>
+        <button class="qa-action-btn" onclick="reaskFromDetail(${JSON.stringify(e.scenario).replace(/"/g, '&quot;')})" title="把這題放回發問框，用最新語料重新生成一個新答案（舊答不會被覆蓋）">🔄 用最新語料重問</button>
         ${(e.asked_by === currentLawyer?.id || ['admin','manager'].includes(currentLawyer?.role)) ? `
           <button class="qa-action-btn" onclick="showRefineForm('${e.id}')">✏️ 補充/修正</button>` : ''}
       </div>
@@ -6056,6 +6048,18 @@ async function showQaDetail(qaId) {
 
   // 捲到結果區
   resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 從 QA 詳情點「用最新語料重問」：把原 scenario 放回發問框，自動 force_new 重跑
+function reaskFromDetail(scenario) {
+  const textarea = document.getElementById('qaScenario');
+  textarea.value = scenario;
+  // 觸發字數計數更新
+  textarea.dispatchEvent(new Event('input'));
+  // 捲到發問框
+  textarea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // 強制重跑（跳過既有 QA 比對）
+  askAI(true);
 }
 
 // ===================== START =====================
