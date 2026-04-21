@@ -1237,6 +1237,7 @@
         <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">總覽</button>
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
+        <button class="tab-btn" onclick="showTab('qa')" id="tab-qa">🤖 AI 問答</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
       </div>
     </div>
@@ -2115,7 +2116,7 @@ async function loadDashboard(user) {
     return { data: all, error: firstError };
   }
 
-  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at';
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis';
 
   // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
@@ -3657,15 +3658,10 @@ function renderCaseCardsSection(lawyerId) {
     <div class="case-row-list">${list.map(c => {
       const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
       const hasTs = c.transcript && c.transcript.trim().length > 0;
-      const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
-      const avgScore = analysis ? analysis.avgScore : null;
-      const scoreColor = avgScore === null ? 'var(--text-muted)' :
-                         avgScore >= 75 ? 'var(--green)' :
-                         avgScore >= 50 ? 'var(--gold-light)' :
-                         'var(--red)';
-      const scoreHtml = avgScore !== null
-        ? `<span style="font-size:0.78rem;font-weight:700;color:${scoreColor};width:28px;text-align:center;flex-shrink:0;">${avgScore}</span>`
-        : '<span style="width:28px;flex-shrink:0;"></span>';
+      const hasLlm = !!c.llm_analysis;
+      const llmTag = hasLlm
+        ? '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:rgba(201,168,76,0.15);color:var(--gold);">已評析</span>'
+        : '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--bg-main);color:var(--text-muted);">未評析</span>';
       const badgeHtml = c.is_signed
         ? '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);">成</span>'
         : '<span style="flex-shrink:0;font-size:0.68rem;padding:1px 6px;border-radius:3px;background:var(--red-dim);color:var(--red);">未</span>';
@@ -3675,7 +3671,7 @@ function renderCaseCardsSection(lawyerId) {
           <span class="case-row-date">${escHtml(c.case_date)}</span>
           <span class="case-row-type" title="${escHtml(c.case_type || '')}">${escHtml(c.case_type || '')}</span>
           <span class="case-row-client">${escHtml(c.client_name || '')}</span>
-          ${scoreHtml}
+          ${llmTag}
           ${badgeHtml}
         </div>
         <div class="case-row-body" id="body-${c.id}" style="display:none;"></div>
@@ -3716,45 +3712,52 @@ function toggleCaseRow(caseId) {
 function renderCaseRowDetail(c) {
   const hasMr = c.meeting_record && c.meeting_record.trim().length > 0;
   const hasTs = c.transcript && c.transcript.trim().length > 0;
-  const analysis = hasMr ? analyzeMeetingRecord(c.meeting_record, c.is_signed) : null;
+  const llm = c.llm_analysis;
 
   let html = '<div class="case-row-detail-inner">';
 
-  if (analysis) {
-    const dims = [
-      { label: '需求掌握', val: analysis.scores.demands },
-      { label: '事實釐清', val: analysis.scores.facts },
-      { label: '法律建議', val: analysis.scores.advice },
-    ];
-    html += '<div class="case-row-scores">' + dims.map(d => {
-      const barColor = d.val >= 75 ? 'var(--green)' : d.val >= 50 ? 'var(--gold)' : 'var(--red)';
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <span style="font-size:0.75rem;color:var(--text-muted);width:64px;text-align:right;flex-shrink:0;">${d.label}</span>
-        <div style="flex:1;max-width:300px;height:6px;background:var(--bg-main);border-radius:3px;overflow:hidden;">
-          <div style="width:${d.val}%;height:100%;background:${barColor};border-radius:3px;"></div>
-        </div>
-        <span style="font-size:0.75rem;font-weight:700;width:26px;color:${barColor};">${d.val}</span>
+  if (llm) {
+    // failure_reason badge (skip for signed — value is always "已簽約")
+    if (!c.is_signed && llm.failure_reason) {
+      html += `<div style="font-size:0.82rem;margin-bottom:10px;">
+        <span style="font-size:0.72rem;color:var(--text-muted);">未成案原因　</span>
+        <span style="font-weight:700;color:var(--red);">${escHtml(llm.failure_reason)}</span>
       </div>`;
-    }).join('') + '</div>';
+    }
 
-    if (analysis.strengths.length > 0) {
-      html += '<div style="margin-top:10px;"><div style="font-size:0.78rem;font-weight:600;color:var(--green);margin-bottom:4px;">優點</div>' +
-        analysis.strengths.map(s => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(s)}</div>`).join('') +
+    const strengths = Array.isArray(llm.strengths) ? llm.strengths : [];
+    if (strengths.length > 0) {
+      html += '<div style="margin-top:4px;"><div style="font-size:0.78rem;font-weight:600;color:var(--green);margin-bottom:4px;">優點</div>' +
+        strengths.map(s => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;line-height:1.5;">• ${escHtml(s)}</div>`).join('') +
         '</div>';
     }
-    if (analysis.weaknesses.length > 0) {
-      html += '<div style="margin-top:8px;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);margin-bottom:4px;">可改進</div>' +
-        analysis.weaknesses.map(w => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;">• ${escHtml(w)}</div>`).join('') +
+
+    // For unsigned: missed_opportunities is the primary "可改進" list.
+    // For signed: fallback to improvement_for_lawyer paragraph (shown as single block).
+    const missed = Array.isArray(llm.missed_opportunities) ? llm.missed_opportunities : [];
+    if (missed.length > 0) {
+      html += '<div style="margin-top:10px;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);margin-bottom:4px;">可改進</div>' +
+        missed.map(w => `<div style="font-size:0.82rem;padding:2px 0;padding-left:12px;line-height:1.5;">• ${escHtml(w)}</div>`).join('') +
         '</div>';
+    } else if (llm.improvement_for_lawyer) {
+      html += '<div style="margin-top:10px;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);margin-bottom:4px;">可改進</div>' +
+        `<div style="font-size:0.82rem;padding:2px 0 2px 12px;line-height:1.5;">${escHtml(llm.improvement_for_lawyer)}</div>` +
+        '</div>';
+    }
+
+    if (llm._analyzed_at) {
+      html += `<div style="margin-top:10px;font-size:0.7rem;color:var(--text-muted);">LLM 分析於 ${llm._analyzed_at.slice(0, 10)}${llm._model ? ' · ' + escHtml(llm._model) : ''}</div>`;
     }
   } else {
-    html += '<div style="font-size:0.82rem;color:var(--text-muted);">無會議記錄可分析</div>';
+    html += '<div style="font-size:0.82rem;color:var(--text-muted);padding:4px 0;">尚未評析</div>';
   }
 
-  html += '<div style="margin-top:12px;display:flex;gap:14px;">';
-  if (hasMr) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'meeting_record')">查看會議記錄</span>`;
-  if (hasTs) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'transcript')">查看逐字稿</span>`;
-  html += '</div>';
+  if (hasMr || hasTs) {
+    html += '<div style="margin-top:12px;display:flex;gap:14px;">';
+    if (hasMr) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'meeting_record')">查看會議記錄</span>`;
+    if (hasTs) html += `<span class="case-link" onclick="event.stopPropagation();openCaseContent('${c.id}', 'transcript')">查看逐字稿</span>`;
+    html += '</div>';
+  }
 
   html += '</div>';
   return html;
