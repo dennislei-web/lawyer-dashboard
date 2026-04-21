@@ -2581,8 +2581,7 @@ function yoyDeltaCell(val, isPercentPoint, prevHas) {
   if (!prevHas) return '<td class="num yoy-change flat" title="去年無資料">—</td>';
   const cls = Math.abs(val) < (isPercentPoint ? 2 : 5) ? 'flat' : (val > 0 ? 'up' : 'down');
   const sign = val > 0 ? '+' : '';
-  const suffix = isPercentPoint ? 'pp' : '%';
-  return `<td class="num yoy-change ${cls}">${sign}${val.toFixed(1)}${suffix}</td>`;
+  return `<td class="num yoy-change ${cls}">${sign}${val.toFixed(1)}%</td>`;
 }
 
 function renderLawyerYoy(currYear, prevYear, deptFilter) {
