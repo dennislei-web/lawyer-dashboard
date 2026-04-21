@@ -1344,7 +1344,10 @@
     <div class="section" id="lawyerYoySection">
       <div class="section-header">
         <div class="section-title" id="lawyerYoyTitle">律師個人績效比較</div>
-        <div style="font-size:0.78rem;color:var(--text-muted);" id="lawyerYoyMeta">同月份比較；點欄位可排序</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);" id="lawyerYoyMeta">點欄位可排序</div>
+      </div>
+      <div class="year-filter-bar" id="yoyCompareBar" style="margin-bottom:12px;">
+        <span class="filter-label">對照年度</span>
       </div>
       <div class="table-wrap">
         <table id="lawyerYoyTable">
@@ -2020,6 +2023,7 @@ let sortCol = 'collected';
 let sortDir = 'desc';
 let lawyerYoySortCol = 'consult_eff_curr';
 let lawyerYoySortDir = 'desc';
+let yoyCompareYear = null; // null = auto (currYear - 1); else user-selected year string
 
 // ===================== INIT =====================
 async function init() {
@@ -2348,7 +2352,7 @@ function renderOverviewPage() {
     document.getElementById('deptComparisonSection').style.display = 'none';
   }
 
-  // 律師個人績效比較（今年 vs 去年）
+  // 律師個人績效比較（今年 vs 使用者選擇的對照年度；預設前一年）
   if (canViewAll()) {
     const years = Array.from(new Set(allStats.map(s => s.month && s.month.slice(0, 4)).filter(Boolean))).sort();
     let currYear;
@@ -2357,7 +2361,17 @@ function renderOverviewPage() {
     } else {
       currYear = overviewYear;
     }
-    const prevYear = (parseInt(currYear) - 1).toString();
+    const availablePrev = years.filter(y => y !== currYear);
+    const autoPrev = (parseInt(currYear) - 1).toString();
+    // Prefer user selection if still valid, else auto default, else newest available prior year
+    let prevYear;
+    if (yoyCompareYear && availablePrev.includes(yoyCompareYear)) {
+      prevYear = yoyCompareYear;
+    } else if (availablePrev.includes(autoPrev)) {
+      prevYear = autoPrev;
+    } else {
+      prevYear = availablePrev.length ? availablePrev[availablePrev.length - 1] : autoPrev;
+    }
     renderLawyerYoy(currYear, prevYear, overviewDept);
   } else {
     const s = document.getElementById('lawyerYoySection');
@@ -2537,13 +2551,6 @@ function buildLawyerRows(stats) {
 }
 
 // ===================== PER-LAWYER YoY COMPARISON =====================
-// Limit previous-year stats to months that also appear in current-year stats,
-// so a partial current year isn't compared against a full prior year.
-function limitPrevToSameMonths(currStats, prevStats) {
-  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
-  return prevStats.filter(s => currMonths.has(s.month.slice(5, 7)));
-}
-
 function buildLawyerYoyRows(currStats, prevStats) {
   const currByLawyer = {};
   buildLawyerRows(currStats).forEach(r => currByLawyer[r.id] = r);
@@ -2584,6 +2591,34 @@ function yoyDeltaCell(val, isPercentPoint, prevHas) {
   return `<td class="num yoy-change ${cls}">${sign}${val.toFixed(1)}%</td>`;
 }
 
+function buildYoyCompareButtons(currYear, activeYear) {
+  const bar = document.getElementById('yoyCompareBar');
+  if (!bar) return;
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+  const years = Array.from(new Set(allStats.map(s => s.month && s.month.slice(0, 4)).filter(Boolean)))
+    .filter(y => y !== currYear)
+    .sort()
+    .reverse();
+  if (years.length === 0) {
+    const span = document.createElement('span');
+    span.className = 'year-btn';
+    span.textContent = '（無其他年度資料）';
+    span.style.pointerEvents = 'none';
+    bar.appendChild(span);
+    return;
+  }
+  years.forEach(y => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn year-btn-yoy' + (y === activeYear ? ' active' : '');
+    btn.textContent = y;
+    btn.onclick = () => {
+      yoyCompareYear = y;
+      renderOverviewPage();
+    };
+    bar.appendChild(btn);
+  });
+}
+
 function renderLawyerYoy(currYear, prevYear, deptFilter) {
   const section = document.getElementById('lawyerYoySection');
   if (!section) return;
@@ -2596,18 +2631,21 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     currStats = filterByDept(currStats, deptFilter);
     prevStats = filterByDept(prevStats, deptFilter);
   }
-  prevStats = limitPrevToSameMonths(currStats, prevStats);
+  // NOTE: no longer restrict prev year to same months as current year.
+  // The three metrics (委任率 / 個案收費 / 諮詢效益) are ratios, so comparing
+  // YTD current year vs full prior year is meaningful and gives a stable benchmark.
+
+  // Render compare-year buttons
+  buildYoyCompareButtons(currYear, prevYear);
 
   // Title + meta
   const deptSuffix = (deptFilter && deptFilter !== 'all') ? '（' + deptFilter + '）' : '';
   document.getElementById('lawyerYoyTitle').textContent = '律師個人績效比較 ' + currYear + ' vs ' + prevYear + deptSuffix;
   const currMonthsArr = Array.from(new Set(currStats.map(s => s.month.slice(5, 7)))).sort();
-  const monthsLabel = currMonthsArr.length === 0
-    ? '今年尚無資料'
-    : currMonthsArr.length === 12
-      ? '比較範圍：全年'
-      : '比較範圍：' + currMonthsArr.map(m => parseInt(m) + '月').join('、');
-  document.getElementById('lawyerYoyMeta').textContent = monthsLabel + '；點欄位可排序';
+  const prevMonthsArr = Array.from(new Set(prevStats.map(s => s.month.slice(5, 7)))).sort();
+  const fmtRange = arr => arr.length === 0 ? '(無資料)' : arr.length === 12 ? '全年' : (parseInt(arr[0]) + '–' + parseInt(arr[arr.length - 1]) + '月');
+  document.getElementById('lawyerYoyMeta').textContent =
+    currYear + ' ' + fmtRange(currMonthsArr) + ' vs ' + prevYear + ' ' + fmtRange(prevMonthsArr) + '；點欄位可排序';
 
   // Label sub-headers with actual years
   ['yoyHdr-curr1','yoyHdr-curr2','yoyHdr-curr3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = currYear; });
