@@ -1718,7 +1718,7 @@
         <div class="section-title">已匯入會議紀錄 / 逐字稿總覽</div>
         <span class="collapse-arrow" style="transition:transform 0.2s;display:inline-block;">▼</span>
       </div>
-      <div id="uploadSummaryContent" style="display:none;"></div>
+      <div id="uploadSummaryContent"></div>
     </div>
 
     <!-- Sync Status -->
@@ -4202,49 +4202,129 @@ async function renderSyncStatus() {
   }
 }
 
+// Track which lawyer is expanded in the per-lawyer upload table
+let uploadDrilldownLawyer = null;
+
 function renderUploadSummary() {
   const el = document.getElementById('uploadSummaryContent');
   if (!el) return;
-  // 只統計有會議紀錄或逐字稿的案件
+  if (casesLoadState !== 'loaded') {
+    el.innerHTML = casesLoadState === 'error'
+      ? '<div style="color:var(--red);padding:12px 0;">案件資料載入失敗</div>'
+      : '<div style="color:var(--text-muted);padding:12px 0;">案件資料載入中…</div>';
+    return;
+  }
   const docCases = allCases.filter(c => c.meeting_record || c.transcript);
-  if (!docCases || docCases.length === 0) {
-    el.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">尚未匯入任何會議紀錄或逐字稿</div>';
+  const allUploadedCount = docCases.length;
+
+  // ===== 總覽 KPIs =====
+  const totalSigned = docCases.filter(c => c.is_signed).length;
+  const totalUnsigned = allUploadedCount - totalSigned;
+  const signRate = allUploadedCount > 0 ? (totalSigned / allUploadedCount * 100).toFixed(1) : '0';
+  const mrCount = allCases.filter(c => c.meeting_record).length;
+  const tsCount = allCases.filter(c => c.transcript).length;
+  const llmCount = allCases.filter(c => c.llm_analyzed_at).length;
+
+  let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">';
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">已上傳案件</span><div style="font-size:1.3rem;font-weight:700;">${allUploadedCount}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">會議記錄</span><div style="font-size:1.3rem;font-weight:700;">${mrCount}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">逐字稿</span><div style="font-size:1.3rem;font-weight:700;">${tsCount}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">已 LLM 分析</span><div style="font-size:1.3rem;font-weight:700;color:var(--gold);">${llmCount}</div></div>`;
+  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案 / 未成案</span><div style="font-size:1.3rem;font-weight:700;"><span style="color:var(--green);">${totalSigned}</span> / <span style="color:var(--red);">${totalUnsigned}</span></div><div style="font-size:0.75rem;color:var(--text-muted);">成案率 ${signRate}%</div></div>`;
+  html += '</div>';
+
+  if (allUploadedCount === 0) {
+    el.innerHTML = html + '<div style="color:var(--text-muted);padding:12px 0;">尚未匯入任何會議紀錄或逐字稿</div>';
     return;
   }
 
-  // Group by year-month
+  // ===== 按律師分組 =====
+  const byLawyer = {};
+  allCases.forEach(c => {
+    if (!c.lawyer_id) return;
+    if (!byLawyer[c.lawyer_id]) byLawyer[c.lawyer_id] = { total: 0, mr: 0, ts: 0, llm: 0, latestUpload: null };
+    const p = byLawyer[c.lawyer_id];
+    p.total++;
+    if (c.meeting_record) p.mr++;
+    if (c.transcript) p.ts++;
+    if (c.llm_analyzed_at) {
+      p.llm++;
+      if (!p.latestUpload || c.llm_analyzed_at > p.latestUpload) p.latestUpload = c.llm_analyzed_at;
+    }
+  });
+
+  // Only show lawyers with at least one upload — saves scrolling
+  const lawyerRows = Object.entries(byLawyer)
+    .filter(([id, p]) => p.mr > 0 || p.ts > 0)
+    .map(([id, p]) => {
+      const l = allLawyersMap[id] || resignedLawyersMap[id] || { name: '(未知)' };
+      return { id, name: l.name, ...p };
+    })
+    .sort((a, b) => (b.mr + b.ts) - (a.mr + a.ts));
+
+  html += '<div style="font-size:0.9rem;font-weight:600;margin-top:20px;margin-bottom:8px;">按律師上傳狀況（點律師列展開案件明細）</div>';
+  html += '<div style="overflow-x:auto;"><table class="detail-table" id="uploadLawyerTable"><thead><tr>';
+  html += '<th>律師</th><th class="num">案件總數</th><th class="num">會議記錄</th><th class="num">逐字稿</th><th class="num">LLM</th><th class="num">會議記錄覆蓋</th><th>最後 LLM 時間</th>';
+  html += '</tr></thead><tbody>';
+  lawyerRows.forEach(r => {
+    const cov = r.total > 0 ? (r.mr / r.total * 100).toFixed(1) : '0';
+    const latest = r.latestUpload ? r.latestUpload.slice(0, 10) : '—';
+    const isOpen = uploadDrilldownLawyer === r.id;
+    html += `<tr style="cursor:pointer;${isOpen ? 'background:var(--bg-row);' : ''}" onclick="toggleUploadLawyer('${r.id}')">
+      <td><strong>${escHtml(r.name)}</strong> ${isOpen ? '▴' : '▾'}</td>
+      <td class="num">${r.total.toLocaleString()}</td>
+      <td class="num" style="color:${r.mr > 0 ? 'var(--green)' : 'var(--text-muted)'};">${r.mr}</td>
+      <td class="num" style="color:${r.ts > 0 ? 'var(--green)' : 'var(--text-muted)'};">${r.ts}</td>
+      <td class="num" style="color:${r.llm > 0 ? 'var(--gold)' : 'var(--text-muted)'};">${r.llm}</td>
+      <td class="num">${cov}%</td>
+      <td style="font-size:0.8rem;color:var(--text-muted);">${latest}</td>
+    </tr>`;
+    if (isOpen) {
+      const cases = allCases
+        .filter(c => c.lawyer_id === r.id && (c.meeting_record || c.transcript))
+        .sort((a, b) => (b.case_date || '').localeCompare(a.case_date || ''));
+      html += `<tr><td colspan="7" style="padding:8px 12px;background:var(--bg-row);"><div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">${r.name} 已上傳 ${cases.length} 筆（最新排前）</div><table class="detail-table" style="font-size:0.82rem;"><thead><tr><th>日期</th><th>案號</th><th>當事人</th><th>類型</th><th>成案</th><th class="num">MR</th><th class="num">TS</th><th class="num">LLM</th></tr></thead><tbody>`;
+      cases.forEach(c => {
+        const mrOk = c.meeting_record ? '✓' : '—';
+        const tsOk = c.transcript ? '✓' : '—';
+        const llmOk = c.llm_analyzed_at ? c.llm_analyzed_at.slice(5, 10) : '—';
+        const signBadge = c.is_signed ? '<span style="color:var(--green);">成案</span>' : '<span style="color:var(--red);">未成案</span>';
+        html += `<tr><td style="white-space:nowrap;">${c.case_date || '-'}</td><td>${escHtml(c.case_number || '-')}</td><td>${escHtml(c.client_name || '-')}</td><td>${escHtml(c.case_type || '-')}</td><td>${signBadge}</td><td class="num">${mrOk}</td><td class="num">${tsOk}</td><td class="num">${llmOk}</td></tr>`;
+      });
+      html += '</tbody></table></td></tr>';
+    }
+  });
+  html += '</tbody></table></div>';
+
+  // ===== 按月份分組（保留舊的）=====
   const monthMap = {};
   docCases.forEach(c => {
-    const ym = c.case_date.substring(0, 7);
+    const ym = (c.case_date || '').substring(0, 7);
+    if (!ym) return;
     if (!monthMap[ym]) monthMap[ym] = { total: 0, signed: 0, unsigned: 0 };
     monthMap[ym].total++;
     if (c.is_signed) monthMap[ym].signed++;
     else monthMap[ym].unsigned++;
   });
-
   const months = Object.keys(monthMap).sort().reverse();
-  const totalSigned = docCases.filter(c => c.is_signed).length;
-  const totalUnsigned = docCases.length - totalSigned;
-  const signRate = docCases.length > 0 ? (totalSigned / docCases.length * 100).toFixed(1) : '0';
 
-  let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;">';
-  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">案件總數</span><div style="font-size:1.3rem;font-weight:700;">${docCases.length}</div></div>`;
-  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--green);">${totalSigned}</div></div>`;
-  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">未成案</span><div style="font-size:1.3rem;font-weight:700;color:var(--red);">${totalUnsigned}</div></div>`;
-  html += `<div><span style="color:var(--text-muted);font-size:0.85rem;">成案率</span><div style="font-size:1.3rem;font-weight:700;">${signRate}%</div></div>`;
-  html += '</div>';
-
+  html += '<div style="font-size:0.9rem;font-weight:600;margin-top:20px;margin-bottom:8px;">按月份上傳狀況</div>';
   html += '<div style="overflow-x:auto;"><table class="detail-table"><thead><tr>';
-  html += '<th>年月</th><th>案件數</th><th>成案</th><th>未成案</th><th>成案率</th>';
+  html += '<th>年月</th><th class="num">案件數</th><th class="num">成案</th><th class="num">未成案</th><th class="num">成案率</th>';
   html += '</tr></thead><tbody>';
   months.forEach(ym => {
     const m = monthMap[ym];
     const rate = (m.signed / m.total * 100).toFixed(1);
-    html += `<tr><td style="white-space:nowrap;">${ym}</td><td>${m.total}</td><td style="color:var(--green);">${m.signed}</td><td style="color:var(--red);">${m.unsigned}</td><td>${rate}%</td></tr>`;
+    html += `<tr><td style="white-space:nowrap;">${ym}</td><td class="num">${m.total}</td><td class="num" style="color:var(--green);">${m.signed}</td><td class="num" style="color:var(--red);">${m.unsigned}</td><td class="num">${rate}%</td></tr>`;
   });
   html += '</tbody></table></div>';
 
   el.innerHTML = html;
+}
+
+function toggleUploadLawyer(id) {
+  uploadDrilldownLawyer = (uploadDrilldownLawyer === id) ? null : id;
+  renderUploadSummary();
 }
 
 function setupDropzone(dropzoneId, inputId, nameId, onFile) {
