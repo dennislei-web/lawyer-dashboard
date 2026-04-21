@@ -1340,6 +1340,39 @@
       </div>
     </div>
 
+    <!-- Per-Lawyer YoY Performance Comparison -->
+    <div class="section" id="lawyerYoySection">
+      <div class="section-header">
+        <div class="section-title" id="lawyerYoyTitle">律師個人績效比較</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);" id="lawyerYoyMeta">同月份比較；點欄位可排序</div>
+      </div>
+      <div class="table-wrap">
+        <table id="lawyerYoyTable">
+          <thead>
+            <tr>
+              <th rowspan="2" style="width:44px;vertical-align:middle;">#</th>
+              <th rowspan="2" style="vertical-align:middle;">律師</th>
+              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">委任率</th>
+              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">個案收費</th>
+              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">諮詢效益</th>
+            </tr>
+            <tr>
+              <th class="num sortable" data-ycol="sign_rate_curr" id="yoyHdr-curr1">今年</th>
+              <th class="num sortable" data-ycol="sign_rate_prev" id="yoyHdr-prev1">去年</th>
+              <th class="num sortable" data-ycol="sign_rate_delta">Δ</th>
+              <th class="num sortable" data-ycol="avg_collected_curr" id="yoyHdr-curr2">今年</th>
+              <th class="num sortable" data-ycol="avg_collected_prev" id="yoyHdr-prev2">去年</th>
+              <th class="num sortable" data-ycol="avg_collected_delta">Δ</th>
+              <th class="num sortable" data-ycol="consult_eff_curr" id="yoyHdr-curr3">今年</th>
+              <th class="num sortable" data-ycol="consult_eff_prev" id="yoyHdr-prev3">去年</th>
+              <th class="num sortable" data-ycol="consult_eff_delta">Δ</th>
+            </tr>
+          </thead>
+          <tbody id="lawyerYoyTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Resigned Lawyers Section (collapsible) -->
     <div class="section" id="resignedSection" style="display:none;">
       <div class="section-header" style="cursor:pointer;" onclick="toggleResigned()">
@@ -1983,6 +2016,8 @@ let deptCharts = { counts: null, signRate: null, collected: null, eff: null };
 // Ranking table sort
 let sortCol = 'collected';
 let sortDir = 'desc';
+let lawyerYoySortCol = 'consult_eff_curr';
+let lawyerYoySortDir = 'desc';
 
 // ===================== INIT =====================
 async function init() {
@@ -2272,6 +2307,22 @@ function renderOverviewPage() {
   } else {
     document.getElementById('deptComparisonSection').style.display = 'none';
   }
+
+  // 律師個人績效比較（今年 vs 去年）
+  if (canViewAll()) {
+    const years = Array.from(new Set(allStats.map(s => s.month && s.month.slice(0, 4)).filter(Boolean))).sort();
+    let currYear;
+    if (overviewYear === 'all') {
+      currYear = years.length ? years[years.length - 1] : new Date().getFullYear().toString();
+    } else {
+      currYear = overviewYear;
+    }
+    const prevYear = (parseInt(currYear) - 1).toString();
+    renderLawyerYoy(currYear, prevYear, overviewDept);
+  } else {
+    const s = document.getElementById('lawyerYoySection');
+    if (s) s.style.display = 'none';
+  }
 }
 
 // ===================== DEPARTMENT COMPARISON CHARTS =====================
@@ -2443,6 +2494,124 @@ function buildLawyerRows(stats) {
       consult_eff:  d.consult_count > 0 ? d.collected / d.consult_count : 0,
     };
   });
+}
+
+// ===================== PER-LAWYER YoY COMPARISON =====================
+// Limit previous-year stats to months that also appear in current-year stats,
+// so a partial current year isn't compared against a full prior year.
+function limitPrevToSameMonths(currStats, prevStats) {
+  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
+  return prevStats.filter(s => currMonths.has(s.month.slice(5, 7)));
+}
+
+function buildLawyerYoyRows(currStats, prevStats) {
+  const currByLawyer = {};
+  buildLawyerRows(currStats).forEach(r => currByLawyer[r.id] = r);
+  const prevByLawyer = {};
+  buildLawyerRows(prevStats).forEach(r => prevByLawyer[r.id] = r);
+
+  const ids = new Set([...Object.keys(currByLawyer), ...Object.keys(prevByLawyer)]);
+  const rows = [];
+  ids.forEach(id => {
+    if (resignedLawyersMap[id]) return;
+    const c = currByLawyer[id] || { name:'', consult_count:0, signed_count:0, sign_rate:0, avg_collected:0, consult_eff:0, collected:0 };
+    const p = prevByLawyer[id] || { name:'', consult_count:0, signed_count:0, sign_rate:0, avg_collected:0, consult_eff:0, collected:0 };
+    if (c.consult_count === 0 && p.consult_count === 0) return;
+
+    const name = (c.name || p.name || (allLawyersMap[id] && allLawyersMap[id].name) || '(未知)');
+
+    // Δ for 委任率 is percentage points; Δ for money metrics is relative %.
+    const signRateDelta = c.sign_rate - p.sign_rate;
+    const avgCollectedDelta = p.avg_collected > 0 ? (c.avg_collected - p.avg_collected) / p.avg_collected * 100 : (c.avg_collected > 0 ? 100 : 0);
+    const consultEffDelta = p.consult_eff > 0 ? (c.consult_eff - p.consult_eff) / p.consult_eff * 100 : (c.consult_eff > 0 ? 100 : 0);
+
+    rows.push({
+      id, name,
+      consult_count_curr: c.consult_count, consult_count_prev: p.consult_count,
+      sign_rate_curr: c.sign_rate, sign_rate_prev: p.sign_rate, sign_rate_delta: signRateDelta,
+      avg_collected_curr: c.avg_collected, avg_collected_prev: p.avg_collected, avg_collected_delta: avgCollectedDelta,
+      consult_eff_curr: c.consult_eff, consult_eff_prev: p.consult_eff, consult_eff_delta: consultEffDelta,
+      _prevHas: p.consult_count > 0,
+    });
+  });
+  return rows;
+}
+
+function yoyDeltaCell(val, isPercentPoint, prevHas) {
+  if (!prevHas) return '<td class="num yoy-change flat" title="去年無資料">—</td>';
+  const cls = Math.abs(val) < (isPercentPoint ? 2 : 5) ? 'flat' : (val > 0 ? 'up' : 'down');
+  const sign = val > 0 ? '+' : '';
+  const suffix = isPercentPoint ? 'pp' : '%';
+  return `<td class="num yoy-change ${cls}">${sign}${val.toFixed(1)}${suffix}</td>`;
+}
+
+function renderLawyerYoy(currYear, prevYear, deptFilter) {
+  const section = document.getElementById('lawyerYoySection');
+  if (!section) return;
+  if (!canViewAll()) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  let currStats = filterByYear(allStats, currYear);
+  let prevStats = filterByYear(allStats, prevYear);
+  if (deptFilter && deptFilter !== 'all') {
+    currStats = filterByDept(currStats, deptFilter);
+    prevStats = filterByDept(prevStats, deptFilter);
+  }
+  prevStats = limitPrevToSameMonths(currStats, prevStats);
+
+  // Title + meta
+  const deptSuffix = (deptFilter && deptFilter !== 'all') ? '（' + deptFilter + '）' : '';
+  document.getElementById('lawyerYoyTitle').textContent = '律師個人績效比較 ' + currYear + ' vs ' + prevYear + deptSuffix;
+  const currMonthsArr = Array.from(new Set(currStats.map(s => s.month.slice(5, 7)))).sort();
+  const monthsLabel = currMonthsArr.length === 0
+    ? '今年尚無資料'
+    : currMonthsArr.length === 12
+      ? '比較範圍：全年'
+      : '比較範圍：' + currMonthsArr.map(m => parseInt(m) + '月').join('、');
+  document.getElementById('lawyerYoyMeta').textContent = monthsLabel + '；點欄位可排序';
+
+  // Label sub-headers with actual years
+  ['yoyHdr-curr1','yoyHdr-curr2','yoyHdr-curr3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = currYear; });
+  ['yoyHdr-prev1','yoyHdr-prev2','yoyHdr-prev3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = prevYear; });
+
+  // Build + sort
+  let rows = buildLawyerYoyRows(currStats, prevStats);
+  rows = sortRows(rows, lawyerYoySortCol, lawyerYoySortDir);
+
+  // Sort indicators
+  document.querySelectorAll('#lawyerYoyTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.ycol === lawyerYoySortCol) {
+      th.classList.add(lawyerYoySortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  const tbody = document.getElementById('lawyerYoyTableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暫無資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const rateClassCurr = r.sign_rate_curr >= 45 ? 'sign-rate-green' : r.sign_rate_curr >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    const prevHasRate = r.consult_count_prev > 0;
+    const prevRateTxt = prevHasRate ? r.sign_rate_prev.toFixed(1) + '%' : '<span style="color:var(--text-muted);">—</span>';
+    const prevAvgTxt = r.avg_collected_prev > 0 ? '$' + Math.round(r.avg_collected_prev).toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
+    const prevEffTxt = r.consult_eff_prev > 0 ? '$' + Math.round(r.consult_eff_prev).toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
+    return `<tr onclick="showDetailPage('${r.id}')">
+      <td>${i + 1}</td>
+      <td><strong>${escHtml(r.name)}</strong></td>
+      <td class="num ${rateClassCurr}">${r.sign_rate_curr.toFixed(1)}%</td>
+      <td class="num">${prevRateTxt}</td>
+      ${yoyDeltaCell(r.sign_rate_delta, true, prevHasRate)}
+      <td class="num">$${Math.round(r.avg_collected_curr).toLocaleString()}</td>
+      <td class="num">${prevAvgTxt}</td>
+      ${yoyDeltaCell(r.avg_collected_delta, false, r.avg_collected_prev > 0)}
+      <td class="num">$${Math.round(r.consult_eff_curr).toLocaleString()}</td>
+      <td class="num">${prevEffTxt}</td>
+      ${yoyDeltaCell(r.consult_eff_delta, false, r.consult_eff_prev > 0)}
+    </tr>`;
+  }).join('');
 }
 
 function renderRankingTable(stats) {
@@ -2777,6 +2946,20 @@ document.querySelectorAll('#rankingTable th.sortable').forEach(th => {
     } else {
       sortCol = col;
       sortDir = 'desc';
+    }
+    renderOverviewPage();
+  });
+});
+
+// YoY comparison table sort
+document.querySelectorAll('#lawyerYoyTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.ycol;
+    if (lawyerYoySortCol === col) {
+      lawyerYoySortDir = lawyerYoySortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      lawyerYoySortCol = col;
+      lawyerYoySortDir = 'desc';
     }
     renderOverviewPage();
   });
