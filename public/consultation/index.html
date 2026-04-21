@@ -5995,15 +5995,13 @@ async function showQaDetail(qaId) {
   if (entry.error || !entry.data) { alert('載入失敗'); return; }
   const e = entry.data;
 
-  // 抓引用的 case_chunks
+  // 抓引用的 case_chunks（by id 直接查，不用 vector search RPC）
   let chunks = [];
   if (e.source_chunk_ids && e.source_chunk_ids.length > 0) {
-    const { data: chs } = await sb.rpc('match_case_chunks', { query_embedding: null, match_count: 0 }).catch(() => ({ data: null }));
-    // RPC 需要 embedding 才能用，這裡直接查 case_chunks
-    const { data: chs2 } = await sb.from('case_chunks')
+    const { data: chs } = await sb.from('case_chunks')
       .select('id, source_type, content, consultation_cases(case_date, case_type, client_name, lawyers(name))')
       .in('id', e.source_chunk_ids);
-    chunks = chs2 || [];
+    chunks = chs || [];
   }
 
   const tags = (e.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
