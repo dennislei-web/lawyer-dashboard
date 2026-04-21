@@ -1199,6 +1199,242 @@
       .tab-btn { padding: 4px 6px; font-size: 0.68rem; }
       .header-right .user-name { display: none; }
     }
+
+    /* ========== AI QA (mobile-first) ========== */
+    .qa-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 1024px) {
+      .qa-layout { grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr); }
+    }
+    .qa-ask-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .qa-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 0.92rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 90px;
+    }
+    .qa-textarea:focus { outline: 2px solid var(--gold); outline-offset: -1px; }
+    .qa-ask-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .qa-char-count { font-size: 0.72rem; color: var(--text-muted); }
+    .qa-char-count.qa-char-over { color: var(--red); }
+    .qa-result { display: flex; flex-direction: column; gap: 12px; }
+    .qa-result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .qa-result-card .qa-label {
+      font-size: 0.72rem;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .qa-result-card .qa-content {
+      font-size: 0.92rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    .qa-result-card .qa-reasoning {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      white-space: pre-wrap;
+    }
+    .qa-reused-banner {
+      background: var(--gold-dim, rgba(212, 175, 55, 0.15));
+      color: var(--gold);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      margin-bottom: 10px;
+    }
+    .qa-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .qa-tag {
+      background: var(--bg);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .qa-tag.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+    .qa-cited {
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    .qa-cited-toggle {
+      background: none;
+      border: none;
+      color: var(--blue, #5b8def);
+      cursor: pointer;
+      font-size: 0.82rem;
+      padding: 0;
+    }
+    .qa-cited-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      font-size: 0.78rem;
+    }
+    .qa-cited-meta { color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px; }
+    .qa-cited-content { white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+    .qa-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .qa-action-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .qa-action-btn:hover { background: var(--border); }
+    .qa-action-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+    .qa-list-header {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .qa-list-title { font-weight: 600; margin-bottom: 8px; color: var(--text); }
+    .qa-list-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .qa-search {
+      flex: 1;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+    .qa-sort {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 0.85rem;
+    }
+    .qa-tags-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .qa-list { display: flex; flex-direction: column; gap: 8px; }
+    .qa-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .qa-card:hover { border-color: var(--gold); }
+    .qa-card-scenario {
+      font-size: 0.92rem;
+      color: var(--text);
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .qa-card-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .qa-card-answer-preview {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.55;
+    }
+    .qa-empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 24px 12px;
+      font-size: 0.88rem;
+    }
+    .qa-loading {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 20px;
+    }
+    .qa-loading::after {
+      content: '...';
+      animation: qa-dots 1.2s steps(4) infinite;
+    }
+    @keyframes qa-dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    .qa-refine-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 80px;
+      margin-top: 8px;
+    }
+    @media (max-width: 600px) {
+      .qa-list-controls { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
@@ -1605,6 +1841,53 @@
             <tr><td colspan="5"><div class="empty-state">暫無資料</div></td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AI 問答 PAGE ===== -->
+  <div id="pageQa" class="page">
+    <div class="section-header" style="margin-bottom:16px;">
+      <div class="section-title" style="font-size:1.1rem;">🤖 AI 諮詢助理</div>
+      <div style="color:var(--text-muted);font-size:0.82rem;">
+        描述你遇到的諮詢情境，AI 會從全所過往案件中找相似案例給建議。問答會存成共享知識庫讓其他律師也能參考。
+      </div>
+    </div>
+
+    <div class="qa-layout">
+      <!-- 左：發問 + 回答 -->
+      <div class="qa-ask-col">
+        <div class="qa-ask-box">
+          <textarea
+            id="qaScenario"
+            class="qa-textarea"
+            placeholder="例如：客戶一直追問實際處理的細節，不知道該回答多深入…（5-300 字）"
+            maxlength="300"
+            rows="4"></textarea>
+          <div class="qa-ask-footer">
+            <span class="qa-char-count" id="qaCharCount">0 / 300</span>
+            <button class="btn btn-primary" id="qaAskBtn" onclick="askAI()">問 AI</button>
+          </div>
+        </div>
+        <div id="qaResult" class="qa-result"></div>
+      </div>
+
+      <!-- 右：既有 QA 知識庫列表 -->
+      <div class="qa-list-col">
+        <div class="qa-list-header">
+          <div class="qa-list-title">📚 知識庫（<span id="qaListCount">0</span>）</div>
+          <div class="qa-list-controls">
+            <input type="text" id="qaSearchInput" class="qa-search" placeholder="搜尋..." oninput="debouncedLoadQaList()">
+            <select id="qaSortSelect" class="qa-sort" onchange="loadQaList()">
+              <option value="recent">最新</option>
+              <option value="rated">👍 最多</option>
+            </select>
+          </div>
+          <div class="qa-tags-bar" id="qaTagsBar"></div>
+        </div>
+        <div id="qaList" class="qa-list">
+          <div class="qa-empty">載入中…</div>
+        </div>
       </div>
     </div>
   </div>
@@ -2179,13 +2462,14 @@ function reRenderActivePage() {
     case 'pageUnsigned':  renderUnsignedPage(); break;
     case 'pageDetail':    renderDetailPage();   break;
     case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
+    case 'pageQa':        renderQaPage(); break;
     // pageAdmin does not depend on allCases
   }
 }
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -2195,12 +2479,14 @@ function showTab(tab) {
   document.getElementById('pageTracking').classList.toggle('active', tab === 'tracking');
   document.getElementById('pageUpload').classList.toggle('active', tab === 'upload');
   document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
+  document.getElementById('pageQa').classList.toggle('active', tab === 'qa');
   document.getElementById('pageAdmin').classList.toggle('active', tab === 'admin');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
   if (tab === 'unsigned')  renderUnsignedPage();
+  if (tab === 'qa')        renderQaPage();
   if (tab === 'admin') {
     if (!currentLawyer || currentLawyer.role !== 'admin') return;
     renderAdminPage();
@@ -2209,7 +2495,7 @@ function showTab(tab) {
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  ['overview', 'tracking', 'upload', 'unsigned', 'admin'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -2217,6 +2503,7 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageTracking').classList.remove('active');
   document.getElementById('pageUpload').classList.remove('active');
   document.getElementById('pageUnsigned').classList.remove('active');
+  document.getElementById('pageQa').classList.remove('active');
   document.getElementById('pageAdmin').classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
   renderDetailPage();
@@ -5412,6 +5699,363 @@ function escHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ===================== AI QA =====================
+const QA_EDGE_FN_URL = `${SUPABASE_URL}/functions/v1/qa_ask`;
+let qaListState = { search: '', sort: 'recent', tag: null };
+let qaListDebounceTimer = null;
+
+function renderQaPage() {
+  // 綁字數計數器（只綁一次）
+  const textarea = document.getElementById('qaScenario');
+  if (textarea && !textarea.dataset.bound) {
+    textarea.dataset.bound = '1';
+    textarea.addEventListener('input', () => {
+      const len = textarea.value.length;
+      const el = document.getElementById('qaCharCount');
+      el.textContent = `${len} / 300`;
+      el.classList.toggle('qa-char-over', len > 300 || (len > 0 && len < 5));
+    });
+  }
+  loadQaList();
+}
+
+async function askAI() {
+  const scenario = (document.getElementById('qaScenario').value || '').trim();
+  if (scenario.length < 5) { alert('情境至少 5 字'); return; }
+  if (scenario.length > 300) { alert('情境最多 300 字'); return; }
+
+  const btn = document.getElementById('qaAskBtn');
+  const resultEl = document.getElementById('qaResult');
+  btn.disabled = true;
+  btn.textContent = '思考中…';
+  resultEl.innerHTML = '<div class="qa-loading">AI 正在從語料庫找相似案例</div>';
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { alert('請重新登入'); return; }
+
+    const resp = await fetch(QA_EDGE_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ scenario }),
+    });
+    const result = await resp.json();
+
+    if (!resp.ok) {
+      resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-label">錯誤</div><div class="qa-content">${escHtml(result.error || 'unknown error')}</div></div>`;
+      return;
+    }
+
+    if (result.type === 'reused') {
+      renderReusedMatches(result.matches, scenario);
+    } else if (result.type === 'new') {
+      renderNewAnswer(result);
+      loadQaList();  // 重新載入列表含剛新增
+    } else if (result.type === 'no_context') {
+      resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-content">${escHtml(result.message)}</div></div>`;
+    } else {
+      resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-content">${escHtml(JSON.stringify(result))}</div></div>`;
+    }
+  } catch (e) {
+    console.error('askAI error', e);
+    resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-label">錯誤</div><div class="qa-content">${escHtml(String(e))}</div></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '問 AI';
+  }
+}
+
+function renderReusedMatches(matches, scenarioAsked) {
+  const resultEl = document.getElementById('qaResult');
+  const banner = `<div class="qa-reused-banner">🔁 這個問題已經有 ${matches.length} 個相似提問，先看看：</div>`;
+  const cards = matches.map(m => {
+    const answer = m.lawyer_refined_answer || m.ai_answer || '';
+    const tags = (m.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
+    const when = m.created_at ? new Date(m.created_at).toISOString().slice(0, 10) : '';
+    const simPct = Math.round((m.similarity || 0) * 100);
+    return `
+      <div class="qa-result-card">
+        <div class="qa-label">相似度 ${simPct}% · ${escHtml(m.asked_by_name || '')} · ${when}</div>
+        <div class="qa-content" style="font-weight:500;margin-bottom:6px;">Q：${escHtml(m.scenario)}</div>
+        <div class="qa-content">${escHtml(answer)}</div>
+        <div class="qa-tags">${tags}</div>
+      </div>`;
+  }).join('');
+  resultEl.innerHTML = banner + cards + `
+    <div style="text-align:center;padding:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="forceNewAsk()">這些都不太對，仍然問 AI 重新生成</button>
+    </div>`;
+}
+
+async function forceNewAsk() {
+  // 加一個前綴讓 embedding 和既有 QA 不那麼相似（hack 但有效）
+  // 最簡單做法：偷偷把當下 scenario 多加空格，打破 match_threshold
+  const scenarioEl = document.getElementById('qaScenario');
+  const current = scenarioEl.value;
+  scenarioEl.value = current + '\n（重新生成）';
+  // 暫時提高 server-side threshold 做不到，我們直接刪既有 QA 不現實。
+  // 實務上：讓使用者改寫 scenario 讓語意不同
+  alert('請稍微改寫一下你的情境描述，讓 AI 知道你想要不同角度的答案');
+  scenarioEl.value = current;
+  scenarioEl.focus();
+}
+
+function renderNewAnswer(result) {
+  const resultEl = document.getElementById('qaResult');
+  const tags = (result.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
+
+  const citedHtml = (result.cited_chunks || []).map(ch => `
+    <div class="qa-cited-item">
+      <div class="qa-cited-meta">${escHtml(ch.case_date || '')} · ${escHtml(ch.case_type || '')} · 客戶 ${escHtml(ch.client_name || '')} · 律師 ${escHtml(ch.lawyer_name || '')} · ${escHtml(ch.source_type)}</div>
+      <div class="qa-cited-content">${escHtml(ch.content)}</div>
+    </div>
+  `).join('');
+
+  resultEl.innerHTML = `
+    <div class="qa-result-card">
+      <div class="qa-label">AI 建議</div>
+      <div class="qa-content">${escHtml(result.answer)}</div>
+      <div class="qa-tags">${tags}</div>
+      ${result.reasoning ? `<div class="qa-reasoning"><b>推理：</b>${escHtml(result.reasoning)}</div>` : ''}
+      <div class="qa-cited">
+        <button class="qa-cited-toggle" onclick="toggleCitedChunks(this)">▶ 展開引用的 ${result.cited_chunks?.length || 0} 個片段</button>
+        <div class="qa-cited-list" style="display:none;">${citedHtml}</div>
+      </div>
+      <div class="qa-actions">
+        ${result.qa_id ? `
+          <button class="qa-action-btn" onclick="rateQa('${result.qa_id}', 1, this)">👍 有用</button>
+          <button class="qa-action-btn" onclick="rateQa('${result.qa_id}', -1, this)">👎 沒用</button>
+          <button class="qa-action-btn" onclick="showRefineForm('${result.qa_id}')">✏️ 我要補充更好的答案</button>
+        ` : ''}
+      </div>
+      <div id="qaRefineBox-${result.qa_id}" style="display:none;"></div>
+    </div>`;
+}
+
+function toggleCitedChunks(btn) {
+  const list = btn.nextElementSibling;
+  const hidden = list.style.display === 'none';
+  list.style.display = hidden ? 'block' : 'none';
+  btn.textContent = (hidden ? '▼ 收起' : '▶ 展開') + btn.textContent.slice(1);
+}
+
+async function rateQa(qaId, rating, btnEl) {
+  if (!currentLawyer) return;
+  try {
+    const { error } = await sb.from('qa_ratings').upsert(
+      { qa_id: qaId, lawyer_id: currentLawyer.id, rating },
+      { onConflict: 'qa_id,lawyer_id' }
+    );
+    if (error) {
+      alert('評分失敗：' + error.message);
+      return;
+    }
+    // 視覺反饋
+    const parent = btnEl.parentElement;
+    parent.querySelectorAll('.qa-action-btn').forEach(b => {
+      if (b.textContent.includes('👍') || b.textContent.includes('👎')) b.classList.remove('active');
+    });
+    btnEl.classList.add('active');
+  } catch (e) {
+    alert('評分失敗：' + e.message);
+  }
+}
+
+function showRefineForm(qaId) {
+  const box = document.getElementById(`qaRefineBox-${qaId}`);
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = `
+    <textarea class="qa-refine-textarea" id="qaRefineTxt-${qaId}" placeholder="寫下你實際採用的回覆（或修正版）…"></textarea>
+    <div style="margin-top:6px;">
+      <button class="btn btn-primary btn-sm" onclick="submitRefine('${qaId}')">儲存</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qaRefineBox-${qaId}').style.display='none'">取消</button>
+    </div>`;
+  document.getElementById(`qaRefineTxt-${qaId}`).focus();
+}
+
+async function submitRefine(qaId) {
+  const txt = document.getElementById(`qaRefineTxt-${qaId}`).value.trim();
+  if (!txt) { alert('請輸入內容'); return; }
+  try {
+    const { error } = await sb.from('qa_entries').update({
+      lawyer_refined_answer: txt,
+      refined_by: currentLawyer.id,
+      refined_at: new Date().toISOString(),
+    }).eq('id', qaId);
+    if (error) { alert('儲存失敗：' + error.message); return; }
+    document.getElementById(`qaRefineBox-${qaId}`).innerHTML = '<div style="color:var(--gold);font-size:0.82rem;padding:6px 0;">✓ 已儲存</div>';
+    loadQaList();
+  } catch (e) {
+    alert('儲存失敗：' + e.message);
+  }
+}
+
+function debouncedLoadQaList() {
+  clearTimeout(qaListDebounceTimer);
+  qaListDebounceTimer = setTimeout(() => {
+    qaListState.search = document.getElementById('qaSearchInput').value.trim();
+    loadQaList();
+  }, 300);
+}
+
+async function loadQaList() {
+  qaListState.sort = document.getElementById('qaSortSelect')?.value || 'recent';
+  const listEl = document.getElementById('qaList');
+  const countEl = document.getElementById('qaListCount');
+  listEl.innerHTML = '<div class="qa-loading">載入中</div>';
+
+  let q = sb.from('qa_entries').select(`
+    id, scenario, ai_answer, lawyer_refined_answer, tags, created_at, asked_by,
+    lawyers!qa_entries_asked_by_fkey(name),
+    qa_ratings(rating)
+  `).limit(100);
+
+  if (qaListState.search) {
+    const s = qaListState.search.replace(/[%,]/g, '');
+    q = q.or(`scenario.ilike.%${s}%,ai_answer.ilike.%${s}%`);
+  }
+  if (qaListState.tag) {
+    q = q.contains('tags', [qaListState.tag]);
+  }
+  q = q.order('created_at', { ascending: false });
+
+  const { data, error } = await q;
+  if (error) {
+    listEl.innerHTML = `<div class="qa-empty">載入失敗：${escHtml(error.message)}</div>`;
+    return;
+  }
+
+  // 計算 rating 分數（👍=+1, 👎=-1）
+  const scored = (data || []).map(d => {
+    const ratings = d.qa_ratings || [];
+    const score = ratings.reduce((s, r) => s + (r.rating || 0), 0);
+    return { ...d, _score: score };
+  });
+
+  if (qaListState.sort === 'rated') {
+    scored.sort((a, b) => b._score - a._score || new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  countEl.textContent = scored.length;
+  renderQaTagsBar(scored);
+  renderQaCards(scored);
+}
+
+function renderQaTagsBar(entries) {
+  const tagCount = {};
+  entries.forEach(e => (e.tags || []).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const sorted = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const bar = document.getElementById('qaTagsBar');
+  if (!bar) return;
+  if (sorted.length === 0) { bar.innerHTML = ''; return; }
+  const allClass = qaListState.tag ? '' : 'active';
+  const tags = sorted.map(([tag, n]) => {
+    const cls = qaListState.tag === tag ? 'active' : '';
+    return `<span class="qa-tag ${cls}" onclick="filterByTag('${escHtml(tag)}')">${escHtml(tag)} (${n})</span>`;
+  }).join('');
+  bar.innerHTML = `<span class="qa-tag ${allClass}" onclick="filterByTag(null)">全部</span>${tags}`;
+}
+
+function filterByTag(tag) {
+  qaListState.tag = tag;
+  loadQaList();
+}
+
+function renderQaCards(entries) {
+  const listEl = document.getElementById('qaList');
+  if (entries.length === 0) {
+    listEl.innerHTML = '<div class="qa-empty">目前還沒有人發問。你可以成為第一位。</div>';
+    return;
+  }
+  listEl.innerHTML = entries.map(e => {
+    const answer = e.lawyer_refined_answer || e.ai_answer || '';
+    const tags = (e.tags || []).slice(0, 3).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
+    const when = e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : '';
+    const name = e.lawyers?.name || '';
+    const scoreLabel = e._score > 0 ? `👍 ${e._score}` : (e._score < 0 ? `👎 ${Math.abs(e._score)}` : '');
+    const refineBadge = e.lawyer_refined_answer ? '<span style="color:var(--gold);font-size:0.7rem;">✓ 律師有修正</span>' : '';
+    return `
+      <div class="qa-card" onclick="showQaDetail('${e.id}')">
+        <div class="qa-card-scenario">Q：${escHtml(e.scenario)}</div>
+        <div class="qa-card-answer-preview">${escHtml(answer)}</div>
+        <div class="qa-tags">${tags}</div>
+        <div class="qa-card-meta">
+          <span>${escHtml(name)} · ${when}</span>
+          <span>${scoreLabel} ${refineBadge}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function showQaDetail(qaId) {
+  const entry = await sb.from('qa_entries').select(`
+    id, scenario, ai_answer, ai_reasoning, lawyer_refined_answer, refined_by, refined_at,
+    source_chunk_ids, tags, asked_by, created_at,
+    lawyers!qa_entries_asked_by_fkey(name)
+  `).eq('id', qaId).single();
+
+  if (entry.error || !entry.data) { alert('載入失敗'); return; }
+  const e = entry.data;
+
+  // 抓引用的 case_chunks
+  let chunks = [];
+  if (e.source_chunk_ids && e.source_chunk_ids.length > 0) {
+    const { data: chs } = await sb.rpc('match_case_chunks', { query_embedding: null, match_count: 0 }).catch(() => ({ data: null }));
+    // RPC 需要 embedding 才能用，這裡直接查 case_chunks
+    const { data: chs2 } = await sb.from('case_chunks')
+      .select('id, source_type, content, consultation_cases(case_date, case_type, client_name, lawyers(name))')
+      .in('id', e.source_chunk_ids);
+    chunks = chs2 || [];
+  }
+
+  const tags = (e.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
+  const when = e.created_at ? new Date(e.created_at).toISOString().slice(0, 10) : '';
+  const answer = e.lawyer_refined_answer || e.ai_answer || '';
+
+  const citedHtml = chunks.map(ch => {
+    const cc = ch.consultation_cases || {};
+    const law = cc.lawyers?.name || '';
+    return `
+      <div class="qa-cited-item">
+        <div class="qa-cited-meta">${escHtml(cc.case_date || '')} · ${escHtml(cc.case_type || '')} · 客戶 ${escHtml(cc.client_name || '')} · 律師 ${escHtml(law)} · ${escHtml(ch.source_type)}</div>
+        <div class="qa-cited-content">${escHtml(ch.content)}</div>
+      </div>`;
+  }).join('');
+
+  const resultEl = document.getElementById('qaResult');
+  resultEl.innerHTML = `
+    <div class="qa-result-card">
+      <div class="qa-label">${escHtml(e.lawyers?.name || '')} · ${when}</div>
+      <div class="qa-content" style="font-weight:500;margin-bottom:10px;">Q：${escHtml(e.scenario)}</div>
+      <div class="qa-label">${e.lawyer_refined_answer ? '律師修正的答案' : 'AI 建議'}</div>
+      <div class="qa-content">${escHtml(answer)}</div>
+      ${e.lawyer_refined_answer && e.ai_answer ? `
+        <div class="qa-reasoning"><b>原 AI 答案：</b>${escHtml(e.ai_answer)}</div>` : ''}
+      <div class="qa-tags">${tags}</div>
+      ${e.ai_reasoning ? `<div class="qa-reasoning"><b>推理：</b>${escHtml(e.ai_reasoning)}</div>` : ''}
+      ${chunks.length > 0 ? `
+        <div class="qa-cited">
+          <button class="qa-cited-toggle" onclick="toggleCitedChunks(this)">▶ 展開引用的 ${chunks.length} 個片段</button>
+          <div class="qa-cited-list" style="display:none;">${citedHtml}</div>
+        </div>` : ''}
+      <div class="qa-actions">
+        <button class="qa-action-btn" onclick="rateQa('${e.id}', 1, this)">👍 有用</button>
+        <button class="qa-action-btn" onclick="rateQa('${e.id}', -1, this)">👎 沒用</button>
+        ${(e.asked_by === currentLawyer?.id || ['admin','manager'].includes(currentLawyer?.role)) ? `
+          <button class="qa-action-btn" onclick="showRefineForm('${e.id}')">✏️ 補充/修正</button>` : ''}
+      </div>
+      <div id="qaRefineBox-${e.id}" style="display:none;"></div>
+    </div>`;
+
+  // 捲到結果區
+  resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ===================== START =====================
