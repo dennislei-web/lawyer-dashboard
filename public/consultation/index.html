@@ -1355,19 +1355,22 @@
             <tr>
               <th rowspan="2" style="width:44px;vertical-align:middle;">#</th>
               <th rowspan="2" style="vertical-align:middle;">律師</th>
+              <th colspan="2" class="num" style="border-bottom:1px solid var(--border);">諮詢場次</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">委任率</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">個案收費</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">諮詢效益</th>
             </tr>
             <tr>
+              <th class="num sortable" data-ycol="consult_count_curr" id="yoyHdr-curr0">今年</th>
+              <th class="num sortable" data-ycol="consult_count_prev" id="yoyHdr-prev0">對照</th>
               <th class="num sortable" data-ycol="sign_rate_curr" id="yoyHdr-curr1">今年</th>
-              <th class="num sortable" data-ycol="sign_rate_prev" id="yoyHdr-prev1">去年</th>
+              <th class="num sortable" data-ycol="sign_rate_prev" id="yoyHdr-prev1">對照</th>
               <th class="num sortable" data-ycol="sign_rate_delta">Δ</th>
               <th class="num sortable" data-ycol="avg_collected_curr" id="yoyHdr-curr2">今年</th>
-              <th class="num sortable" data-ycol="avg_collected_prev" id="yoyHdr-prev2">去年</th>
+              <th class="num sortable" data-ycol="avg_collected_prev" id="yoyHdr-prev2">對照</th>
               <th class="num sortable" data-ycol="avg_collected_delta">Δ</th>
               <th class="num sortable" data-ycol="consult_eff_curr" id="yoyHdr-curr3">今年</th>
-              <th class="num sortable" data-ycol="consult_eff_prev" id="yoyHdr-prev3">去年</th>
+              <th class="num sortable" data-ycol="consult_eff_prev" id="yoyHdr-prev3">對照</th>
               <th class="num sortable" data-ycol="consult_eff_delta">Δ</th>
             </tr>
           </thead>
@@ -2648,8 +2651,8 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     currYear + ' ' + fmtRange(currMonthsArr) + ' vs ' + prevYear + ' ' + fmtRange(prevMonthsArr) + '；點欄位可排序';
 
   // Label sub-headers with actual years
-  ['yoyHdr-curr1','yoyHdr-curr2','yoyHdr-curr3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = currYear; });
-  ['yoyHdr-prev1','yoyHdr-prev2','yoyHdr-prev3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = prevYear; });
+  ['yoyHdr-curr0','yoyHdr-curr1','yoyHdr-curr2','yoyHdr-curr3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = currYear; });
+  ['yoyHdr-prev0','yoyHdr-prev1','yoyHdr-prev2','yoyHdr-prev3'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = prevYear; });
 
   // Build + sort
   let rows = buildLawyerYoyRows(currStats, prevStats);
@@ -2665,7 +2668,7 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
 
   const tbody = document.getElementById('lawyerYoyTableBody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暫無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
 
@@ -2675,9 +2678,13 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     const prevRateTxt = prevHasRate ? r.sign_rate_prev.toFixed(1) + '%' : '<span style="color:var(--text-muted);">—</span>';
     const prevAvgTxt = r.avg_collected_prev > 0 ? '$' + Math.round(r.avg_collected_prev).toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
     const prevEffTxt = r.consult_eff_prev > 0 ? '$' + Math.round(r.consult_eff_prev).toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
+    const prevConsultTxt = r.consult_count_prev > 0 ? r.consult_count_prev.toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
+    const currConsultTxt = r.consult_count_curr > 0 ? r.consult_count_curr.toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
     return `<tr onclick="showDetailPage('${r.id}')">
       <td>${i + 1}</td>
       <td><strong>${escHtml(r.name)}</strong></td>
+      <td class="num">${currConsultTxt}</td>
+      <td class="num">${prevConsultTxt}</td>
       <td class="num ${rateClassCurr}">${r.sign_rate_curr.toFixed(1)}%</td>
       <td class="num">${prevRateTxt}</td>
       ${yoyDeltaCell(r.sign_rate_delta, true, prevHasRate)}
