@@ -2327,6 +2327,10 @@ async function init() {
       bootSignedInSeen = true;
       return;
     }
+    // Ignore repeat SIGNED_IN events (cross-tab sync, token refresh, shell-iframe gotrue
+    // contention) — they'd reset casesLoadState to 'pending' and wedge the UI even though
+    // nothing about the session actually changed.
+    if (event === 'SIGNED_IN' && currentLawyer) return;
     if (event === 'SIGNED_IN' && session) await loadDashboard(session.user);
     else if (event === 'SIGNED_OUT') { bootSignedInSeen = false; showLoginPage(); }
   });
