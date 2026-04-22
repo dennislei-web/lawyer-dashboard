@@ -345,9 +345,10 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       password: document.getElementById('loginPassword').value,
     });
     if (r.error) throw r.error;
-    currentUser = r.data.user;
-    await loadUserProfile();
-    showShell();
+    // Full-page reload on login guarantees all iframes initialize with the fresh session,
+    // without the infinite-loop risk of auth-event-driven iframe reloads.
+    location.reload();
+    return;
   } catch (ex) {
     err.textContent = '登入失敗：' + (ex.message || '請確認帳號密碼');
     err.style.display = 'block';
@@ -358,41 +359,15 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
 
 document.getElementById('logoutBtn').addEventListener('click', async function() {
   if (sb) await sb.auth.signOut();
-  currentUser = null; currentLawyer = null;
-  showLogin();
+  // Full reload on logout ensures iframes clear their cached Supabase client state too.
+  location.reload();
 });
 
 // ═══ Session lifecycle ═══
-// Re-login (via the shell's own login form or cross-tab) must force-reload all iframes,
-// otherwise they retain the pre-login (expired) Supabase client state and stay empty.
-function reloadAllIframes() {
-  document.querySelectorAll('iframe').forEach(function (f) {
-    if (f && f.src) { f.src = f.src; }
-  });
-}
-// Supabase fires SIGNED_IN / INITIAL_SESSION immediately when the listener is attached
-// (localStorage hydration). That's handled by checkSession() on boot — we must NOT reload
-// iframes there or we'll loop (iframe reload → iframe's own listener fires → shell fires again).
-// Only reload iframes on a *subsequent* SIGNED_IN (actual re-login after a SIGNED_OUT).
-var bootSignInSkipped = false;
-if (sb && sb.auth && sb.auth.onAuthStateChange) {
-  sb.auth.onAuthStateChange(function (event, session) {
-    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !bootSignInSkipped) {
-      bootSignInSkipped = true;
-      return;
-    }
-    if (event === 'SIGNED_IN' && session) {
-      currentUser = session.user;
-      loadUserProfile().then(function () {
-        showShell();
-        reloadAllIframes();
-      });
-    } else if (event === 'SIGNED_OUT') {
-      bootSignInSkipped = false; // Next SIGNED_IN is a real re-login, should reload iframes
-      showLogin();
-    }
-  });
-}
+// NOTE: We used to subscribe to onAuthStateChange to auto-reload iframes, but that
+// fires whenever ANY iframe writes to localStorage auth state — causing an infinite
+// reload loop. Instead: force full-page reload on explicit login/logout form actions
+// (see below). For idle-expiry, the visibilitychange handler already reloads.
 
 // If the tab was backgrounded long enough for the access token to expire (default 1 h),
 // just reload the shell when the user comes back — cheaper than reconciling stale iframe state.
