@@ -370,8 +370,17 @@ function reloadAllIframes() {
     if (f && f.src) { f.src = f.src; }
   });
 }
+// Supabase fires SIGNED_IN / INITIAL_SESSION immediately when the listener is attached
+// (localStorage hydration). That's handled by checkSession() on boot — we must NOT reload
+// iframes there or we'll loop (iframe reload → iframe's own listener fires → shell fires again).
+// Only reload iframes on a *subsequent* SIGNED_IN (actual re-login after a SIGNED_OUT).
+var bootSignInSkipped = false;
 if (sb && sb.auth && sb.auth.onAuthStateChange) {
   sb.auth.onAuthStateChange(function (event, session) {
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !bootSignInSkipped) {
+      bootSignInSkipped = true;
+      return;
+    }
     if (event === 'SIGNED_IN' && session) {
       currentUser = session.user;
       loadUserProfile().then(function () {
@@ -379,6 +388,7 @@ if (sb && sb.auth && sb.auth.onAuthStateChange) {
         reloadAllIframes();
       });
     } else if (event === 'SIGNED_OUT') {
+      bootSignInSkipped = false; // Next SIGNED_IN is a real re-login, should reload iframes
       showLogin();
     }
   });

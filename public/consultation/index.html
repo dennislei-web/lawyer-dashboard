@@ -2318,13 +2318,17 @@ async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) await loadDashboard(session.user);
 
+  // Note: we used to re-run loadDashboard on TOKEN_REFRESHED, but it risks amplifying
+  // auth-event loops across the shell+iframes. Visibility-based reload below is safer.
+  let bootSignedInSeen = false;
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) await loadDashboard(session.user);
-    else if (event === 'SIGNED_OUT') showLoginPage();
-    else if (event === 'TOKEN_REFRESHED' && session && currentUser) {
-      // Token auto-refresh kicked in — pull fresh data in case prior queries failed silently.
-      loadDashboard(session.user);
+    // Skip the boot-time SIGNED_IN / INITIAL_SESSION; init() already loaded the dashboard.
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !bootSignedInSeen) {
+      bootSignedInSeen = true;
+      return;
     }
+    if (event === 'SIGNED_IN' && session) await loadDashboard(session.user);
+    else if (event === 'SIGNED_OUT') { bootSignedInSeen = false; showLoginPage(); }
   });
 
   // Belt & suspenders: if the iframe was hidden long enough for the session to expire
