@@ -1652,9 +1652,18 @@ function renderAdjustmentLog(year) {
   var personnelMap = {};
   // (other adjustments are added individually to groups)
 
-  activeAdjs.forEach(function(adj) {
+  // "Budget impact" semantics: positive = net spending goes up, negative = net spending goes down.
+  // Income-category adjustments (租賃收益、政府補助…) must be sign-flipped so a positive amount
+  // shows up as "預算減少" (more income reduces net expense), not "預算增加".
+  function budgetImpactOf(adj) {
     var monthCount = adj.adjust_type === 'one_time' ? 1 : (adj.end_month - adj.start_month + 1);
-    var impact = adj.amount * monthCount;
+    var cat = catIdMap[adj.category_id];
+    var isIncome = cat && (cat.section === 'non_operating_income' || cat.section === 'revenue');
+    return adj.amount * monthCount * (isIncome ? -1 : 1);
+  }
+
+  activeAdjs.forEach(function(adj) {
+    var impact = budgetImpactOf(adj);
     var match = adj.description.match(/^(離職|新進|育嬰留停|調薪)\s+(\S+?)[\s（(]/);
     if (match) {
       var key = match[1] + '-' + match[2];
@@ -1692,10 +1701,7 @@ function renderAdjustmentLog(year) {
   // (other adjustments already in groups individually)
 
   var totalImpact = 0;
-  activeAdjs.forEach(function(a) {
-    var mc = a.adjust_type === 'one_time' ? 1 : (a.end_month - a.start_month + 1);
-    totalImpact += a.amount * mc;
-  });
+  activeAdjs.forEach(function(a) { totalImpact += budgetImpactOf(a); });
 
   // Render 4 quadrants
   var html = '<div class="table-header" style="border:none;padding:16px 0 8px"><span class="table-title">調整紀錄</span>';
