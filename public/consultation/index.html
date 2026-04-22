@@ -2321,6 +2321,20 @@ async function init() {
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session) await loadDashboard(session.user);
     else if (event === 'SIGNED_OUT') showLoginPage();
+    else if (event === 'TOKEN_REFRESHED' && session && currentUser) {
+      // Token auto-refresh kicked in — pull fresh data in case prior queries failed silently.
+      loadDashboard(session.user);
+    }
+  });
+
+  // Belt & suspenders: if the iframe was hidden long enough for the session to expire
+  // (default access-token TTL = 1 h), reload on return rather than trying to reconcile.
+  let lastActiveAt = Date.now();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { lastActiveAt = Date.now(); return; }
+    if (Date.now() - lastActiveAt > 30 * 60 * 1000) {
+      location.reload();
+    }
   });
 }
 

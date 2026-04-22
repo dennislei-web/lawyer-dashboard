@@ -362,6 +362,38 @@ document.getElementById('logoutBtn').addEventListener('click', async function() 
   showLogin();
 });
 
+// ═══ Session lifecycle ═══
+// Re-login (via the shell's own login form or cross-tab) must force-reload all iframes,
+// otherwise they retain the pre-login (expired) Supabase client state and stay empty.
+function reloadAllIframes() {
+  document.querySelectorAll('iframe').forEach(function (f) {
+    if (f && f.src) { f.src = f.src; }
+  });
+}
+if (sb && sb.auth && sb.auth.onAuthStateChange) {
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (event === 'SIGNED_IN' && session) {
+      currentUser = session.user;
+      loadUserProfile().then(function () {
+        showShell();
+        reloadAllIframes();
+      });
+    } else if (event === 'SIGNED_OUT') {
+      showLogin();
+    }
+  });
+}
+
+// If the tab was backgrounded long enough for the access token to expire (default 1 h),
+// just reload the shell when the user comes back — cheaper than reconciling stale iframe state.
+var lastActiveAt = Date.now();
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) { lastActiveAt = Date.now(); return; }
+  if (Date.now() - lastActiveAt > 30 * 60 * 1000) {
+    location.reload();
+  }
+});
+
 // ═══ HASH ROUTING ═══
 window.addEventListener('hashchange', function() {
   if (document.getElementById('shell').style.display === 'none') return;

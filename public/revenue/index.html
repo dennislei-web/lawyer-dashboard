@@ -1629,6 +1629,15 @@ window.addEventListener('message', function(e) {
 function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return n.toLocaleString('zh-TW'); }
 
 checkSession();
+
+// Auto-reload if hidden long enough for the Supabase access token (1 h TTL) to expire
+(function () {
+  var lastActiveAt = Date.now();
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { lastActiveAt = Date.now(); return; }
+    if (Date.now() - lastActiveAt > 30 * 60 * 1000) location.reload();
+  });
+})();
 </script>
 </body>
 </html>

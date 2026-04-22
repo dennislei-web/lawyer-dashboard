@@ -791,6 +791,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ═══ START ═══
 checkSession();
+
+// Auto-reload if hidden long enough for the Supabase access token (1 h TTL) to expire
+(function () {
+  var lastActiveAt = Date.now();
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { lastActiveAt = Date.now(); return; }
+    if (Date.now() - lastActiveAt > 30 * 60 * 1000) location.reload();
+  });
+})();
 </script>
 </body>
 </html>
