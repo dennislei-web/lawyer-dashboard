@@ -1834,6 +1834,7 @@
     </div>
     <div id="unsignedPriorityBanner" style="margin-bottom:12px;"></div>
     <div id="unsignedSummary" style="margin-bottom:16px;"></div>
+    <div id="pendingBindingsSection" style="margin-bottom:16px;"></div>
     <div class="section">
       <div class="table-wrap">
         <table id="unsignedTable">
@@ -5574,6 +5575,9 @@ async function loadPriorityUnsignedCases() {
 }
 
 function renderUnsignedPage() {
+  // 進到未成案 tab 時順便載入待綁定清單（只抓一次，後續 confirm/dismiss 再局部更新）
+  if (pendingBindingsLoadState === 'idle') loadPendingBindings();
+
   // 決定資料來源：全量 allCases 優先；否則 fallback 到 priority 小批
   let sourceCases = null;
   let isPriorityMode = false;
@@ -5823,6 +5827,189 @@ async function saveLineChatFromInput(inputEl) {
 
 function cancelEditLineChat(el) {
   renderLineChatCell(el.closest('td'));
+}
+
+// ---- 待人工綁定 LINE 對話（line_pending_bindings）----
+// webhook 收到 follow/message 但沒 auto-match 到案件 → 這裡讓法務手動配對
+let pendingBindingsLoadState = 'idle';   // idle | loading | loaded | error
+let pendingBindingsData = [];            // 近 14 天 matched_case_id IS NULL 的 rows
+
+async function loadPendingBindings() {
+  if (pendingBindingsLoadState === 'loading') return;
+  pendingBindingsLoadState = 'loading';
+  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
+  try {
+    const { data, error } = await sb
+      .from('line_pending_bindings')
+      .select('user_id, oa_id, oa_name, followed_at, last_message_at, last_message_text, last_extracted_name, match_attempts')
+      .is('matched_case_id', null)
+      .is('matched_at', null)             // 排除被法務按「忽略」的 row
+      .gte('followed_at', cutoff)
+      .order('followed_at', { ascending: false });
+    if (error) throw error;
+    pendingBindingsData = data || [];
+    pendingBindingsLoadState = 'loaded';
+    renderPendingBindings();
+  } catch (e) {
+    console.error('loadPendingBindings error', e);
+    pendingBindingsLoadState = 'error';
+    const sec = document.getElementById('pendingBindingsSection');
+    if (sec) sec.innerHTML = '';  // 靜默失敗，不打擾主流程
+  }
+}
+
+function renderPendingBindings() {
+  const sec = document.getElementById('pendingBindingsSection');
+  if (!sec) return;
+  const rows = pendingBindingsData;
+  if (!rows.length) { sec.innerHTML = ''; return; }
+
+  // 候選案件池：近 14 天 is_signed=false 且還沒 line_chat_url
+  const now = Date.now();
+  const candidatesAll = (allCases || []).filter(c =>
+    !c.is_signed &&
+    !c.line_chat_url &&
+    (now - new Date(c.case_date).getTime()) <= 21 * 86400000  // 案件日期往前 21 天，寬於 14 天給點緩衝
+  );
+
+  const rowHtml = rows.map((r, idx) => {
+    const followDate = new Date(r.followed_at);
+    const daysAgo = Math.floor((now - followDate.getTime()) / 86400000);
+    const userShort = (r.user_id || '').slice(0, 8) + '…';
+    const oaLabel = r.oa_name || (r.oa_id || '').slice(0, 8) + '…';
+    const lastText = r.last_message_text
+      ? (r.last_message_text.length > 40 ? r.last_message_text.slice(0, 40) + '…' : r.last_message_text)
+      : '（尚無訊息）';
+    const hintName = r.last_extracted_name ? ` · 抓到的名字：<span style="color:var(--gold);">${escHtml(r.last_extracted_name)}</span>` : '';
+
+    // 針對這一筆 pending：候選案件 = 全部 candidatesAll（給法務肉眼看）
+    // 如果有 last_extracted_name，排序把名字 contains 的排前面
+    let options = candidatesAll;
+    if (r.last_extracted_name) {
+      const n = r.last_extracted_name;
+      options = [...candidatesAll].sort((a, b) => {
+        const am = (a.client_name || '').includes(n) ? 0 : 1;
+        const bm = (b.client_name || '').includes(n) ? 0 : 1;
+        return am - bm || (a.case_date < b.case_date ? 1 : -1);
+      });
+    }
+    const optsHtml = ['<option value="">— 選擇對應案件 —</option>']
+      .concat(options.map(c => {
+        const lawyerName = allLawyersMap[c.lawyer_id] ? allLawyersMap[c.lawyer_id].name : '';
+        const hit = r.last_extracted_name && (c.client_name || '').includes(r.last_extracted_name) ? '⭐ ' : '';
+        return `<option value="${c.id}">${hit}${escHtml(c.case_date)} · ${escHtml(c.client_name || '無名')} · ${escHtml(c.case_type || '').slice(0,6)} · ${escHtml(lawyerName)}</option>`;
+      }))
+      .join('');
+
+    return `
+      <div class="pending-binding-row" data-idx="${idx}" style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">
+        <div style="font-size:0.78rem;color:var(--text-muted);min-width:120px;">
+          <div><span style="color:var(--gold);">${escHtml(oaLabel)}</span> · <span class="num">${daysAgo}</span> 天前加入</div>
+          <div style="margin-top:2px;" title="${escHtml(r.user_id)}">ID: ${escHtml(userShort)}</div>
+        </div>
+        <div style="font-size:0.8rem;">
+          <div style="color:var(--text);">${escHtml(lastText)}${hintName}</div>
+          <select data-user="${escHtml(r.user_id)}" data-oa="${escHtml(r.oa_id)}" style="margin-top:4px;padding:3px 6px;font-size:0.78rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-row);color:var(--text);max-width:100%;">
+            ${optsHtml}
+          </select>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="confirmPendingBinding(this)" style="padding:4px 12px;border:1px solid var(--green);background:transparent;color:var(--green);border-radius:4px;cursor:pointer;font-size:0.78rem;">綁定</button>
+          <button onclick="dismissPendingBinding(this)" title="忽略：此對話非諮詢客戶" style="padding:4px 8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:4px;cursor:pointer;font-size:0.78rem;">✗</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  sec.innerHTML = `
+    <div class="section" style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--bg-row);">
+        <div style="font-size:0.88rem;font-weight:600;">待人工綁定 LINE 對話 <span class="num" style="color:var(--gold);">${rows.length}</span></div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">webhook 自動綁不到的加好友事件（近 14 天）</div>
+      </div>
+      ${rowHtml}
+    </div>
+  `;
+}
+
+async function confirmPendingBinding(btnEl) {
+  const row = btnEl.closest('.pending-binding-row');
+  const select = row.querySelector('select');
+  const caseId = select.value;
+  const userId = select.dataset.user;
+  const oaId = select.dataset.oa;
+  if (!caseId) { alert('請先選擇要綁定的案件'); return; }
+
+  btnEl.disabled = true;
+  btnEl.textContent = '綁定中…';
+  const chatUrl = `https://chat.line.biz/${oaId}/chat/${userId}`;
+
+  try {
+    // 1. 寫 consultation_cases.line_chat_url
+    const { error: ccErr } = await sb
+      .from('consultation_cases')
+      .update({
+        line_chat_url: chatUrl,
+        line_chat_updated_at: new Date().toISOString(),
+        line_chat_updated_by: currentLawyer ? currentLawyer.id : null,
+      })
+      .eq('id', caseId);
+    if (ccErr) throw ccErr;
+
+    // 2. 更新 pending binding（標記已手動綁）
+    const { error: pbErr } = await sb
+      .from('line_pending_bindings')
+      .update({
+        matched_case_id: caseId,
+        matched_at: new Date().toISOString(),
+        matched_by: 'manual',
+      })
+      .eq('user_id', userId)
+      .eq('oa_id', oaId);
+    if (pbErr) throw pbErr;
+
+    // 3. 更新本地資料 + 重新渲染
+    const c = (allCases || []).find(x => x.id === caseId);
+    if (c) c.line_chat_url = chatUrl;
+    pendingBindingsData = pendingBindingsData.filter(p => !(p.user_id === userId && p.oa_id === oaId));
+    renderPendingBindings();
+    renderUnsignedPage();  // table 也要 refresh（該案件 LINE 對話欄變連結）
+  } catch (e) {
+    console.error('confirmPendingBinding error', e);
+    alert('綁定失敗：' + (e.message || e));
+    btnEl.disabled = false;
+    btnEl.textContent = '綁定';
+  }
+}
+
+async function dismissPendingBinding(btnEl) {
+  if (!confirm('忽略這筆加好友？（會標記為已處理，不再出現在此清單）')) return;
+  const row = btnEl.closest('.pending-binding-row');
+  const select = row.querySelector('select');
+  const userId = select.dataset.user;
+  const oaId = select.dataset.oa;
+  btnEl.disabled = true;
+
+  try {
+    // 用 matched_by='manual' + matched_case_id=null 無法（FK 允許 null 但我們用 matched_at 標記處理過）
+    // 改法：留 matched_case_id=null，但寫 matched_at + matched_by='manual' 代表「法務看過但決定不綁」
+    // 查詢時排除 matched_at IS NOT NULL 的 row 即可
+    const { error } = await sb
+      .from('line_pending_bindings')
+      .update({
+        matched_at: new Date().toISOString(),
+        matched_by: 'manual',
+      })
+      .eq('user_id', userId)
+      .eq('oa_id', oaId);
+    if (error) throw error;
+    pendingBindingsData = pendingBindingsData.filter(p => !(p.user_id === userId && p.oa_id === oaId));
+    renderPendingBindings();
+  } catch (e) {
+    console.error('dismissPendingBinding error', e);
+    alert('忽略失敗：' + (e.message || e));
+    btnEl.disabled = false;
+  }
 }
 
 async function saveLawyerNote(caseId, note, cellEl) {
