@@ -48,17 +48,28 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-// 從客戶訊息抓姓名：去 lead-in 後抓第一個 2-4 字中文連續字元
+// 從客戶訊息抓姓名。只在以下 pattern 才認，避免抓到閒聊訊息前 2-4 字誤判：
+//  1. 明確句型：「我是XXX」「我叫XXX」「敝姓X」「姓名：XXX」
+//  2. 單純短訊息：純 2-4 字中文，可接結尾標點/emoji（例如「陸德」「陸德！」）
+//  3. 客氣 lead-in + 短姓名：「您好 陸德」「你好，我是陸德」
+// 其他情況（長句子、含問號、夾雜數字英文）一律回 null
 function extractName(text: string): string | null {
   if (!text) return null;
   let s = text.trim();
-  s = s.replace(/^(您好|你好|hi|hello)[\s,，、!！.。]*/i, '');
-  s = s.replace(/^(我是|我叫|敝姓|在下|本人)[\s,，、]*/i, '');
-  s = s.trim();
-  const cjk = s.match(/[\u4e00-\u9fff]{2,4}/);
-  if (cjk) return cjk[0];
-  // fallback：全英文且長度合理（極罕見但留著）
-  if (s.length >= 2 && s.length <= 20 && /^[a-z\s]+$/i.test(s)) return s;
+
+  // 剝掉常見 lead-in（您好/你好/Hi/Hello + 標點）
+  s = s.replace(/^(您好|你好|hi|hello)[\s,，、!！.。~～]*/i, '');
+  // 剝掉自介句首（我是/我叫/敝姓/姓名是/名字是）
+  s = s.replace(/^(我是|我叫|敝姓|在下|本人|本人是|姓名(?:是|:|：)|名字(?:是|:|：))[\s,，、]*/i, '');
+  // 剝掉尾端標點
+  s = s.replace(/[\s!！。?？~～,，、.…]+$/, '').trim();
+
+  // 剝完之後剩下的必須「整串就是 2-4 字中文」才算名字
+  if (/^[\u4e00-\u9fff]{2,4}$/.test(s)) return s;
+
+  // fallback：全英文姓名（極罕見但保留，例如「Jill」「Stanley」）
+  if (/^[A-Za-z]{2,20}$/.test(s)) return s;
+
   return null;
 }
 
