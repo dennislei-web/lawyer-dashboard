@@ -19,10 +19,23 @@ const OA_CONFIG_RAW = Deno.env.get('LINE_OA_CONFIG') ?? '[]';
 // 初次部署時 dest 可能還沒知道，留空；function 會用「逐一試 secret」驗章，不靠 dest 路由
 type OAEntry = { chatUrlPrefix: string; secret: string; name?: string; dest?: string };
 let OA_LIST: OAEntry[] = [];
+let OA_PARSE_ERROR: string | null = null;
 try {
-  OA_LIST = JSON.parse(OA_CONFIG_RAW);
+  const parsed = JSON.parse(OA_CONFIG_RAW);
+  if (!Array.isArray(parsed)) throw new Error('not an array');
+  OA_LIST = parsed.filter(e => e && typeof e.secret === 'string' && typeof e.chatUrlPrefix === 'string');
+  if (OA_LIST.length === 0) {
+    // 注意：不能直接印 key 名，因為用戶可能把 secret 填在 key 位置會洩漏
+    const shapes = parsed.map((e: any) => {
+      if (!e || typeof e !== 'object') return 'non-object';
+      const keys = Object.keys(e);
+      return `{${keys.length} keys, hasSecret=${'secret' in e}, hasPrefix=${'chatUrlPrefix' in e}, hasName=${'name' in e}}`;
+    }).join(' | ');
+    OA_PARSE_ERROR = `parsed ${parsed.length} entries but 0 valid. shapes=${shapes}`;
+  }
 } catch (e) {
-  console.error('LINE_OA_CONFIG parse failed', e);
+  OA_PARSE_ERROR = `parse failed: ${(e as Error).message} (raw len=${OA_CONFIG_RAW.length}, first char=${JSON.stringify(OA_CONFIG_RAW[0])})`;
+  console.error('LINE_OA_CONFIG', OA_PARSE_ERROR);
 }
 
 const MATCH_WINDOW_DAYS = 30;
@@ -219,27 +232,33 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
 }
 
 serve(async (req) => {
-  if (req.method !== 'POST') {
-    return new Response('method not allowed', { status: 405 });
-  }
-
-  const rawBody = await req.text();
-  const signature = req.headers.get('x-line-signature') ?? '';
-
-  // 逐一試 secret 驗章 — 哪把 secret 算出的簽章對得上，就是哪個 OA
-  // 這樣不依賴 body.destination（實測 destination != chatUrlPrefix）
-  let matchedOA: OAEntry | null = null;
-  for (const entry of OA_LIST) {
-    const expected = await hmacSha256Base64(entry.secret, rawBody);
-    if (timingSafeEqual(signature, expected)) {
-      matchedOA = entry;
-      break;
+  try {
+    if (req.method !== 'POST') {
+      return new Response('method not allowed', { status: 405 });
     }
-  }
-  if (!matchedOA) {
-    console.warn('no secret matched signature', { sigLen: signature.length });
-    return new Response('bad signature', { status: 401 });
-  }
+
+    if (OA_PARSE_ERROR) {
+      console.error('abort: config not loaded', OA_PARSE_ERROR);
+      return new Response(`config error: ${OA_PARSE_ERROR}`, { status: 500 });
+    }
+
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-line-signature') ?? '';
+
+    // 逐一試 secret 驗章 — 哪把 secret 算出的簽章對得上，就是哪個 OA
+    // 這樣不依賴 body.destination（實測 destination != chatUrlPrefix）
+    let matchedOA: OAEntry | null = null;
+    for (const entry of OA_LIST) {
+      const expected = await hmacSha256Base64(entry.secret, rawBody);
+      if (timingSafeEqual(signature, expected)) {
+        matchedOA = entry;
+        break;
+      }
+    }
+    if (!matchedOA) {
+      console.warn('no secret matched signature', { sigLen: signature.length, oaCount: OA_LIST.length });
+      return new Response('bad signature', { status: 401 });
+    }
 
   let payload: any;
   try {
@@ -282,5 +301,9 @@ serve(async (req) => {
     }
   }
 
-  return new Response('ok', { status: 200 });
+    return new Response('ok', { status: 200 });
+  } catch (err) {
+    console.error('fatal', { err: String(err), stack: (err as Error)?.stack });
+    return new Response(`fatal: ${String(err)}`, { status: 500 });
+  }
 });
