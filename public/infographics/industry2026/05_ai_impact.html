@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>AI 對法律產業的影響</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #eef0f6;
+    color: #0e1433;
+  }
+  .page {
+    width: 1080px;
+    min-height: 2200px;
+    padding: 56px 60px;
+    background: linear-gradient(180deg, #f2f4fb 0%, #dfe3f2 100%);
+    position: relative;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 900;
+    line-height: 1.25;
+    color: #0e1433;
+    border-bottom: 4px solid #2c3e80;
+    padding-bottom: 14px;
+    margin-bottom: 22px;
+  }
+  h1 .accent { color: #2c3e80; }
+  h1 .accent2 { color: #00a3b4; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 18px 0 12px;
+  }
+  .section-head h2 {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0e1433;
+  }
+  .section-head .tag {
+    font-size: 12px;
+    padding: 3px 12px;
+    background: #2c3e80;
+    color: white;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .section-head .tag.cyan { background: #00a3b4; }
+  .section-head .tag.gold { background: #d4a24c; }
+
+  /* ===== Thesis summary row ===== */
+  .thesis-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .thesis-card {
+    background: white;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 4px 14px rgba(44,62,128,0.1);
+    border-top: 5px solid #2c3e80;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .thesis-card.t2 { border-top-color: #00a3b4; }
+  .thesis-icon {
+    font-size: 42px;
+    flex-shrink: 0;
+  }
+  .thesis-title {
+    font-size: 17px;
+    font-weight: 900;
+    color: #0e1433;
+    line-height: 1.35;
+  }
+  .thesis-title span { color: #2c3e80; }
+  .t2 .thesis-title span { color: #00a3b4; }
+  .thesis-sub {
+    font-size: 12px;
+    color: #6874a8;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+
+  /* ===== Card container ===== */
+  .v-card {
+    background: white;
+    border-radius: 14px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 14px rgba(44,62,128,0.08);
+    margin-bottom: 16px;
+  }
+  .v-card .v-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0e1433;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ===== Grid layouts ===== */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  /* ===== Icon stat card ===== */
+  .stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px 16px;
+    box-shadow: 0 2px 10px rgba(44,62,128,0.06);
+    text-align: center;
+  }
+  .stat-card .icon { font-size: 32px; margin-bottom: 6px; }
+  .stat-card .label { font-size: 12px; color: #6874a8; font-weight: 600; margin-bottom: 4px; }
+  .stat-card .value { font-size: 20px; font-weight: 900; color: #0e1433; line-height: 1.1; }
+  .stat-card .foot { font-size: 11px; color: #8a93b5; margin-top: 4px; }
+
+  /* ===== Matrix ===== */
+  .matrix-wrap {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr;
+    grid-template-rows: 36px 120px 120px;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .mx-corner {}
+  .mx-col-h {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    color: #2c3e80;
+    background: #eef0f6;
+    border-radius: 8px;
+  }
+  .mx-row-h {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    color: #2c3e80;
+    background: #eef0f6;
+    border-radius: 8px;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+  }
+  .mx-cell {
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+  }
+  .mx-cell .i { font-size: 28px; }
+  .mx-cell .t { font-size: 14px; font-weight: 800; }
+  .mx-cell .d { font-size: 11.5px; line-height: 1.45; }
+  .mx-cell.stable  { background: #e4f7f3; color: #0a6e5a; }
+  .mx-cell.chaos   { background: #fcecea; color: #8b2e1f; }
+  .mx-cell.wait    { background: #fef7e7; color: #8c6b2a; }
+  .mx-cell.shift   { background: #fbe6cc; color: #a64a18; }
+
+  /* ===== Top-down vs Bottom-up diagram ===== */
+  .adopt-diagram {
+    background: #f4f6fb;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+
+  /* ===== Benefit grid ===== */
+  .benefit-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .benefit-mini {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 12px;
+    border-top: 4px solid #00a3b4;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,163,180,0.06);
+  }
+  .benefit-mini.gold { border-top-color: #d4a24c; box-shadow: 0 2px 8px rgba(212,162,76,0.08); }
+  .benefit-mini .ic { font-size: 30px; margin-bottom: 4px; }
+  .benefit-mini .tt {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0e1433;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  .benefit-mini .bb {
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: #2d3558;
+  }
+
+  /* ===== Closing card ===== */
+  .closing-card {
+    background: linear-gradient(135deg, #ffffff, #eaf9f5);
+    border-radius: 14px;
+    padding: 20px 24px;
+    border-left: 5px solid #00a3b4;
+    box-shadow: 0 4px 14px rgba(0,163,180,0.12);
+    margin-top: 4px;
+  }
+  .closing-title {
+    font-size: 19px;
+    font-weight: 900;
+    color: #003e47;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .closing-body {
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: #0a6e5a;
+  }
+  .closing-body b { color: #00a3b4; }
+
+  .watermark {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 12px;
+    color: #8a93b5;
+  }
+  .watermark::before { content: "◈ "; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>AI 對法律產業的影響：<br/>
+    <span class="accent">短期市場結構</span> × <span class="accent2">導入路徑侷限</span>
+  </h1>
+
+  <!-- ===== Thesis summary ===== -->
+  <div class="thesis-row">
+    <div class="thesis-card">
+      <div class="thesis-icon">⚖️</div>
+      <div>
+        <div class="thesis-sub">THESIS 01 · 短期市場</div>
+        <div class="thesis-title">效率 <span>≠</span> 業績<br/>版圖不動、價格先亂</div>
+      </div>
+    </div>
+    <div class="thesis-card t2">
+      <div class="thesis-icon">🧱</div>
+      <div>
+        <div class="thesis-sub">THESIS 02 · 導入路徑</div>
+        <div class="thesis-title">Top-down <span>卡</span>現場<br/>Bottom-up <span>卡</span>動機</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Section 1 ===== -->
+  <div class="section-head">
+    <h2>一、短期為何不會因 AI 洗牌</h2>
+    <span class="tag">THESIS 01</span>
+  </div>
+
+  <!-- Visualization 1: 產能 vs 業績 bar comparison -->
+  <div class="v-card">
+    <div class="v-title">📊 產能提升 ≠ 業績成長</div>
+    <svg viewBox="0 0 900 170" width="100%">
+      <!-- 產能 bar (full) -->
+      <rect x="120" y="30" width="630" height="34" rx="6" fill="#eef0f6"/>
+      <rect x="120" y="30" width="500" height="34" rx="6" fill="#00a3b4"/>
+      <text x="115" y="52" font-family="Noto Sans TC" font-size="14" font-weight="700" fill="#0e1433" text-anchor="end">產能</text>
+      <text x="370" y="52" font-family="Noto Sans TC" font-size="15" font-weight="900" fill="white" text-anchor="middle">+30% ~ +80%</text>
+      <text x="760" y="52" font-family="Noto Sans TC" font-size="12" fill="#6874a8">AI 可兌現</text>
+
+      <!-- 業績 bar (flat) -->
+      <rect x="120" y="105" width="630" height="34" rx="6" fill="#eef0f6"/>
+      <rect x="120" y="105" width="25" height="34" rx="6" fill="#c85a3f"/>
+      <text x="115" y="127" font-family="Noto Sans TC" font-size="14" font-weight="700" fill="#0e1433" text-anchor="end">業績</text>
+      <text x="200" y="127" font-family="Noto Sans TC" font-size="15" font-weight="900" fill="#c85a3f">≈ 0%</text>
+      <text x="760" y="127" font-family="Noto Sans TC" font-size="12" fill="#6874a8">信任／轉介／品牌曝光不會變</text>
+
+      <!-- Gap callout -->
+      <line x1="625" y1="70" x2="625" y2="100" stroke="#c85a3f" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="625" y="88" font-family="Noto Sans TC" font-size="16" font-weight="900" fill="#c85a3f" text-anchor="middle">≠</text>
+    </svg>
+  </div>
+
+  <!-- Visualization 2: 降價漏斗 + 價格混亂 -->
+  <div class="grid-2">
+    <div class="v-card" style="margin-bottom:0;">
+      <div class="v-title">💸 降價也難快速換客</div>
+      <svg viewBox="0 0 380 160" width="100%">
+        <!-- Funnel shape -->
+        <polygon points="40,20 340,20 280,90 100,90" fill="#fcecea" opacity="0.7"/>
+        <polygon points="100,90 280,90 230,140 150,140" fill="#c85a3f" opacity="0.8"/>
+        <!-- Labels -->
+        <text x="190" y="50" font-family="Noto Sans TC" font-size="13" font-weight="700" fill="#8b2e1f" text-anchor="middle">降價 20-30%</text>
+        <text x="190" y="68" font-family="Noto Sans TC" font-size="11" fill="#8b2e1f" text-anchor="middle">潛在可吸引 100 客戶</text>
+        <text x="190" y="113" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="white" text-anchor="middle">摩擦成本過濾</text>
+        <text x="190" y="132" font-family="Noto Sans TC" font-size="11" font-weight="700" fill="white" text-anchor="middle">實際只剩 少數</text>
+      </svg>
+      <div style="font-size:12px;line-height:1.6;color:#2d3558;margin-top:6px;text-align:center;">
+        客戶換律師的<b>信任重建成本</b>遠高於價差
+      </div>
+    </div>
+
+    <div class="v-card" style="margin-bottom:0;">
+      <div class="v-title">🌀 但價格混亂會先發生</div>
+      <svg viewBox="0 0 380 160" width="100%">
+        <!-- Price distribution: before / after -->
+        <!-- Before: tight curve -->
+        <path d="M 30,140 Q 120,40 210,140" fill="#00a3b4" opacity="0.25"/>
+        <text x="120" y="155" font-family="Noto Sans TC" font-size="11" fill="#006570" text-anchor="middle">AI 前：定價收斂</text>
+        <!-- After: wide curve -->
+        <path d="M 170,140 Q 280,20 390,140" fill="#c85a3f" opacity="0.3"/>
+        <path d="M 170,140 Q 280,20 390,140" fill="none" stroke="#c85a3f" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="280" y="155" font-family="Noto Sans TC" font-size="11" fill="#8b2e1f" text-anchor="middle">AI 後：高低落差放大</text>
+        <!-- Center bar - overlap  -->
+        <line x1="200" y1="30" x2="200" y2="135" stroke="#6874a8" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="200" y="20" font-family="Noto Sans TC" font-size="10" fill="#6874a8" text-anchor="middle">中段毛利受壓</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Visualization 3: 2x2 matrix -->
+  <div class="v-card">
+    <div class="v-title">🗺 AI 衝擊的時間 × 面向矩陣</div>
+    <div class="matrix-wrap">
+      <div class="mx-corner"></div>
+      <div class="mx-col-h">短期（1-2 年）</div>
+      <div class="mx-col-h">長期（3-5 年）</div>
+
+      <div class="mx-row-h">價格</div>
+      <div class="mx-cell chaos">
+        <div class="i">🌀</div>
+        <div class="t">立即混亂</div>
+        <div class="d">小所低價試探、大所毛利受壓</div>
+      </div>
+      <div class="mx-cell wait">
+        <div class="i">⏳</div>
+        <div class="t">視紅利走向</div>
+        <div class="d">若大所兌現規模：重新收斂<br/>若小所逆襲：持續分化</div>
+      </div>
+
+      <div class="mx-row-h">版圖</div>
+      <div class="mx-cell stable">
+        <div class="i">🛡</div>
+        <div class="t">結構穩定</div>
+        <div class="d">信任／轉介邏輯未變<br/>市佔不動</div>
+      </div>
+      <div class="mx-cell shift">
+        <div class="i">⚡</div>
+        <div class="t">可能洗牌</div>
+        <div class="d">組織能跟上工具者<br/>擴大、跟不上者退場</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visualization 4: Y fork -->
+  <div class="v-card">
+    <div class="v-title">⚡ 關鍵分岔：工具穩定後往哪邊走？</div>
+    <svg viewBox="0 0 900 200" width="100%">
+      <!-- Root trunk -->
+      <rect x="380" y="80" width="140" height="40" rx="8" fill="#2c3e80"/>
+      <text x="450" y="105" font-family="Noto Sans TC" font-size="14" font-weight="700" fill="white" text-anchor="middle">AI 工具成熟</text>
+
+      <!-- Fork arrows -->
+      <line x1="385" y1="100" x2="220" y2="175" stroke="#2c3e80" stroke-width="3" marker-end="url(#arr1)"/>
+      <line x1="515" y1="100" x2="680" y2="175" stroke="#2c3e80" stroke-width="3" marker-end="url(#arr1)"/>
+      <defs>
+        <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2c3e80"/>
+        </marker>
+      </defs>
+
+      <!-- Path A branch -->
+      <rect x="40" y="150" width="330" height="40" rx="8" fill="#d4a24c"/>
+      <text x="205" y="168" font-family="Noto Sans TC" font-size="13" font-weight="700" fill="white" text-anchor="middle">🏢 路徑 A · 大所規模紅利</text>
+      <text x="205" y="184" font-family="Noto Sans TC" font-size="11" fill="white" text-anchor="middle">SOP + AI 管控 → 毛利擴大 → 擠壓利基</text>
+
+      <!-- Path B branch -->
+      <rect x="530" y="150" width="330" height="40" rx="8" fill="#00a3b4"/>
+      <text x="695" y="168" font-family="Noto Sans TC" font-size="13" font-weight="700" fill="white" text-anchor="middle">⚡ 路徑 B · 中小所效率逆襲</text>
+      <text x="695" y="184" font-family="Noto Sans TC" font-size="11" fill="white" text-anchor="middle">客製 + 嵌入流程 → 蠶食中段客戶</text>
+
+      <!-- Small icons on top -->
+      <text x="200" y="35" font-family="Noto Sans TC" font-size="32" text-anchor="middle">🏢</text>
+      <text x="450" y="35" font-family="Noto Sans TC" font-size="32" text-anchor="middle">🔧</text>
+      <text x="700" y="35" font-family="Noto Sans TC" font-size="32" text-anchor="middle">⚡</text>
+
+      <!-- Deciding factor -->
+      <text x="450" y="58" font-family="Noto Sans TC" font-size="11" fill="#6874a8" text-anchor="middle">決定關鍵：組織結構能否跟上工具演化速度</text>
+    </svg>
+  </div>
+
+  <!-- ===== Section 2 ===== -->
+  <div class="section-head">
+    <h2>二、導入路徑的結構性天花板</h2>
+    <span class="tag cyan">THESIS 02</span>
+  </div>
+
+  <div class="v-card">
+    <div class="v-title">🚧 兩條路各有撞牆點</div>
+    <svg viewBox="0 0 900 290" width="100%">
+      <!-- Left column: Top-down -->
+      <rect x="40" y="20" width="380" height="250" rx="12" fill="#fcf2f7"/>
+      <text x="230" y="50" font-family="Noto Sans TC" font-size="15" font-weight="800" fill="#8b3d6f" text-anchor="middle">👔 Top-down · 主事者推動</text>
+      <!-- Arrow down from top -->
+      <line x1="230" y1="70" x2="230" y2="160" stroke="#8b3d6f" stroke-width="4" marker-end="url(#arrD)"/>
+      <defs>
+        <marker id="arrD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b3d6f"/>
+        </marker>
+      </defs>
+      <!-- Ceiling (wall) -->
+      <rect x="70" y="175" width="320" height="40" rx="6" fill="#8b3d6f"/>
+      <text x="230" y="198" font-family="Noto Sans TC" font-size="13" font-weight="800" fill="white" text-anchor="middle">🧱 現場知識壁壘</text>
+      <text x="230" y="245" font-family="Noto Sans TC" font-size="12" fill="#5c1f40" text-anchor="middle">主事者遠離案件細節</text>
+      <text x="230" y="262" font-family="Noto Sans TC" font-size="11" fill="#5c1f40" text-anchor="middle">規範脫節實務 → 生產力沒變</text>
+
+      <!-- Right column: Bottom-up -->
+      <rect x="480" y="20" width="380" height="250" rx="12" fill="#eaf3fa"/>
+      <text x="670" y="50" font-family="Noto Sans TC" font-size="15" font-weight="800" fill="#3c5e94" text-anchor="middle">🛠 Bottom-up · 律師個人</text>
+      <!-- Floor (ceiling for upward path) at top -->
+      <rect x="510" y="80" width="320" height="40" rx="6" fill="#3c5e94"/>
+      <text x="670" y="103" font-family="Noto Sans TC" font-size="13" font-weight="800" fill="white" text-anchor="middle">🧱 個人動機天花板</text>
+      <!-- Arrow up from bottom -->
+      <line x1="670" y1="230" x2="670" y2="135" stroke="#3c5e94" stroke-width="4" marker-end="url(#arrU)"/>
+      <defs>
+        <marker id="arrU" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#3c5e94"/>
+        </marker>
+      </defs>
+      <text x="670" y="250" font-family="Noto Sans TC" font-size="12" fill="#1e3a5f" text-anchor="middle">不想被 AI 取代</text>
+      <text x="670" y="267" font-family="Noto Sans TC" font-size="11" fill="#1e3a5f" text-anchor="middle">改動停留個人 → 組織不擴散</text>
+    </svg>
+  </div>
+
+  <!-- Blind spot quick summary -->
+  <div class="grid-4" style="margin-bottom:16px;">
+    <div class="stat-card">
+      <div class="icon">🔭</div>
+      <div class="label">Top-down 有</div>
+      <div class="value" style="color:#8b3d6f;">權力</div>
+      <div class="foot">但缺現場知識</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">🛠</div>
+      <div class="label">Bottom-up 有</div>
+      <div class="value" style="color:#3c5e94;">現場知識</div>
+      <div class="foot">但缺權力與誘因</div>
+    </div>
+    <div class="stat-card" style="background:#fef7e7;">
+      <div class="icon">🎯</div>
+      <div class="label">AI 生產力需要</div>
+      <div class="value" style="color:#a27a1c;">兩者合流</div>
+      <div class="foot">現場 × 組織推動</div>
+    </div>
+    <div class="stat-card" style="background:#fcecea;">
+      <div class="icon">⚠️</div>
+      <div class="label">傳統事務所</div>
+      <div class="value" style="color:#c85a3f;">難以兼備</div>
+      <div class="foot">這是結構性問題</div>
+    </div>
+  </div>
+
+  <!-- ===== Section 3 ===== -->
+  <div class="section-head">
+    <h2>三、喆律 × 合署：結構性贏家候選</h2>
+    <span class="tag gold">HYPOTHESIS</span>
+  </div>
+
+  <div class="v-card">
+    <div class="v-title">🏆 品牌平台 × 自主執行單位</div>
+    <svg viewBox="0 0 900 260" width="100%">
+      <!-- Platform box (top) -->
+      <rect x="40" y="20" width="820" height="70" rx="10" fill="#2c3e80"/>
+      <text x="450" y="45" font-family="Noto Sans TC" font-size="16" font-weight="700" fill="white" text-anchor="middle">
+        喆律主體 · 品牌平台
+      </text>
+      <g font-family="Noto Sans TC" font-size="12" fill="#c5cbe8" text-anchor="middle">
+        <text x="200" y="72">📢 品牌</text>
+        <text x="350" y="72">🎯 案源</text>
+        <text x="500" y="72">⚙️ 後台</text>
+        <text x="650" y="72">🤖 AI 採購</text>
+        <text x="800" y="72">💰 規模採購</text>
+      </g>
+
+      <!-- Arrows down -->
+      <g stroke="#00a3b4" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+        <line x1="160" y1="95" x2="160" y2="140"/>
+        <line x1="330" y1="95" x2="330" y2="140"/>
+        <line x1="500" y1="95" x2="500" y2="140"/>
+        <line x1="670" y1="95" x2="670" y2="140"/>
+        <line x1="800" y1="95" x2="800" y2="140"/>
+      </g>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#00a3b4"/>
+        </marker>
+      </defs>
+
+      <!-- 5 合署 units with icons -->
+      <g>
+        <rect x="100" y="145" width="120" height="90" rx="8" fill="white" stroke="#00a3b4" stroke-width="2"/>
+        <text x="160" y="172" font-size="24" text-anchor="middle">👨‍👩‍👧</text>
+        <text x="160" y="197" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="#003e47" text-anchor="middle">合署 A</text>
+        <text x="160" y="215" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">家事專精</text>
+        <text x="160" y="228" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">自主執行</text>
+
+        <rect x="270" y="145" width="120" height="90" rx="8" fill="white" stroke="#00a3b4" stroke-width="2"/>
+        <text x="330" y="172" font-size="24" text-anchor="middle">⚖️</text>
+        <text x="330" y="197" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="#003e47" text-anchor="middle">合署 B</text>
+        <text x="330" y="215" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">刑事消債</text>
+        <text x="330" y="228" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">自主執行</text>
+
+        <rect x="440" y="145" width="120" height="90" rx="8" fill="white" stroke="#00a3b4" stroke-width="2"/>
+        <text x="500" y="172" font-size="24" text-anchor="middle">💼</text>
+        <text x="500" y="197" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="#003e47" text-anchor="middle">合署 C</text>
+        <text x="500" y="215" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">商事顧問</text>
+        <text x="500" y="228" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">自主執行</text>
+
+        <rect x="610" y="145" width="120" height="90" rx="8" fill="white" stroke="#00a3b4" stroke-width="2"/>
+        <text x="670" y="172" font-size="24" text-anchor="middle">🏭</text>
+        <text x="670" y="197" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="#003e47" text-anchor="middle">合署 D</text>
+        <text x="670" y="215" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">勞動行政</text>
+        <text x="670" y="228" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">自主執行</text>
+
+        <rect x="740" y="145" width="120" height="90" rx="8" fill="#e4f7f3" stroke="#00a3b4" stroke-width="2" stroke-dasharray="4 3"/>
+        <text x="800" y="172" font-size="24" text-anchor="middle">➕</text>
+        <text x="800" y="197" font-family="Noto Sans TC" font-size="12" font-weight="700" fill="#003e47" text-anchor="middle">新合署</text>
+        <text x="800" y="215" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">彈性擴張</text>
+        <text x="800" y="228" font-family="Noto Sans TC" font-size="10" fill="#006570" text-anchor="middle">低成本</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Four benefits as icon cards -->
+  <div class="benefit-grid" style="margin-bottom:18px;">
+    <div class="benefit-mini">
+      <div class="ic">🔭</div>
+      <div class="tt">解 Top-down 盲點</div>
+      <div class="bb">合署即現場，AI 選型由律師主導</div>
+    </div>
+    <div class="benefit-mini">
+      <div class="ic">💪</div>
+      <div class="tt">解 Bottom-up 動機</div>
+      <div class="bb">合署收入直接相關，無被取代焦慮</div>
+    </div>
+    <div class="benefit-mini gold">
+      <div class="ic">📢</div>
+      <div class="tt">規模紅利</div>
+      <div class="bb">主體品牌吸進小所無法獲得的案源</div>
+    </div>
+    <div class="benefit-mini gold">
+      <div class="ic">🧪</div>
+      <div class="tt">低成本試錯</div>
+      <div class="bb">各單位獨立試工作流，有效的快速複製</div>
+    </div>
+  </div>
+
+  <!-- Closing -->
+  <div class="closing-card">
+    <div class="closing-title">📌 新物種假說：「合署型大所」</div>
+    <div class="closing-body">
+      以<b>品牌平台</b>承接規模紅利、以<b>合署單位</b>保留個人執行動機——
+      把大所的<b>業務管道能力</b>與個體戶的<b>改革動機</b>組合進同一個組織。
+      若假說成立，未來 3-5 年產業可能出現<b>「合署型大所」這個新物種</b>，而喆律是最完整模板。
+    </div>
+  </div>
+
+  <div class="watermark">legal-industry-intel · 2026 產業評析 · AI 影響篇</div>
+</div>
+</body>
+</html>

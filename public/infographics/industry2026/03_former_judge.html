@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>前司法官策略所：17% 的產業現象</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #f5eef3;
+    color: #3a0f2c;
+  }
+  .page {
+    width: 1080px;
+    min-height: 1800px;
+    padding: 56px 60px;
+    background: linear-gradient(180deg, #faf2f6 0%, #eddae5 100%);
+    position: relative;
+  }
+  h1 {
+    font-size: 42px;
+    font-weight: 900;
+    line-height: 1.25;
+    color: #3a0f2c;
+    border-bottom: 4px solid #8b3d6f;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+  h1 .accent { color: #8b3d6f; }
+  .subtitle {
+    font-size: 17px;
+    line-height: 1.75;
+    color: #4a2538;
+    margin-bottom: 26px;
+  }
+
+  .hero-row {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+    margin-bottom: 26px;
+  }
+  .stat-card {
+    background: white;
+    border-radius: 14px;
+    padding: 24px 26px;
+    box-shadow: 0 4px 14px rgba(139,61,111,0.12);
+  }
+  .donut-inline {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .donut-wrap { position: relative; flex-shrink: 0; }
+  .donut-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .donut-big { font-size: 36px; font-weight: 900; color: #8b3d6f; line-height: 1; }
+  .donut-sub { font-size: 11px; color: #6b3e54; margin-top: 3px; }
+  .stat-text h3 { font-size: 20px; font-weight: 800; color: #3a0f2c; margin-bottom: 6px; }
+  .stat-text p { font-size: 13.5px; line-height: 1.75; color: #4a2538; }
+  .stat-text b { color: #8b3d6f; }
+
+  .timeline-card {
+    background: white;
+    border-radius: 14px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 14px rgba(139,61,111,0.12);
+  }
+  .timeline-title { font-size: 16px; font-weight: 700; color: #3a0f2c; margin-bottom: 12px; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 14px 0 14px;
+  }
+  .section-head h2 { font-size: 23px; font-weight: 800; color: #3a0f2c; }
+  .section-head .tag {
+    font-size: 12px;
+    padding: 3px 12px;
+    background: #8b3d6f;
+    color: white;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  .firm-grid {
+    background: white;
+    border-radius: 14px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 14px rgba(139,61,111,0.1);
+    margin-bottom: 22px;
+  }
+  .firm-grid-title { font-size: 17px; font-weight: 700; color: #3a0f2c; margin-bottom: 14px; }
+  .firms {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .firm-chip {
+    background: #faf2f6;
+    border: 1.5px solid #ecd8e4;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #3a0f2c;
+  }
+  .firm-chip.star {
+    background: linear-gradient(135deg,#f9eaf2,#f3d4e3);
+    border-color: #8b3d6f;
+  }
+  .firm-chip .name { font-weight: 700; font-size: 14px; display: block; }
+  .firm-chip .detail { font-size: 11px; color: #6b3e54; display: block; margin-top: 2px; line-height: 1.4; }
+
+  .why-card {
+    background: white;
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 4px 14px rgba(139,61,111,0.1);
+    border-left: 5px solid #8b3d6f;
+  }
+  .why-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #3a0f2c;
+    margin-bottom: 12px;
+  }
+  .why-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 14px 0 8px;
+  }
+  .why-item {
+    background: #faf2f6;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .why-item .icon { font-size: 24px; margin-bottom: 6px; }
+  .why-item .h { font-size: 14.5px; font-weight: 700; color: #3a0f2c; margin-bottom: 4px; }
+  .why-item .b { font-size: 12.5px; line-height: 1.65; color: #4a2538; }
+
+  .case-card {
+    background: linear-gradient(135deg, #ffffff, #f9eef4);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    border-left: 4px solid #8b3d6f;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .case-title { font-size: 16px; font-weight: 800; color: #3a0f2c; margin-bottom: 6px; }
+  .case-body { font-size: 13px; line-height: 1.7; color: #4a2538; }
+  .case-body b { color: #8b3d6f; }
+
+  .contrast-card {
+    background: white;
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 4px 14px rgba(139,61,111,0.1);
+    margin-bottom: 20px;
+  }
+  .contrast-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 10px;
+  }
+  .contrast-col {
+    padding: 14px;
+    border-radius: 8px;
+  }
+  .contrast-col.big { background: #eef3f8; border-left: 4px solid #3c5e94; }
+  .contrast-col.boutique { background: #faf2f6; border-left: 4px solid #8b3d6f; }
+  .contrast-col h4 { font-size: 15px; font-weight: 800; color: #3a0f2c; margin-bottom: 8px; }
+  .contrast-col ul { font-size: 12.5px; line-height: 1.8; color: #4a2538; list-style: none; padding-left: 0; }
+  .contrast-col ul li::before { content: "▸ "; color: #8b3d6f; font-weight: 700; }
+  .contrast-col.big ul li::before { color: #3c5e94; }
+
+  .watermark {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 12px;
+    color: #8c6b7c;
+  }
+  .watermark::before { content: "◈ "; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>前司法官策略所：<br/><span class="accent">17% 的產業現象</span></h1>
+  <div class="subtitle">
+    189 間深度檔案中，<b>32 間（17%）</b>註記有前法官或前檢察官合夥人，
+    且 <b>約 22 間成立於 2015 年後</b>——這不是零散案例，而是明確的世代策略選擇，
+    集中在 10–30 人的中型精品所，專攻刑事、重大經濟犯罪、行政爭訟等「判決洞察價值高」的領域。
+  </div>
+
+  <div class="hero-row">
+    <div class="stat-card">
+      <div class="donut-inline">
+        <!-- Donut: 17% -->
+        <div class="donut-wrap">
+          <svg viewBox="0 0 160 160" width="150" height="150">
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#ecd8e4" stroke-width="22"/>
+            <!-- 17% of circumference 2πr=377 → 64.09 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#8b3d6f" stroke-width="22"
+                    stroke-dasharray="64.09 377" stroke-dashoffset="0"
+                    transform="rotate(-90 80 80)" stroke-linecap="round"/>
+          </svg>
+          <div class="donut-text">
+            <div class="donut-big">17%</div>
+            <div class="donut-sub">32 / 189 間</div>
+          </div>
+        </div>
+        <div class="stat-text">
+          <h3>深度檔案中的「前司法官因子」</h3>
+          <p>
+            189 間 <b>firm_profiles</b> 深度檔裡，<b>32 間</b>明確註記有前法官或前檢察官合夥人。
+            這個比例在商業律師市場極高，且<b>不是分散個案</b>——
+            而是集中在 10–30 人的中型精品所。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-card">
+      <div class="timeline-title">⏱ 成立年份分布（32 間）</div>
+      <!-- Simple horizontal timeline SVG -->
+      <svg viewBox="0 0 420 180" width="100%">
+        <line x1="20" y1="140" x2="400" y2="140" stroke="#8b3d6f" stroke-width="2"/>
+        <!-- Era ticks: 2000, 2005, 2010, 2015, 2020, 2025 -->
+        <g font-family="Noto Sans TC" font-size="11" fill="#6b3e54" text-anchor="middle">
+          <text x="50" y="160">2000</text>
+          <text x="120" y="160">2010</text>
+          <text x="200" y="160">2015</text>
+          <text x="280" y="160">2020</text>
+          <text x="360" y="160">2025</text>
+        </g>
+        <!-- Ticks -->
+        <g stroke="#8b3d6f" stroke-width="1">
+          <line x1="50" y1="135" x2="50" y2="145"/>
+          <line x1="120" y1="135" x2="120" y2="145"/>
+          <line x1="200" y1="135" x2="200" y2="145"/>
+          <line x1="280" y1="135" x2="280" y2="145"/>
+          <line x1="360" y1="135" x2="360" y2="145"/>
+        </g>
+        <!-- Era shading: 2015+ -->
+        <rect x="200" y="20" width="200" height="115" fill="#8b3d6f" opacity="0.12" rx="4"/>
+        <text x="300" y="40" font-family="Noto Sans TC" font-size="12" font-weight="700" text-anchor="middle" fill="#8b3d6f">2015+ 新生代</text>
+        <text x="300" y="58" font-family="Noto Sans TC" font-size="22" font-weight="900" text-anchor="middle" fill="#8b3d6f">22 間</text>
+        <text x="300" y="76" font-family="Noto Sans TC" font-size="11" text-anchor="middle" fill="#4a2538">佔 32 間中的 69%</text>
+        <!-- Earlier firms -->
+        <text x="120" y="40" font-family="Noto Sans TC" font-size="12" font-weight="700" text-anchor="middle" fill="#6b3e54">2015 前</text>
+        <text x="120" y="58" font-family="Noto Sans TC" font-size="22" font-weight="900" text-anchor="middle" fill="#6b3e54">10 間</text>
+        <!-- Dots representing firms -->
+        <g fill="#8b3d6f">
+          <circle cx="70" cy="120" r="4"/>
+          <circle cx="90" cy="120" r="4"/>
+          <circle cx="110" cy="120" r="4"/>
+          <circle cx="130" cy="120" r="4"/>
+          <circle cx="150" cy="120" r="4"/>
+          <circle cx="170" cy="120" r="4"/>
+          <circle cx="190" cy="120" r="4"/>
+          <!-- 2015+ denser -->
+          <circle cx="210" cy="120" r="4.5"/>
+          <circle cx="225" cy="120" r="4.5"/>
+          <circle cx="240" cy="120" r="4.5"/>
+          <circle cx="255" cy="120" r="4.5"/>
+          <circle cx="270" cy="120" r="4.5"/>
+          <circle cx="285" cy="120" r="4.5"/>
+          <circle cx="300" cy="120" r="4.5"/>
+          <circle cx="315" cy="120" r="4.5"/>
+          <circle cx="330" cy="120" r="4.5"/>
+          <circle cx="345" cy="120" r="4.5"/>
+          <circle cx="360" cy="120" r="4.5"/>
+          <circle cx="375" cy="120" r="4.5"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>代表事務所總覽</h2>
+    <span class="tag">星號 = 主持或全員為前司法官</span>
+  </div>
+
+  <div class="firm-grid">
+    <div class="firm-grid-title">依前司法官密度分組</div>
+    <div class="firms">
+      <div class="firm-chip star">
+        <span class="name">恆昇 ★★★</span>
+        <span class="detail">5 位主持律師全為前司法官<br/>前特偵組組長楊榮宗領軍</span>
+      </div>
+      <div class="firm-chip star">
+        <span class="name">平安恩慈 ★★★</span>
+        <span class="detail">6 位前司法官<br/>前檢察總長陳守煌創立</span>
+      </div>
+      <div class="firm-chip star">
+        <span class="name">觀希 ★★</span>
+        <span class="detail">5 位前司法官<br/>高屏據點</span>
+      </div>
+      <div class="firm-chip star">
+        <span class="name">伯衡 ★★</span>
+        <span class="detail">5 位前司法官<br/>北中南據點</span>
+      </div>
+      <div class="firm-chip star">
+        <span class="name">任遠 ★★</span>
+        <span class="detail">4 位前法官</span>
+      </div>
+      <div class="firm-chip star">
+        <span class="name">正陽聯合 ★★</span>
+        <span class="detail">前台北地檢檢察長周章欽<br/>前高分院法官共創</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">法丞</span>
+        <span class="detail">陳樹村 23 年法官資歷<br/>高雄不動產訴訟近壟斷</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">達文西</span>
+        <span class="detail">葉奇鑫（前檢察官）<br/>刑法妨害電腦使用罪章起草人</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">誠澈</span>
+        <span class="detail">前司法官精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">明永</span>
+        <span class="detail">前司法官精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">業鑫</span>
+        <span class="detail">勞動法 × 前司法官</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">博理</span>
+        <span class="detail">冠名制新生代</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">佐誠</span>
+        <span class="detail">中型精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">守諺</span>
+        <span class="detail">冠名制</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">文尹</span>
+        <span class="detail">中型精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">金石</span>
+        <span class="detail">中型精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">眾博</span>
+        <span class="detail">冠名制</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">鴻翔</span>
+        <span class="detail">中型精品</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">法丞／觀希／伯衡</span>
+        <span class="detail">地區龍頭 × 前司法官雙重模型</span>
+      </div>
+      <div class="firm-chip">
+        <span class="name">……其餘 12 間</span>
+        <span class="detail">多為 2018–2023 新立精品</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="why-card">
+    <div class="why-title">🎯 商業邏輯：前司法官帶來的三件事</div>
+    <div class="why-grid">
+      <div class="why-item">
+        <div class="icon">⚖️</div>
+        <div class="h">法庭文化熟稔</div>
+        <div class="b">
+          對證據門檻、審判長習慣、量刑邏輯的掌握，是外部律師<b>難以短期習得</b>的資訊不對稱。
+        </div>
+      </div>
+      <div class="why-item">
+        <div class="icon">🔮</div>
+        <div class="h">判決傾向預測</div>
+        <div class="b">
+          能更精準評估訴訟成功率，降低客戶決策不確定性，在高風險案件中特別有價值。
+        </div>
+      </div>
+      <div class="why-item">
+        <div class="icon">🤝</div>
+        <div class="h">客戶信任縮短決策</div>
+        <div class="b">
+          「前法官」「前檢察官」的履歷<b>比任何簡介都縮短客戶的聘任決策時間</b>。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>為何集中中型精品所而非超大所？</h2>
+    <span class="tag" style="background:#3c5e94;">產業結構解釋</span>
+  </div>
+
+  <div class="contrast-card">
+    <div style="font-size:14px;line-height:1.75;color:#4a2538;">
+      32 間前司法官所集中在中型精品所，<b>這不是巧合</b>。核心原因在於兩類事務所的業務結構不同——
+      大所主戰場在非訟與國際客戶，前司法官邊際效用有限；
+      但中型精品所以刑事、重大經濟犯罪、行政爭訟為核心，前司法官正好是最鋒利的差異化槓桿。
+    </div>
+    <div class="contrast-grid">
+      <div class="contrast-col big">
+        <h4>🏛 大所（理律、萬國等）</h4>
+        <ul>
+          <li>業務以<b>非訟 + 國際</b>為主</li>
+          <li>競爭力在規模、品牌、全球網絡</li>
+          <li>前司法官的<b>邊際效用有限</b></li>
+          <li>人才招募靠制度化訓練與 lock-up</li>
+        </ul>
+      </div>
+      <div class="contrast-col boutique">
+        <h4>🎯 中型精品所（恆昇、觀希等）</h4>
+        <ul>
+          <li>業務以<b>刑事 + 行政爭訟</b>為核心</li>
+          <li>沒有規模 → 需要<b>專業招牌</b></li>
+          <li>前司法官是<b>最快被辨識的差異化槓桿</b></li>
+          <li>客戶決策時看「誰出庭」而非「哪間所」</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="case-card">
+    <div class="case-title">🧩 個案：法丞 × 陳樹村（23 年法官資歷）</div>
+    <div class="case-body">
+      陳樹村在高雄不動產訴訟<b>近乎壟斷</b>。法丞同時佔據「地區龍頭」與「前司法官策略所」雙重模型，
+      這種雙重護城河是其他南部事務所難以複製的結構優勢。
+    </div>
+  </div>
+  <div class="case-card">
+    <div class="case-title">🧩 個案：達文西 × 葉奇鑫（刑法妨電腦使用罪章起草人）</div>
+    <div class="case-body">
+      把<b>檢察官時期對法條的原始權威</b>轉化為個資法遵品牌。
+      這是前司法官把司法資歷「商品化」最徹底的案例——資歷本身就是產品。
+    </div>
+  </div>
+
+  <div class="watermark">legal-industry-intel · 2026 產業評析 · 前司法官因子篇</div>
+</div>
+</body>
+</html>

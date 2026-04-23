@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>法律010 與合署業務獲利貢獻</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #e8f1f5;
+    color: #0f2a3d;
+  }
+  .page {
+    width: 1080px;
+    min-height: 1700px;
+    padding: 56px 60px;
+    background: linear-gradient(180deg, #f0f7fa 0%, #d8e8ef 100%);
+    position: relative;
+  }
+  h1 {
+    font-size: 42px;
+    font-weight: 900;
+    line-height: 1.25;
+    color: #0f2a3d;
+    margin-bottom: 10px;
+  }
+  h1 .brand { color: #0e7c8b; }
+  .subtitle {
+    font-size: 17px;
+    line-height: 1.75;
+    color: #2d4a5a;
+    margin-bottom: 30px;
+  }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+  .kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px 22px;
+    box-shadow: 0 4px 14px rgba(14, 124, 139, 0.1);
+    border-left: 5px solid #0e7c8b;
+  }
+  .kpi-card.teal  { border-color: #0e7c8b; }
+  .kpi-card.cyan  { border-color: #34b8c9; }
+  .kpi-card.alert { border-color: #c85a3f; }
+  .kpi-label { font-size: 13px; color: #6b8596; font-weight: 500; }
+  .kpi-value { font-size: 30px; font-weight: 900; color: #0f2a3d; margin: 4px 0; }
+  .kpi-delta { font-size: 13px; font-weight: 700; }
+  .kpi-delta.up { color: #0e7c8b; }
+  .kpi-delta.down { color: #c85a3f; }
+
+  .chart-card {
+    background: white;
+    border-radius: 16px;
+    padding: 28px 26px;
+    box-shadow: 0 4px 16px rgba(14, 124, 139, 0.1);
+    margin-bottom: 26px;
+  }
+  .chart-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f2a3d;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chart-title .badge {
+    font-size: 12px;
+    background: #0e7c8b;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .legend-inline {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .legend-inline span { display: flex; align-items: center; gap: 6px; }
+  .legend-inline i {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .callout {
+    background: white;
+    padding: 18px 22px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    border-left: 5px solid #0e7c8b;
+  }
+  .callout.shield { border-color: #34b8c9; background: linear-gradient(135deg, #ffffff 0%, #e8f6f9 100%); }
+  .callout.warn { border-color: #d4a24c; background: linear-gradient(135deg, #ffffff 0%, #fdf4e2 100%); }
+  .callout-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f2a3d;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .callout-body {
+    font-size: 14px;
+    line-height: 1.75;
+    color: #2d4a5a;
+  }
+
+  .table-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: right; padding: 10px 8px; background: #f0f7fa; color: #0f2a3d; font-weight: 700; border-bottom: 2px solid #0e7c8b; }
+  th:first-child { text-align: left; }
+  td { padding: 10px 8px; text-align: right; border-bottom: 1px solid #e5eef2; color: #2d4a5a; }
+  td:first-child { text-align: left; font-weight: 600; color: #0f2a3d; }
+  tr.highlight td { background: #fff8ec; font-weight: 700; }
+  tr.alert-row td { background: #fcecea; color: #a23f28; }
+
+  .watermark {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 12px;
+    color: #6b8596;
+  }
+  .watermark::before { content: "◈ "; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>核心業務引擎：<span class="brand">法律 010 × 合署業務</span><br/>盈餘 × 帳面貢獻解析</h1>
+  <div class="subtitle">
+    這兩項業務是公司帳面進帳的重要引擎，但性質不同：<br/>
+    <b>法律 010</b> 為<b>獨立核算的淨盈餘</b>；<b>合署業務</b> 則為<b>帳面進帳（毛貢獻）</b>——
+    合署的租金、行政人力、廣告投放、委前部門等實際成本，在帳上均掛在 <b>喆律本體</b>。
+    因此「合署業務」數字反映的是量能規模，而非獨立淨利。
+  </div>
+
+  <div class="callout warn" style="margin-bottom:24px;">
+    <div class="callout-title">📌 重要定義：為何本圖不把「合署」稱為盈餘</div>
+    <div class="callout-body">
+      合署業務的帳面進帳（如 2025 年 945.7 萬）尚未扣除共用成本。
+      <b>租金、行政助理、廣告投放、委前部門</b>等固定與變動支出，目前依會計政策記於喆律本體的支出欄位。
+      要評估合署的真實淨貢獻，需另行分攤這些共用成本——本圖以<b>「帳面貢獻」</b>代稱所有合署數字以避免誤讀。
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card teal">
+      <div class="kpi-label">法律 010｜2025 <b>淨盈餘</b></div>
+      <div class="kpi-value">1,487<span style="font-size:16px;"> 萬</span></div>
+      <div class="kpi-delta up">利潤率 &gt; 64%（獨立核算）</div>
+    </div>
+    <div class="kpi-card cyan">
+      <div class="kpi-label">合署業務｜2025 <b>帳面貢獻</b></div>
+      <div class="kpi-value">945.7<span style="font-size:16px;"> 萬</span></div>
+      <div class="kpi-delta up">▲ 234% YoY（成本掛本體）</div>
+    </div>
+    <div class="kpi-card alert">
+      <div class="kpi-label">2026 開春（1-2 月）總損益</div>
+      <div class="kpi-value" style="color:#c85a3f;">-217.3<span style="font-size:16px;"> 萬</span></div>
+      <div class="kpi-delta down">法律010 盈餘 + 合署帳面 合計 345.7 萬</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">
+      年度業務量能比較（法律010 淨盈餘 + 合署帳面貢獻 vs 總盈餘）
+      <span class="badge">2021 · 2024 · 2025 · 2026</span>
+    </div>
+    <div class="legend-inline">
+      <span><i style="background:#0e7c8b;"></i>法律 010（淨盈餘）</span>
+      <span><i style="background:#34b8c9;"></i>合署業務（帳面貢獻）</span>
+      <span><i style="background:#94a3b0;"></i>總盈虧</span>
+      <span><i style="background:#c85a3f;"></i>總損益（負值）</span>
+    </div>
+    <!-- Stacked bar chart SVG -->
+    <!-- Values:
+         2021: Law010=396.5, 合署=0 (僅盈餘柱，無盈餘資料顯示)
+         2024: Law010=1776, 合署=283.3, 盈餘=2486.4
+         2025: Law010=1487, 合署=945.7, 盈餘=2334.5
+         2026: Law010=195.1, 合署=150.6, 盈餘=-217.3
+         Max scale: ~2500
+         -->
+    <svg viewBox="0 0 900 430" width="100%" style="display:block;">
+      <!-- Zero line -->
+      <line x1="60" y1="320" x2="880" y2="320" stroke="#0f2a3d" stroke-width="2"/>
+      <!-- Grid -->
+      <g stroke="#e5eef2" stroke-width="1">
+        <line x1="60" y1="60"  x2="880" y2="60"/>
+        <line x1="60" y1="130" x2="880" y2="130"/>
+        <line x1="60" y1="195" x2="880" y2="195"/>
+        <line x1="60" y1="260" x2="880" y2="260"/>
+        <line x1="60" y1="360" x2="880" y2="360"/>
+      </g>
+      <g font-size="11" fill="#6b8596" text-anchor="end" font-family="Noto Sans TC">
+        <text x="52" y="64">2500</text>
+        <text x="52" y="134">2000</text>
+        <text x="52" y="199">1500</text>
+        <text x="52" y="264">1000</text>
+        <text x="52" y="324">0</text>
+        <text x="52" y="364">-500</text>
+      </g>
+
+      <!-- Scale: 2500萬 = 260px above baseline y=320 → 1px = ~9.6萬
+           Actually let's do: top=60 (=2500萬), baseline=320 (=0萬)
+           So 2500萬 spans 260px → px per 萬 = 0.104
+           -->
+
+      <!-- 2021 column (x=120) -->
+      <!-- Law010 stacked: 396.5萬 → h=41.2px, top=320-41.2=278.8 -->
+      <g>
+        <rect x="100" y="278.8" width="90" height="41.2" fill="#0e7c8b" rx="3"/>
+        <!-- No 合署, no 盈餘shown for 2021 -->
+      </g>
+      <text x="145" y="270" font-size="12" fill="#0e7c8b" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">法律010: 396.5</text>
+      <text x="145" y="390" font-size="14" fill="#0f2a3d" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2021</text>
+      <text x="145" y="408" font-size="11" fill="#6b8596" text-anchor="middle" font-family="Noto Sans TC">起點基期</text>
+
+      <!-- 2024 column (x=295) two bars side by side: contribution stack + dividend -->
+      <!-- Contribution stack: Law010=1776 → 184.7px, 合署=283.3 → 29.5px -->
+      <!-- Total stack height = 214.2px, top=320-214.2=105.8 -->
+      <g>
+        <rect x="265" y="135.3" width="70" height="184.7" fill="#0e7c8b" rx="3"/>
+        <rect x="265" y="105.8" width="70" height="29.5" fill="#34b8c9" rx="3"/>
+      </g>
+      <text x="300" y="150" font-size="11" fill="white" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">1,776</text>
+      <text x="300" y="125" font-size="10" fill="white" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">283.3</text>
+      <!-- 2024 dividend bar next to it -->
+      <!-- 2486.4 → 258.6px, top=61.4 -->
+      <g>
+        <rect x="345" y="61.4" width="50" height="258.6" fill="#94a3b0" rx="3" opacity="0.8"/>
+      </g>
+      <text x="370" y="53" font-size="12" fill="#475569" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2,486.4</text>
+      <text x="330" y="390" font-size="14" fill="#0f2a3d" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2024</text>
+      <text x="330" y="408" font-size="11" fill="#6b8596" text-anchor="middle" font-family="Noto Sans TC">雙引擎啟動</text>
+
+      <!-- 2025 column (x=490) -->
+      <!-- Law010=1487 → 154.6, 合署=945.7 → 98.4, total=253 → top=67 -->
+      <g>
+        <rect x="465" y="165.4" width="70" height="154.6" fill="#0e7c8b" rx="3"/>
+        <rect x="465" y="67" width="70" height="98.4" fill="#34b8c9" rx="3"/>
+      </g>
+      <text x="500" y="185" font-size="11" fill="white" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">1,487</text>
+      <text x="500" y="120" font-size="11" fill="white" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">945.7</text>
+      <text x="500" y="58" font-size="11" fill="#0e7c8b" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">合計 2,432.7</text>
+      <!-- 2025 dividend bar -->
+      <!-- 2334.5 → 242.8, top=77.2 -->
+      <g>
+        <rect x="545" y="77.2" width="50" height="242.8" fill="#94a3b0" rx="3" opacity="0.8"/>
+      </g>
+      <text x="570" y="70" font-size="12" fill="#475569" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2,334.5</text>
+      <text x="530" y="390" font-size="14" fill="#0f2a3d" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2025 ★</text>
+      <text x="530" y="408" font-size="11" fill="#0e7c8b" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">獲利緩衝峰值</text>
+
+      <!-- 2026 column (x=720) -->
+      <!-- Law010=195.1 → 20.3, 合署=150.6 → 15.7, total=36 → top=284 -->
+      <g>
+        <rect x="695" y="299.7" width="70" height="20.3" fill="#0e7c8b" rx="3"/>
+        <rect x="695" y="284" width="70" height="15.7" fill="#34b8c9" rx="3"/>
+      </g>
+      <text x="730" y="278" font-size="11" fill="#0e7c8b" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">合計 345.7</text>
+      <!-- 2026 negative dividend: -217.3 → 22.6px, from baseline 320 down to 342.6 -->
+      <g>
+        <rect x="775" y="320" width="50" height="22.6" fill="#c85a3f" rx="3"/>
+      </g>
+      <text x="800" y="358" font-size="12" fill="#c85a3f" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">-217.3</text>
+      <text x="760" y="390" font-size="14" fill="#0f2a3d" text-anchor="middle" font-weight="700" font-family="Noto Sans TC">2026</text>
+      <text x="760" y="408" font-size="11" fill="#c85a3f" text-anchor="middle" font-family="Noto Sans TC">1-2 月初步</text>
+    </svg>
+  </div>
+
+  <div class="callout shield">
+    <div class="callout-title">🛡️ 量能緩衝公式：2025 年帳面合計 2,432.7 萬 &gt; 總盈餘 2,334.5 萬</div>
+    <div class="callout-body">
+      法律 010 淨盈餘 (1,487) + 合署帳面貢獻 (945.7) = <b>2,432.7 萬</b>，超過當年總盈餘 <b>2,334.5 萬</b>。
+      這意味：<b>若不計合署的共用成本</b>，兩條業務線的進帳量能足以獨力支撐全年盈餘池。
+      實際淨緩衝效應需扣除合署分攤的本體成本後再評估——但即便保守計算，合署仍是公司近年成長最快的量能來源。
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">🚀 合署業務：2025 年帳面貢獻成長 234%，第二量能曲線確立</div>
+    <div class="callout-body">
+      合署業務<b>帳面進帳</b>從 2024 年的 <b>283.3 萬</b> 跳升至 2025 年的 <b>945.7 萬</b>，單年成長 <b>234%</b>。
+      雖然法律 010 淨盈餘於 2025 年略回落（1,776 → 1,487，-16%），合署量能強勢補位，使帳面總額仍創新高。
+      <b>下一步建議：</b>將合署專屬的租金、行政、廣告、委前部門成本做分攤試算，建立合署真實淨貢獻儀表板。
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-title">⚠️ 2026 年開春警訊：量能動能尚未延續</div>
+    <div class="callout-body">
+      2026 年 1-2 月初步數據顯示，法律 010 淨盈餘 + 合署帳面貢獻僅合計 <b>345.7 萬</b>，而總損益為 <b>-217.3 萬</b>。
+      以線性外推全年度僅 <b>約 2,074 萬</b> 帳面量能，尚不足以比肩 2025 年水準。
+      建議 Q2 密切關注合署轉案節奏與法律 010 案源結構——<b>若合署占比持續放大，成本分攤議題的優先級也會升高</b>。
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="chart-title" style="font-size:18px;">📋 四年度量能明細（單位：萬元）</div>
+    <table>
+      <thead>
+        <tr>
+          <th>年度</th>
+          <th>法律 010<br/>（淨盈餘）</th>
+          <th>合署業務<br/>（帳面貢獻）</th>
+          <th>兩項帳面合計</th>
+          <th>總盈虧</th>
+          <th>喆律本體<br/>帳面殘差</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2021</td>
+          <td>396.5</td>
+          <td>—</td>
+          <td>396.5</td>
+          <td>1,440.6</td>
+          <td>+1,044.1</td>
+        </tr>
+        <tr>
+          <td>2024</td>
+          <td>1,776.0</td>
+          <td>283.3</td>
+          <td>2,059.3</td>
+          <td>2,486.4</td>
+          <td>+427.1</td>
+        </tr>
+        <tr class="highlight">
+          <td>2025 ★</td>
+          <td>1,487.0</td>
+          <td>945.7</td>
+          <td>2,432.7</td>
+          <td>2,334.5</td>
+          <td>-98.2</td>
+        </tr>
+        <tr class="alert-row">
+          <td>2026 Q1 初步</td>
+          <td>195.1</td>
+          <td>150.6</td>
+          <td>345.7</td>
+          <td>-217.3</td>
+          <td>-563.0</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:11.5px;color:#6b8596;margin-top:10px;line-height:1.75;">
+      <b>註 1：</b>「合署業務（帳面貢獻）」為合署端帳面進帳，<b>尚未扣除共用成本</b>（租金、行政、廣告、委前部門）——這些成本現行均記於喆律本體帳上。<br/>
+      <b>註 2：</b>「喆律本體帳面殘差」= 總盈虧 − 法律010 淨盈餘 − 合署帳面貢獻；其中包含了合署的全部共用成本分攤。
+      因此 2025 年看似 -98.2 萬的殘差，實際已吸收了合署的租金/廣告/人事等支出，<b>不代表本體業務真實虧損</b>。<br/>
+      <b>註 3：</b>2021 年合署業務尚未獨立統計，以「—」標示。
+    </div>
+  </div>
+
+  <div class="watermark">喆律法律事務所 · 核心業務量能分析（帳面貢獻版）</div>
+</div>
+</body>
+</html>

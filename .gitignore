@@ -6,3 +6,19 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/
+
+# scratch / 一次性 debug 腳本（檔名約定）
+scripts/_*
+scripts/check_*.py
+scripts/fix_*.py
+scripts/test_*.py
+
+# 敏感業務資料（走 iCloud 同步，不進 git）
+scripts/briefs/
+
+# 腳本產出物
+public/infographics/pdf/
+
+# Supabase CLI 暫存
+supabase/.temp/
+supabase/supabase/

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>六種經營模型（2026）</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: #eaf2ef;
+    color: #0e2a22;
+  }
+  .page {
+    width: 1080px;
+    min-height: 1780px;
+    padding: 56px 60px;
+    background: linear-gradient(180deg, #f0f7f4 0%, #dce9e2 100%);
+    position: relative;
+  }
+  h1 {
+    font-size: 42px;
+    font-weight: 900;
+    line-height: 1.25;
+    color: #0e2a22;
+    border-bottom: 4px solid #1e6b54;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+  h1 .accent { color: #1e6b54; }
+  .subtitle {
+    font-size: 16.5px;
+    line-height: 1.75;
+    color: #2a4a3f;
+    margin-bottom: 26px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 26px;
+  }
+  .model-card {
+    background: white;
+    border-radius: 14px;
+    padding: 22px 22px 18px;
+    box-shadow: 0 4px 14px rgba(30,107,84,0.1);
+    border-top: 5px solid #1e6b54;
+    position: relative;
+  }
+  .model-card .num {
+    position: absolute;
+    top: -18px;
+    left: 20px;
+    background: #1e6b54;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 900;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  .model-card.c2 { border-top-color: #2a94a0; }
+  .model-card.c2 .num { background: #2a94a0; }
+  .model-card.c3 { border-top-color: #8b3d6f; }
+  .model-card.c3 .num { background: #8b3d6f; }
+  .model-card.c4 { border-top-color: #c27a3f; }
+  .model-card.c4 .num { background: #c27a3f; }
+  .model-card.c5 { border-top-color: #3c5e94; }
+  .model-card.c5 .num { background: #3c5e94; }
+  .model-card.c6 { border-top-color: #6b8e23; }
+  .model-card.c6 .num { background: #6b8e23; }
+
+  .model-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: #0e2a22;
+    margin: 8px 0 4px;
+  }
+  .model-tag {
+    font-size: 12px;
+    color: #1e6b54;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .c2 .model-tag { color: #2a94a0; }
+  .c3 .model-tag { color: #8b3d6f; }
+  .c4 .model-tag { color: #c27a3f; }
+  .c5 .model-tag { color: #3c5e94; }
+  .c6 .model-tag { color: #6b8e23; }
+
+  .model-logic {
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: #364c48;
+    margin-bottom: 10px;
+  }
+  .reps {
+    background: #f4f9f7;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: #2a4a3f;
+    margin-bottom: 8px;
+  }
+  .c2 .reps { background: #eff8fa; }
+  .c3 .reps { background: #f9eff5; }
+  .c4 .reps { background: #fdf4e7; }
+  .c5 .reps { background: #eff3fa; }
+  .c6 .reps { background: #f3f7e8; }
+  .reps b { color: #0e2a22; }
+
+  .model-metric {
+    display: flex;
+    gap: 12px;
+    font-size: 12.5px;
+    color: #5a7569;
+    margin-top: 6px;
+  }
+  .model-metric .k {
+    background: #e7f0eb;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    color: #1e6b54;
+  }
+  .c2 .model-metric .k { background: #e0f0f3; color: #2a94a0; }
+  .c3 .model-metric .k { background: #f2e0ec; color: #8b3d6f; }
+  .c4 .model-metric .k { background: #fbe6cc; color: #c27a3f; }
+  .c5 .model-metric .k { background: #e0e7f3; color: #3c5e94; }
+  .c6 .model-metric .k { background: #ebefd8; color: #6b8e23; }
+
+  .insight-card {
+    background: white;
+    border-radius: 14px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 14px rgba(30,107,84,0.1);
+    margin-bottom: 20px;
+    border-left: 5px solid #1e6b54;
+  }
+  .insight-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #0e2a22;
+    margin-bottom: 10px;
+  }
+  .insight-body {
+    font-size: 13.5px;
+    line-height: 1.8;
+    color: #2a4a3f;
+  }
+
+  .watermark {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 12px;
+    color: #6b8e7f;
+  }
+  .watermark::before { content: "◈ "; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>台灣法律事務所<span class="accent">六種經營模型</span>全覽<br/>
+    <span style="font-size:22px;font-weight:700;color:#2a4a3f;">189 間深度檔 × 規模 × 專長 × 沿革交叉歸納</span>
+  </h1>
+  <div class="subtitle">
+    在超扁平的市場中，具差異化生存能力的中大型所，可清楚歸類為以下六種。
+    這些模型並非互斥——如喆律同時兼具「法律科技量產」與「家事專業深耕」雙重性格——但各自都有清晰的護城河邏輯與代表玩家。
+  </div>
+
+  <div class="grid">
+    <!-- 1. 全方位綜合大所 -->
+    <div class="model-card">
+      <div class="num">1</div>
+      <div class="model-title">全方位綜合大所</div>
+      <div class="model-tag">人才庫即護城河｜非訟 &gt; 訴訟</div>
+      <div class="model-logic">
+        老派全領域大所，靠「人才池同時開戰十個領域」的規模效應，
+        賺取上市公司常年顧問與國際 referral。平均案件數低，收入來自高單價非訟。
+      </div>
+      <div class="reps">
+        <b>代表：</b>理律（205）、萬國（106）、常在（51）、寰瀛（31）<br/>
+        <b>特殊資產：</b>萬國的司法元老派血統（賴浩敏、黃虹霞、陳傳岳）
+      </div>
+      <div class="model-metric">
+        <span class="k">理律 7 件/人</span>
+        <span class="k">常在 5 件/人</span>
+      </div>
+    </div>
+
+    <!-- 2. 企業化法律科技所 -->
+    <div class="model-card c2">
+      <div class="num">2</div>
+      <div class="model-title">企業化法律科技所</div>
+      <div class="model-tag">用系統對抗長尾｜SOP + AI 壓邊際成本</div>
+      <div class="model-logic">
+        量產可標準化案件（家事、消債、刑事輕罪），當個體戶與 2–4 人所無法承受
+        案源行銷與後台固定成本時，規模化量產所便吃下長尾市場。
+      </div>
+      <div class="reps">
+        <b>代表：</b>喆律（64）、立勤、元亨、大恆、謙聖<br/>
+        <b>對照：</b>喆律每人 77 件，是理律的 <b>11×</b>、萬國的 <b>5×</b>
+      </div>
+      <div class="model-metric">
+        <span class="k">喆律 77</span>
+        <span class="k">謙聖 244</span>
+        <span class="k">大恆 55</span>
+      </div>
+    </div>
+
+    <!-- 3. 前司法官策略所 -->
+    <div class="model-card c3">
+      <div class="num">3</div>
+      <div class="model-title">前司法官策略所</div>
+      <div class="model-tag">司法文化內線｜刑事・重大經濟・行政爭訟</div>
+      <div class="model-logic">
+        189 間中 <b>32 間（17%）</b>有前司法官合夥人，約 22 間成立於 2015 年後。
+        專攻「法庭結果不確定、判決洞察價值高」的領域，避開理律萬國既有業務帶。
+      </div>
+      <div class="reps">
+        <b>代表：</b>恆昇（前特偵組組長楊榮宗領軍）、平安恩慈（前檢察總長陳守煌）、
+        觀希、任遠、伯衡、法丞、達文西……
+      </div>
+      <div class="model-metric">
+        <span class="k">32 間 · 17%</span>
+        <span class="k">10–30 人為主</span>
+      </div>
+    </div>
+
+    <!-- 4. 專業深耕精品所 -->
+    <div class="model-card c4">
+      <div class="num">4</div>
+      <div class="model-title">專業深耕精品所</div>
+      <div class="model-tag">垂直縱深｜指名度 &gt; 價格敏感度</div>
+      <div class="model-logic">
+        靠單一領域權威擋掉大所綜合服務的報價競爭。客戶遇到該領域爭議時，
+        <b>繞過綜合大所直接上門</b>。這條賽道在 AI 時代反而更穩固。
+      </div>
+      <div class="reps">
+        <b>智財：</b>聖島（1984 建成首個中文商標資料庫）、TIPLO（1965）、六合<br/>
+        <b>勞動：</b>宇恒（1,300 顧問客戶）、有澤、業鑫<br/>
+        <b>家事：</b>喆律、恩典｜<b>保險：</b>元亨（36% 全台最高）
+      </div>
+      <div class="model-metric">
+        <span class="k">單領域 Top-of-Mind</span>
+      </div>
+    </div>
+
+    <!-- 5. 國際連結所 -->
+    <div class="model-card c5">
+      <div class="num">5</div>
+      <div class="model-title">國際連結所</div>
+      <div class="model-tag">跨境節點稀缺性｜外商／IPO／併購／仲裁</div>
+      <div class="model-logic">
+        境內競爭力不在規模，而在<b>跨境交易流量入口</b>。2024 遠東聯合（萬佳+遠東合併）
+        顯示本土國際所也正透過合併擴張。Big 4 附屬已超過 110 人，形成「稅+法」獨立生態。
+      </div>
+      <div class="reps">
+        <b>外資系：</b>國際通商（Baker McKenzie）、眾達（Jones Day）、大成（Dentons）、高蓋茨<br/>
+        <b>本土國際：</b>博仲（台灣＋外國律師合夥，外商來台主要節點）、恆業、遠東聯合<br/>
+        <b>Big 4：</b>普華、安侯、德勤、協合
+      </div>
+      <div class="model-metric">
+        <span class="k">Big 4 合計 110+ 人</span>
+      </div>
+    </div>
+
+    <!-- 6. 地區龍頭所 -->
+    <div class="model-card c6">
+      <div class="num">6</div>
+      <div class="model-title">地區龍頭所</div>
+      <div class="model-tag">本地人脈閉環｜不追求跨區</div>
+      <div class="model-logic">
+        以本地法院與公會為核心經營資源。案源來自轉介、地方企業顧問、政府採購，
+        與地方法院形成共生。<b>跨區分所是台北所最難複製</b>的模式。
+      </div>
+      <div class="reps">
+        <b>代表：</b>法丞（高雄 30）、正陽聯合（前台北地檢檢察長周章欽共創）、
+        觀希（高屏）、吉常同（台中+彰化+澎湖）、萬峯（桃園）
+      </div>
+      <div class="model-metric">
+        <span class="k">法丞 30 人</span>
+        <span class="k">多城據點</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="insight-card">
+    <div class="insight-title">🧭 六種模型的共同邏輯：差異化取代規模戰</div>
+    <div class="insight-body">
+      台灣市場既無美式巨頭、也沒有英式 Magic Circle，每家中大型所都必須在
+      <b>「人才／流程／身分／專業／跨境／地緣」</b>六個構面挑一個成為核心護城河。
+      模型 1、5 靠「量」取勝（人才庫、跨境網絡）；模型 2 靠「流程與工具」取勝；
+      模型 3、4、6 則靠「特定身分資本或客戶指名度」取勝。
+      <b>同時佔據兩個以上模型的事務所（如喆律＝2+4、法丞＝3+6、恆昇＝3+4）</b>
+      通常具有最強的抗週期能力。
+    </div>
+  </div>
+
+  <div class="insight-card" style="border-left-color:#c27a3f;">
+    <div class="insight-title" style="color:#c27a3f;">⚡ 反直覺觀察：規模與量產不必然矛盾</div>
+    <div class="insight-body">
+      喆律 64 人做到平均每人 77 件，證明<b>規模化量產可同時兼具高利潤</b>。
+      恆昇 5 位主持律師全為前司法官、放棄綜合所定位，反而在刑事圈形成極強辨識度。
+      博仲以<b>台灣＋外國律師合夥</b>的結構，長年承接大量外商來台設立、投資、跨境合規案件——
+      <b>合夥組成本身就是產品</b>，外商客戶選擇博仲時買的是「溝通不需翻譯的信任感」。
+    </div>
+  </div>
+
+  <div class="watermark">legal-industry-intel · 2026 產業評析 · 經營模型篇</div>
+</div>
+</body>
+</html>
