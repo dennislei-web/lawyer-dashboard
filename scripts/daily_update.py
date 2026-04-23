@@ -550,7 +550,11 @@ def scrape_tracking_table(session, target_months):
         }
 
         print(f"    {y}-{m:02d}...", end=" ", flush=True)
-        resp = session.get(url, params=params)
+        try:
+            resp = session.get(url, params=params, timeout=30)
+        except requests.exceptions.RequestException as e:
+            print(f"請求失敗: {type(e).__name__}")
+            continue
         if resp.status_code != 200:
             print(f"失敗 (HTTP {resp.status_code})")
             continue
@@ -606,7 +610,7 @@ def scrape_tracking_table(session, target_months):
 
 
 def update_tracking_in_supabase(tracking_rows):
-    """透過案件編號更新 consultation_cases 的追蹤欄位。"""
+    """批次更新 consultation_cases 的追蹤欄位（透過 update_tracking_bulk RPC）。"""
     if not tracking_rows:
         return
 
@@ -616,31 +620,24 @@ def update_tracking_in_supabase(tracking_rows):
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=minimal",
     }
 
     print(f"  更新 {len(tracking_rows)} 筆追蹤資料到 Supabase...", end=" ", flush=True)
 
-    updated = 0
-    with httpx.Client(timeout=30) as client:
-        for row in tracking_rows:
-            cn = row["case_number"]
-            payload = {
-                "tracking_staff": row["tracking_staff"],
-                "tracking_notes": row["tracking_notes"],
-                "tracking_status": row["tracking_status"],
-            }
-            resp = client.patch(
-                f"{SUPABASE_URL}/rest/v1/consultation_cases",
-                params={"case_number": f"eq.{cn}"},
-                json=payload,
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/update_tracking_bulk",
+                json={"data": tracking_rows},
                 headers=headers,
             )
-            if resp.status_code in (200, 204):
-                updated += 1
-            # 404/no match 是正常的（追蹤表的案件可能不在 consultation_cases）
-
-    print(f"已更新 {updated}/{len(tracking_rows)} 筆")
+            if resp.status_code not in (200, 204):
+                print(f"失敗 (HTTP {resp.status_code}): {resp.text[:200]}")
+                return
+            updated = resp.json() if resp.content else 0
+            print(f"已更新 {updated}/{len(tracking_rows)} 筆")
+    except Exception as e:
+        print(f"失敗: {e}")
 
 
 # ═══════════════════════════════════════════════════════════
