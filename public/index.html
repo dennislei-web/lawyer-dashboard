@@ -120,6 +120,38 @@
     }
     .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
 
+    /* MODAL */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; z-index:1000;
+      background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
+      align-items:center; justify-content:center; padding:20px;
+    }
+    .modal-overlay.active { display:flex; }
+    .modal-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+      padding:28px; width:100%; max-width:400px; box-shadow:0 24px 64px var(--login-shadow);
+    }
+    .modal-card h2 { font-size:1.1rem; color:var(--gold-light); margin-bottom:18px; letter-spacing:1px; }
+    .modal-card .form-group { margin-bottom:14px; }
+    .modal-card label { display:block; font-size:0.78rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; }
+    .modal-card input {
+      width:100%; padding:10px 14px; background:var(--bg-row); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-size:0.9rem; transition:border-color 0.2s;
+    }
+    .modal-card input:focus { outline:none; border-color:var(--gold); }
+    .modal-actions { display:flex; gap:10px; margin-top:18px; }
+    .btn-primary, .btn-outline {
+      flex:1; padding:10px; border-radius:8px; font-size:0.9rem; font-weight:600; cursor:pointer; transition:opacity 0.2s;
+    }
+    .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; border:none; }
+    .btn-primary:hover { opacity:0.9; }
+    .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+    .btn-outline { background:transparent; color:var(--text); border:1px solid var(--border); }
+    .btn-outline:hover { background:var(--ghost-bg); }
+    .modal-msg { font-size:0.85rem; margin-bottom:12px; display:none; padding:8px 12px; border-radius:6px; }
+    .modal-msg.error { color:var(--red); background:var(--red-dim); }
+    .modal-msg.success { color:var(--green); background:var(--green-dim); }
+
     #framesHost {
       flex:1 1 auto;
       position:relative;
@@ -204,6 +236,7 @@
     <div class="header-right">
       <span class="user-badge" id="userBadge"></span>
       <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="changePwdBtn" title="修改密碼">修改密碼</button>
       <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
     </div>
   </div>
@@ -213,6 +246,29 @@
     <iframe class="route-frame" data-route="finance"      src="" title="finance"></iframe>
     <iframe class="route-frame" data-route="partners"     src="" title="partners"></iframe>
     <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
+  </div>
+</div>
+
+<!-- PASSWORD MODAL -->
+<div class="modal-overlay" id="passwordModal">
+  <div class="modal-card">
+    <h2>修改密碼</h2>
+    <div class="modal-msg error" id="pwdError"></div>
+    <div class="modal-msg success" id="pwdSuccess">密碼修改成功！</div>
+    <form id="passwordForm">
+      <div class="form-group">
+        <label>新密碼</label>
+        <input type="password" id="newPassword" minlength="6" placeholder="至少 6 個字元" required autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label>確認新密碼</label>
+        <input type="password" id="confirmPassword" minlength="6" placeholder="再次輸入新密碼" required autocomplete="new-password">
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn-primary" id="pwdSubmitBtn">確認修改</button>
+        <button type="button" class="btn-outline" id="pwdCancelBtn">取消</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -361,6 +417,60 @@ document.getElementById('logoutBtn').addEventListener('click', async function() 
   if (sb) await sb.auth.signOut();
   // Full reload on logout ensures iframes clear their cached Supabase client state too.
   location.reload();
+});
+
+// ═══ CHANGE PASSWORD ═══
+var pwdModal      = document.getElementById('passwordModal');
+var pwdErrorEl    = document.getElementById('pwdError');
+var pwdSuccessEl  = document.getElementById('pwdSuccess');
+var pwdNewInput   = document.getElementById('newPassword');
+var pwdConfInput  = document.getElementById('confirmPassword');
+var pwdSubmitBtn  = document.getElementById('pwdSubmitBtn');
+
+function openPwdModal() {
+  pwdErrorEl.style.display = 'none';
+  pwdSuccessEl.style.display = 'none';
+  pwdNewInput.value = '';
+  pwdConfInput.value = '';
+  pwdModal.classList.add('active');
+  setTimeout(function() { pwdNewInput.focus(); }, 50);
+}
+function closePwdModal() { pwdModal.classList.remove('active'); }
+function showPwdError(msg) { pwdErrorEl.textContent = msg; pwdErrorEl.style.display = 'block'; }
+
+document.getElementById('changePwdBtn').addEventListener('click', openPwdModal);
+document.getElementById('pwdCancelBtn').addEventListener('click', closePwdModal);
+pwdModal.addEventListener('click', function(e) {
+  if (e.target === pwdModal) closePwdModal();
+});
+
+document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  pwdErrorEl.style.display = 'none';
+  pwdSuccessEl.style.display = 'none';
+
+  var newPwd = pwdNewInput.value;
+  var confPwd = pwdConfInput.value;
+  if (newPwd.length < 6) { showPwdError('密碼至少 6 個字元'); return; }
+  if (newPwd !== confPwd) { showPwdError('兩次密碼不一致'); return; }
+  if (!sb) { showPwdError('Supabase 未設定'); return; }
+
+  pwdSubmitBtn.disabled = true;
+  pwdSubmitBtn.textContent = '修改中...';
+  try {
+    var r = await sb.auth.updateUser({ password: newPwd });
+    if (r.error) {
+      showPwdError('修改失敗：' + r.error.message);
+    } else {
+      pwdSuccessEl.style.display = 'block';
+      setTimeout(closePwdModal, 1500);
+    }
+  } catch (ex) {
+    showPwdError('修改失敗：' + (ex.message || '未知錯誤'));
+  } finally {
+    pwdSubmitBtn.disabled = false;
+    pwdSubmitBtn.textContent = '確認修改';
+  }
 });
 
 // ═══ Session lifecycle ═══
