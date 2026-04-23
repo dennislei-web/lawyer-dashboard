@@ -524,79 +524,84 @@ TRACKING_STAFF = [
 
 
 def scrape_tracking_table(session, target_months):
-    """透過 JSON API 爬取客戶關係追蹤表。"""
+    """透過 JSON API 爬取客戶關係追蹤表（逐月查詢，避免 API 對大範圍回空 list）。"""
+    import calendar
+
     print(f"\n{'='*50}")
     print("  Step 3: 爬取客戶關係追蹤表")
     print(f"{'='*50}")
 
     sorted_months = sorted(target_months)
-    first_y, first_m = sorted_months[0]
-    last_y, last_m = sorted_months[-1]
-
-    import calendar
-    start_date = f"{first_y}-{first_m:02d}-01"
-    last_day = calendar.monthrange(last_y, last_m)[1]
-    end_date = f"{last_y}-{last_m:02d}-{last_day}"
-
     users_str = ",".join(TRACKING_STAFF)
     url = f"{CRM_BASE_URL}/api/consultation_trackings"
-    params = {
-        "start_date": start_date,
-        "end_date": end_date,
-        "users": users_str,
-    }
 
-    print(f"  日期範圍：{start_date} ~ {end_date}")
+    print(f"  共 {len(sorted_months)} 個月，逐月查詢")
     print(f"  法務人員：{users_str}")
-    print(f"  爬取中...", end=" ", flush=True)
 
-    resp = session.get(url, params=params)
-    if resp.status_code != 200:
-        print(f"失敗 (HTTP {resp.status_code})")
-        return []
+    all_rows = []
+    for y, m in sorted_months:
+        start_date = f"{y}-{m:02d}-01"
+        last_day = calendar.monthrange(y, m)[1]
+        end_date = f"{y}-{m:02d}-{last_day}"
+        params = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "users": users_str,
+        }
 
-    try:
-        data = resp.json()
-    except Exception:
-        print("回應非 JSON")
-        return []
-
-    if not isinstance(data, list):
-        print(f"預期陣列，得到 {type(data)}")
-        return []
-
-    rows = []
-    for r in data:
-        try:
-            cases = r.get("cases", [])
-            case = cases[0] if cases else {}
-            case_number = case.get("serial_number", "")
-            if not case_number:
-                continue
-
-            # 備註（HTML → 純文字）
-            desc = r.get("description", "") or ""
-            notes = re.sub(r"<[^>]+>", "", desc).strip()
-
-            # 負責法務（sales 欄位）
-            sales = r.get("sales", [])
-            staff = ", ".join(s.get("name", "") for s in sales if isinstance(s, dict) and s.get("name"))
-
-            # 簽約狀態
-            signed_state = r.get("signed_state", "")
-            tracking_status = SIGNED_MAP.get(signed_state, signed_state)
-
-            rows.append({
-                "case_number": case_number,
-                "tracking_staff": staff,
-                "tracking_notes": notes,
-                "tracking_status": tracking_status,
-            })
-        except Exception as e:
-            print(f"    解析追蹤記錄失敗: {e}")
+        print(f"    {y}-{m:02d}...", end=" ", flush=True)
+        resp = session.get(url, params=params)
+        if resp.status_code != 200:
+            print(f"失敗 (HTTP {resp.status_code})")
             continue
 
-    print(f"OK，取得 {len(rows)} 筆追蹤資料")
+        try:
+            data = resp.json()
+        except Exception:
+            print("回應非 JSON")
+            continue
+
+        if not isinstance(data, list):
+            print(f"預期陣列，得到 {type(data)}")
+            continue
+
+        month_rows = []
+        for r in data:
+            try:
+                cases = r.get("cases", [])
+                case = cases[0] if cases else {}
+                case_number = case.get("serial_number", "")
+                if not case_number:
+                    continue
+
+                desc = r.get("description", "") or ""
+                notes = re.sub(r"<[^>]+>", "", desc).strip()
+
+                sales = r.get("sales", [])
+                staff = ", ".join(s.get("name", "") for s in sales if isinstance(s, dict) and s.get("name"))
+
+                signed_state = r.get("signed_state", "")
+                tracking_status = SIGNED_MAP.get(signed_state, signed_state)
+
+                month_rows.append({
+                    "case_number": case_number,
+                    "tracking_staff": staff,
+                    "tracking_notes": notes,
+                    "tracking_status": tracking_status,
+                })
+            except Exception as e:
+                print(f"解析追蹤記錄失敗: {e}")
+                continue
+
+        print(f"{len(month_rows)} 筆")
+        all_rows.extend(month_rows)
+
+    # 同一 case_number 在跨月查詢可能出現多次（description 會延續），保留最後一筆（較新）
+    by_case = {}
+    for row in all_rows:
+        by_case[row["case_number"]] = row
+    rows = list(by_case.values())
+    print(f"  共取得 {len(rows)} 筆追蹤資料（去重後）")
     return rows
 
 
