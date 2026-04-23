@@ -136,9 +136,29 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
     return;
   }
 
-  // 沒 follow 紀錄（例如 webhook 上線前就已加好友）→ 補建一筆用 messageAt 當 followed_at
+  // 已 match 過 → 純更新 last_message 就結束
+  if (existing?.matched_case_id) {
+    await sb.from('line_pending_bindings')
+      .update({ last_message_at: messageAt, last_message_text: text.slice(0, 500) })
+      .eq('user_id', userId).eq('oa_id', oaKey);
+    return;
+  }
+
+  const name = extractName(text);
+
+  // 沒 pending row 且訊息不是短姓名 → silent ignore（避免閒聊訊息塞爆清單）
+  if (!existing && !name) return;
+
+  // 有名字才 match
+  const followedAt = existing?.followed_at ?? messageAt;
+  const candidates = name ? await tryAutoMatch(sb, name, followedAt) : [];
+
+  // 沒 pending row 且名字對不到任何案件 → silent ignore（排除「好的感謝」這種 4 字短語）
+  if (!existing && candidates.length === 0) return;
+
+  // 到這裡：要嘛已有 row（更新），要嘛是 name + 至少 1 個 candidate（新建）
   if (!existing) {
-    const { error: upErr } = await sb
+    const { error: insErr } = await sb
       .from('line_pending_bindings')
       .insert({
         user_id: userId,
@@ -147,33 +167,17 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
         followed_at: messageAt,
         last_message_at: messageAt,
         last_message_text: text.slice(0, 500),
+        last_extracted_name: name,
+        match_attempts: 1,
       });
-    if (upErr) console.error('pending insert on message error', upErr);
+    if (insErr) {
+      console.error('pending insert error', insErr);
+      return;
+    }
   }
-
-  const row = existing ?? { followed_at: messageAt, matched_case_id: null, match_attempts: 0 };
-
-  // 已 match 過就不再動，純更新 last_message
-  if (row.matched_case_id) {
-    await sb.from('line_pending_bindings')
-      .update({ last_message_at: messageAt, last_message_text: text.slice(0, 500) })
-      .eq('user_id', userId).eq('oa_id', oaKey);
-    return;
-  }
-
-  // 嘗試抓姓名
-  const name = extractName(text);
-  const candidates = name ? await tryAutoMatch(sb, name, row.followed_at) : [];
-
-  const baseUpdate: Record<string, unknown> = {
-    last_message_at: messageAt,
-    last_message_text: text.slice(0, 500),
-    last_extracted_name: name,
-    match_attempts: (row.match_attempts ?? 0) + 1,
-  };
 
   if (candidates.length === 1) {
-    // 自動綁定：寫 consultation_cases.line_chat_url + 標記 pending 已 match
+    // 自動綁定
     const caseId = candidates[0].id;
     const chatUrl = `https://chat.line.biz/${oa.chatUrlPrefix}/chat/${userId}`;
     const { error: ccErr } = await sb
@@ -181,23 +185,36 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
       .update({
         line_chat_url: chatUrl,
         line_chat_updated_at: new Date().toISOString(),
-        line_chat_updated_by: null,    // auto，不歸屬任何律師
+        line_chat_updated_by: null,
       })
       .eq('id', caseId)
-      .is('line_chat_url', null);      // race: 不覆蓋已有連結
+      .is('line_chat_url', null);
 
-    if (ccErr) {
-      console.error('auto-bind consultation update error', ccErr);
-    } else {
-      baseUpdate.matched_case_id = caseId;
-      baseUpdate.matched_at = new Date().toISOString();
-      baseUpdate.matched_by = 'auto';
+    if (!ccErr) {
+      await sb.from('line_pending_bindings')
+        .update({
+          last_message_at: messageAt,
+          last_message_text: text.slice(0, 500),
+          last_extracted_name: name,
+          match_attempts: (existing?.match_attempts ?? 0) + 1,
+          matched_case_id: caseId,
+          matched_at: new Date().toISOString(),
+          matched_by: 'auto',
+        })
+        .eq('user_id', userId).eq('oa_id', oaKey);
+      return;
     }
+    console.error('auto-bind consultation update error', ccErr);
   }
 
-  // 0 / >1 / 自動綁失敗 → 只更新累計欄位，留在 pending 表
+  // existing row + 閒聊訊息 / 0 / >1 candidate → 更新 last_message
   await sb.from('line_pending_bindings')
-    .update(baseUpdate)
+    .update({
+      last_message_at: messageAt,
+      last_message_text: text.slice(0, 500),
+      last_extracted_name: name,
+      match_attempts: (existing?.match_attempts ?? 0) + 1,
+    })
     .eq('user_id', userId).eq('oa_id', oaKey);
 }
 
