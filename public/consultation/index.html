@@ -5632,7 +5632,8 @@ function renderUnsignedPage() {
 }
 
 // ---- LINE OA 對話連結：inline edit ----
-const LINE_CHAT_URL_RE = /^https:\/\/chat\.line\.biz\/U[0-9a-f]+\/chat\/U[0-9a-f]+/;
+// chat ID prefix: U=個人 / C=群組 / R=多人聊天室
+const LINE_CHAT_URL_RE = /^https:\/\/chat\.line\.biz\/U[0-9a-f]+\/chat\/[UCR][0-9a-f]+/;
 
 function lineChatInnerHtml(url) {
   if (url) {
@@ -5666,7 +5667,7 @@ async function saveLineChatFromInput(inputEl) {
   const caseId = tdEl.dataset.caseId;
   const newUrl = (inputEl.value || '').trim();
   if (newUrl && !LINE_CHAT_URL_RE.test(newUrl)) {
-    alert('網址格式錯誤\n\n請貼 LINE OA 後台對話頁網址，格式類似：\nhttps://chat.line.biz/Uxxxx.../chat/Uxxxx...');
+    alert('網址格式錯誤\n\n請貼 LINE OA 後台對話頁網址，格式類似：\nhttps://chat.line.biz/Uxxxx.../chat/{U|C|R}xxxx...\n（U=個人對話、C=群組、R=多人聊天室）');
     inputEl.focus();
     return;
   }
