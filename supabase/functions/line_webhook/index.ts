@@ -14,11 +14,13 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OA_CONFIG_RAW = Deno.env.get('LINE_OA_CONFIG') ?? '[]';
 
-type OAEntry = { dest: string; secret: string; name?: string };
-let OA_CONFIG: Record<string, OAEntry> = {};
+// chatUrlPrefix = chat.line.biz/{這個}/chat/{userId} 的第一段（OA 後台管理 ID）
+// dest = webhook body.destination（bot user ID，跟 chatUrlPrefix 不一樣但都 U 開頭）
+// 初次部署時 dest 可能還沒知道，留空；function 會用「逐一試 secret」驗章，不靠 dest 路由
+type OAEntry = { chatUrlPrefix: string; secret: string; name?: string; dest?: string };
+let OA_LIST: OAEntry[] = [];
 try {
-  const list: OAEntry[] = JSON.parse(OA_CONFIG_RAW);
-  OA_CONFIG = Object.fromEntries(list.map(e => [e.dest, e]));
+  OA_LIST = JSON.parse(OA_CONFIG_RAW);
 } catch (e) {
   console.error('LINE_OA_CONFIG parse failed', e);
 }
@@ -91,11 +93,12 @@ async function handleFollow(sb: any, event: any, oa: OAEntry) {
   if (event.source?.type !== 'user') return;
   const userId = event.source.userId;
   const followedAt = new Date(event.timestamp).toISOString();
+  // 存 oa_id = chatUrlPrefix（因為 dashboard 要用它拼 chat.line.biz URL）
   const { error } = await sb
     .from('line_pending_bindings')
     .upsert({
       user_id: userId,
-      oa_id: oa.dest,
+      oa_id: oa.chatUrlPrefix,
       oa_name: oa.name ?? null,
       followed_at: followedAt,
     }, { onConflict: 'user_id,oa_id' });
@@ -108,13 +111,14 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
   const userId = event.source.userId;
   const text: string = event.message.text ?? '';
   const messageAt = new Date(event.timestamp).toISOString();
+  const oaKey = oa.chatUrlPrefix;
 
   // 抓現有 pending binding
   const { data: existing, error: selErr } = await sb
     .from('line_pending_bindings')
     .select('*')
     .eq('user_id', userId)
-    .eq('oa_id', oa.dest)
+    .eq('oa_id', oaKey)
     .maybeSingle();
   if (selErr) {
     console.error('pending select error', selErr);
@@ -127,7 +131,7 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
       .from('line_pending_bindings')
       .insert({
         user_id: userId,
-        oa_id: oa.dest,
+        oa_id: oaKey,
         oa_name: oa.name ?? null,
         followed_at: messageAt,
         last_message_at: messageAt,
@@ -142,7 +146,7 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
   if (row.matched_case_id) {
     await sb.from('line_pending_bindings')
       .update({ last_message_at: messageAt, last_message_text: text.slice(0, 500) })
-      .eq('user_id', userId).eq('oa_id', oa.dest);
+      .eq('user_id', userId).eq('oa_id', oaKey);
     return;
   }
 
@@ -160,7 +164,7 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
   if (candidates.length === 1) {
     // 自動綁定：寫 consultation_cases.line_chat_url + 標記 pending 已 match
     const caseId = candidates[0].id;
-    const chatUrl = `https://chat.line.biz/${oa.dest}/chat/${userId}`;
+    const chatUrl = `https://chat.line.biz/${oa.chatUrlPrefix}/chat/${userId}`;
     const { error: ccErr } = await sb
       .from('consultation_cases')
       .update({
@@ -183,7 +187,7 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
   // 0 / >1 / 自動綁失敗 → 只更新累計欄位，留在 pending 表
   await sb.from('line_pending_bindings')
     .update(baseUpdate)
-    .eq('user_id', userId).eq('oa_id', oa.dest);
+    .eq('user_id', userId).eq('oa_id', oaKey);
 }
 
 serve(async (req) => {
@@ -194,6 +198,21 @@ serve(async (req) => {
   const rawBody = await req.text();
   const signature = req.headers.get('x-line-signature') ?? '';
 
+  // 逐一試 secret 驗章 — 哪把 secret 算出的簽章對得上，就是哪個 OA
+  // 這樣不依賴 body.destination（實測 destination != chatUrlPrefix）
+  let matchedOA: OAEntry | null = null;
+  for (const entry of OA_LIST) {
+    const expected = await hmacSha256Base64(entry.secret, rawBody);
+    if (timingSafeEqual(signature, expected)) {
+      matchedOA = entry;
+      break;
+    }
+  }
+  if (!matchedOA) {
+    console.warn('no secret matched signature', { sigLen: signature.length });
+    return new Response('bad signature', { status: 401 });
+  }
+
   let payload: any;
   try {
     payload = JSON.parse(rawBody);
@@ -201,19 +220,15 @@ serve(async (req) => {
     return new Response('invalid json', { status: 400 });
   }
 
-  const dest: string = payload.destination ?? '';
-  const oa = OA_CONFIG[dest];
-  if (!oa) {
-    console.warn('unknown destination', dest);
-    return new Response('unknown destination', { status: 404 });
+  // 記下 LINE 實際 destination，方便之後 debug / 補 config
+  if (payload.destination && payload.destination !== matchedOA.dest) {
+    console.log('oa matched', {
+      name: matchedOA.name, chatUrlPrefix: matchedOA.chatUrlPrefix,
+      actualDestination: payload.destination,
+    });
   }
 
-  const expected = await hmacSha256Base64(oa.secret, rawBody);
-  if (!timingSafeEqual(signature, expected)) {
-    console.warn('signature mismatch', { dest });
-    return new Response('bad signature', { status: 401 });
-  }
-
+  const oa = matchedOA;
   const events: any[] = Array.isArray(payload.events) ? payload.events : [];
   if (events.length === 0) {
     // LINE 驗證 webhook 時會送空 events，回 200 即可
