@@ -2295,9 +2295,18 @@ function getChartColors() {
   };
 }
 
+// consultation_cases SELECT 欄位清單（全域共用：loadDashboard 全量載入 + priority 小批載入）
+const CASE_COLS = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis,line_chat_url';
+
 let allCases      = [];      // all consultation_cases rows visible to this user
 let casesLoadState = 'pending'; // 'pending' | 'loaded' | 'error' — tracks the background allCases fetch
 let casesLoadError = null;
+
+// 未成案 priority 載入：進未成案 tab 時先撈「目標律師近 1 個月」小批資料，讓使用者不用等全量 allCases。
+// 目標律師：lawyer 帳號=自己、非 lawyer 帳號=雷皓明。全量載完後 reRenderActivePage() 自動切換。
+let priorityUnsignedCases = null;
+let priorityUnsignedLoadState = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
+let priorityUnsignedTargetName = null;
 
 let overviewYear = 'all';
 let overviewDept = 'all';  // 部門篩選：'all' 或 DEPARTMENT_ORDER 其中一個
@@ -2421,7 +2430,7 @@ async function loadDashboard(user) {
     return { data: all, error: firstError };
   }
 
-  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis,line_chat_url';
+  const caseCols = CASE_COLS;
 
   // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
@@ -2507,7 +2516,13 @@ function showTab(tab) {
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
   if (tab === 'upload')    { renderUploadSummary(); renderSyncStatus(); }
-  if (tab === 'unsigned')  renderUnsignedPage();
+  if (tab === 'unsigned')  {
+    // 全量 cases 尚未載完 → 背景撈 priority 小批（1 個月 + 目標律師）讓使用者不用等
+    if (casesLoadState !== 'loaded' && priorityUnsignedLoadState === 'idle') {
+      loadPriorityUnsignedCases();
+    }
+    renderUnsignedPage();
+  }
   if (tab === 'qa')        renderQaPage();
   if (tab === 'admin') {
     if (!currentLawyer || currentLawyer.role !== 'admin') return;
@@ -5464,9 +5479,78 @@ async function resetPassword(authUserId, name) {
   }
 }
 
+async function loadPriorityUnsignedCases() {
+  if (priorityUnsignedLoadState !== 'idle') return;
+  priorityUnsignedLoadState = 'loading';
+  try {
+    // 決定目標律師：lawyer 帳號=自己，其他 role=雷皓明
+    let targetLawyerId = null;
+    let targetLawyerName = null;
+    if (currentLawyer && currentLawyer.role === 'lawyer') {
+      targetLawyerId = currentLawyer.id;
+      targetLawyerName = currentLawyer.name || '我';
+    } else {
+      // 非律師帳號 → 找雷皓明
+      let dennis = allLawyersMap ? Object.values(allLawyersMap).find(l => l && l.name === '雷皓明') : null;
+      if (!dennis) {
+        const { data, error } = await sb
+          .from('lawyers')
+          .select('id,name,role')
+          .eq('name', '雷皓明')
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        dennis = data;
+      }
+      if (!dennis) {
+        priorityUnsignedLoadState = 'error';
+        console.error('[priorityUnsigned] 找不到雷皓明');
+        return;
+      }
+      targetLawyerId = dennis.id;
+      targetLawyerName = dennis.name;
+    }
+    priorityUnsignedTargetName = targetLawyerName;
+
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 1);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data, error } = await sb
+      .from('consultation_cases')
+      .select(CASE_COLS)
+      .eq('is_signed', false)
+      .eq('lawyer_id', targetLawyerId)
+      .gte('case_date', cutoffStr)
+      .order('case_date', { ascending: false });
+    if (error) throw error;
+    priorityUnsignedCases = data || [];
+    priorityUnsignedLoadState = 'loaded';
+    console.log('[DEBUG] priority unsigned loaded:', priorityUnsignedCases.length, 'for', targetLawyerName);
+
+    // 全量還沒載完 + 使用者仍在未成案 tab → 立刻渲染
+    const unsignedActive = document.getElementById('pageUnsigned');
+    if (casesLoadState !== 'loaded' && unsignedActive && unsignedActive.classList.contains('active')) {
+      renderUnsignedPage();
+    }
+  } catch (e) {
+    priorityUnsignedLoadState = 'error';
+    console.error('[loadPriorityUnsignedCases] error:', e);
+  }
+}
+
 function renderUnsignedPage() {
-  // If cases haven't finished loading, show a status banner instead of a misleading "0".
-  if (casesLoadState !== 'loaded') {
+  // 決定資料來源：全量 allCases 優先；否則 fallback 到 priority 小批
+  let sourceCases = null;
+  let isPriorityMode = false;
+  if (casesLoadState === 'loaded') {
+    sourceCases = allCases;
+  } else if (priorityUnsignedLoadState === 'loaded' && priorityUnsignedCases) {
+    sourceCases = priorityUnsignedCases;
+    isPriorityMode = true;
+  }
+
+  if (!sourceCases) {
     const summary = document.getElementById('unsignedSummary');
     const tbody = document.getElementById('unsignedTableBody');
     const headRow = document.getElementById('unsignedTableHead');
@@ -5485,14 +5569,16 @@ function renderUnsignedPage() {
 
   const now = new Date();
   const cutoff = new Date(now);
-  cutoff.setMonth(cutoff.getMonth() - unsignedRange);
+  // priority 模式下 fetched data 只有近 1 個月，即使按鈕選 3/6 月也只能顯示 1 個月範圍
+  const effectiveRange = isPriorityMode ? 1 : unsignedRange;
+  cutoff.setMonth(cutoff.getMonth() - effectiveRange);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   // Filter unsigned cases within date range
-  let cases = allCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+  let cases = sourceCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
 
-  // Admin: show lawyer filter
-  const showAllData = canViewAll();
+  // Admin: show lawyer filter（priority 模式下隱藏，因為資料已被 lawyer 過濾）
+  const showAllData = !isPriorityMode && canViewAll();
   const filterLabel = document.getElementById('unsignedLawyerFilterLabel');
   const filterSelect = document.getElementById('unsignedLawyerSelect');
   const staffLabel = document.getElementById('unsignedStaffFilterLabel');
@@ -5534,13 +5620,22 @@ function renderUnsignedPage() {
     filterSelect.style.display = 'none';
     staffLabel.style.display = 'none';
     staffSelect.style.display = 'none';
-    cases = cases.filter(c => c.lawyer_id === currentLawyer.id);
+    // priority 模式下 sourceCases 已經預先過濾為目標律師的資料，不需再 filter
+    if (!isPriorityMode) {
+      cases = cases.filter(c => c.lawyer_id === currentLawyer.id);
+    }
   }
 
   // Summary
   const totalCount = cases.length;
   const lawyerSet = new Set(cases.map(c => c.lawyer_id));
+  const priorityBanner = isPriorityMode
+    ? `<div style="background:var(--bg-card);border-left:3px solid var(--gold);padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:0.82rem;color:var(--text-muted);">
+         💡 先顯示 <strong style="color:var(--text);">${escHtml(priorityUnsignedTargetName || '')}</strong> 近 1 個月未成案，完整資料載入中…
+       </div>`
+    : '';
   document.getElementById('unsignedSummary').innerHTML =
+    priorityBanner +
     `<div style="display:flex;gap:24px;flex-wrap:wrap;">
       <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${totalCount}</div></div>
       ${showAllData ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
