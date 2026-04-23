@@ -5832,12 +5832,12 @@ function cancelEditLineChat(el) {
 // ---- 待人工綁定 LINE 對話（line_pending_bindings）----
 // webhook 收到 follow/message 但沒 auto-match 到案件 → 這裡讓法務手動配對
 let pendingBindingsLoadState = 'idle';   // idle | loading | loaded | error
-let pendingBindingsData = [];            // 近 14 天 matched_case_id IS NULL 的 rows
+let pendingBindingsData = [];            // 近 30 天 matched_case_id IS NULL 的 rows
 
 async function loadPendingBindings() {
   if (pendingBindingsLoadState === 'loading') return;
   pendingBindingsLoadState = 'loading';
-  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
+  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
   try {
     const { data, error } = await sb
       .from('line_pending_bindings')
@@ -5864,12 +5864,12 @@ function renderPendingBindings() {
   const rows = pendingBindingsData;
   if (!rows.length) { sec.innerHTML = ''; return; }
 
-  // 候選案件池：近 14 天 is_signed=false 且還沒 line_chat_url
+  // 候選案件池：近 30 天 is_signed=false 且還沒 line_chat_url
   const now = Date.now();
   const candidatesAll = (allCases || []).filter(c =>
     !c.is_signed &&
     !c.line_chat_url &&
-    (now - new Date(c.case_date).getTime()) <= 21 * 86400000  // 案件日期往前 21 天，寬於 14 天給點緩衝
+    (now - new Date(c.case_date).getTime()) <= 45 * 86400000  // 案件日期往前 45 天，寬於 30 天給點緩衝
   );
 
   const rowHtml = rows.map((r, idx) => {
@@ -5929,7 +5929,7 @@ function renderPendingBindings() {
     <div class="section" style="padding:0;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--bg-row);">
         <div style="font-size:0.88rem;font-weight:600;">待人工綁定 LINE 對話 <span class="num" style="color:var(--gold);">${rows.length}</span></div>
-        <div style="font-size:0.72rem;color:var(--text-muted);">webhook 自動綁不到的加好友事件（近 14 天）</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">webhook 自動綁不到的加好友事件（近 30 天）</div>
       </div>
       ${rowHtml}
     </div>

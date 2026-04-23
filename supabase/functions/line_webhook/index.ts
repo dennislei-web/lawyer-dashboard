@@ -25,7 +25,7 @@ try {
   console.error('LINE_OA_CONFIG parse failed', e);
 }
 
-const MATCH_WINDOW_DAYS = 14;
+const MATCH_WINDOW_DAYS = 30;
 
 async function hmacSha256Base64(secret: string, body: string): Promise<string> {
   const key = await crypto.subtle.importKey(
