@@ -2421,7 +2421,7 @@ async function loadDashboard(user) {
     return { data: all, error: firstError };
   }
 
-  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis';
+  const caseCols = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis,line_chat_url';
 
   // Step 1: Load stats + lawyers first (fast, ~1-2s)
   const lawyerPromise = canViewAll()
@@ -5561,6 +5561,7 @@ function renderUnsignedPage() {
   cols.push({ key: 'tracking_status', label: '狀態' });
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
   cols.push({ key: 'tracking_notes', label: '備註' });
+  cols.push({ key: 'line_chat_url', label: 'LINE 對話' });
 
   const tbl = document.getElementById('unsignedTable');
   tbl.style.tableLayout = 'fixed';
@@ -5568,7 +5569,7 @@ function renderUnsignedPage() {
   tbl.style.fontSize = '0.82rem';
   // Width allocation: left columns tight, notes get remaining space
   const colW = { case_date:'86px', client_name:'5em', case_type:'3em',
-    lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em' };
+    lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em', line_chat_url:'7em' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
     const w = colW[c.key] ? `width:${colW[c.key]};` : '';
@@ -5625,8 +5626,78 @@ function renderUnsignedPage() {
       <td style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:break-word;${notes.length > 60 ? 'cursor:pointer;' : ''}"
           ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
           >${escHtml(shortNotes) || '—'}</td>
+      <td class="line-chat-cell" data-case-id="${c.id}" data-url="${escHtml(c.line_chat_url || '')}" style="font-size:0.78rem;text-align:center;vertical-align:middle;">${lineChatInnerHtml(c.line_chat_url || '')}</td>
     </tr>`;
   }).join('');
+}
+
+// ---- LINE OA 對話連結：inline edit ----
+const LINE_CHAT_URL_RE = /^https:\/\/chat\.line\.biz\/U[0-9a-f]+\/chat\/U[0-9a-f]+/;
+
+function lineChatInnerHtml(url) {
+  if (url) {
+    return `<a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;" title="${escHtml(url)}">🔗 對話</a> <button onclick="startEditLineChat(this.closest('td'))" title="編輯連結" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.72rem;padding:0 2px;">✎</button>`;
+  }
+  return `<button onclick="startEditLineChat(this.closest('td'))" style="background:none;border:1px dashed var(--border);border-radius:4px;cursor:pointer;color:var(--text-muted);font-size:0.72rem;padding:2px 8px;">＋ 貼連結</button>`;
+}
+
+function renderLineChatCell(tdEl) {
+  tdEl.innerHTML = lineChatInnerHtml(tdEl.dataset.url || '');
+}
+
+function startEditLineChat(tdEl) {
+  const url = tdEl.dataset.url || '';
+  tdEl.innerHTML = `
+    <input type="url" value="${escHtml(url)}" placeholder="https://chat.line.biz/..."
+           style="width:calc(100% - 4px);padding:2px 4px;font-size:0.7rem;border:1px solid var(--border);border-radius:3px;background:var(--bg-row);color:var(--text);box-sizing:border-box;"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();saveLineChatFromInput(this);}else if(event.key==='Escape'){event.preventDefault();cancelEditLineChat(this);}" />
+    <div style="margin-top:3px;display:flex;gap:4px;">
+      <button onclick="saveLineChatFromInput(this.closest('td').querySelector('input'))" style="flex:1;padding:2px 4px;border:1px solid var(--green);background:transparent;color:var(--green);border-radius:3px;cursor:pointer;font-size:0.7rem;">✓ 存</button>
+      <button onclick="cancelEditLineChat(this)" style="flex:1;padding:2px 4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:3px;cursor:pointer;font-size:0.7rem;">✗</button>
+    </div>
+  `;
+  const input = tdEl.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+async function saveLineChatFromInput(inputEl) {
+  const tdEl = inputEl.closest('td');
+  const caseId = tdEl.dataset.caseId;
+  const newUrl = (inputEl.value || '').trim();
+  if (newUrl && !LINE_CHAT_URL_RE.test(newUrl)) {
+    alert('網址格式錯誤\n\n請貼 LINE OA 後台對話頁網址，格式類似：\nhttps://chat.line.biz/Uxxxx.../chat/Uxxxx...');
+    inputEl.focus();
+    return;
+  }
+  const valueToSend = newUrl || null;
+  try {
+    const { error } = await sb
+      .from('consultation_cases')
+      .update({
+        line_chat_url: valueToSend,
+        line_chat_updated_at: valueToSend ? new Date().toISOString() : null,
+        line_chat_updated_by: valueToSend ? (currentLawyer && currentLawyer.id) : null
+      })
+      .eq('id', caseId);
+    if (error) throw error;
+    const c = allCases.find(c => c.id === caseId);
+    if (c) c.line_chat_url = valueToSend;
+    tdEl.dataset.url = valueToSend || '';
+    renderLineChatCell(tdEl);
+    const msg = document.createElement('div');
+    msg.textContent = '✓ 已儲存';
+    msg.style.cssText = 'color:var(--green);font-size:0.7rem;margin-top:2px;';
+    tdEl.appendChild(msg);
+    setTimeout(() => msg.remove(), 1500);
+  } catch (e) {
+    alert('儲存失敗：' + (e.message || e));
+    console.error('saveLineChat error:', e);
+  }
+}
+
+function cancelEditLineChat(el) {
+  renderLineChatCell(el.closest('td'));
 }
 
 async function saveLawyerNote(caseId, note, cellEl) {
