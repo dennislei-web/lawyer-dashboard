@@ -5901,11 +5901,15 @@ function renderPendingBindings() {
       }))
       .join('');
 
+    const chatUrl = `https://chat.line.biz/${encodeURIComponent(r.oa_id)}/chat/${encodeURIComponent(r.user_id)}`;
     return `
       <div class="pending-binding-row" data-idx="${idx}" style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">
-        <div style="font-size:0.78rem;color:var(--text-muted);min-width:120px;">
+        <div style="font-size:0.78rem;color:var(--text-muted);min-width:140px;">
           <div><span style="color:var(--gold);">${escHtml(oaLabel)}</span> · <span class="num">${daysAgo}</span> 天前加入</div>
           <div style="margin-top:2px;" title="${escHtml(r.user_id)}">ID: ${escHtml(userShort)}</div>
+          <div style="margin-top:3px;">
+            <a href="${chatUrl}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-size:0.75rem;" title="在 LINE OA 後台打開此對話確認脈絡">🔗 打開 LINE 對話</a>
+          </div>
         </div>
         <div style="font-size:0.8rem;">
           <div style="color:var(--text);">${escHtml(lastText)}${hintName}</div>
