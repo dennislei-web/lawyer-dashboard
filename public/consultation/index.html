@@ -1832,6 +1832,7 @@
       <select id="unsignedStaffSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
       </select>
     </div>
+    <div id="unsignedPriorityBanner" style="margin-bottom:12px;"></div>
     <div id="unsignedSummary" style="margin-bottom:16px;"></div>
     <div class="section">
       <div class="table-wrap">
@@ -2490,7 +2491,16 @@ function reRenderActivePage() {
   switch (active.id) {
     case 'pageOverview':  renderOverviewPage(); break;
     case 'pageTracking':  renderTrackingPage(); break;
-    case 'pageUnsigned':  renderUnsignedPage(); break;
+    case 'pageUnsigned':
+      // priority data 已經顯示給使用者 → 不自動切到全量（避免畫面跳轉），
+      // 只把 banner 改成「✓ 完整資料已載入 [查看全部]」提示。
+      // 使用者按「查看全部」或切 filter / 時間範圍 / tab 再回來才重 render。
+      if (priorityUnsignedLoadState === 'loaded') {
+        writeUnsignedPriorityBanner();
+      } else {
+        renderUnsignedPage();
+      }
+      break;
     case 'pageDetail':    renderDetailPage();   break;
     case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
     case 'pageQa':        renderQaPage(); break;
@@ -5479,6 +5489,30 @@ async function resetPassword(authUserId, name) {
   }
 }
 
+// 未成案 tab 頂部 banner：根據 priority / 全量載入狀態決定顯示什麼
+function writeUnsignedPriorityBanner() {
+  const el = document.getElementById('unsignedPriorityBanner');
+  if (!el) return;
+  if (priorityUnsignedLoadState !== 'loaded') {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  if (casesLoadState === 'loaded') {
+    // 全量已 ready，但畫面還是 priority 資料 → 提示使用者可切到全部
+    el.style.display = '';
+    el.innerHTML = `<div style="background:var(--bg-card);border-left:3px solid var(--green);padding:8px 12px;border-radius:4px;font-size:0.82rem;color:var(--text-muted);">
+      ✓ 完整資料已載入完畢
+      <button onclick="renderUnsignedPage()" style="margin-left:12px;padding:3px 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;font-size:0.78rem;">查看全部</button>
+    </div>`;
+  } else {
+    el.style.display = '';
+    el.innerHTML = `<div style="background:var(--bg-card);border-left:3px solid var(--gold);padding:8px 12px;border-radius:4px;font-size:0.82rem;color:var(--text-muted);">
+      💡 先顯示 <strong style="color:var(--text);">${escHtml(priorityUnsignedTargetName || '')}</strong> 近 1 個月未成案，完整資料載入中…
+    </div>`;
+  }
+}
+
 async function loadPriorityUnsignedCases() {
   if (priorityUnsignedLoadState !== 'idle') return;
   priorityUnsignedLoadState = 'loading';
@@ -5629,13 +5663,8 @@ function renderUnsignedPage() {
   // Summary
   const totalCount = cases.length;
   const lawyerSet = new Set(cases.map(c => c.lawyer_id));
-  const priorityBanner = isPriorityMode
-    ? `<div style="background:var(--bg-card);border-left:3px solid var(--gold);padding:8px 12px;border-radius:4px;margin-bottom:12px;font-size:0.82rem;color:var(--text-muted);">
-         💡 先顯示 <strong style="color:var(--text);">${escHtml(priorityUnsignedTargetName || '')}</strong> 近 1 個月未成案，完整資料載入中…
-       </div>`
-    : '';
+  writeUnsignedPriorityBanner();
   document.getElementById('unsignedSummary').innerHTML =
-    priorityBanner +
     `<div style="display:flex;gap:24px;flex-wrap:wrap;">
       <div class="kpi-card" style="min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${totalCount}</div></div>
       ${showAllData ? `<div class="kpi-card" style="min-width:140px;"><div class="kpi-label">涉及律師數</div><div class="kpi-value">${lawyerSet.size}</div></div>` : ''}
