@@ -189,38 +189,12 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
     }
   }
 
-  if (candidates.length === 1) {
-    // 自動綁定
-    const caseId = candidates[0].id;
-    const chatUrl = `https://chat.line.biz/${oa.chatUrlPrefix}/chat/${userId}`;
-    const { error: ccErr } = await sb
-      .from('consultation_cases')
-      .update({
-        line_chat_url: chatUrl,
-        line_chat_updated_at: new Date().toISOString(),
-        line_chat_updated_by: null,
-      })
-      .eq('id', caseId)
-      .is('line_chat_url', null);
+  // 不做 auto-bind 寫 consultation_cases.line_chat_url：
+  // webhook event.source.userId 跟 chat.line.biz 後台用的 userId 不同，
+  // 自動拼出來的 https://chat.line.biz/{prefix}/chat/{userId} 必定 404。
+  // 所有 binding 一律由法務在 dashboard 看 last_message_text + extracted_name 後手動處理。
 
-    if (!ccErr) {
-      await sb.from('line_pending_bindings')
-        .update({
-          last_message_at: messageAt,
-          last_message_text: text.slice(0, 500),
-          last_extracted_name: name,
-          match_attempts: (existing?.match_attempts ?? 0) + 1,
-          matched_case_id: caseId,
-          matched_at: new Date().toISOString(),
-          matched_by: 'auto',
-        })
-        .eq('user_id', userId).eq('oa_id', oaKey);
-      return;
-    }
-    console.error('auto-bind consultation update error', ccErr);
-  }
-
-  // existing row + 閒聊訊息 / 0 / >1 candidate → 更新 last_message
+  // 不論 candidates 數量都只更新 last_message
   await sb.from('line_pending_bindings')
     .update({
       last_message_at: messageAt,

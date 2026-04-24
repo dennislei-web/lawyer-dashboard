@@ -5980,15 +5980,11 @@ function renderPendingBindings() {
       }))
       .join('');
 
-    const chatUrl = `https://chat.line.biz/${encodeURIComponent(r.oa_id)}/chat/${encodeURIComponent(r.user_id)}`;
     return `
       <div class="pending-binding-row" data-idx="${idx}" style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">
         <div style="font-size:0.78rem;color:var(--text-muted);min-width:140px;">
           <div><span style="color:var(--gold);">${escHtml(oaLabel)}</span> · <span class="num">${daysAgo}</span> 天前加入</div>
           <div style="margin-top:2px;" title="${escHtml(r.user_id)}">ID: ${escHtml(userShort)}</div>
-          <div style="margin-top:3px;">
-            <a href="${chatUrl}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-size:0.75rem;" title="在 LINE OA 後台打開此對話確認脈絡">🔗 打開 LINE 對話</a>
-          </div>
         </div>
         <div style="font-size:0.8rem;">
           <div style="color:var(--text);">${escHtml(lastText)}${hintName}</div>
@@ -6023,21 +6019,37 @@ async function confirmPendingBinding(btnEl) {
   const oaId = select.dataset.oa;
   if (!caseId) { alert('請先選擇要綁定的案件'); return; }
 
+  // webhook userId ≠ chat.line.biz 後台 userId，自動拼網址會 404
+  // 改成請法務從 chat.line.biz 後台複製真實對話網址
+  const chatUrl = (prompt(
+    '請從 LINE OA 後台（chat.line.biz）找到對應對話，複製網址貼到下面：\n\n' +
+    '格式：https://chat.line.biz/{oaId}/chat/{userId}\n\n' +
+    '可留白只標記「已找到此案件對應的 LINE 好友」，之後再到案件列表貼網址。'
+  ) || '').trim();
+  if (chatUrl && !LINE_CHAT_URL_RE.test(chatUrl)) {
+    alert('網址格式錯誤，未綁定。請貼 LINE OA 後台對話頁網址');
+    return;
+  }
+
   btnEl.disabled = true;
   btnEl.textContent = '綁定中…';
-  const chatUrl = `https://chat.line.biz/${oaId}/chat/${userId}`;
 
   try {
-    // 1. 寫 consultation_cases.line_chat_url
-    const { error: ccErr } = await sb
-      .from('consultation_cases')
-      .update({
-        line_chat_url: chatUrl,
-        line_chat_updated_at: new Date().toISOString(),
-        line_chat_updated_by: currentLawyer ? currentLawyer.id : null,
-      })
-      .eq('id', caseId);
-    if (ccErr) throw ccErr;
+    // 1. 寫 consultation_cases.line_chat_url（chatUrl 可能為空 — 代表只標記不貼網址）
+    const updatePayload = chatUrl
+      ? {
+          line_chat_url: chatUrl,
+          line_chat_updated_at: new Date().toISOString(),
+          line_chat_updated_by: currentLawyer ? currentLawyer.id : null,
+        }
+      : {};
+    if (chatUrl) {
+      const { error: ccErr } = await sb
+        .from('consultation_cases')
+        .update(updatePayload)
+        .eq('id', caseId);
+      if (ccErr) throw ccErr;
+    }
 
     // 2. 更新 pending binding（標記已手動綁）
     const { error: pbErr } = await sb
@@ -6052,8 +6064,10 @@ async function confirmPendingBinding(btnEl) {
     if (pbErr) throw pbErr;
 
     // 3. 更新本地資料 + 重新渲染
-    const c = (allCases || []).find(x => x.id === caseId);
-    if (c) c.line_chat_url = chatUrl;
+    if (chatUrl) {
+      const c = (allCases || []).find(x => x.id === caseId);
+      if (c) c.line_chat_url = chatUrl;
+    }
     pendingBindingsData = pendingBindingsData.filter(p => !(p.user_id === userId && p.oa_id === oaId));
     renderPendingBindings();
     renderUnsignedPage();  // table 也要 refresh（該案件 LINE 對話欄變連結）
