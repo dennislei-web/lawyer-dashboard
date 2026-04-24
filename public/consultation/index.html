@@ -587,6 +587,45 @@
     .yoy-change.down { color: var(--red); }
     .yoy-change.flat { color: var(--text-muted); }
 
+    /* Pin control for YoY comparison table */
+    .yoy-pin-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-right: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1;
+      opacity: 0.35;
+      transition: opacity 0.15s, color 0.15s, background 0.15s;
+      vertical-align: middle;
+    }
+    .yoy-pin-btn:hover { opacity: 1; background: var(--bg-row); }
+    .yoy-pin-btn.active { opacity: 1; color: var(--gold); }
+    tr.yoy-pinned { background: rgba(201, 168, 76, 0.10); }
+    tr.yoy-pinned:hover { background: rgba(201, 168, 76, 0.18); }
+    tr.yoy-pin-divider > td {
+      border-bottom: 2px dashed var(--border-light);
+      padding-bottom: 10px;
+    }
+    .yoy-clear-pins {
+      margin-left: 8px;
+      padding: 2px 10px;
+      font-size: 0.75rem;
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .yoy-clear-pins:hover { color: var(--text); border-color: var(--border-light); }
+
     .month-cards-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -2322,6 +2361,7 @@ let sortDir = 'desc';
 let lawyerYoySortCol = 'consult_eff_curr';
 let lawyerYoySortDir = 'desc';
 let yoyCompareYear = null; // null = auto (currYear - 1); else user-selected year string
+let pinnedYoyLawyerIds = new Set(); // 釘選在 YoY 比較表最上方的律師 id（不跨頁保留）
 
 // ===================== INIT =====================
 async function init() {
@@ -2994,6 +3034,15 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
   let rows = buildLawyerYoyRows(currStats, prevStats);
   rows = sortRows(rows, lawyerYoySortCol, lawyerYoySortDir);
 
+  // Drop stale pins whose lawyer is no longer in rows (e.g. after dept filter change)
+  const rowIds = new Set(rows.map(r => r.id));
+  pinnedYoyLawyerIds.forEach(id => { if (!rowIds.has(id)) pinnedYoyLawyerIds.delete(id); });
+
+  // Split into pinned (top, sort order preserved) + rest
+  const pinnedRows = rows.filter(r => pinnedYoyLawyerIds.has(r.id));
+  const restRows   = rows.filter(r => !pinnedYoyLawyerIds.has(r.id));
+  const orderedRows = [...pinnedRows, ...restRows];
+
   // Sort indicators
   document.querySelectorAll('#lawyerYoyTable th.sortable').forEach(th => {
     th.classList.remove('sort-asc', 'sort-desc');
@@ -3002,13 +3051,27 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     }
   });
 
+  // Show "清除釘選" button when any pin is active
+  const metaEl = document.getElementById('lawyerYoyMeta');
+  const existingClear = document.getElementById('yoyClearPinsBtn');
+  if (existingClear) existingClear.remove();
+  if (pinnedYoyLawyerIds.size > 0 && metaEl) {
+    const btn = document.createElement('button');
+    btn.id = 'yoyClearPinsBtn';
+    btn.className = 'yoy-clear-pins';
+    btn.textContent = '清除釘選 (' + pinnedYoyLawyerIds.size + ')';
+    btn.onclick = (e) => { e.stopPropagation(); clearYoyPins(); };
+    metaEl.appendChild(btn);
+  }
+
   const tbody = document.getElementById('lawyerYoyTableBody');
-  if (rows.length === 0) {
+  if (orderedRows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = rows.map((r, i) => {
+  const lastPinnedIdx = pinnedRows.length - 1;
+  tbody.innerHTML = orderedRows.map((r, i) => {
     const rateClassCurr = r.sign_rate_curr >= 45 ? 'sign-rate-green' : r.sign_rate_curr >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
     const prevHasRate = r.consult_count_prev > 0;
     const prevRateTxt = prevHasRate ? r.sign_rate_prev.toFixed(1) + '%' : '<span style="color:var(--text-muted);">—</span>';
@@ -3016,9 +3079,14 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     const prevEffTxt = r.consult_eff_prev > 0 ? '$' + Math.round(r.consult_eff_prev).toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
     const prevConsultTxt = r.consult_count_prev > 0 ? r.consult_count_prev.toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
     const currConsultTxt = r.consult_count_curr > 0 ? r.consult_count_curr.toLocaleString() : '<span style="color:var(--text-muted);">—</span>';
-    return `<tr onclick="showDetailPage('${r.id}')">
+    const isPinned = pinnedYoyLawyerIds.has(r.id);
+    const trCls = [isPinned ? 'yoy-pinned' : '', (isPinned && i === lastPinnedIdx) ? 'yoy-pin-divider' : ''].filter(Boolean).join(' ');
+    const pinTitle = isPinned ? '取消釘選' : '釘選到最上方';
+    const pinIcon = isPinned ? '📌' : '📍';
+    const pinBtn = `<button type="button" class="yoy-pin-btn${isPinned ? ' active' : ''}" title="${pinTitle}" onclick="event.stopPropagation();toggleYoyPin('${r.id}');">${pinIcon}</button>`;
+    return `<tr class="${trCls}" onclick="showDetailPage('${r.id}')">
       <td>${i + 1}</td>
-      <td><strong>${escHtml(r.name)}</strong></td>
+      <td>${pinBtn}<strong>${escHtml(r.name)}</strong></td>
       <td class="num">${currConsultTxt}</td>
       <td class="num">${prevConsultTxt}</td>
       <td class="num ${rateClassCurr}">${r.sign_rate_curr.toFixed(1)}%</td>
@@ -3032,6 +3100,17 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
       ${yoyDeltaCell(r.consult_eff_delta, false, r.consult_eff_prev > 0)}
     </tr>`;
   }).join('');
+}
+
+function toggleYoyPin(lawyerId) {
+  if (pinnedYoyLawyerIds.has(lawyerId)) pinnedYoyLawyerIds.delete(lawyerId);
+  else pinnedYoyLawyerIds.add(lawyerId);
+  renderOverviewPage();
+}
+
+function clearYoyPins() {
+  pinnedYoyLawyerIds.clear();
+  renderOverviewPage();
 }
 
 function renderRankingTable(stats) {
