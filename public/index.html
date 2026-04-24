@@ -230,6 +230,7 @@
         <a class="nav-link" data-route="revenue" data-restricted="1" href="#/revenue" onclick="switchRoute('revenue');return false;">營運</a>
         <a class="nav-link" data-route="finance" data-restricted="1" href="#/finance" onclick="switchRoute('finance');return false;">財務規劃</a>
         <a class="nav-link" data-route="partners" data-restricted="1" href="#/partners" onclick="switchRoute('partners');return false;">合署律師</a>
+        <a class="nav-link" data-route="evidence" data-restricted="1" href="#/evidence" onclick="switchRoute('evidence');return false;">當事人檔案</a>
         <a id="navAdmin" class="nav-link" data-route="admin" data-admin-only="1" href="#/admin" onclick="switchRoute('admin');return false;" style="display:none">🔑 帳號管理</a>
       </div>
     </div>
@@ -245,6 +246,7 @@
     <iframe class="route-frame" data-route="revenue"      src="" title="revenue"></iframe>
     <iframe class="route-frame" data-route="finance"      src="" title="finance"></iframe>
     <iframe class="route-frame" data-route="partners"     src="" title="partners"></iframe>
+    <iframe class="route-frame" data-route="evidence"     src="" title="evidence"></iframe>
     <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
   </div>
 </div>
@@ -287,6 +289,7 @@ var ROUTES = {
   revenue:      BASE + '/revenue/?embed=1',
   finance:      BASE + '/finance/?embed=1',
   partners:     BASE + '/partners/?embed=1',
+  evidence:     BASE + '/evidence/?embed=1',
   admin:        BASE + '/admin/?embed=1',
 };
 
