@@ -69,17 +69,24 @@ def compute_monthly_stats(df: pd.DataFrame, month: str | None = None) -> pd.Data
 
     df["已簽約"] = df["簽約狀態"].apply(is_signed)
 
-    # 數值欄位轉換
-    for col in ["應收金額", "已收金額"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    # 數值欄位 fuzzy 匹配（xlsx 欄位名可能含括號註解，例如「應收金額（案件委任金）」）
+    rev_col = next((c for c in df.columns if "應收" in c), None)
+    col_col = next((c for c in df.columns if "已收" in c), None)
+    df["revenue"] = (
+        pd.to_numeric(df[rev_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0)
+        if rev_col else 0
+    )
+    df["collected"] = (
+        pd.to_numeric(df[col_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0)
+        if col_col else 0
+    )
 
     # 按律師+月份分組
     grouped = df.groupby(["諮詢律師", "month"]).agg(
         consult_count=("諮詢律師", "count"),
         signed_count=("已簽約", "sum"),
-        revenue=("應收金額", "sum"),
-        collected=("已收金額", "sum"),
+        revenue=("revenue", "sum"),
+        collected=("collected", "sum"),
     ).reset_index()
 
     grouped["signed_count"] = grouped["signed_count"].astype(int)
@@ -139,6 +146,10 @@ def upsert_consultation_logs(supabase, df: pd.DataFrame, lawyer_map: dict[str, s
     if "是否列入計算" in df.columns:
         df = df[df["是否列入計算"].astype(str).str.strip() != "否"].copy()
 
+    # fuzzy 匹配金額欄位（容忍「應收金額（案件委任金）」等帶註解的欄位名）
+    rev_col = next((c for c in df.columns if "應收" in c), None)
+    col_col = next((c for c in df.columns if "已收" in c), None)
+
     rows = []
     for _, row in df.iterrows():
         lawyer_name = str(row.get("諮詢律師", "")).strip()
@@ -168,8 +179,8 @@ def upsert_consultation_logs(supabase, df: pd.DataFrame, lawyer_map: dict[str, s
             "consult_method": str(row.get("諮詢方式", "")).strip(),
             "service_type": str(row.get("服務項目", "")).strip(),
             "sign_status": sign_status,
-            "revenue": int(pd.to_numeric(row.get("應收金額", 0), errors="coerce") or 0),
-            "collected": int(pd.to_numeric(row.get("已收金額", 0), errors="coerce") or 0),
+            "revenue": int(pd.to_numeric(row.get(rev_col, 0) if rev_col else 0, errors="coerce") or 0),
+            "collected": int(pd.to_numeric(row.get(col_col, 0) if col_col else 0, errors="coerce") or 0),
             "is_counted": str(row.get("是否列入計算", "")).strip() != "否",
         })
 

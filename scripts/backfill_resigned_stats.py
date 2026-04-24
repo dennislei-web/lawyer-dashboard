@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from collections import defaultdict
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-load_dotenv(r"C:\projects\lawyer-dashboard\scripts\.env")
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 url = os.environ["SUPABASE_URL"]
 key = os.environ["SUPABASE_SERVICE_KEY"]

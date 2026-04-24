@@ -1,7 +1,7 @@
 """Render the 7 infographic HTMLs to PDF using playwright.
 
 Requires the preview server (or any HTTP server) on http://localhost:8766
-to be serving C:\\projects\\lawyer-dashboard\\public\\.
+to be serving the project's public/ directory.
 """
 import asyncio
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 BASE_URL = "http://localhost:8766/infographics"
-OUT_DIR = Path(r"C:\projects\lawyer-dashboard\public\infographics\pdf")
+OUT_DIR = Path(__file__).resolve().parent.parent / "public" / "infographics" / "pdf"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # (relative URL path, output pdf name, nominal page height hint in px)

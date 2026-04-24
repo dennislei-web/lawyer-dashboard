@@ -3,7 +3,7 @@ import httpx, os, io, sys, json
 from dotenv import load_dotenv
 from collections import Counter
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-load_dotenv(r"C:\projects\lawyer-dashboard\scripts\.env")
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 u = os.environ["SUPABASE_URL"]
 k = os.environ["SUPABASE_SERVICE_KEY"]
 H = {"apikey": k, "Authorization": f"Bearer {k}"}

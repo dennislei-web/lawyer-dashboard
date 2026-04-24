@@ -23,7 +23,7 @@ import voyageai
 from dotenv import load_dotenv
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-load_dotenv(r"C:\projects\lawyer-dashboard\scripts\.env", override=True)
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), override=True)
 
 URL = os.environ["SUPABASE_URL"]
 KEY = os.environ["SUPABASE_SERVICE_KEY"]

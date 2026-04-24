@@ -2,11 +2,15 @@
 import httpx, os, io, sys
 from dotenv import load_dotenv
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-load_dotenv(r"C:\projects\lawyer-dashboard\scripts\.env")
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 url = os.environ["SUPABASE_URL"]
 key = os.environ["SUPABASE_SERVICE_KEY"]
 
-with open(r"C:\projects\lawyer-dashboard\supabase\migrations\20260418000000_add_quarterly_reviews.sql", encoding="utf-8") as f:
+MIGRATION_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "supabase", "migrations", "20260418000000_add_quarterly_reviews.sql",
+)
+with open(MIGRATION_PATH, encoding="utf-8") as f:
     sql = f.read()
 
 # Use PostgREST RPC 'exec_sql' if available, else inform user to run in SQL Editor
@@ -27,7 +31,7 @@ print("=" * 60)
 # 驗證建好了沒
 print("\n執行後跑這個 Python 再驗證：")
 print("  python -c \"")
-print("  import httpx, os; from dotenv import load_dotenv; load_dotenv(r'C:/projects/lawyer-dashboard/scripts/.env')")
+print("  import httpx, os; from dotenv import load_dotenv; load_dotenv()")
 print("  H={'apikey':os.environ['SUPABASE_SERVICE_KEY'],'Authorization':'Bearer '+os.environ['SUPABASE_SERVICE_KEY']}")
 print("  r=httpx.get(os.environ['SUPABASE_URL']+'/rest/v1/quarterly_reviews?limit=1', headers=H)")
 print("  print(r.status_code, r.text[:200])\"")
