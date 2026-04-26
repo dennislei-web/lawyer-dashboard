@@ -61,29 +61,60 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
+// 客戶常見的 ack / 客氣 / 短回應詞，會通過 2-4 字中文或全英文 regex 但不是名字
+// 比對前 candidate 會 toLowerCase，所以這裡英文都用小寫
+const NAME_BLOCKLIST = new Set([
+  // 中文 ack / 客氣 / 短回應
+  '感謝', '謝謝', '感恩', '多謝', '謝啦',
+  '收到', '了解', '知道', '明白', '清楚',
+  '好的', '好喔', '好啊', '好吧', '好啦', '好哦', '好滴', '好低',
+  '可以', '不會', '不用', '沒事', '不錯', '可以的',
+  '沒問題', '不客氣',
+  '是的', '對的', '不是', '對啊', '對對',
+  '嗯嗯', '哦哦', '喔喔', '哈哈', '呵呵', '欸欸', '誒誒',
+  '哈囉', '哈摟', '你好', '您好',
+  '抱歉', '不好意思',
+  '辛苦', '辛苦了', '晚安', '早安', '午安', '再見', '掰掰', '拜拜',
+  '麻煩', '請問', '想問', '不好',
+  '稍等', '等等', '稍候', '加油',
+  // 英文 ack
+  'ok', 'okok', 'okay', 'okie', 'okies',
+  'yes', 'yeah', 'yep', 'yup', 'yea', 'ya', 'yo',
+  'no', 'nope', 'nah',
+  'hi', 'hii', 'hello', 'helo', 'hey',
+  'thx', 'ty', 'tks', 'thanks', 'thank',
+  'bye', 'byebye',
+  'sure', 'fine', 'good', 'great', 'nice',
+  'lol', 'hmm', 'hmmm', 'oops',
+]);
+
 // 從客戶訊息抓姓名。只在以下 pattern 才認，避免抓到閒聊訊息前 2-4 字誤判：
 //  1. 明確句型：「我是XXX」「我叫XXX」「敝姓X」「姓名：XXX」
 //  2. 單純短訊息：純 2-4 字中文，可接結尾標點/emoji（例如「陸德」「陸德！」）
 //  3. 客氣 lead-in + 短姓名：「您好 陸德」「你好，我是陸德」
 // 其他情況（長句子、含問號、夾雜數字英文）一律回 null
+// 通過 regex 但落在 NAME_BLOCKLIST 的 ack / 客氣詞（感謝、okok、好的…）也回 null
 function extractName(text: string): string | null {
   if (!text) return null;
   let s = text.trim();
 
   // 剝掉常見 lead-in（您好/你好/Hi/Hello + 標點）
-  s = s.replace(/^(您好|你好|hi|hello)[\s,，、!！.。~～]*/i, '');
+  s = s.replace(/^(您好|你好|哈囉|哈摟|hi|hello|hey|好的?|ok|okay)[\s,，、!！.。~～]*/i, '');
   // 剝掉自介句首（我是/我叫/敝姓/姓名是/名字是）
   s = s.replace(/^(我是|我叫|敝姓|在下|本人|本人是|姓名(?:是|:|：)|名字(?:是|:|：))[\s,，、]*/i, '');
   // 剝掉尾端標點
   s = s.replace(/[\s!！。?？~～,，、.…]+$/, '').trim();
 
+  let candidate: string | null = null;
   // 剝完之後剩下的必須「整串就是 2-4 字中文」才算名字
-  if (/^[\u4e00-\u9fff]{2,4}$/.test(s)) return s;
-
+  if (/^[\u4e00-\u9fff]{2,4}$/.test(s)) candidate = s;
   // fallback：全英文姓名（極罕見但保留，例如「Jill」「Stanley」）
-  if (/^[A-Za-z]{2,20}$/.test(s)) return s;
+  else if (/^[A-Za-z]{2,20}$/.test(s)) candidate = s;
 
-  return null;
+  if (!candidate) return null;
+  // ack / 客氣詞通過 regex 但不是真姓名，擋掉
+  if (NAME_BLOCKLIST.has(candidate.toLowerCase())) return null;
+  return candidate;
 }
 
 function escapeLike(s: string): string {
@@ -195,11 +226,15 @@ async function handleMessage(sb: any, event: any, oa: OAEntry) {
   // 所有 binding 一律由法務在 dashboard 看 last_message_text + extracted_name 後手動處理。
 
   // 不論 candidates 數量都只更新 last_message
+  // last_extracted_name 一旦抓到就 freeze，之後不再覆寫
+  // 為何：客戶第一句通常就是自報姓名（OA 歡迎訊息要求），後續訊息全是閒聊；
+  // 即使後面恰好抓到別的詞（誤判 or 轉介他人姓名），也不應蓋掉最初的名字。
+  // 若第一次就抓錯，法務可在 dashboard 按 X 清掉整列，等客戶下一次 follow 重來。
   await sb.from('line_pending_bindings')
     .update({
       last_message_at: messageAt,
       last_message_text: text.slice(0, 500),
-      last_extracted_name: name,
+      last_extracted_name: existing?.last_extracted_name ?? name ?? null,
       match_attempts: (existing?.match_attempts ?? 0) + 1,
     })
     .eq('user_id', userId).eq('oa_id', oaKey);

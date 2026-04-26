@@ -5937,6 +5937,14 @@ function cancelEditLineChat(el) {
 let pendingBindingsLoadState = 'idle';   // idle | loading | loaded | error
 let pendingBindingsData = [];            // 近 30 天 matched_case_id IS NULL 的 rows
 
+// chatUrlPrefix → 顯示名稱。secret 那邊改不了（write-only 又沒備份），所以前端 override。
+// 新增 OA 時記得加這裡，否則會 fallback 到 r.oa_name（secret 內 name 欄位）。
+const OA_DISPLAY_NAME = {
+  'Ufc1c91f334978bb633a745416a4bbf2b': '喆律法律事務所',
+  'Ue485ba4fece0a89b526f50bb25534e13': '金貝殼',
+  'U8561eadcfeb14262902b136788147973': '85010',
+};
+
 async function loadPendingBindings() {
   if (pendingBindingsLoadState === 'loading') return;
   pendingBindingsLoadState = 'loading';
@@ -5979,7 +5987,7 @@ function renderPendingBindings() {
     const followDate = new Date(r.followed_at);
     const daysAgo = Math.floor((now - followDate.getTime()) / 86400000);
     const userShort = (r.user_id || '').slice(0, 8) + '…';
-    const oaLabel = r.oa_name || (r.oa_id || '').slice(0, 8) + '…';
+    const oaLabel = OA_DISPLAY_NAME[r.oa_id] || r.oa_name || (r.oa_id || '').slice(0, 8) + '…';
     const lastText = r.last_message_text
       ? (r.last_message_text.length > 40 ? r.last_message_text.slice(0, 40) + '…' : r.last_message_text)
       : '（尚無訊息）';
