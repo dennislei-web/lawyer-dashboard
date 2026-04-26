@@ -6015,8 +6015,8 @@ function renderPendingBindings() {
           <div style="margin-top:3px;">
             <a href="https://chat.line.biz/" target="_blank" rel="noopener"
                style="color:var(--blue);text-decoration:none;font-size:0.72rem;"
-               title="開新分頁到 LINE OA 後台，搜尋字串已自動複製到剪貼簿"
-               onclick="copyForLineSearch(this, '${copyAttr}')">→ 開 LINE OA（會自動複製搜尋字）</a>
+               title="開新分頁到 LINE OA 後台。LINE 沒提供直連特定 OA 的網址，請進去後從上方下拉選單切到「${escHtml(oaLabel)}」。搜尋字串已複製到剪貼簿"
+               onclick="copyForLineSearch(this, '${copyAttr}')">→ 開 LINE OA（請切到 <strong style="color:var(--gold);">${escHtml(oaLabel)}</strong>）</a>
           </div>
         </div>
         <div style="font-size:0.8rem;">
