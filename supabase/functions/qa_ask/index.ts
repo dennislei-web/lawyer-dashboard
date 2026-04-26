@@ -213,6 +213,12 @@ serve(async (req) => {
     const citedIds: string[] = Array.isArray(parsed.cited_chunk_ids) ? parsed.cited_chunk_ids : [];
     const tags: string[] = Array.isArray(parsed.suggested_tags) ? parsed.suggested_tags.slice(0, 3) : [];
 
+    // DB 寫入與 response 必須用同一份 chunks：LLM 偶爾 echo 空/不存在的 IDs，
+    // 若 DB 存原始 citedIds 而 response 走 fallback，showQaDetail 之後就查無片段。
+    const citedChunks = chunks.filter((c: any) => citedIds.includes(c.id));
+    const finalChunks = citedChunks.length > 0 ? citedChunks : chunks.slice(0, 3);
+    const finalChunkIds = finalChunks.map((c: any) => c.id);
+
     const { data: inserted, error: insertErr } = await sb
       .from('qa_entries')
       .insert({
@@ -221,7 +227,7 @@ serve(async (req) => {
         scenario_embedding: embedding,
         ai_answer: parsed.answer ?? '',
         ai_reasoning: parsed.reasoning ?? '',
-        source_chunk_ids: citedIds,
+        source_chunk_ids: finalChunkIds,
         tags,
       })
       .select('id')
@@ -232,16 +238,12 @@ serve(async (req) => {
       // 即使存失敗，還是把答案回給律師
     }
 
-    // 只把實際 cited 的 chunk 送回前端，減少 payload
-    const citedChunks = chunks.filter((c: any) => citedIds.includes(c.id));
-    const fallbackChunks = citedChunks.length > 0 ? citedChunks : chunks.slice(0, 3);
-
     return Response.json({
       type: 'new',
       qa_id: inserted?.id ?? null,
       answer: parsed.answer ?? '',
       reasoning: parsed.reasoning ?? '',
-      cited_chunks: fallbackChunks,
+      cited_chunks: finalChunks,
       tags,
       tokens_used: {
         input: claudeResp.usage.input_tokens,

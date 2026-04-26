@@ -6635,9 +6635,15 @@ async function showQaDetail(qaId) {
       </div>`;
   }).join('');
   const signedCount = chunks.filter(ch => ch.consultation_cases?.is_signed).length;
-  const citedSummary = chunks.length > 0
-    ? `共 ${chunks.length} 個參考片段，其中 <b style="color:#4caf50;">${signedCount} 個來自最終成案</b>`
-    : '';
+  const storedIds = e.source_chunk_ids || [];
+  let citedSummary;
+  if (chunks.length > 0) {
+    citedSummary = `共 ${chunks.length} 個參考片段，其中 <b style="color:#4caf50;">${signedCount} 個來自最終成案</b>`;
+  } else if (storedIds.length > 0) {
+    citedSummary = `紀錄了 ${storedIds.length} 個引用片段 ID，但目前查無對應 case_chunks 內容（可能已刪除或為早期 LLM 回填錯誤）`;
+  } else {
+    citedSummary = '此版本未保存引用片段';
+  }
 
   const resultEl = document.getElementById('qaResult');
   resultEl.innerHTML = `
@@ -6651,11 +6657,10 @@ async function showQaDetail(qaId) {
         <div class="qa-reasoning"><b>原 AI 答案：</b>${escHtml(e.ai_answer)}</div>` : ''}
       <div class="qa-tags">${tags}</div>
       ${e.ai_reasoning ? `<div class="qa-reasoning"><b>推理：</b>${escHtml(e.ai_reasoning)}</div>` : ''}
-      ${chunks.length > 0 ? `
-        <div class="qa-cited">
-          <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">📚 參考諮詢資料（${citedSummary}）</div>
-          <div class="qa-cited-list">${citedHtml}</div>
-        </div>` : ''}
+      <div class="qa-cited">
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">📚 參考諮詢資料（${citedSummary}）</div>
+        ${chunks.length > 0 ? `<div class="qa-cited-list">${citedHtml}</div>` : ''}
+      </div>
       <div class="qa-actions">
         <button class="qa-action-btn" onclick="rateQa('${e.id}', 1, this)">👍 有用</button>
         <button class="qa-action-btn" onclick="rateQa('${e.id}', -1, this)">👎 沒用</button>
