@@ -1346,8 +1346,29 @@
       margin-top: 6px;
       font-size: 0.78rem;
     }
-    .qa-cited-meta { color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px; }
+    .qa-cited-meta { color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
     .qa-cited-content { white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+    .qa-cited-badge {
+      display:inline-block;
+      font-size:0.68rem;
+      padding:1px 6px;
+      border-radius:10px;
+      font-weight:600;
+      letter-spacing:0.5px;
+    }
+    .qa-cited-badge.signed {
+      background: rgba(76, 175, 80, 0.15);
+      color: #4caf50;
+      border: 1px solid rgba(76, 175, 80, 0.4);
+    }
+    .qa-cited-badge.unsigned {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .qa-cited-item.signed {
+      border-left: 3px solid #4caf50;
+    }
     .qa-actions {
       display: flex;
       gap: 8px;
@@ -2541,6 +2562,9 @@ function reRenderActivePage() {
       } else {
         renderUnsignedPage();
       }
+      // pending bindings 的「選擇對應案件」候選池來自 allCases，pending fetch 比 allCases 快，
+      // 第一次 render 時 allCases 通常還空 → dropdown 沒選項。allCases 到齊後重渲染一次才會有。
+      if (pendingBindingsLoadState === 'loaded') renderPendingBindings();
       break;
     case 'pageDetail':    renderDetailPage();   break;
     case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
@@ -6303,12 +6327,23 @@ function renderNewAnswer(result) {
   const resultEl = document.getElementById('qaResult');
   const tags = (result.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
 
-  const citedHtml = (result.cited_chunks || []).map(ch => `
-    <div class="qa-cited-item">
-      <div class="qa-cited-meta">${escHtml(ch.case_date || '')} · ${escHtml(ch.case_type || '')} · 客戶 ${escHtml(ch.client_name || '')} · 律師 ${escHtml(ch.lawyer_name || '')} · ${escHtml(ch.source_type)}</div>
+  const citedHtml = (result.cited_chunks || []).map(ch => {
+    const signed = !!ch.is_signed;
+    const badge = signed
+      ? '<span class="qa-cited-badge signed">✅ 成案</span>'
+      : '<span class="qa-cited-badge unsigned">未成案</span>';
+    return `
+    <div class="qa-cited-item ${signed ? 'signed' : ''}">
+      <div class="qa-cited-meta">${badge}<span>${escHtml(ch.case_date || '')} · ${escHtml(ch.case_type || '')} · 客戶 ${escHtml(ch.client_name || '')} · 律師 ${escHtml(ch.lawyer_name || '')} · ${escHtml(ch.source_type)}</span></div>
       <div class="qa-cited-content">${escHtml(ch.content)}</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+
+  const citedCount = result.cited_chunks?.length || 0;
+  const signedCount = (result.cited_chunks || []).filter(c => c.is_signed).length;
+  const summary = citedCount > 0
+    ? `共 ${citedCount} 個參考片段，其中 <b style="color:#4caf50;">${signedCount} 個來自最終成案</b>`
+    : '無參考片段';
 
   resultEl.innerHTML = `
     <div class="qa-result-card">
@@ -6317,8 +6352,8 @@ function renderNewAnswer(result) {
       <div class="qa-tags">${tags}</div>
       ${result.reasoning ? `<div class="qa-reasoning"><b>推理：</b>${escHtml(result.reasoning)}</div>` : ''}
       <div class="qa-cited">
-        <button class="qa-cited-toggle" onclick="toggleCitedChunks(this)">▶ 展開引用的 ${result.cited_chunks?.length || 0} 個片段</button>
-        <div class="qa-cited-list" style="display:none;">${citedHtml}</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">📚 參考諮詢資料（${summary}）</div>
+        <div class="qa-cited-list">${citedHtml}</div>
       </div>
       <div class="qa-actions">
         ${result.qa_id ? `
@@ -6528,7 +6563,7 @@ async function showQaDetail(qaId) {
   let chunks = [];
   if (e.source_chunk_ids && e.source_chunk_ids.length > 0) {
     const { data: chs } = await sb.from('case_chunks')
-      .select('id, source_type, content, consultation_cases(case_date, case_type, client_name, lawyers(name))')
+      .select('id, source_type, content, consultation_cases(case_date, case_type, client_name, is_signed, lawyers(name))')
       .in('id', e.source_chunk_ids);
     chunks = chs || [];
   }
@@ -6557,12 +6592,20 @@ async function showQaDetail(qaId) {
   const citedHtml = chunks.map(ch => {
     const cc = ch.consultation_cases || {};
     const law = cc.lawyers?.name || '';
+    const signed = !!cc.is_signed;
+    const badge = signed
+      ? '<span class="qa-cited-badge signed">✅ 成案</span>'
+      : '<span class="qa-cited-badge unsigned">未成案</span>';
     return `
-      <div class="qa-cited-item">
-        <div class="qa-cited-meta">${escHtml(cc.case_date || '')} · ${escHtml(cc.case_type || '')} · 客戶 ${escHtml(cc.client_name || '')} · 律師 ${escHtml(law)} · ${escHtml(ch.source_type)}</div>
+      <div class="qa-cited-item ${signed ? 'signed' : ''}">
+        <div class="qa-cited-meta">${badge}<span>${escHtml(cc.case_date || '')} · ${escHtml(cc.case_type || '')} · 客戶 ${escHtml(cc.client_name || '')} · 律師 ${escHtml(law)} · ${escHtml(ch.source_type)}</span></div>
         <div class="qa-cited-content">${escHtml(ch.content)}</div>
       </div>`;
   }).join('');
+  const signedCount = chunks.filter(ch => ch.consultation_cases?.is_signed).length;
+  const citedSummary = chunks.length > 0
+    ? `共 ${chunks.length} 個參考片段，其中 <b style="color:#4caf50;">${signedCount} 個來自最終成案</b>`
+    : '';
 
   const resultEl = document.getElementById('qaResult');
   resultEl.innerHTML = `
@@ -6578,8 +6621,8 @@ async function showQaDetail(qaId) {
       ${e.ai_reasoning ? `<div class="qa-reasoning"><b>推理：</b>${escHtml(e.ai_reasoning)}</div>` : ''}
       ${chunks.length > 0 ? `
         <div class="qa-cited">
-          <button class="qa-cited-toggle" onclick="toggleCitedChunks(this)">▶ 展開引用的 ${chunks.length} 個片段</button>
-          <div class="qa-cited-list" style="display:none;">${citedHtml}</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">📚 參考諮詢資料（${citedSummary}）</div>
+          <div class="qa-cited-list">${citedHtml}</div>
         </div>` : ''}
       <div class="qa-actions">
         <button class="qa-action-btn" onclick="rateQa('${e.id}', 1, this)">👍 有用</button>

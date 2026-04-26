@@ -45,7 +45,7 @@ const SYSTEM_PROMPT = `你是一位資深法律諮詢對話顧問，專長是從
 function buildUserPrompt(scenario: string, chunks: any[]): string {
   const chunkBlocks = chunks.map((ch, i) => `
 [片段 ${i + 1}] (id: ${ch.id})
-案件：${ch.case_date} · ${ch.case_type ?? '未填'} · 客戶 ${ch.client_name ?? '未填'} · 律師 ${ch.lawyer_name ?? '未填'}
+案件：${ch.case_date} · ${ch.case_type ?? '未填'} · 客戶 ${ch.client_name ?? '未填'} · 律師 ${ch.lawyer_name ?? '未填'} · ${ch.is_signed ? '✅ 最終成案' : '⚠ 未成案'}
 來源：${ch.source_type}
 內容：
 """
