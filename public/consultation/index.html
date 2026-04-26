@@ -6599,13 +6599,43 @@ async function showQaDetail(qaId) {
     .order('created_at', { ascending: false });
   const versions = allVersions || [];
 
-  // 抓引用的 case_chunks（by id 直接查，不用 vector search RPC）
+  // 抓引用的 case_chunks（拆三步查，避開 PostgREST embed + RLS 互動造成 0 row 的怪行為）
   let chunks = [];
   if (e.source_chunk_ids && e.source_chunk_ids.length > 0) {
-    const { data: chs } = await sb.from('case_chunks')
-      .select('id, source_type, content, consultation_cases(case_date, case_type, client_name, is_signed, lawyers(name))')
+    // Step 1: case_chunks 本體
+    const { data: chunkData, error: chunkErr } = await sb.from('case_chunks')
+      .select('id, source_type, content, case_id')
       .in('id', e.source_chunk_ids);
-    chunks = chs || [];
+    if (chunkErr) console.warn('case_chunks query error', chunkErr);
+
+    if (chunkData && chunkData.length > 0) {
+      // Step 2: 對應的 consultation_cases
+      const caseIds = [...new Set(chunkData.map(c => c.case_id).filter(Boolean))];
+      const { data: caseData } = caseIds.length > 0
+        ? await sb.from('consultation_cases')
+            .select('id, case_date, case_type, client_name, is_signed, lawyer_id')
+            .in('id', caseIds)
+        : { data: [] };
+
+      // Step 3: 對應的 lawyers
+      const lawyerIds = [...new Set((caseData || []).map(c => c.lawyer_id).filter(Boolean))];
+      const { data: lawyerData } = lawyerIds.length > 0
+        ? await sb.from('lawyers').select('id, name').in('id', lawyerIds)
+        : { data: [] };
+
+      // 縫起來
+      const caseMap = new Map((caseData || []).map(c => [c.id, c]));
+      const lawyerMap = new Map((lawyerData || []).map(l => [l.id, l]));
+      chunks = chunkData.map(ch => {
+        const cc = caseMap.get(ch.case_id);
+        return {
+          ...ch,
+          consultation_cases: cc
+            ? { ...cc, lawyers: cc.lawyer_id ? lawyerMap.get(cc.lawyer_id) : null }
+            : null,
+        };
+      });
+    }
   }
 
   const tags = (e.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
