@@ -6675,10 +6675,15 @@ async function showQaDetail(qaId) {
 }
 
 // 刪除單一版本（僅 admin/manager/asked_by 有權限；按鈕本身就有權限守門）
+// 加 .select() 才能拿到實際刪除的列；只靠 error 會被 RLS 靜默過濾誤判為成功
 async function deleteQaVersion(qaId) {
   if (!confirm('確定刪除這個版本的答案？\n（其他版本如有會保留）')) return;
-  const { error } = await sb.from('qa_entries').delete().eq('id', qaId);
+  const { data, error } = await sb.from('qa_entries').delete().eq('id', qaId).select('id');
   if (error) { alert('刪除失敗：' + error.message); return; }
+  if (!data || data.length === 0) {
+    alert(`刪除失敗：權限不足（RLS 阻擋）\n\n你目前角色：${currentLawyer?.role || '未知'}\n你的 lawyer id：${currentLawyer?.id || '未知'}\n\n只有發問人本人或 admin/manager 可刪除。如果你應該有權限但看到這個訊息，可能是 lawyers.auth_user_id 沒對上。`);
+    return;
+  }
   document.getElementById('qaResult').innerHTML = '<div class="qa-empty">✓ 已刪除此版本</div>';
   loadQaList();
 }
@@ -6687,9 +6692,13 @@ async function deleteQaVersion(qaId) {
 async function deleteQaAllVersions(scenario) {
   const preview = scenario.length > 50 ? scenario.slice(0, 50) + '...' : scenario;
   if (!confirm(`確定刪除「${preview}」的所有版本？\n\n此操作無法復原。`)) return;
-  const { error } = await sb.from('qa_entries').delete().eq('scenario', scenario);
+  const { data, error } = await sb.from('qa_entries').delete().eq('scenario', scenario).select('id');
   if (error) { alert('刪除失敗：' + error.message); return; }
-  document.getElementById('qaResult').innerHTML = '<div class="qa-empty">✓ 已刪除整題及所有版本</div>';
+  if (!data || data.length === 0) {
+    alert(`刪除失敗：權限不足（RLS 阻擋）\n\n你目前角色：${currentLawyer?.role || '未知'}\n只有發問人本人或 admin/manager 可刪除。`);
+    return;
+  }
+  document.getElementById('qaResult').innerHTML = `<div class="qa-empty">✓ 已刪除 ${data.length} 個版本</div>`;
   loadQaList();
 }
 
