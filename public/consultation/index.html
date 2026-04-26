@@ -6004,14 +6004,24 @@ function renderPendingBindings() {
       }))
       .join('');
 
+    // 複製優先序：抓到的姓名 > 訊息文字（用於到 LINE OA 後台貼上搜尋）
+    const copyText = r.last_extracted_name || r.last_message_text || '';
+    const copyAttr = escHtml(copyText);
     return `
       <div class="pending-binding-row" data-idx="${idx}" style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">
         <div style="font-size:0.78rem;color:var(--text-muted);min-width:140px;">
           <div><span style="color:var(--gold);">${escHtml(oaLabel)}</span> · <span class="num">${daysAgo}</span> 天前加入</div>
           <div style="margin-top:2px;" title="${escHtml(r.user_id)}">ID: ${escHtml(userShort)}</div>
+          <div style="margin-top:3px;">
+            <a href="https://chat.line.biz/" target="_blank" rel="noopener"
+               style="color:var(--blue);text-decoration:none;font-size:0.72rem;"
+               title="開新分頁到 LINE OA 後台，搜尋字串已自動複製到剪貼簿"
+               onclick="copyForLineSearch(this, '${copyAttr}')">→ 開 LINE OA（會自動複製搜尋字）</a>
+          </div>
         </div>
         <div style="font-size:0.8rem;">
-          <div style="color:var(--text);">${escHtml(lastText)}${hintName}</div>
+          <div style="color:var(--text);cursor:pointer;" title="點擊複製完整訊息到剪貼簿"
+               onclick="copyToClipboard(this, '${escHtml(r.last_message_text || '')}')">${escHtml(lastText)}${hintName}</div>
           <select data-user="${escHtml(r.user_id)}" data-oa="${escHtml(r.oa_id)}" style="margin-top:4px;padding:3px 6px;font-size:0.78rem;border:1px solid var(--border);border-radius:4px;background:var(--bg-row);color:var(--text);max-width:100%;">
             ${optsHtml}
           </select>
@@ -6100,6 +6110,28 @@ async function confirmPendingBinding(btnEl) {
     alert('綁定失敗：' + (e.message || e));
     btnEl.disabled = false;
     btnEl.textContent = '綁定';
+  }
+}
+
+// 複製文字到剪貼簿，並在元素上顯示短暫 ✓ 提示
+async function copyToClipboard(el, text) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = el.innerHTML;
+    el.innerHTML = '<span style="color:var(--green);">✓ 已複製</span>';
+    setTimeout(() => { el.innerHTML = orig; }, 1200);
+  } catch (e) {
+    console.error('clipboard write failed', e);
+    alert('複製失敗，請手動選取：\n\n' + text);
+  }
+}
+
+// 複製搜尋字串並開新分頁到 LINE OA（onclick 在 anchor 上，async 不阻擋預設導航）
+function copyForLineSearch(aEl, text) {
+  if (!text) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(e => console.error('clipboard write failed', e));
   }
 }
 
