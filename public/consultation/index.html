@@ -5936,6 +5936,7 @@ function cancelEditLineChat(el) {
 // webhook 收到 follow/message 但沒 auto-match 到案件 → 這裡讓法務手動配對
 let pendingBindingsLoadState = 'idle';   // idle | loading | loaded | error
 let pendingBindingsData = [];            // 近 30 天 matched_case_id IS NULL 的 rows
+let pendingBindingsCollapsed = true;     // 預設收起，點 header 才展開
 
 // chatUrlPrefix → 顯示名稱。secret 那邊改不了（write-only 又沒備份），所以前端 override。
 // 新增 OA 時記得加這裡，否則會 fallback 到 r.oa_name（secret 內 name 欄位）。
@@ -6042,15 +6043,23 @@ function renderPendingBindings() {
     `;
   }).join('');
 
+  const collapsed = pendingBindingsCollapsed;
+  const chevron = collapsed ? '▸' : '▾';
+  const borderStyle = collapsed ? '' : 'border-bottom:1px solid var(--border);';
   sec.innerHTML = `
     <div class="section" style="padding:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--bg-row);">
-        <div style="font-size:0.88rem;font-weight:600;">待人工綁定 LINE 對話 <span class="num" style="color:var(--gold);">${rows.length}</span></div>
+      <div onclick="togglePendingBindings()" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;${borderStyle}background:var(--bg-row);cursor:pointer;user-select:none;">
+        <div style="font-size:0.88rem;font-weight:600;"><span style="display:inline-block;width:14px;color:var(--text-muted);">${chevron}</span>待人工綁定 LINE 對話 <span class="num" style="color:var(--gold);">${rows.length}</span></div>
         <div style="font-size:0.72rem;color:var(--text-muted);">webhook 自動綁不到的加好友事件（近 30 天）</div>
       </div>
-      ${rowHtml}
+      ${collapsed ? '' : rowHtml}
     </div>
   `;
+}
+
+function togglePendingBindings() {
+  pendingBindingsCollapsed = !pendingBindingsCollapsed;
+  renderPendingBindings();
 }
 
 async function confirmPendingBinding(btnEl) {
