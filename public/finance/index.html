@@ -2212,16 +2212,26 @@ async function loadUploadLog() {
   var r = await sb.from('finance_uploads').select('*').order('created_at', { ascending: false }).limit(50);
   if (!r.data || r.data.length === 0) { document.getElementById('uploadLog').innerHTML = ''; return; }
 
-  // Only show the latest record per year+entity, skip entries before a deletion
-  var seen = {}; // key: year-entity → true if already shown or cleared
+  // Clear button writes entity='all', so per-(year,entity) dedupe missed it.
+  // Use latest clear timestamp per year to filter older uploads regardless of entity.
+  var clearedAtByYear = {};
+  r.data.forEach(function(u) {
+    if (u.filename.indexOf('已清除') > -1) {
+      var t = new Date(u.created_at).getTime();
+      if (!clearedAtByYear[u.fiscal_year] || t > clearedAtByYear[u.fiscal_year]) {
+        clearedAtByYear[u.fiscal_year] = t;
+      }
+    }
+  });
+
+  var seen = {};
   var validRows = [];
   r.data.forEach(function(u) {
+    if (u.filename.indexOf('已清除') > -1) return;
+    var clearedAt = clearedAtByYear[u.fiscal_year];
+    if (clearedAt && new Date(u.created_at).getTime() < clearedAt) return;
     var key = u.fiscal_year + '-' + u.entity;
-    if (seen[key]) return; // already found the latest for this combo
-    if (u.filename.indexOf('已清除') > -1) {
-      seen[key] = true; // mark as cleared, skip everything older
-      return;
-    }
+    if (seen[key]) return;
     validRows.push(u);
     seen[key] = true;
   });
