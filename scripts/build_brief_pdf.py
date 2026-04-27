@@ -298,6 +298,7 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
             "signed": "簽" if c.get("is_signed") else "未簽",
             "collected": c.get("collected") or 0,
             "failure_reason": a.get("failure_reason") or "",
+            "reason_specific": (a.get("reason_specific") or "")[:120],
             "reason_evidence": (a.get("reason_evidence") or "")[:220],
             "missed_opportunities": (a.get("missed_opportunities") or [])[:5],
             "strengths": (a.get("strengths") or [])[:3],
@@ -471,6 +472,249 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
         return rule_based_actions
 
 
+def _load_inline_narrative(lawyer_name):
+    """
+    優先讀取 inline 產的 narrative JSON（由 Claude Opus 在對話中產，比 API Sonnet 4.5 品質好）。
+
+    Schema：briefs/raw_data/{律師名}_narrative.json
+        {
+          "interpretation": "1 句解讀（含這位律師獨特的數字事實）",
+          "attribution": "1 句歸因（具體情境，不是通用模板）",
+          "focus_title": "≤12 字標題",
+          "behavior_themes": [
+            {"name": "≤12 字主題", "count": 12},
+            ...
+          ]
+        }
+
+    回傳 dict（含 behavior_themes 已轉成 list of tuples）；找不到或格式不對回 None。
+    """
+    path = RAW_DIR / f"{lawyer_name}_narrative.json"
+    if not path.exists():
+        return None
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        themes_raw = d.get("behavior_themes") or []
+        themes = []
+        for t in themes_raw:
+            name = (t.get("name") or "").strip()
+            cnt = t.get("count")
+            if not name or not isinstance(cnt, int) or cnt < 1:
+                continue
+            themes.append((name, cnt))
+        themes.sort(key=lambda x: -x[1])
+        if len(themes) < 2:
+            print(f"  [narrative inline] {path.name} themes < 2，忽略", flush=True)
+            return None
+        result = {
+            "interpretation": (d.get("interpretation") or "").strip(),
+            "attribution": (d.get("attribution") or "").strip(),
+            "focus_title": (d.get("focus_title") or "").strip(),
+            "behavior_themes": themes,
+        }
+        if not result["interpretation"] or not result["attribution"] or not result["focus_title"]:
+            print(f"  [narrative inline] {path.name} 缺欄位，忽略", flush=True)
+            return None
+        print(f"  [narrative inline] 載入 {path.name}（{len(themes)} themes）", flush=True)
+        return result
+    except Exception as e:
+        print(f"  [narrative inline] 讀檔失敗 {path.name}: {type(e).__name__}: {e}", flush=True)
+        return None
+
+
+def generate_narrative_and_themes(lw, ov, rec, prev, delta, reason_counts, reason_total,
+                                   top_reasons, all_missed, monthly_trend,
+                                   strengths_types, weaknesses_types,
+                                   unsigned_count, signed_count, lag_stats,
+                                   rule_based_fallback):
+    """
+    產出 narrative 解讀 + behavior themes（破除同質化）。
+
+    優先順序：
+    1. **Inline JSON**（Claude Opus 4.7 在對話中產，品質最佳、$0、無 rate limit）
+    2. **API call**（Claude Sonnet 4.5，自動但品質次之、有成本與 rate limit）
+    3. **Rule-based fallback**（5 個寫死字串，會同質化）
+
+    回傳：dict {interpretation, attribution, focus_title, behavior_themes:[(name,count)]}
+    """
+    # ---- Layer 1: inline JSON ----
+    inline = _load_inline_narrative(lw["name"])
+    if inline:
+        return inline
+
+    # ---- Layer 2: API call ----
+    if not _USE_LLM_ACTIONS or not _ANTHROPIC_AVAILABLE:
+        return rule_based_fallback
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return rule_based_fallback
+    if not all_missed:
+        # 沒有 missed_opportunities 就無法產 themes，直接 fallback
+        return rule_based_fallback
+
+    # 萃取「可能讓這位律師獨特」的事實，餵給 LLM
+    distinguishing_facts = []
+    # 1. 月度趨勢轉折/停工
+    if monthly_trend:
+        zero_streak = 0
+        for m in monthly_trend:
+            if (m.get("consult") or 0) == 0:
+                zero_streak += 1
+            else:
+                if zero_streak >= 3:
+                    distinguishing_facts.append(f"月度趨勢中有連續 {zero_streak} 個月 0 案（疑似停工/離崗）")
+                zero_streak = 0
+        if zero_streak >= 3:
+            distinguishing_facts.append(f"月度趨勢中近期連續 {zero_streak} 個月 0 案")
+    # 2. 客單價位置
+    avg_unit = ov.get("avg_collected") or 0
+    office_unit = ov.get("office_avg_unit") or 0
+    if office_unit > 0 and avg_unit > 0:
+        gap_pct = (avg_unit - office_unit) / office_unit * 100
+        if abs(gap_pct) >= 10:
+            direction = "高出" if gap_pct > 0 else "低於"
+            distinguishing_facts.append(f"整體客單價 {direction}同所別 {abs(gap_pct):.0f}%（你 {int(avg_unit):,} vs 同所別 {int(office_unit):,}）")
+    # 3. 簽約滯後 outlier（當天簽 vs 30 天簽）
+    if lag_stats:
+        within_0 = lag_stats.get("within_0") or 0
+        if within_0 >= 55:
+            distinguishing_facts.append(f"當日簽 {within_0:.0f}%（屬於『當場收單型』）")
+        elif within_0 <= 30:
+            distinguishing_facts.append(f"當日簽僅 {within_0:.0f}%（簽約多在後續 1-30 天發生）")
+    # 4. 最大強項 / 最大弱項
+    if strengths_types:
+        top_s = strengths_types[0]
+        gap = top_s.get("office_unit_gap_pct") or top_s.get("unit_gap_pct") or 0
+        if abs(gap) >= 15 and top_s.get("my_signed", 0) >= 5:
+            distinguishing_facts.append(f"最強案型「{top_s['case_type']}」客單價高同所別 {gap:+.0f}%（n={top_s['my_signed']}）")
+    if weaknesses_types:
+        top_w = weaknesses_types[0]
+        gap = top_w.get("office_unit_gap_pct") or top_w.get("unit_gap_pct") or 0
+        if abs(gap) >= 15 and top_w.get("my_signed", 0) >= 5:
+            distinguishing_facts.append(f"最弱案型「{top_w['case_type']}」客單價低同所別 {abs(gap):.0f}%（n={top_w['my_signed']}）")
+
+    context = {
+        "lawyer": lw["name"],
+        "office": lw.get("office"),
+        "metrics": {
+            "consult": ov.get("consult_count"),
+            "sign_rate_pct": round(ov.get("sign_rate") or 0, 1),
+            "avg_unit": int(avg_unit),
+            "consult_eff": int(ov.get("consult_eff") or 0),
+            "office_sign_rate_pct": round(ov.get("office_sign_rate") or 0, 1),
+            "office_avg_unit": int(office_unit),
+            "office_eff": int(ov.get("office_eff") or 0),
+        },
+        "recent_vs_prev": {
+            "rate_delta_pct": round(delta.get("sign_rate_delta") or 0, 1),
+            "eff_delta": int(delta.get("consult_eff_delta") or 0),
+            "recent_rate_pct": round(rec.get("sign_rate") or 0, 1),
+            "prev_rate_pct": round(prev.get("sign_rate") or 0, 1),
+            "recent_eff": int(rec.get("consult_eff") or 0),
+            "prev_eff": int(prev.get("consult_eff") or 0),
+        },
+        "top_failure_reasons": [
+            {"reason": r, "count": n, "pct": round(n / reason_total * 100) if reason_total else 0}
+            for r, n in top_reasons[:5] if r != "已簽約"
+        ],
+        "unsigned_count": unsigned_count,
+        "signed_count": signed_count,
+        "distinguishing_facts": distinguishing_facts,
+        "all_missed_opportunities": all_missed[:80],  # 上限避免 prompt 太長
+    }
+
+    system_prompt = (
+        "你是喆律法律事務所的資深經營主管，正在閱讀某位律師的諮詢成案分析資料。"
+        "**你已經寫過 4 份其他律師的 brief，使用者明確抱怨『大家的 brief 看起來都太像了』**。"
+        "你的任務是讀完這位律師的 missed_opportunities 原文後，產出**只屬於她**的解讀和行為主題，"
+        "**禁止套用任何放諸四海皆準的 SOP 詞彙**。"
+    )
+
+    user_prompt = f"""## 背景資料（JSON）
+
+```json
+{json.dumps(context, ensure_ascii=False, indent=2)}
+```
+
+## 任務
+
+產出 4 個欄位（純 JSON，無 markdown、無前後說明）：
+
+```json
+{{
+  "interpretation": "1 句解讀『這位律師當下的處境』。**必須**包含 distinguishing_facts 中至少 1 個事實的具體數字，不可寫只看 metrics 就能寫出的通用句。25-50 字。",
+  "attribution": "1 句指出 AI 在 missed_opportunities 中看到的關鍵卡點。**禁止**用『核心是諮詢尾聲沒有推客戶下決定』『改善這段動線』『價格錨定不足』『信任建立不足』這類通用模板；必須具體到『律師在哪個情境少做了什麼』。25-50 字。",
+  "focus_title": "≤12 字的 brief 主軸標題，要呼應 interpretation。**禁止**直接複製『決策推進 · 縮短遲疑』『報價動線優化 · 拉升客單價』『價格溝通強化』這 5 個 fallback 字串。",
+  "behavior_themes": [
+    {{
+      "name": "≤12 字的主題名（描述律師具體少做的某個動作）",
+      "count": <int 該主題在 all_missed_opportunities 中被命中的筆數，必須真實計算>,
+      "example": "從 all_missed_opportunities 裡引用 1 句最具代表性的原文（≤50 字）"
+    }}
+  ]
+}}
+```
+
+### behavior_themes 規則
+1. 產 **3-6 個** themes，全部加總應該至少涵蓋 50% 的 missed_opportunities（不需 100%）
+2. 每個 theme 的 name **不能**是『主動報價/探預算』『尾聲確認疑慮』『強化委任價值』『不過早交業務』『即時蒐證引導』這 5 個 fallback 字串（除非該律師確實有 ≥5 筆案件指向這 5 個之一，才可保留 1-2 個，其他必須換成只屬於她的 theme）
+3. 每個 theme 必須真的能從至少 3 筆原文找到證據（count ≥ 3）；count = 1 或 2 的不要列
+4. 鼓勵發現「主題粒度更細」的 pattern，例如：
+   - 不只「主動報價」，而是「對企業客戶決策鏈長時沒給董事會一頁摘要」
+   - 不只「即時蒐證引導」，而是「客戶提到 LINE 對話沒當場討論截圖保全方法」
+5. count 必須誠實計算（粗略匹配 OK，不用嚴格字面比對），如果某個你想列的 theme 實際只有 2 筆 hit，就不要列
+
+### interpretation / attribution 範例對照（學這個風格、不要照抄）
+- 通用 ❌: 「成案率與客單價同時下滑」
+- 個案 ✅: 「停工 6 個月後回崗，2026-04 已跑出 $316K 但離婚協議書客單仍比同事少 26%」
+- 通用 ❌: 「核心是諮詢尾聲沒有推客戶下決定」
+- 個案 ✅: 「客戶帶家屬同來時律師仍只對當事人講話，沒把專業論述同時投向出錢的家屬」
+"""
+
+    try:
+        client = Anthropic(api_key=api_key, max_retries=10, timeout=120)
+        resp = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=2500,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        text = resp.content[0].text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip().rstrip("`").strip()
+        data = json.loads(text)
+
+        themes_raw = data.get("behavior_themes") or []
+        themes = []
+        for t in themes_raw:
+            name = (t.get("name") or "").strip()
+            cnt = t.get("count")
+            if not name or not isinstance(cnt, int) or cnt < 1:
+                continue
+            themes.append((name, cnt))
+        themes.sort(key=lambda x: -x[1])
+
+        if len(themes) < 2:
+            print(f"  [narrative+themes] LLM 回傳 themes < 2，退回 rule-based", flush=True)
+            return rule_based_fallback
+
+        result = {
+            "interpretation": (data.get("interpretation") or "").strip(),
+            "attribution": (data.get("attribution") or "").strip(),
+            "focus_title": (data.get("focus_title") or rule_based_fallback["focus_title"]).strip(),
+            "behavior_themes": themes,
+        }
+        print(f"  [narrative+themes] LLM 產出 {len(themes)} themes "
+              f"(in={resp.usage.input_tokens} out={resp.usage.output_tokens})", flush=True)
+        return result
+    except Exception as e:
+        print(f"  [narrative+themes] 失敗退回 rule-based: {type(e).__name__}: {e}", flush=True)
+        return rule_based_fallback
+
+
 def build_html(prep, llm, all_cases=None, lag_stats=None):
     lw = prep["lawyer"]
     ov = prep["overall"]
@@ -543,19 +787,20 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
     for c in unsigned:
         all_missed.extend(c["analysis"].get("missed_opportunities") or [])
 
-    def count_theme(keywords):
+    # === Rule-based fallback：行為主題（substring matching） ===
+    def _fallback_count_theme(keywords):
         return sum(1 for m in all_missed if any(k in m for k in keywords))
 
-    behavior_themes = [
+    _fb_themes_def = [
         ("主動報價 / 探預算", ["報價", "費用區間", "預算", "探問預算", "價格"]),
         ("尾聲確認疑慮", ["尾聲", "最後", "確認", "顧慮"]),
         ("強化委任價值", ["價值", "委任必要", "投資報酬", "委任價值", "服務價值"]),
         ("不過早交業務", ["業務", "交給", "客戶經理", "轉交", "轉給"]),
         ("即時蒐證引導", ["蒐證", "證據", "錄音", "當週", "立即"]),
     ]
-    behavior_counts = [(name, count_theme(kw)) for name, kw in behavior_themes]
-    behavior_counts = [b for b in behavior_counts if b[1] > 0]
-    behavior_counts.sort(key=lambda x: -x[1])
+    _fb_behavior_counts = [(name, _fallback_count_theme(kw)) for name, kw in _fb_themes_def]
+    _fb_behavior_counts = [b for b in _fb_behavior_counts if b[1] > 0]
+    _fb_behavior_counts.sort(key=lambda x: -x[1])
 
     # 強項主題
     strength_themes = pick_top_strength_themes(signed, limit=4)
@@ -563,7 +808,7 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
     # 3 個改進代表案例
     rep_improvements = pick_representative_improvements(unsigned, limit=3)
 
-    # Header 主題 — 依 AI 歸因的失敗原因組合自動判斷
+    # === Rule-based fallback：focus_title + attribution（依 top2 失敗原因 5 種模板） ===
     top2_names = [r for r, _ in top_reasons[:2]]
     top2_cnt = sum(n for _, n in top_reasons[:2])
     top2_pct = top2_cnt / reason_total * 100 if reason_total else 0
@@ -575,28 +820,28 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
     has_trust = any("信任" in r for r in top2_names)
 
     if has_price and has_delay:
-        focus_title = "報價動線優化 · 拉升客單價"
-        theme_sentence = (
-            f"這不是諮詢品質問題，而是<b>諮詢到簽約的動線問題</b>"
-            f"（律師策略給完 → 直接轉業務 → 客戶回去考慮）。改善這段動線，同時能提升成案率與客單價。"
+        _fb_focus_title = "報價動線優化 · 拉升客單價"
+        _fb_attribution = (
+            "這不是諮詢品質問題，而是<b>諮詢到簽約的動線問題</b>"
+            "（律師策略給完 → 直接轉業務 → 客戶回去考慮）。改善這段動線，同時能提升成案率與客單價。"
         )
     elif has_price:
-        focus_title = "價格溝通強化"
-        theme_sentence = f"核心議題是<b>價格錨定不足</b>：律師未在諮詢現場建立價格共識就轉業務。"
+        _fb_focus_title = "價格溝通強化"
+        _fb_attribution = "核心議題是<b>價格錨定不足</b>：律師未在諮詢現場建立價格共識就轉業務。"
     elif has_delay:
-        focus_title = "決策推進 · 縮短遲疑"
-        theme_sentence = f"客戶常帶著「回去考慮」離開。核心是<b>諮詢尾聲沒有推客戶下決定</b>。"
+        _fb_focus_title = "決策推進 · 縮短遲疑"
+        _fb_attribution = "客戶常帶著「回去考慮」離開。核心是<b>諮詢尾聲沒有推客戶下決定</b>。"
     elif has_mismatch:
-        focus_title = "案件聚焦 · 過濾方向不符的諮詢"
-        theme_sentence = f"核心是<b>客戶需求與事務所擅長範圍的落差</b>，改善篩選或期待管理。"
+        _fb_focus_title = "案件聚焦 · 過濾方向不符的諮詢"
+        _fb_attribution = "核心是<b>客戶需求與事務所擅長範圍的落差</b>，改善篩選或期待管理。"
     elif has_trust:
-        focus_title = "專業溝通深化 · 建立信任"
-        theme_sentence = f"核心是<b>律師與客戶的信任建立不足</b>。"
+        _fb_focus_title = "專業溝通深化 · 建立信任"
+        _fb_attribution = "核心是<b>律師與客戶的信任建立不足</b>。"
     else:
-        focus_title = "諮詢表現回顧"
-        theme_sentence = ""
+        _fb_focus_title = "諮詢表現回顧"
+        _fb_attribution = ""
 
-    # 決定敘事語氣 — 依據「成案率變動」× 「效益變動」的 2x2 組合
+    # 數據句（含 stat colors）— LLM/fallback 都接這個前綴
     eff_change = delta.get("consult_eff_delta") or 0
     rate_change = delta.get("sign_rate_delta") or 0
 
@@ -608,36 +853,60 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
         f"諮詢效益從 {fmt_money(prev['consult_eff'])} 變動到 {fmt_money(rec['consult_eff'])}（{eff_str}）。"
     )
 
+    # === Rule-based fallback：interpretation（依「成案率 × 效益」2x2 寫死文案） ===
     RATE_THR = 1.0       # % 以內視為持平
     EFF_THR = 1000       # 元/人以內視為持平
-
     rate_up = rate_change >= RATE_THR
     rate_down = rate_change <= -RATE_THR
     eff_up = eff_change >= EFF_THR
     eff_down = eff_change <= -EFF_THR
 
     if rate_up and eff_down:
-        # 成案率升 + 效益降 — 接更多但每件少（琬琪律師的 pattern）
-        verdict = "<b>簡言之：接得到更多案子，但每件收得較少</b>（客單價下滑是主要問題）。"
+        _fb_interpretation = "<b>簡言之：接得到更多案子，但每件收得較少</b>（客單價下滑是主要問題）。"
     elif rate_down and eff_up:
-        # 成案率降 + 效益升 — 選擇接高價（策略選擇）
-        verdict = "<b>簡言之：選擇接高價案件，成案率下滑但客單價提升</b>——若是刻意的策略選擇，可接受。"
+        _fb_interpretation = "<b>簡言之：選擇接高價案件，成案率下滑但客單價提升</b>——若是刻意的策略選擇，可接受。"
     elif rate_down and eff_down:
-        # 兩者都下滑 — 林桑羽的 pattern
-        verdict = "<b>簡言之：成案率與客單價同時下滑</b>——不是單純的策略取捨，兩個指標都在弱化，需要找原因。"
+        _fb_interpretation = "<b>簡言之：成案率與客單價同時下滑</b>——不是單純的策略取捨，兩個指標都在弱化，需要找原因。"
     elif rate_up and eff_up:
-        # 兩者都上升
-        verdict = "<b>簡言之：成案率與客單價同步提升</b>——整體表現變好。"
+        _fb_interpretation = "<b>簡言之：成案率與客單價同步提升</b>——整體表現變好。"
     else:
-        verdict = "<b>簡言之：整體變動不大</b>，屬於月度波動範圍。"
+        _fb_interpretation = "<b>簡言之：整體變動不大</b>，屬於月度波動範圍。"
 
-    lead = base + verdict
+    # === 呼叫 LLM 產 narrative 解讀 + 行為主題（破除同質化），失敗時 fallback ===
+    nt_result = generate_narrative_and_themes(
+        lw=lw, ov=ov, rec=rec, prev=prev, delta=delta,
+        reason_counts=reason_counts, reason_total=reason_total,
+        top_reasons=top_reasons, all_missed=all_missed,
+        monthly_trend=prep.get("monthly_trend", []),
+        strengths_types=strengths_types, weaknesses_types=weaknesses_types,
+        unsigned_count=len(unsigned), signed_count=len(signed),
+        lag_stats=lag_stats,
+        rule_based_fallback={
+            "interpretation": _fb_interpretation,
+            "attribution": _fb_attribution,
+            "focus_title": _fb_focus_title,
+            "behavior_themes": _fb_behavior_counts,
+        },
+    )
 
-    # 組 narrative：lead + AI 歸因摘要 + theme_sentence
-    if reason_total and top2_joined:
+    interpretation = nt_result["interpretation"]
+    attribution = nt_result["attribution"]
+    focus_title = nt_result["focus_title"]
+    behavior_counts = nt_result["behavior_themes"]
+
+    # interpretation 需要 <b> 包裝（fallback 已含；LLM 版若沒有就補）
+    if interpretation and not interpretation.startswith("<b>") and "<b>" not in interpretation:
+        interpretation_html = f"<b>{interpretation}</b>"
+    else:
+        interpretation_html = interpretation
+
+    lead = base + interpretation_html
+
+    # 組 narrative：lead + AI 歸因摘要 + attribution
+    if reason_total and top2_joined and attribution:
         ai_summary = (
             f"<br><br><b>AI 歸因 {len(unsigned)} 筆未簽案件，{top2_pct:.0f}% 集中在「{top2_joined}」</b>"
-            f"——{theme_sentence}"
+            f"——{attribution}"
         )
     else:
         ai_summary = ""
@@ -1128,7 +1397,10 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
     improvement_cards = ""
     for i, case in enumerate(rep_improvements, 1):
         a = case["analysis"]
-        reason = a.get("failure_reason", "")
+        reason_bucket = a.get("failure_reason", "")
+        reason_specific = (a.get("reason_specific") or "").strip()
+        # 標題優先用 reason_specific（個案指紋），fallback 到 bucket
+        reason = reason_specific if reason_specific and reason_specific != "已簽約" else reason_bucket
         evidence = a.get("reason_evidence", "")
         missed_list = a.get("missed_opportunities") or []
         improvement = a.get("improvement_for_lawyer", "")
