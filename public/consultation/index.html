@@ -2069,8 +2069,9 @@
 
     <!-- Sync Status -->
     <div id="syncStatusSection" class="section" style="margin-bottom:20px;">
-      <div class="section-header">
+      <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div class="section-title">自動同步狀態</div>
+        <button class="btn btn-outline btn-sm" id="manualSyncBtn" onclick="triggerManualSync()" style="display:none;">立即手動同步</button>
       </div>
       <div id="syncStatusContent" style="padding:4px 0;color:var(--text-muted);">載入中...</div>
     </div>
@@ -2640,6 +2641,8 @@ function showDashboard() {
   if (uploadTab) uploadTab.style.display = (isAdmin || isManager) ? '' : 'none';
   const adminLink = document.getElementById('adminLink');
   if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
+  const manualSyncBtn = document.getElementById('manualSyncBtn');
+  if (manualSyncBtn) manualSyncBtn.style.display = (isAdmin || isManager) ? '' : 'none';
 
   // Build year filter options from data
   const years = getAvailableYears(allStats);
@@ -4570,6 +4573,75 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('parseBtn').disabled = false;
   });
 });
+
+const TRIGGER_SYNC_FN_URL = `${SUPABASE_URL}/functions/v1/trigger_sync`;
+let manualSyncPollTimer = null;
+
+async function triggerManualSync() {
+  const btn = document.getElementById('manualSyncBtn');
+  if (!btn) return;
+  if (!confirm('要立即觸發一次 CRM 爬取＋同步嗎？通常會跑 5–10 分鐘，期間不會中斷現有資料。')) return;
+
+  const origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '觸發中...';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { alert('請重新登入'); return; }
+
+    const resp = await fetch(TRIGGER_SYNC_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ months: '6' }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const errMsg = result.error || result.details || JSON.stringify(result);
+      alert('觸發失敗：' + errMsg);
+      console.error('trigger_sync error:', result);
+      return;
+    }
+
+    btn.textContent = '同步進行中...';
+    await renderSyncStatus();
+    startManualSyncPolling();
+  } catch (e) {
+    console.error('triggerManualSync error', e);
+    alert('觸發失敗：' + String(e));
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = origLabel;
+    }, 3000);
+  }
+}
+
+function startManualSyncPolling() {
+  if (manualSyncPollTimer) clearInterval(manualSyncPollTimer);
+  const startedAt = Date.now();
+  const MAX_MS = 15 * 60 * 1000;
+  manualSyncPollTimer = setInterval(async () => {
+    if (Date.now() - startedAt > MAX_MS) {
+      clearInterval(manualSyncPollTimer);
+      manualSyncPollTimer = null;
+      return;
+    }
+    try {
+      const { data } = await sb.from('sync_status').select('status').eq('id', 'daily_update').single();
+      await renderSyncStatus();
+      if (data && (data.status === 'success' || data.status === 'error')) {
+        clearInterval(manualSyncPollTimer);
+        manualSyncPollTimer = null;
+      }
+    } catch (e) {
+      // 忽略單次 polling 錯誤，下一輪再試
+    }
+  }, 5000);
+}
 
 async function renderSyncStatus() {
   const el = document.getElementById('syncStatusContent');
