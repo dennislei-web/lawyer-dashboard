@@ -554,11 +554,12 @@ def generate_narrative_and_themes(lw, ov, rec, prev, delta, reason_counts, reaso
 
     # 萃取「可能讓這位律師獨特」的事實，餵給 LLM
     distinguishing_facts = []
-    # 1. 月度趨勢轉折/停工
+    # 1. 月度趨勢轉折/停工（schema：consult_count / signed_count）
     if monthly_trend:
         zero_streak = 0
         for m in monthly_trend:
-            if (m.get("consult") or 0) == 0:
+            n = m.get("consult_count") or m.get("consult") or 0
+            if n == 0:
                 zero_streak += 1
             else:
                 if zero_streak >= 3:
@@ -2240,7 +2241,10 @@ def main():
     ap.add_argument("--html-only", action="store_true")
     ap.add_argument("--no-llm-actions", action="store_true",
                     help="停用 LLM 個人化 actions，退回 rule-based 模板")
+    ap.add_argument("--suffix", default="",
+                    help="輸出檔名加 suffix（例如 v2 → {name}_v2_brief.html），避免覆蓋舊版")
     args = ap.parse_args()
+    suffix_part = f"_{args.suffix}" if args.suffix else ""
 
     global _USE_LLM_ACTIONS
     if args.no_llm_actions:
@@ -2277,7 +2281,7 @@ def main():
     html_out = build_html(prep, llm, all_cases=all_cases, lag_stats=lag_stats)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    html_path = OUT_DIR / f"{args.name}_brief.html"
+    html_path = OUT_DIR / f"{args.name}{suffix_part}_brief.html"
     html_path.write_text(html_out, encoding="utf-8")
     print(f"HTML：{html_path}")
 
@@ -2285,7 +2289,7 @@ def main():
         return
 
     from playwright.sync_api import sync_playwright
-    pdf_path = OUT_DIR / f"{args.name}_brief.pdf"
+    pdf_path = OUT_DIR / f"{args.name}{suffix_part}_brief.pdf"
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
