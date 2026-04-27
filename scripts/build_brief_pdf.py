@@ -2243,8 +2243,16 @@ def main():
                     help="停用 LLM 個人化 actions，退回 rule-based 模板")
     ap.add_argument("--suffix", default="",
                     help="輸出檔名加 suffix（例如 v2 → {name}_v2_brief.html），避免覆蓋舊版")
+    ap.add_argument("--out-dir", default=None,
+                    help="自訂輸出目錄（預設 scripts/briefs；可設環境變數 LAWYER_BRIEF_OUT_DIR）。"
+                         "常用：直接寫到 iCloud 避免手動 cp，例如 "
+                         "C:/Users/admin/iCloudDrive/lawyer-data-sync/lawyer-dashboard/briefs")
     args = ap.parse_args()
     suffix_part = f"_{args.suffix}" if args.suffix else ""
+
+    # 決定輸出目錄：CLI > 環境變數 > 預設 scripts/briefs
+    out_dir_str = args.out_dir or os.environ.get("LAWYER_BRIEF_OUT_DIR")
+    out_dir = Path(out_dir_str) if out_dir_str else OUT_DIR
 
     global _USE_LLM_ACTIONS
     if args.no_llm_actions:
@@ -2280,8 +2288,8 @@ def main():
 
     html_out = build_html(prep, llm, all_cases=all_cases, lag_stats=lag_stats)
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    html_path = OUT_DIR / f"{args.name}{suffix_part}_brief.html"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    html_path = out_dir / f"{args.name}{suffix_part}_brief.html"
     html_path.write_text(html_out, encoding="utf-8")
     print(f"HTML：{html_path}")
 
@@ -2289,7 +2297,7 @@ def main():
         return
 
     from playwright.sync_api import sync_playwright
-    pdf_path = OUT_DIR / f"{args.name}{suffix_part}_brief.pdf"
+    pdf_path = out_dir / f"{args.name}{suffix_part}_brief.pdf"
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
