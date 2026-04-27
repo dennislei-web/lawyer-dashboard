@@ -6457,7 +6457,7 @@ async function askAI(forceNew = false) {
     if (result.type === 'reused') {
       renderReusedMatches(result.matches, scenario);
     } else if (result.type === 'new') {
-      renderNewAnswer(result);
+      renderNewAnswer(result, scenario);
       loadQaList();  // 重新載入列表含剛新增
     } else if (result.type === 'no_context') {
       resultEl.innerHTML = `<div class="qa-result-card"><div class="qa-content">${escHtml(result.message)}</div></div>`;
@@ -6497,9 +6497,10 @@ function renderReusedMatches(matches, scenarioAsked) {
     </div>`;
 }
 
-function renderNewAnswer(result) {
+function renderNewAnswer(result, scenario) {
   const resultEl = document.getElementById('qaResult');
   const tags = (result.tags || []).map(t => `<span class="qa-tag">${escHtml(t)}</span>`).join('');
+  const scenarioJson = JSON.stringify(scenario || '').replace(/"/g, '&quot;');
 
   const citedHtml = (result.cited_chunks || []).map(ch => {
     const signed = !!ch.is_signed;
@@ -6533,7 +6534,9 @@ function renderNewAnswer(result) {
         ${result.qa_id ? `
           <button class="qa-action-btn" onclick="rateQa('${result.qa_id}', 1, this)">👍 有用</button>
           <button class="qa-action-btn" onclick="rateQa('${result.qa_id}', -1, this)">👎 沒用</button>
+          <button class="qa-action-btn" onclick="reaskFromDetail(${scenarioJson})" title="把這題放回發問框，用最新語料再生一個版本（這個答案不會被覆蓋）">🔄 用最新語料重問</button>
           <button class="qa-action-btn" onclick="showRefineForm('${result.qa_id}')">✏️ 我要補充更好的答案</button>
+          <button class="qa-action-btn" style="color:var(--red,#e56565);border-color:var(--red,#e56565);" onclick="deleteQaVersion('${result.qa_id}')" title="只刪這個版本，其他版本保留">🗑️ 刪本版</button>
         ` : ''}
       </div>
       <div id="qaRefineBox-${result.qa_id}" style="display:none;"></div>
