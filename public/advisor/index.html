@@ -692,7 +692,7 @@ async function init() {
     const [cs, fn, vs, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_inbound_funnel').select('*').order('fiscal_year').order('month'),
-      sb.from('advisor_outbound_visits').select('*').order('visited_at', { ascending: false }),
+      sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
