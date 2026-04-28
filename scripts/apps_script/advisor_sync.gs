@@ -91,6 +91,45 @@ function setupDailyTrigger() {
 }
 
 // ============================================================
+//  WEB APP: 一鍵同步入口
+//  部署為 Web App 後，前端 dashboard 可以打 doPost 觸發 syncAll。
+//  收到請求需驗證 token（存在 Script Properties: SYNC_TRIGGER_TOKEN）。
+// ============================================================
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents || '{}');
+    const expectedToken = PropertiesService.getScriptProperties().getProperty('SYNC_TRIGGER_TOKEN');
+    if (!expectedToken || data.token !== expectedToken) {
+      return jsonResponse({ ok: false, error: 'Unauthorized' });
+    }
+    syncAll();
+    return jsonResponse({ ok: true, message: '同步完成' });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err) });
+  }
+}
+
+function jsonResponse(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** 一鍵：產生 token、寫入 Script Properties，並印出對應的 Supabase SQL */
+function generateAndSetToken() {
+  const token = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperty('SYNC_TRIGGER_TOKEN', token);
+  Logger.log('========================================');
+  Logger.log('Token 已存到 Script Properties (SYNC_TRIGGER_TOKEN)');
+  Logger.log('Token: ' + token);
+  Logger.log('========================================');
+  Logger.log('請把下面這段 SQL 貼到 Supabase SQL Editor 跑一次：');
+  Logger.log('');
+  Logger.log("INSERT INTO advisor_config (key, value) VALUES ('sync_token', '" + token + "') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();");
+  Logger.log('========================================');
+}
+
+// ============================================================
 //  SYNC: 業績成案清單 → advisor_cases
 // ============================================================
 function syncCases(ss) {

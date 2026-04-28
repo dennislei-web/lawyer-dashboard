@@ -335,6 +335,7 @@
       <div class="sync-info" id="syncInfo">
         <span><span class="sync-dot" id="syncDot"></span><span id="syncText">載入中…</span></span>
         <span id="syncCount" class="text-muted"></span>
+        <button class="btn-sm" id="manualSyncBtn" onclick="manualSync()" style="margin-left:auto;">🔄 立即同步</button>
       </div>
 
       <!-- ===== TAB: 總覽 ===== -->
@@ -1118,6 +1119,47 @@ function sortPending(arr) {
     if (typeof va === 'string') return factor * va.localeCompare(String(vb), 'zh-Hant');
     return factor * (va - vb);
   });
+}
+
+// ============ 一鍵同步 ============
+async function manualSync() {
+  const btn = document.getElementById('manualSyncBtn');
+  const txt = document.getElementById('syncText');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ 讀取設定...';
+
+  try {
+    const { data: config, error } = await sb.from('advisor_config').select('*').in('key', ['sync_url', 'sync_token']);
+    if (error) throw error;
+    const cfg = (config || []).reduce((m, c) => (m[c.key] = c.value, m), {});
+    if (!cfg.sync_url || !cfg.sync_token) {
+      alert('尚未設定一鍵同步：advisor_config 缺少 sync_url 或 sync_token。\n請依照部署 SOP 設定後再試。');
+      btn.textContent = orig; btn.disabled = false;
+      return;
+    }
+
+    btn.textContent = '⏳ 同步中（5–15 秒）...';
+    txt.textContent = '同步中，請稍候...';
+
+    const resp = await fetch(cfg.sync_url, {
+      method: 'POST',
+      body: JSON.stringify({ token: cfg.sync_token }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: 'follow'
+    });
+    const result = await resp.json();
+    if (!result.ok) throw new Error(result.error || '同步失敗');
+
+    btn.textContent = '✅ 同步完成，重新載入...';
+    await init();
+    btn.textContent = '✅ 完成';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+  } catch (e) {
+    alert('同步失敗：' + e.message);
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
 }
 
 // ============ 管道分類 Excel 匯出 / 匯入 ============
