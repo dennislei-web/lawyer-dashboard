@@ -3606,6 +3606,9 @@ function renderDetailChart(stats) {
   const rateData    = months.map(m =>
     byMonth[m].c > 0 ? +(byMonth[m].sig / byMonth[m].c * 100).toFixed(1) : 0
   );
+  const effData     = months.map(m =>
+    byMonth[m].c > 0 ? Math.round(byMonth[m].col / byMonth[m].c) : 0
+  );
 
   if (detailChart) detailChart.destroy();
 
@@ -3646,6 +3649,20 @@ function renderDetailChart(stats) {
           fill: true,
           yAxisID: 'y1',
         },
+        {
+          label: '諮詢效益 ($)',
+          data: effData,
+          type: 'line',
+          borderColor: '#e05c5c',
+          backgroundColor: 'rgba(224,92,92,0.10)',
+          borderWidth: 2,
+          borderDash: [6, 4],
+          pointRadius: 4,
+          pointBackgroundColor: '#e05c5c',
+          tension: 0.3,
+          fill: false,
+          yAxisID: 'y2',
+        },
       ],
     },
     options: {
@@ -3662,6 +3679,15 @@ function renderDetailChart(stats) {
           borderWidth: 1,
           titleColor: getChartColors().gold,
           bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e0e0e0',
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.parsed.y;
+              if (ctx.dataset.label === '諮詢效益 ($)') {
+                return `${ctx.dataset.label}: $${Number(v).toLocaleString()}`;
+              }
+              return `${ctx.dataset.label}: ${v}`;
+            },
+          },
         },
       },
       scales: {
@@ -3683,6 +3709,17 @@ function renderDetailChart(stats) {
           ticks:  { color: getChartColors().gold, font: { size: 11 } },
           grid:   { drawOnChartArea: false },
           title:  { display: true, text: '簽約率 (%)', color: getChartColors().gold, font: { size: 11 } },
+        },
+        y2: {
+          beginAtZero: true,
+          position: 'right',
+          ticks:  {
+            color: '#e05c5c',
+            font: { size: 11 },
+            callback: (v) => '$' + Number(v).toLocaleString(),
+          },
+          grid:   { drawOnChartArea: false },
+          title:  { display: true, text: '諮詢效益 ($)', color: '#e05c5c', font: { size: 11 } },
         },
       },
     },
