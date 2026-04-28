@@ -311,7 +311,6 @@
       <button class="tab-btn active" data-tab="overview">總覽</button>
       <button class="tab-btn" data-tab="people">業務 / 律師</button>
       <button class="tab-btn" data-tab="clients">客戶 360</button>
-      <button class="tab-btn" data-tab="funnel">Inbound 漏斗</button>
       <button class="tab-btn" data-tab="outbound">陌開拜訪</button>
     </div>
 
@@ -489,40 +488,6 @@
         </div>
       </div>
 
-      <!-- ===== TAB: Inbound 漏斗 ===== -->
-      <div class="page" id="page-funnel">
-        <div class="filter-bar">
-          <span class="filter-label">年度：</span>
-          <div class="year-btns" id="yearBtns3"></div>
-        </div>
-
-        <div class="kpi-row">
-          <div class="kpi-card blue"><div class="kpi-label">年度法零轉介</div><div class="kpi-value blue" id="kpiFalingY">—</div></div>
-          <div class="kpi-card teal"><div class="kpi-label">年度委前轉介</div><div class="kpi-value teal" id="kpiPreRetainY">—</div></div>
-          <div class="kpi-card orange"><div class="kpi-label">年度會議數</div><div class="kpi-value orange" id="kpiMeetingY">—</div><div class="kpi-sub">電話+視訊+現場</div></div>
-          <div class="kpi-card green"><div class="kpi-label">年度促成簽約</div><div class="kpi-value green" id="kpiSignedY">—</div></div>
-        </div>
-
-        <div class="chart-row eq">
-          <div class="chart-card"><div class="chart-title">月度漏斗（轉介 → 會議 → 簽約 → 付款）</div><div class="chart-container"><canvas id="chartFunnelMonthly"></canvas></div></div>
-          <div class="chart-card"><div class="chart-title">會議型態分布</div><div class="chart-container"><canvas id="chartMeetingType"></canvas></div></div>
-        </div>
-
-        <div class="table-card">
-          <div class="table-header"><div class="table-title">月度漏斗明細</div></div>
-          <div style="overflow-x:auto;">
-            <table id="tableFunnel">
-              <thead><tr>
-                <th>月份</th><th class="text-right">法零</th><th class="text-right">委前</th><th class="text-right">電話</th>
-                <th class="text-right">視訊</th><th class="text-right">現場</th><th class="text-right">簽約</th><th class="text-right">付款</th>
-                <th class="text-right">轉介→簽約</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
       <!-- ===== TAB: 陌開拜訪 ===== -->
       <div class="page" id="page-outbound">
         <div class="kpi-row">
@@ -681,7 +646,7 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], funnel: [], visits: [], lastSync: null,
+  cases: [], visits: [], lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   charts: {}
 };
@@ -689,15 +654,13 @@ let STATE = {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, fn, vs, log] = await Promise.all([
+    const [cs, vs, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
-      sb.from('advisor_inbound_funnel').select('*').order('fiscal_year').order('month'),
       sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
-    STATE.funnel = fn.data || [];
     STATE.visits = vs.data || [];
     STATE.lastSync = log.data?.[0] || null;
 
@@ -733,19 +696,18 @@ function renderSyncStatus() {
     dot.className = 'sync-dot' + (ageH > 36 ? ' stale' : '');
     txt.textContent = '上次同步：' + ts.toLocaleString('zh-TW') + (log.error_message ? '（有錯誤）' : '');
   }
-  cnt.textContent = `成案 ${STATE.cases.length} 筆 · 漏斗 ${STATE.funnel.length} 月 · 拜訪 ${STATE.visits.length} 筆`;
+  cnt.textContent = `成案 ${STATE.cases.length} 筆 · 拜訪 ${STATE.visits.length} 筆`;
 }
 
 function setupYearFilter() {
   const years = new Set();
   STATE.cases.forEach(c => { if (c.paid_at) years.add(new Date(c.paid_at).getFullYear()); });
-  STATE.funnel.forEach(f => years.add(f.fiscal_year));
   const ys = [...years].sort((a,b)=>b-a);
   const cur = new Date().getFullYear();
   STATE.selectedYear = ys.includes(cur) ? cur : (ys[0] || cur);
   // 'all' 代表全部年度
   const renderBtns = (selected) => {
-    ['yearBtns','yearBtns2','yearBtns3'].forEach(id => {
+    ['yearBtns','yearBtns2'].forEach(id => {
       const c = document.getElementById(id);
       if (!c) return;
       const allBtn = `<button class="year-btn ${selected==='all'?'active':''}" data-year="all">全部</button>`;
@@ -819,7 +781,6 @@ function renderAll() {
   renderOverview();
   renderPeople();
   renderClients();
-  renderFunnel();
   renderOutbound();
 }
 
@@ -1056,51 +1017,6 @@ function renderClients() {
       <td class="text-right text-orange">${fmtNum(days)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="empty">無</td></tr>';
-}
-
-// ============ TAB: Inbound 漏斗 ============
-function renderFunnel() {
-  const fy = STATE.selectedYear;
-  const yearData = fy === 'all'
-    ? STATE.funnel.slice().sort((a,b) => a.fiscal_year - b.fiscal_year || a.month - b.month)
-    : STATE.funnel.filter(f => f.fiscal_year === fy).sort((a,b) => a.month - b.month);
-  const labelOf = f => fy === 'all' ? `${f.fiscal_year}/${f.month}` : f.month + '月';
-  const sum = (k) => yearData.reduce((s,f)=>s+(+f[k]||0), 0);
-  document.getElementById('kpiFalingY').textContent    = fmtNum(sum('referral_faling'));
-  document.getElementById('kpiPreRetainY').textContent = fmtNum(sum('referral_pre_retain'));
-  document.getElementById('kpiMeetingY').textContent   = fmtNum(sum('meeting_phone')+sum('meeting_video')+sum('meeting_onsite'));
-  document.getElementById('kpiSignedY').textContent    = fmtNum(sum('signed'));
-
-  drawChart('chartFunnelMonthly', 'line', {
-    labels: yearData.map(labelOf),
-    datasets: [
-      { label:'轉介(法零+委前)', data: yearData.map(f=>(+f.referral_faling||0)+(+f.referral_pre_retain||0)), borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', tension:0.3 },
-      { label:'會議', data: yearData.map(f=>(+f.meeting_phone||0)+(+f.meeting_video||0)+(+f.meeting_onsite||0)), borderColor:'#e0954a', backgroundColor:'rgba(224,149,74,0.1)', tension:0.3 },
-      { label:'簽約', data: yearData.map(f=>+f.signed||0), borderColor:'#4caf82', backgroundColor:'rgba(76,175,130,0.1)', tension:0.3 },
-      { label:'付款', data: yearData.map(f=>+f.paid||0), borderColor:'#c9a84c', backgroundColor:'rgba(201,168,76,0.1)', tension:0.3 }
-    ]
-  });
-
-  drawChart('chartMeetingType', 'doughnut', {
-    labels: ['電話','視訊','現場'],
-    datasets: [{ data:[sum('meeting_phone'),sum('meeting_video'),sum('meeting_onsite')], backgroundColor:['#4f8ef7','#b974e0','#4dd0c5'], borderWidth: 0 }]
-  }, { legend: true });
-
-  document.querySelector('#tableFunnel tbody').innerHTML = yearData.map(f => {
-    const refer = (+f.referral_faling||0)+(+f.referral_pre_retain||0);
-    const conv = refer > 0 ? ((+f.signed||0)/refer*100).toFixed(1)+'%' : '—';
-    return `<tr>
-      <td>${labelOf(f)}</td>
-      <td class="text-right">${fmtNum(f.referral_faling)}</td>
-      <td class="text-right">${fmtNum(f.referral_pre_retain)}</td>
-      <td class="text-right">${fmtNum(f.meeting_phone)}</td>
-      <td class="text-right">${fmtNum(f.meeting_video)}</td>
-      <td class="text-right">${fmtNum(f.meeting_onsite)}</td>
-      <td class="text-right text-green">${fmtNum(f.signed)}</td>
-      <td class="text-right text-gold">${fmtNum(f.paid)}</td>
-      <td class="text-right">${conv}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
 }
 
 // ============ TAB: 陌開拜訪 ============
