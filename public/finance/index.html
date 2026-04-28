@@ -2237,14 +2237,26 @@ async function loadUploadLog() {
   });
 
   if (validRows.length === 0) { document.getElementById('uploadLog').innerHTML = ''; return; }
-  var html = '<div style="margin-top:12px;font-weight:600">目前有效資料</div><table style="margin-top:8px"><thead><tr><th>上傳時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th></tr></thead><tbody>';
+  var html = '<div style="margin-top:12px;font-weight:600">目前有效資料</div><table style="margin-top:8px"><thead><tr><th>上傳時間</th><th>檔案</th><th>實體</th><th>年度</th><th>筆數</th><th></th></tr></thead><tbody>';
   validRows.forEach(function(u) {
     var d = new Date(u.created_at);
     html += '<tr><td>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</td>';
-    html += '<td>' + u.filename + '</td><td>' + u.entity + '</td><td>' + u.fiscal_year + '</td><td>' + (u.row_count||'-') + '</td></tr>';
+    html += '<td>' + u.filename + '</td><td>' + u.entity + '</td><td>' + u.fiscal_year + '</td><td>' + (u.row_count||'-') + '</td>';
+    html += '<td><button class="btn-sm" style="color:var(--red);border-color:var(--red);padding:1px 8px;font-size:0.7rem" data-upload-id="' + u.id + '">刪除紀錄</button></td></tr>';
   });
   html += '</tbody></table>';
-  document.getElementById('uploadLog').innerHTML = html;
+  var el = document.getElementById('uploadLog');
+  el.innerHTML = html;
+  el.querySelectorAll('button[data-upload-id]').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var id = this.getAttribute('data-upload-id');
+      if (!confirm('刪除這筆上傳紀錄？\n（只清除「目前有效資料」顯示，不會動到實際的損益表數字）')) return;
+      this.disabled = true; this.textContent = '刪除中...';
+      var r = await sb.from('finance_uploads').delete().eq('id', id);
+      if (r.error) { alert('刪除失敗：' + r.error.message); this.disabled = false; this.textContent = '刪除紀錄'; return; }
+      loadUploadLog();
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
