@@ -13,6 +13,7 @@
 //  CONFIG
 // ============================================================
 const TAB_CASES    = '1. 業績成案清單';     // 第 1 個分頁的名稱（含前綴 "1. "）
+const TAB_PENDING  = '2. 克威柏凱輪值表';     // 跟進中案件
 const TAB_FUNNEL   = 'inbound數據';
 const TAB_OUTBOUND = '電話陌開促成拜訪進度';
 
@@ -58,6 +59,28 @@ const COL_OUTBOUND = {
   visited_at: 9, case_summary: 10, remark: 11, is_retained: 12, advisor_window: 13
 };
 
+// 克威柏凱輪值表（跟進中案件）欄位對應
+const COL_PENDING = {
+  monthly_seq: 1,        // A
+  salesperson: 2,        // B
+  assigned_at: 3,        // C
+  client_name: 4,        // D
+  is_paid: 5,            // E
+  channel: 6,            // F
+  consultation_lawyer: 7,// G
+  last_contact_text: 8,  // H
+  case_summary: 9,       // I
+  first_contact_at: 10,  // J
+  cm_meeting_at: 11,     // K
+  lawyer_meeting_at: 12, // L
+  proposal_at: 13,       // M
+  follow_up_1_at: 14,    // N
+  follow_up_2_at: 15,    // O
+  lawyer_notes: 16,      // P
+  is_signed: 17,         // Q
+  payment_status: 18     // R
+};
+
 // ============================================================
 //  ENTRY POINTS
 // ============================================================
@@ -66,6 +89,7 @@ const COL_OUTBOUND = {
 function syncAll() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   syncCases(ss);
+  syncPending(ss);
   syncFunnel(ss);
   syncOutbound(ss);
 }
@@ -156,6 +180,94 @@ function syncCases(ss) {
   const ins = batchInsert('/rest/v1/advisor_cases', rows);
 
   logSync(TAB_CASES, rows.length, 0, 0, ins.error || del.error || null, startedAt);
+}
+
+// ============================================================
+//  SYNC: 克威柏凱輪值表 → advisor_pending_cases
+// ============================================================
+function syncPending(ss) {
+  const startedAt = new Date();
+  const sheet = ss.getSheetByName(TAB_PENDING);
+  if (!sheet) { logSync(TAB_PENDING, 0, 0, 0, '找不到分頁: ' + TAB_PENDING, startedAt); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { logSync(TAB_PENDING, 0, 0, 0, '無資料列', startedAt); return; }
+
+  const range = sheet.getRange(2, 1, lastRow - 1, 18).getValues();
+  const today = new Date();
+  const rows = [];
+
+  range.forEach((r, i) => {
+    const clientName = String(r[COL_PENDING.client_name - 1] || '').trim();
+    if (!clientName) return;  // 空白列跳過
+
+    const assignedAt   = parseDate(r[COL_PENDING.assigned_at - 1]);
+    const firstContact = parseDate(r[COL_PENDING.first_contact_at - 1]);
+    const cmMeeting    = parseDate(r[COL_PENDING.cm_meeting_at - 1]);
+    const lawyerMeeting= parseDate(r[COL_PENDING.lawyer_meeting_at - 1]);
+    const proposal     = parseDate(r[COL_PENDING.proposal_at - 1]);
+    const followUp1    = parseDate(r[COL_PENDING.follow_up_1_at - 1]);
+    const followUp2    = parseDate(r[COL_PENDING.follow_up_2_at - 1]);
+
+    const isSigned = toBool(r[COL_PENDING.is_signed - 1]);
+
+    // current_stage：從最晚階段往前推
+    let stage = '尚未啟動';
+    if (isSigned) stage = '已成案';
+    else if (followUp2)                          stage = '第二次追蹤';
+    else if (followUp1)                          stage = '提報追蹤';
+    else if (proposal)                           stage = '提報方案';
+    else if (lawyerMeeting && !isPlaceholder(lawyerMeeting)) stage = '律師會議';
+    else if (cmMeeting)                          stage = '客戶經理會議';
+    else if (firstContact || assignedAt)         stage = '初次接觸';
+
+    // days_since_assigned / days_since_last_action
+    const daysSinceAssigned = assignedAt ? Math.floor((today - assignedAt) / 86400000) : null;
+    const lastActionDate = [followUp2, followUp1, proposal,
+                            (lawyerMeeting && !isPlaceholder(lawyerMeeting)) ? lawyerMeeting : null,
+                            cmMeeting, firstContact, assignedAt].find(Boolean);
+    const daysSinceLastAction = lastActionDate ? Math.floor((today - lastActionDate) / 86400000) : null;
+
+    rows.push({
+      monthly_seq:         toIntOrNull(r[COL_PENDING.monthly_seq - 1]),
+      salesperson:         nullIfEmpty(r[COL_PENDING.salesperson - 1]),
+      assigned_at:         dateToStr(assignedAt),
+      client_name:         clientName,
+      is_paid:             toBool(r[COL_PENDING.is_paid - 1]),
+      channel:             nullIfEmpty(r[COL_PENDING.channel - 1]),
+      consultation_lawyer: nullIfEmpty(r[COL_PENDING.consultation_lawyer - 1]),
+      last_contact_text:   nullIfEmpty(r[COL_PENDING.last_contact_text - 1]),
+      case_summary:        nullIfEmpty(r[COL_PENDING.case_summary - 1]),
+      first_contact_at:    dateToStr(firstContact),
+      cm_meeting_at:       dateToStr(cmMeeting),
+      lawyer_meeting_at:   isPlaceholder(lawyerMeeting) ? null : dateToStr(lawyerMeeting),
+      proposal_at:         dateToStr(proposal),
+      follow_up_1_at:      dateToStr(followUp1),
+      follow_up_2_at:      dateToStr(followUp2),
+      lawyer_notes:        nullIfEmpty(r[COL_PENDING.lawyer_notes - 1]),
+      is_signed:           isSigned,
+      payment_status:      nullIfEmpty(r[COL_PENDING.payment_status - 1]),
+      current_stage:       stage,
+      days_since_assigned: daysSinceAssigned,
+      days_since_last_action: daysSinceLastAction,
+      sheet_row_index:     i + 2,
+      row_hash:            hashRow([clientName, r[COL_PENDING.assigned_at - 1], stage, daysSinceLastAction])
+    });
+  });
+
+  const del = supabaseRequest('DELETE', '/rest/v1/advisor_pending_cases?id=neq.00000000-0000-0000-0000-000000000000', null);
+  const ins = batchInsert('/rest/v1/advisor_pending_cases', rows);
+
+  logSync(TAB_PENDING, rows.length, 0, 0, ins.error || del.error || null, startedAt);
+}
+
+function isPlaceholder(d) {
+  // Sheet 用 2000/01/01 表示「無律師會議」
+  return !!d && d.getFullYear() === 2000 && d.getMonth() === 0 && d.getDate() === 1;
+}
+function dateToStr(d) {
+  if (!d || isPlaceholder(d)) return null;
+  return Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
 }
 
 // ============================================================

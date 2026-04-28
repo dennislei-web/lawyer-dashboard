@@ -309,6 +309,7 @@
   <div id="localContent">
     <div class="tabs">
       <button class="tab-btn active" data-tab="overview">總覽</button>
+      <button class="tab-btn" data-tab="pending">跟進中案件</button>
       <button class="tab-btn" data-tab="people">業務 / 律師</button>
       <button class="tab-btn" data-tab="clients">客戶 360</button>
       <button class="tab-btn" data-tab="outbound">陌開拜訪</button>
@@ -387,6 +388,81 @@
                   <th class="text-right">未分類</th>
                 </tr>
               </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 跟進中案件 ===== -->
+      <div class="page" id="page-pending">
+        <div class="filter-bar">
+          <span class="filter-label">業務：</span>
+          <select class="filter-select" id="pendingSalesFilter">
+            <option value="">全部</option>
+          </select>
+          <span class="filter-label" style="margin-left:12px;">階段：</span>
+          <select class="filter-select" id="pendingStageFilter">
+            <option value="">全部（不含已成案）</option>
+            <option value="all-with-signed">含已成案</option>
+            <option value="初次接觸">初次接觸</option>
+            <option value="客戶經理會議">客戶經理會議</option>
+            <option value="律師會議">律師會議</option>
+            <option value="提報方案">提報方案</option>
+            <option value="提報追蹤">提報追蹤</option>
+            <option value="第二次追蹤">第二次追蹤</option>
+            <option value="逾期">逾期（>14 天未跟進）</option>
+          </select>
+        </div>
+
+        <div class="kpi-row k5">
+          <div class="kpi-card gold"><div class="kpi-label">跟進中案件</div><div class="kpi-value gold" id="kpiPendingTotal">—</div><div class="kpi-sub">不含已成案</div></div>
+          <div class="kpi-card blue"><div class="kpi-label">本月新交辦</div><div class="kpi-value blue" id="kpiPendingNew">—</div><div class="kpi-sub" id="kpiPendingNewSub"></div></div>
+          <div class="kpi-card orange"><div class="kpi-label">逾期未跟進</div><div class="kpi-value orange" id="kpiPendingOverdue">—</div><div class="kpi-sub">距上次行動 &gt; 14 天</div></div>
+          <div class="kpi-card purple"><div class="kpi-label">平均交辦至今</div><div class="kpi-value purple" id="kpiPendingAvgAge">—</div><div class="kpi-sub">天</div></div>
+          <div class="kpi-card green"><div class="kpi-label">已進入提報</div><div class="kpi-value green" id="kpiPendingProposal">—</div><div class="kpi-sub">提報方案以後</div></div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card">
+            <div class="chart-title">管線階段分布</div>
+            <div class="chart-container"><canvas id="chartPendingStage"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">業務分布</div>
+            <div class="chart-container"><canvas id="chartPendingSales"></canvas></div>
+          </div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card">
+            <div class="chart-title">管道來源分布</div>
+            <div class="chart-container"><canvas id="chartPendingChannel"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">逾期分齡（天數）</div>
+            <div class="chart-container"><canvas id="chartPendingAging"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">案件清單（依「距上次行動」遞減排序）</div>
+            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">紅 = 逾期 &gt; 14 天</span></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tablePending">
+              <thead><tr>
+                <th>編號</th>
+                <th>業務</th>
+                <th>當事人</th>
+                <th>來源</th>
+                <th>階段</th>
+                <th class="text-right">交辦距今</th>
+                <th class="text-right">距上次行動</th>
+                <th>最近聯繫</th>
+                <th>備註</th>
+              </tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -646,26 +722,30 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], visits: [], lastSync: null,
+  cases: [], visits: [], pending: [], lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
+  pendingSales: '', pendingStage: '',
   charts: {}
 };
 
 async function init() {
   showSyncLoading();
   try {
-    const [cs, vs, log] = await Promise.all([
+    const [cs, vs, pn, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
+      sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
     STATE.visits = vs.data || [];
+    STATE.pending = pn.data || [];
     STATE.lastSync = log.data?.[0] || null;
 
     setupYearFilter();
     setupOfficeFilter();
+    setupPendingFilters();
     bindFilters();
     renderAll();
     renderSyncStatus();
@@ -753,6 +833,12 @@ function setupOfficeFilter() {
   sel.innerHTML = '<option value="">全部</option>' + offices.map(o => `<option value="${o}">${o}</option>`).join('');
 }
 
+function setupPendingFilters() {
+  const sales = [...new Set(STATE.pending.map(p => p.salesperson).filter(Boolean))].sort();
+  const sel = document.getElementById('pendingSalesFilter');
+  sel.innerHTML = '<option value="">全部</option>' + sales.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
 function bindFilters() {
   document.getElementById('officeFilter').onchange = e => { STATE.selectedOffice = e.target.value; renderOverview(); };
   document.getElementById('monthFilter').onchange = e => {
@@ -762,6 +848,8 @@ function bindFilters() {
   document.getElementById('topClientLimit').onchange = renderClients;
   document.getElementById('dueWindow').onchange = renderClients;
   document.getElementById('visitFilter').onchange = renderOutbound;
+  document.getElementById('pendingSalesFilter').onchange = e => { STATE.pendingSales = e.target.value; renderPending(); };
+  document.getElementById('pendingStageFilter').onchange = e => { STATE.pendingStage = e.target.value; renderPending(); };
 }
 
 function filterCases(opts) {
@@ -779,6 +867,7 @@ function filterCases(opts) {
 
 function renderAll() {
   renderOverview();
+  renderPending();
   renderPeople();
   renderClients();
   renderOutbound();
@@ -914,6 +1003,121 @@ function renderOverview() {
       <td class="text-right text-muted">${fmtNum(counts['未分類'])}</td>
     </tr>`;
   }).join('');
+}
+
+// ============ TAB: 跟進中案件 ============
+const PENDING_STAGES = ['初次接觸','客戶經理會議','律師會議','提報方案','提報追蹤','第二次追蹤'];
+const PENDING_STAGE_COLORS = {
+  '初次接觸':'#8899aa','客戶經理會議':'#4f8ef7','律師會議':'#b974e0',
+  '提報方案':'#e0954a','提報追蹤':'#4dd0c5','第二次追蹤':'#4caf82','已成案':'#c9a84c'
+};
+
+function filterPending() {
+  const stage = STATE.pendingStage;
+  return STATE.pending.filter(p => {
+    if (STATE.pendingSales && p.salesperson !== STATE.pendingSales) return false;
+    if (stage === 'all-with-signed') return true;
+    // 預設不含已成案
+    if (p.current_stage === '已成案' || p.is_signed) return false;
+    if (!stage) return true;
+    if (stage === '逾期') return (p.days_since_last_action || 0) > 14;
+    return p.current_stage === stage;
+  });
+}
+
+function renderPending() {
+  const all = STATE.pending.filter(p => !p.is_signed && p.current_stage !== '已成案');  // 跟進中（不論 filter）
+  const fp  = filterPending();  // 適用 filter 的清單
+
+  // KPI（用 all 算大盤；filter 只影響圖表跟下方表格）
+  document.getElementById('kpiPendingTotal').textContent = fmtNum(all.length);
+
+  const now = new Date();
+  const thisMonth = all.filter(p => {
+    if (!p.assigned_at) return false;
+    const d = new Date(p.assigned_at);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+  const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMonth = all.filter(p => {
+    if (!p.assigned_at) return false;
+    const d = new Date(p.assigned_at);
+    return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+  });
+  document.getElementById('kpiPendingNew').textContent = fmtNum(thisMonth.length);
+  document.getElementById('kpiPendingNewSub').textContent = `上月 ${fmtNum(lastMonth.length)}`;
+
+  const overdue = all.filter(p => (p.days_since_last_action || 0) > 14);
+  document.getElementById('kpiPendingOverdue').textContent = fmtNum(overdue.length);
+
+  const ages = all.map(p => p.days_since_assigned).filter(x => x != null);
+  const avgAge = ages.length ? Math.round(ages.reduce((a,b)=>a+b,0) / ages.length) : 0;
+  document.getElementById('kpiPendingAvgAge').textContent = fmtNum(avgAge);
+
+  const proposalPlus = all.filter(p => ['提報方案','提報追蹤','第二次追蹤'].includes(p.current_stage));
+  document.getElementById('kpiPendingProposal').textContent = fmtNum(proposalPlus.length);
+
+  // 階段分布（管線漏斗 — 直方）
+  const stageCounts = {};
+  PENDING_STAGES.forEach(s => stageCounts[s] = 0);
+  fp.forEach(p => { if (stageCounts[p.current_stage] != null) stageCounts[p.current_stage]++; });
+  drawChart('chartPendingStage', 'bar', {
+    labels: PENDING_STAGES,
+    datasets: [{ label: '案件數', data: PENDING_STAGES.map(s=>stageCounts[s]), backgroundColor: PENDING_STAGES.map(s=>PENDING_STAGE_COLORS[s]), borderWidth: 0 }]
+  });
+
+  // 業務分布
+  const salesCounts = {};
+  fp.forEach(p => { const s = p.salesperson || '未填'; salesCounts[s] = (salesCounts[s]||0) + 1; });
+  drawChart('chartPendingSales', 'doughnut', {
+    labels: Object.keys(salesCounts),
+    datasets: [{ data: Object.values(salesCounts), backgroundColor: ['#c9a84c','#4f8ef7','#4caf82','#e0954a','#b974e0','#4dd0c5','#8899aa'], borderWidth: 0 }]
+  }, { legend: true });
+
+  // 管道來源分布
+  const channelCounts = {};
+  fp.forEach(p => { const c = p.channel || '未填'; channelCounts[c] = (channelCounts[c]||0) + 1; });
+  const sortedChannels = Object.entries(channelCounts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  drawChart('chartPendingChannel', 'bar', {
+    labels: sortedChannels.map(x=>x[0]),
+    datasets: [{ label: '案件數', data: sortedChannels.map(x=>x[1]), backgroundColor: '#4f8ef7', borderWidth: 0 }]
+  }, { horizontal: true });
+
+  // 逾期分齡
+  const buckets = [
+    { label: '0–7 天',   min: 0,  max: 7  },
+    { label: '8–14 天',  min: 8,  max: 14 },
+    { label: '15–30 天', min: 15, max: 30 },
+    { label: '31–60 天', min: 31, max: 60 },
+    { label: '> 60 天',  min: 61, max: Infinity }
+  ];
+  const bucketCounts = buckets.map(b => fp.filter(p => {
+    const d = p.days_since_last_action;
+    return d != null && d >= b.min && d <= b.max;
+  }).length);
+  drawChart('chartPendingAging', 'bar', {
+    labels: buckets.map(b=>b.label),
+    datasets: [{ label: '案件數', data: bucketCounts, backgroundColor: ['#4caf82','#c9a84c','#e0954a','#e05c5c','#b22222'], borderWidth: 0 }]
+  });
+
+  // 表格 — 依 days_since_last_action DESC
+  const sorted = fp.slice().sort((a,b) => (b.days_since_last_action || 0) - (a.days_since_last_action || 0));
+  document.querySelector('#tablePending tbody').innerHTML = sorted.slice(0,500).map(p => {
+    const overdueCls = (p.days_since_last_action || 0) > 14 ? 'text-red' : '';
+    const stageBadge = `<span class="badge b1">${p.current_stage || '—'}</span>`;
+    const summary = (p.case_summary || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    return `<tr>
+      <td>${p.monthly_seq || ''}</td>
+      <td>${p.salesperson || '—'}</td>
+      <td>${p.client_name || '—'}</td>
+      <td>${p.channel || '—'}</td>
+      <td>${stageBadge}</td>
+      <td class="text-right">${p.days_since_assigned != null ? p.days_since_assigned + ' 天' : '—'}</td>
+      <td class="text-right ${overdueCls}">${p.days_since_last_action != null ? p.days_since_last_action + ' 天' : '—'}</td>
+      <td class="text-muted" style="font-size:0.78rem;">${p.last_contact_text || '—'}</td>
+      <td class="text-muted" style="font-size:0.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(p.case_summary||'').replace(/"/g,'&quot;')}">${summary}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
 }
 
 // ============ TAB: 業務 / 律師 ============
