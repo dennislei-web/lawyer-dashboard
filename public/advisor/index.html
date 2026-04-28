@@ -328,6 +328,10 @@
         <div class="filter-bar">
           <span class="filter-label">年度：</span>
           <div class="year-btns" id="yearBtns"></div>
+          <span class="filter-label" id="monthFilterLabel" style="margin-left:12px;display:none;">月份：</span>
+          <select class="filter-select" id="monthFilter" style="display:none;">
+            <option value="all">全部月份</option>
+          </select>
           <span class="filter-label" style="margin-left:12px;">所別：</span>
           <select class="filter-select" id="officeFilter">
             <option value="">全部</option>
@@ -678,7 +682,7 @@ const fmtMoneyShort = n => {
 
 let STATE = {
   cases: [], funnel: [], visits: [], lastSync: null,
-  selectedYear: null, selectedOffice: '',
+  selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   charts: {}
 };
 
@@ -750,12 +754,35 @@ function setupYearFilter() {
       c.querySelectorAll('.year-btn').forEach(b => b.onclick = () => {
         const v = b.dataset.year;
         STATE.selectedYear = v === 'all' ? 'all' : +v;
+        STATE.selectedMonth = 'all';  // 切年度時重設月份
+        refreshMonthFilter();
         renderBtns(STATE.selectedYear);
         renderAll();
       });
     });
   };
   renderBtns(STATE.selectedYear);
+  refreshMonthFilter();
+}
+
+// 月份 drilldown：只在「最新年度」（current year）顯示
+function refreshMonthFilter() {
+  const cur = new Date().getFullYear();
+  const lbl = document.getElementById('monthFilterLabel');
+  const sel = document.getElementById('monthFilter');
+  const show = STATE.selectedYear === cur;
+  lbl.style.display = show ? '' : 'none';
+  sel.style.display = show ? '' : 'none';
+  if (!show) { STATE.selectedMonth = 'all'; return; }
+  const months = new Set();
+  STATE.cases.forEach(c => {
+    if (c.paid_at && new Date(c.paid_at).getFullYear() === cur) {
+      months.add(new Date(c.paid_at).getMonth() + 1);
+    }
+  });
+  const ms = [...months].sort((a,b)=>a-b);
+  sel.innerHTML = '<option value="all">全部月份</option>' + ms.map(m => `<option value="${m}">${m} 月</option>`).join('');
+  sel.value = STATE.selectedMonth === 'all' ? 'all' : String(STATE.selectedMonth);
 }
 
 function setupOfficeFilter() {
@@ -766,15 +793,23 @@ function setupOfficeFilter() {
 
 function bindFilters() {
   document.getElementById('officeFilter').onchange = e => { STATE.selectedOffice = e.target.value; renderOverview(); };
+  document.getElementById('monthFilter').onchange = e => {
+    STATE.selectedMonth = e.target.value === 'all' ? 'all' : +e.target.value;
+    renderOverview();
+  };
   document.getElementById('topClientLimit').onchange = renderClients;
   document.getElementById('dueWindow').onchange = renderClients;
   document.getElementById('visitFilter').onchange = renderOutbound;
 }
 
-function filterCases() {
+function filterCases(opts) {
+  // opts.ignoreMonth=true 給 12 月度趨勢用（時間序列圖永遠呈現整年）
+  const ignoreMonth = opts && opts.ignoreMonth;
   return STATE.cases.filter(c => {
     if (!c.paid_at) return false;
-    if (STATE.selectedYear !== 'all' && new Date(c.paid_at).getFullYear() !== STATE.selectedYear) return false;
+    const d = new Date(c.paid_at);
+    if (STATE.selectedYear !== 'all' && d.getFullYear() !== STATE.selectedYear) return false;
+    if (!ignoreMonth && STATE.selectedMonth !== 'all' && (d.getMonth() + 1) !== STATE.selectedMonth) return false;
     if (STATE.selectedOffice && c.office !== STATE.selectedOffice) return false;
     return true;
   });
@@ -794,39 +829,42 @@ function rerenderAllCharts() { renderAll(); }
 function renderOverview() {
   const cs = filterCases();
   const sy = STATE.selectedYear;
+  const sm = STATE.selectedMonth;
   const now = new Date();
-  const isCurrent = sy === now.getFullYear();
   const isAll = sy === 'all';
+  const monthSelected = sm !== 'all';
 
   const totalCount = cs.length;
   const totalAmount = cs.reduce((s,c)=>s + (+c.amount_paid||0), 0);
 
-  // KPI 1+2 動態：本年→本月 vs 上月；過去年度→年度合計 vs 月均；全部→累計
+  // KPI 1+2 動態：
+  //   全部     → 累計
+  //   月份指定 → 該月 vs 上月
+  //   年度指定 → 年度合計 vs 月均
   let label1, val1, sub1, label2, val2, sub2, avgSub;
-  if (isCurrent) {
-    const thisMonth = cs.filter(c => {
-      const d = new Date(c.paid_at);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    });
-    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  if (isAll) {
+    label1 = '累計成案數';   val1 = fmtNum(totalCount);          sub1 = '全部年度';
+    label2 = '累計成案金額'; val2 = fmtMoneyShort(totalAmount);  sub2 = '全部年度';
+    avgSub = `累計總 ${fmtMoneyShort(totalAmount)}`;
+  } else if (monthSelected) {
+    // 上一個月（可能跨年）
+    const prevYM = sm === 1 ? { y: sy - 1, m: 12 } : { y: sy, m: sm - 1 };
     const officeOk = c => !STATE.selectedOffice || c.office === STATE.selectedOffice;
-    const lastMonth = STATE.cases.filter(c => {
+    const prevMonth = STATE.cases.filter(c => {
       if (!c.paid_at || !officeOk(c)) return false;
       const d = new Date(c.paid_at);
-      return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+      return d.getFullYear() === prevYM.y && (d.getMonth() + 1) === prevYM.m;
     });
-    const lmAmount = lastMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
-    const tmAmount = thisMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
-    label1 = '本月成案數';   val1 = fmtNum(thisMonth.length);     sub1 = `上月 ${fmtNum(lastMonth.length)}`;
-    label2 = '本月成案金額'; val2 = fmtMoneyShort(tmAmount);      sub2 = `上月 ${fmtMoneyShort(lmAmount)}`;
-    avgSub = `年度總 ${fmtMoneyShort(totalAmount)}`;
-  } else if (isAll) {
-    label1 = '累計成案數';   val1 = fmtNum(totalCount);                sub1 = '全部年度';
-    label2 = '累計成案金額'; val2 = fmtMoneyShort(totalAmount);        sub2 = '全部年度';
-    avgSub = `累計總 ${fmtMoneyShort(totalAmount)}`;
+    const pmAmount = prevMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+    label1 = `${sy} 年 ${sm} 月成案數`;   val1 = fmtNum(totalCount);          sub1 = `上月 ${fmtNum(prevMonth.length)}`;
+    label2 = `${sy} 年 ${sm} 月成案金額`; val2 = fmtMoneyShort(totalAmount);  sub2 = `上月 ${fmtMoneyShort(pmAmount)}`;
+    // 年度累計（不受月份過濾）作為 avg sub
+    const yearTotal = STATE.cases.filter(c => c.paid_at && officeOk(c) && new Date(c.paid_at).getFullYear() === sy)
+      .reduce((s,c)=>s + (+c.amount_paid||0), 0);
+    avgSub = `${sy} 年度累計 ${fmtMoneyShort(yearTotal)}`;
   } else {
-    label1 = `${sy} 年成案數`;   val1 = fmtNum(totalCount);              sub1 = `月均 ${(totalCount/12).toFixed(1)} 件`;
-    label2 = `${sy} 年成案金額`; val2 = fmtMoneyShort(totalAmount);      sub2 = `月均 ${fmtMoneyShort(totalAmount/12)}`;
+    label1 = `${sy} 年成案數`;   val1 = fmtNum(totalCount);          sub1 = `月均 ${(totalCount/12).toFixed(1)} 件`;
+    label2 = `${sy} 年成案金額`; val2 = fmtMoneyShort(totalAmount);  sub2 = `月均 ${fmtMoneyShort(totalAmount/12)}`;
     avgSub = `${sy} 年度總 ${fmtMoneyShort(totalAmount)}`;
   }
   document.getElementById('kpiMonthCountLabel').textContent  = label1;
@@ -884,9 +922,10 @@ function renderOverview() {
     datasets: [{ label: '成案數', data: Object.values(offBy), backgroundColor: '#c9a84c', borderWidth: 0 }]
   });
 
-  // Monthly amount
+  // Monthly amount + table 用整年資料（不受月份 drilldown 影響，保留時間序列脈絡）
+  const csYear = filterCases({ ignoreMonth: true });
   const yearMonths = Array.from({length:12}, (_,i)=>i);
-  const ma = yearMonths.map(m => cs.filter(c => new Date(c.paid_at).getMonth() === m).reduce((s,c)=>s+(+c.amount_paid||0), 0));
+  const ma = yearMonths.map(m => csYear.filter(c => new Date(c.paid_at).getMonth() === m).reduce((s,c)=>s+(+c.amount_paid||0), 0));
   drawChart('chartAmount', 'bar', {
     labels: yearMonths.map(m=>(m+1)+'月'),
     datasets: [{ label: '金額', data: ma, backgroundColor: '#4f8ef7', borderWidth: 0 }]
@@ -895,7 +934,7 @@ function renderOverview() {
   // Monthly table
   const tbody = document.querySelector('#tableMonthly tbody');
   tbody.innerHTML = yearMonths.map(m => {
-    const ms = cs.filter(c => new Date(c.paid_at).getMonth() === m);
+    const ms = csYear.filter(c => new Date(c.paid_at).getMonth() === m);
     const counts = {}; CATEGORIES.forEach(k=>counts[k]=0);
     ms.forEach(c => { counts[c.case_category||'未分類']++; });
     const sum = ms.reduce((s,c)=>s+(+c.amount_paid||0), 0);
