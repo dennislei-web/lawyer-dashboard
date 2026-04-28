@@ -191,6 +191,10 @@
     .text-blue { color: var(--blue); }
     .text-muted { color: var(--text-muted); }
 
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: var(--bg-hover); color: var(--text); }
+    .sort-arrow { color: var(--gold-light); margin-left: 4px; font-size: 0.7rem; display: inline-block; min-width: 8px; }
+
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
     .badge.b1 { background: var(--blue-dim); color: var(--blue); }
     .badge.b2 { background: var(--green-dim); color: var(--green); }
@@ -401,18 +405,6 @@
           <select class="filter-select" id="pendingSalesFilter">
             <option value="">全部</option>
           </select>
-          <span class="filter-label" style="margin-left:12px;">階段：</span>
-          <select class="filter-select" id="pendingStageFilter">
-            <option value="">全部（不含已成案）</option>
-            <option value="all-with-signed">含已成案</option>
-            <option value="初次接觸">初次接觸</option>
-            <option value="客戶經理會議">客戶經理會議</option>
-            <option value="律師會議">律師會議</option>
-            <option value="提報方案">提報方案</option>
-            <option value="提報追蹤">提報追蹤</option>
-            <option value="第二次追蹤">第二次追蹤</option>
-            <option value="逾期">逾期（>14 天未跟進）</option>
-          </select>
         </div>
 
         <div class="kpi-row k5">
@@ -452,15 +444,15 @@
           </div>
           <div style="overflow-x:auto;">
             <table id="tablePending">
-              <thead><tr>
-                <th>編號</th>
-                <th>業務</th>
-                <th>當事人</th>
-                <th>來源</th>
-                <th>階段</th>
-                <th class="text-right">交辦距今</th>
-                <th class="text-right">距上次行動</th>
-                <th>最近聯繫</th>
+              <thead><tr id="pendingHeader">
+                <th class="sortable" data-sort="monthly_seq">編號 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="salesperson">業務 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="client_name">當事人 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="channel">來源 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="current_stage">階段 <span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="days_since_assigned">交辦距今 <span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="days_since_last_action">距上次行動 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="last_contact_text">最近聯繫 <span class="sort-arrow"></span></th>
                 <th>備註</th>
               </tr></thead>
               <tbody></tbody>
@@ -724,9 +716,16 @@ const fmtMoneyShort = n => {
 let STATE = {
   cases: [], visits: [], pending: [], lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
-  pendingSales: '', pendingStage: '',
+  pendingSales: '',
+  pendingSort: { field: 'assigned_at', dir: 'desc' },
   charts: {}
 };
+
+// 拆分多人業務（"克威 柏凱" → ["克威","柏凱"]）
+function parseSalespeople(s) {
+  if (!s) return [];
+  return String(s).split(/[\s、,/]+/).map(x => x.trim()).filter(Boolean);
+}
 
 async function init() {
   showSyncLoading();
@@ -834,9 +833,21 @@ function setupOfficeFilter() {
 }
 
 function setupPendingFilters() {
-  const sales = [...new Set(STATE.pending.map(p => p.salesperson).filter(Boolean))].sort();
+  // 取所有出現過的「個人」名字（拆掉組合）
+  const set = new Set();
+  STATE.pending.forEach(p => parseSalespeople(p.salesperson).forEach(n => set.add(n)));
+  const sales = [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
   const sel = document.getElementById('pendingSalesFilter');
   sel.innerHTML = '<option value="">全部</option>' + sales.map(s => `<option value="${s}">${s}</option>`).join('');
+  // 表頭排序
+  document.querySelectorAll('#pendingHeader .sortable').forEach(th => {
+    th.onclick = () => {
+      const f = th.dataset.sort;
+      if (STATE.pendingSort.field === f) STATE.pendingSort.dir = STATE.pendingSort.dir === 'asc' ? 'desc' : 'asc';
+      else { STATE.pendingSort.field = f; STATE.pendingSort.dir = 'asc'; }
+      renderPending();
+    };
+  });
 }
 
 function bindFilters() {
@@ -849,7 +860,6 @@ function bindFilters() {
   document.getElementById('dueWindow').onchange = renderClients;
   document.getElementById('visitFilter').onchange = renderOutbound;
   document.getElementById('pendingSalesFilter').onchange = e => { STATE.pendingSales = e.target.value; renderPending(); };
-  document.getElementById('pendingStageFilter').onchange = e => { STATE.pendingStage = e.target.value; renderPending(); };
 }
 
 function filterCases(opts) {
@@ -1013,15 +1023,37 @@ const PENDING_STAGE_COLORS = {
 };
 
 function filterPending() {
-  const stage = STATE.pendingStage;
   return STATE.pending.filter(p => {
-    if (STATE.pendingSales && p.salesperson !== STATE.pendingSales) return false;
-    if (stage === 'all-with-signed') return true;
-    // 預設不含已成案
-    if (p.current_stage === '已成案' || p.is_signed) return false;
-    if (!stage) return true;
-    if (stage === '逾期') return (p.days_since_last_action || 0) > 14;
-    return p.current_stage === stage;
+    if (p.is_signed || p.current_stage === '已成案') return false;
+    if (STATE.pendingSales) {
+      const ind = parseSalespeople(p.salesperson);
+      if (!ind.includes(STATE.pendingSales)) return false;
+    }
+    return true;
+  });
+}
+
+const STAGE_ORDER = ['尚未啟動','初次接觸','客戶經理會議','律師會議','提報方案','提報追蹤','第二次追蹤','已成案'];
+
+function sortPending(arr) {
+  const { field, dir } = STATE.pendingSort;
+  const factor = dir === 'asc' ? 1 : -1;
+  return arr.slice().sort((a, b) => {
+    let va, vb;
+    if (field === 'current_stage') {
+      va = STAGE_ORDER.indexOf(a.current_stage);
+      vb = STAGE_ORDER.indexOf(b.current_stage);
+    } else if (field === 'assigned_at') {
+      va = a.assigned_at ? new Date(a.assigned_at).getTime() : null;
+      vb = b.assigned_at ? new Date(b.assigned_at).getTime() : null;
+    } else {
+      va = a[field]; vb = b[field];
+    }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;   // null always last
+    if (vb == null) return -1;
+    if (typeof va === 'string') return factor * va.localeCompare(String(vb), 'zh-Hant');
+    return factor * (va - vb);
   });
 }
 
@@ -1066,9 +1098,13 @@ function renderPending() {
     datasets: [{ label: '案件數', data: PENDING_STAGES.map(s=>stageCounts[s]), backgroundColor: PENDING_STAGES.map(s=>PENDING_STAGE_COLORS[s]), borderWidth: 0 }]
   });
 
-  // 業務分布
+  // 業務分布（多人案件 → 每個個人都算一次）
   const salesCounts = {};
-  fp.forEach(p => { const s = p.salesperson || '未填'; salesCounts[s] = (salesCounts[s]||0) + 1; });
+  fp.forEach(p => {
+    const ind = parseSalespeople(p.salesperson);
+    if (!ind.length) { salesCounts['未填'] = (salesCounts['未填']||0) + 1; return; }
+    ind.forEach(n => { salesCounts[n] = (salesCounts[n]||0) + 1; });
+  });
   drawChart('chartPendingSales', 'doughnut', {
     labels: Object.keys(salesCounts),
     datasets: [{ data: Object.values(salesCounts), backgroundColor: ['#c9a84c','#4f8ef7','#4caf82','#e0954a','#b974e0','#4dd0c5','#8899aa'], borderWidth: 0 }]
@@ -1100,8 +1136,15 @@ function renderPending() {
     datasets: [{ label: '案件數', data: bucketCounts, backgroundColor: ['#4caf82','#c9a84c','#e0954a','#e05c5c','#b22222'], borderWidth: 0 }]
   });
 
-  // 表格 — 依 days_since_last_action DESC
-  const sorted = fp.slice().sort((a,b) => (b.days_since_last_action || 0) - (a.days_since_last_action || 0));
+  // 表格 — 依使用者選的排序欄位
+  const sorted = sortPending(fp);
+  // 表頭箭頭
+  document.querySelectorAll('#pendingHeader .sortable').forEach(th => {
+    const arrow = th.querySelector('.sort-arrow');
+    if (!arrow) return;
+    arrow.textContent = th.dataset.sort === STATE.pendingSort.field
+      ? (STATE.pendingSort.dir === 'asc' ? '▲' : '▼') : '';
+  });
   document.querySelector('#tablePending tbody').innerHTML = sorted.slice(0,500).map(p => {
     const overdueCls = (p.days_since_last_action || 0) > 14 ? 'text-red' : '';
     const stageBadge = `<span class="badge b1">${p.current_stage || '—'}</span>`;
