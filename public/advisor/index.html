@@ -445,7 +445,8 @@
           <div style="overflow-x:auto;">
             <table id="tablePending">
               <thead><tr id="pendingHeader">
-                <th class="sortable" data-sort="monthly_seq">編號 <span class="sort-arrow"></span></th>
+                <th>#</th>
+                <th class="sortable" data-sort="needs_followup">後續追蹤 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="salesperson">業務 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="client_name">當事人 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="channel">來源 <span class="sort-arrow"></span></th>
@@ -714,7 +715,7 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], visits: [], pending: [], lastSync: null,
+  cases: [], visits: [], pending: [], pendingState: {}, lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingSort: { field: 'assigned_at', dir: 'desc' },
@@ -730,16 +731,19 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, vs, pn, log] = await Promise.all([
+    const [cs, vs, pn, ps, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
+      sb.from('advisor_pending_state').select('*'),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
     STATE.visits = vs.data || [];
     STATE.pending = pn.data || [];
+    STATE.pendingState = {};
+    (ps.data || []).forEach(s => { STATE.pendingState[s.client_name] = s; });
     STATE.lastSync = log.data?.[0] || null;
 
     setupYearFilter();
@@ -1046,6 +1050,12 @@ function sortPending(arr) {
     } else if (field === 'assigned_at') {
       va = a.assigned_at ? new Date(a.assigned_at).getTime() : null;
       vb = b.assigned_at ? new Date(b.assigned_at).getTime() : null;
+    } else if (field === 'needs_followup') {
+      // 預設 true（沒紀錄就是 true）
+      const sa = STATE.pendingState[a.client_name];
+      const sb_ = STATE.pendingState[b.client_name];
+      va = (sa ? sa.needs_followup : true) ? 1 : 0;
+      vb = (sb_ ? sb_.needs_followup : true) ? 1 : 0;
     } else {
       va = a[field]; vb = b[field];
     }
@@ -1055,6 +1065,17 @@ function sortPending(arr) {
     if (typeof va === 'string') return factor * va.localeCompare(String(vb), 'zh-Hant');
     return factor * (va - vb);
   });
+}
+
+async function toggleFollowup(clientName, checked, cbEl) {
+  const payload = { client_name: clientName, needs_followup: checked, updated_at: new Date().toISOString() };
+  const { error } = await sb.from('advisor_pending_state').upsert(payload, { onConflict: 'client_name' });
+  if (error) {
+    alert('儲存失敗：' + error.message);
+    if (cbEl) cbEl.checked = !checked;
+    return;
+  }
+  STATE.pendingState[clientName] = payload;
 }
 
 function renderPending() {
@@ -1145,12 +1166,16 @@ function renderPending() {
     arrow.textContent = th.dataset.sort === STATE.pendingSort.field
       ? (STATE.pendingSort.dir === 'asc' ? '▲' : '▼') : '';
   });
-  document.querySelector('#tablePending tbody').innerHTML = sorted.slice(0,500).map(p => {
+  document.querySelector('#tablePending tbody').innerHTML = sorted.slice(0,500).map((p, idx) => {
     const overdueCls = (p.days_since_last_action || 0) > 14 ? 'text-red' : '';
     const stageBadge = `<span class="badge b1">${p.current_stage || '—'}</span>`;
     const summary = (p.case_summary || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const st = STATE.pendingState[p.client_name];
+    const followup = st ? st.needs_followup : true;
+    const safeClient = (p.client_name || '').replace(/"/g, '&quot;');
     return `<tr>
-      <td>${p.monthly_seq || ''}</td>
+      <td class="text-muted">${idx + 1}</td>
+      <td><input type="checkbox" class="followup-cb" data-client="${safeClient}" ${followup ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--green);"></td>
       <td>${p.salesperson || '—'}</td>
       <td>${p.client_name || '—'}</td>
       <td>${p.channel || '—'}</td>
@@ -1160,7 +1185,12 @@ function renderPending() {
       <td class="text-muted" style="font-size:0.78rem;">${p.last_contact_text || '—'}</td>
       <td class="text-muted" style="font-size:0.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(p.case_summary||'').replace(/"/g,'&quot;')}">${summary}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
+  }).join('') || '<tr><td colspan="10" class="empty">無資料</td></tr>';
+
+  // 綁 checkbox change → upsert
+  document.querySelectorAll('.followup-cb').forEach(cb => {
+    cb.onchange = () => toggleFollowup(cb.dataset.client, cb.checked, cb);
+  });
 }
 
 // ============ TAB: 業務 / 律師 ============
