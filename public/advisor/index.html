@@ -195,6 +195,16 @@
     th.sortable:hover { background: var(--bg-hover); color: var(--text); }
     .sort-arrow { color: var(--gold-light); margin-left: 4px; font-size: 0.7rem; display: inline-block; min-width: 8px; }
 
+    .followup-select {
+      padding: 3px 8px; font-size: 0.76rem; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg-row); color: var(--text); cursor: pointer;
+    }
+    .followup-select:focus { outline: none; }
+    .followup-select.s-active { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+    .followup-select.s-wait   { border-color: var(--orange); color: var(--orange); background: var(--orange-dim); }
+    .followup-select.s-done   { border-color: var(--text-muted); color: var(--text-muted); }
+
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
     .badge.b1 { background: var(--blue-dim); color: var(--blue); }
     .badge.b2 { background: var(--green-dim); color: var(--green); }
@@ -446,7 +456,7 @@
             <table id="tablePending">
               <thead><tr id="pendingHeader">
                 <th>#</th>
-                <th class="sortable" data-sort="needs_followup">後續追蹤 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="followup_status">後續追蹤 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="salesperson">業務 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="client_name">當事人 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="channel">來源 <span class="sort-arrow"></span></th>
@@ -1038,6 +1048,8 @@ function filterPending() {
 }
 
 const STAGE_ORDER = ['尚未啟動','初次接觸','客戶經理會議','律師會議','提報方案','提報追蹤','第二次追蹤','已成案'];
+const FOLLOWUP_STATUSES = ['持續追蹤','暫時等待','無須追蹤'];
+const FOLLOWUP_CLS = { '持續追蹤':'s-active', '暫時等待':'s-wait', '無須追蹤':'s-done' };
 
 function sortPending(arr) {
   const { field, dir } = STATE.pendingSort;
@@ -1050,12 +1062,12 @@ function sortPending(arr) {
     } else if (field === 'assigned_at') {
       va = a.assigned_at ? new Date(a.assigned_at).getTime() : null;
       vb = b.assigned_at ? new Date(b.assigned_at).getTime() : null;
-    } else if (field === 'needs_followup') {
-      // 預設 true（沒紀錄就是 true）
+    } else if (field === 'followup_status') {
+      // 排序順序：持續追蹤 < 暫時等待 < 無須追蹤（ASC = 進行中先）
       const sa = STATE.pendingState[a.client_name];
       const sb_ = STATE.pendingState[b.client_name];
-      va = (sa ? sa.needs_followup : true) ? 1 : 0;
-      vb = (sb_ ? sb_.needs_followup : true) ? 1 : 0;
+      va = FOLLOWUP_STATUSES.indexOf(sa ? sa.followup_status : '持續追蹤');
+      vb = FOLLOWUP_STATUSES.indexOf(sb_ ? sb_.followup_status : '持續追蹤');
     } else {
       va = a[field]; vb = b[field];
     }
@@ -1067,15 +1079,19 @@ function sortPending(arr) {
   });
 }
 
-async function toggleFollowup(clientName, checked, cbEl) {
-  const payload = { client_name: clientName, needs_followup: checked, updated_at: new Date().toISOString() };
+async function onFollowupChange(clientName, status, sel) {
+  const payload = { client_name: clientName, followup_status: status, updated_at: new Date().toISOString() };
   const { error } = await sb.from('advisor_pending_state').upsert(payload, { onConflict: 'client_name' });
   if (error) {
     alert('儲存失敗：' + error.message);
-    if (cbEl) cbEl.checked = !checked;
+    if (sel) sel.value = STATE.pendingState[clientName]?.followup_status || '持續追蹤';
     return;
   }
   STATE.pendingState[clientName] = payload;
+  if (sel) {
+    sel.classList.remove('s-active','s-wait','s-done');
+    sel.classList.add(FOLLOWUP_CLS[status]);
+  }
 }
 
 function renderPending() {
@@ -1171,11 +1187,13 @@ function renderPending() {
     const stageBadge = `<span class="badge b1">${p.current_stage || '—'}</span>`;
     const summary = (p.case_summary || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     const st = STATE.pendingState[p.client_name];
-    const followup = st ? st.needs_followup : true;
+    const status = st ? st.followup_status : '持續追蹤';
+    const cls = FOLLOWUP_CLS[status] || '';
     const safeClient = (p.client_name || '').replace(/"/g, '&quot;');
+    const opts = FOLLOWUP_STATUSES.map(s => `<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('');
     return `<tr>
       <td class="text-muted">${idx + 1}</td>
-      <td><input type="checkbox" class="followup-cb" data-client="${safeClient}" ${followup ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--green);"></td>
+      <td><select class="followup-select ${cls}" data-client="${safeClient}">${opts}</select></td>
       <td>${p.salesperson || '—'}</td>
       <td>${p.client_name || '—'}</td>
       <td>${p.channel || '—'}</td>
@@ -1187,9 +1205,9 @@ function renderPending() {
     </tr>`;
   }).join('') || '<tr><td colspan="10" class="empty">無資料</td></tr>';
 
-  // 綁 checkbox change → upsert
-  document.querySelectorAll('.followup-cb').forEach(cb => {
-    cb.onchange = () => toggleFollowup(cb.dataset.client, cb.checked, cb);
+  // 綁 select change → upsert
+  document.querySelectorAll('.followup-select').forEach(sel => {
+    sel.onchange = () => onFollowupChange(sel.dataset.client, sel.value, sel);
   });
 }
 
