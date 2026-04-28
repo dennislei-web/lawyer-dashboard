@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 法律顧問</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg-main:    #020b18;
+      --bg-card:    #0a1628;
+      --bg-row:     #111b2e;
+      --bg-hover:   #16253d;
+      --border:     #1e3050;
+      --border-light: #243a5e;
+      --gold:       #c9a84c;
+      --gold-light: #e8c97a;
+      --text:       #e0e0e0;
+      --text-muted: #8899aa;
+      --blue:       #4f8ef7;
+      --blue-dim:   rgba(79,142,247,0.15);
+      --green:      #4caf82;
+      --green-dim:  rgba(76,175,130,0.15);
+      --red:        #e05c5c;
+      --red-dim:    rgba(224,92,92,0.15);
+      --orange:     #e0954a;
+      --orange-dim: rgba(224,149,74,0.15);
+      --purple:     #b974e0;
+      --purple-dim: rgba(185,116,224,0.15);
+      --teal:       #4dd0c5;
+      --teal-dim:   rgba(77,208,197,0.15);
+      --brand-color: #e8c97a;
+      --header-bg:  rgba(10,22,40,0.95);
+      --login-shadow: rgba(0,0,0,0.5);
+      --tab-active-bg: rgba(201,168,76,0.12);
+      --tab-active-border: rgba(201,168,76,0.2);
+      --tab-active-color: var(--gold-light);
+      --ghost-bg: rgba(255,255,255,0.07);
+      --ghost-hover-bg: rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:    #f5f6fa;
+      --bg-card:    #ffffff;
+      --bg-row:     #f0f2f5;
+      --bg-hover:   #e8eaf0;
+      --border:     #d0d5dd;
+      --border-light: #e0e4eb;
+      --gold:       #a3842a;
+      --gold-light: #8b6f1e;
+      --text:       #1a1a2e;
+      --text-muted: #6b7280;
+      --blue:       #2563eb;
+      --blue-dim:   rgba(37,99,235,0.1);
+      --green:      #15803d;
+      --green-dim:  rgba(21,128,61,0.12);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.1);
+      --orange:     #d97706;
+      --orange-dim: rgba(217,119,6,0.1);
+      --purple:     #7c3aed;
+      --purple-dim: rgba(124,58,237,0.1);
+      --teal:       #0f766e;
+      --teal-dim:   rgba(15,118,110,0.1);
+      --brand-color: #1a1a2e;
+      --header-bg:  rgba(255,255,255,0.95);
+      --login-shadow: rgba(0,0,0,0.12);
+      --tab-active-bg: rgba(37,99,235,0.1);
+      --tab-active-border: rgba(37,99,235,0.25);
+      --tab-active-color: #2563eb;
+      --ghost-bg: rgba(0,0,0,0.04);
+      --ghost-hover-bg: rgba(0,0,0,0.08);
+    }
+    .embed-mode .header { display: none !important; }
+    .embed-mode #loginPage { display: none !important; }
+    .embed-mode #dashboard { display: block !important; }
+    .embed-mode #dashboardFrame { display: none !important; }
+    .embed-mode body { padding-top: 0 !important; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      background: var(--bg-main); color: var(--text); min-height: 100vh; font-size: 14px;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 20px;
+      background: radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+                  var(--bg-main);
+    }
+    .login-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 44px 40px; width: 100%; max-width: 420px; box-shadow: 0 24px 64px var(--login-shadow); }
+    .login-logo { text-align: center; margin-bottom: 28px; }
+    .login-logo .firm-name { font-size: 1.6rem; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
+    .login-logo .subtitle { margin-top: 6px; font-size: 0.85rem; color: var(--text-muted); letter-spacing: 1px; }
+    .login-divider { height: 1px; background: linear-gradient(to right, transparent, var(--border-light), transparent); margin-bottom: 28px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .form-group input { width: 100%; padding: 12px 16px; background: var(--bg-row); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.95rem; }
+    .form-group input:focus { outline: none; border-color: var(--gold); }
+    .btn-login { width: 100%; padding: 13px; background: linear-gradient(135deg, var(--gold), #b8942e); color: #0a0a0a; font-weight: 700; font-size: 0.95rem; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error { color: var(--red); font-size: 0.85rem; margin-top: 12px; text-align: center; display: none; }
+
+    /* HEADER */
+    .header { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 56px; background: var(--header-bg); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-brand { font-size: 1.1rem; font-weight: 700; color: var(--gold-light); letter-spacing: 1px; cursor: pointer; text-decoration: none; }
+    .header-subtitle { font-size: 0.78rem; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .user-badge { font-size: 0.8rem; color: var(--text-muted); padding: 4px 10px; background: var(--ghost-bg); border-radius: 6px; }
+    .btn-icon { background: var(--ghost-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); cursor: pointer; padding: 6px 10px; font-size: 0.85rem; }
+    .btn-icon:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-link { padding: 4px 10px; font-size: 0.75rem; color: var(--text-muted); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; background: var(--ghost-bg); }
+    .nav-link:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    .nav-link.active { background: var(--tab-active-bg); color: var(--tab-active-color); border-color: var(--tab-active-border); }
+
+    /* TABS */
+    .tabs { display: flex; gap: 2px; padding: 8px 24px; background: var(--bg-main); border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab-btn { padding: 8px 18px; font-size: 0.85rem; font-weight: 500; color: var(--text-muted); background: transparent; border: 1px solid transparent; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+    .tab-btn:hover { background: var(--ghost-bg); color: var(--text); }
+    .tab-btn.active { background: var(--tab-active-bg); border-color: var(--tab-active-border); color: var(--tab-active-color); font-weight: 600; }
+
+    /* MAIN */
+    .main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* KPI */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .kpi-row.k5 { grid-template-columns: repeat(5, 1fr); }
+    .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
+    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .kpi-card.gold::before { background: var(--gold); }
+    .kpi-card.blue::before { background: var(--blue); }
+    .kpi-card.green::before { background: var(--green); }
+    .kpi-card.red::before { background: var(--red); }
+    .kpi-card.orange::before { background: var(--orange); }
+    .kpi-card.purple::before { background: var(--purple); }
+    .kpi-card.teal::before { background: var(--teal); }
+    .kpi-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; }
+    .kpi-value.gold { color: var(--gold-light); }
+    .kpi-value.blue { color: var(--blue); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.orange { color: var(--orange); }
+    .kpi-value.purple { color: var(--purple); }
+    .kpi-value.teal { color: var(--teal); }
+    .kpi-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* CHARTS */
+    .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-row.eq { grid-template-columns: 1fr 1fr; }
+    .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+    .chart-container { position: relative; height: 300px; }
+
+    /* FILTER */
+    .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+    .year-btns { display: flex; gap: 4px; }
+    .year-btn { padding: 5px 14px; font-size: 0.8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-row); color: var(--text-muted); cursor: pointer; }
+    .year-btn:hover { background: var(--ghost-hover-bg); }
+    .year-btn.active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
+    .filter-select { padding: 5px 10px; font-size: 0.8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-row); color: var(--text); }
+
+    /* TABLE */
+    .table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+    .table-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .table-title { font-size: 0.9rem; font-weight: 600; }
+    .table-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-sm { padding: 5px 12px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 6px; background: var(--ghost-bg); color: var(--text-muted); cursor: pointer; }
+    .btn-sm:hover { background: var(--ghost-hover-bg); color: var(--text); }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { padding: 10px 14px; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tbody td { padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: var(--bg-hover); }
+    .text-right { text-align: right; }
+    .text-green { color: var(--green); }
+    .text-red { color: var(--red); }
+    .text-gold { color: var(--gold-light); }
+    .text-blue { color: var(--blue); }
+    .text-muted { color: var(--text-muted); }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+    .badge.b1 { background: var(--blue-dim); color: var(--blue); }
+    .badge.b2 { background: var(--green-dim); color: var(--green); }
+    .badge.b3 { background: var(--purple-dim); color: var(--purple); }
+    .badge.b4 { background: var(--orange-dim); color: var(--orange); }
+    .badge.b5 { background: var(--teal-dim); color: var(--teal); }
+    .badge.b6 { background: var(--red-dim); color: var(--red); }
+
+    .empty { text-align: center; padding: 40px; color: var(--text-muted); }
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    .spinner { display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .sync-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; }
+    .sync-dot.stale { background: var(--orange); }
+    .sync-dot.error { background: var(--red); }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .kpi-row.k5 { grid-template-columns: repeat(2, 1fr); }
+      .chart-row { grid-template-columns: 1fr; }
+      .chart-row.eq { grid-template-columns: 1fr; }
+      .chart-container { height: 260px; }
+      .main { padding: 16px; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 13px; }
+      .header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 6px; }
+      .header-left { width: 100%; gap: 8px; flex-wrap: wrap; }
+      .header-brand { font-size: 0.95rem; }
+      .header-subtitle { display: none; }
+      .nav-links { gap: 4px; flex: 1; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-link { padding: 4px 10px; font-size: 0.72rem; white-space: nowrap; flex-shrink: 0; }
+      .header-right { width: 100%; justify-content: flex-end; gap: 6px; }
+      .tabs { padding: 6px 12px; gap: 2px; }
+      .tab-btn { padding: 6px 12px; font-size: 0.78rem; }
+      .main { padding: 12px; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+      .kpi-card { padding: 12px; }
+      .kpi-value { font-size: 1.15rem; }
+      .chart-card { padding: 14px; }
+      .chart-container { height: 240px; }
+      .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
+      thead th { padding: 8px 10px; font-size: 0.7rem; }
+      tbody td { padding: 8px 10px; font-size: 0.78rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">法律顧問</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage" style="display:none;align-items:center;justify-content:center;min-height:100vh;padding:20px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:480px;text-align:center;">
+    <div style="font-size:2.4rem;margin-bottom:12px;">🔒</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:10px;">無權限存取此儀表板</div>
+    <div style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:24px;">
+      您的帳號（<span id="noAccessUser"></span>）目前僅能存取<strong style="color:var(--gold-light);">諮詢分析</strong>儀表板。<br>
+      如需存取此儀表板，請聯繫管理員調整權限。
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/lawyer-dashboard/" class="btn-login" style="text-decoration:none;display:inline-block;max-width:200px;padding:10px 20px;">返回諮詢分析</a>
+      <button class="btn-icon" id="noAccessLogout" style="padding:10px 20px;">登出</button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <a class="header-brand" href="/advisor/">喆律法律事務所</a>
+      <div class="nav-links">
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/?embed=1" onclick="switchDashboard(this);return false">諮詢分析</a>
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/revenue/?embed=1" onclick="switchDashboard(this);return false">營運</a>
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/finance/?embed=1" onclick="switchDashboard(this);return false">財務規劃</a>
+        <a class="nav-link active" href="#" data-dashboard="" onclick="switchDashboard(this);return false">法律顧問</a>
+        <a class="nav-link" href="#" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/partners/?embed=1" onclick="switchDashboard(this);return false">合署律師</a>
+        <a id="navLinkAdmin" class="nav-link" href="#" style="display:none" data-dashboard="https://dennislei-web.github.io/lawyer-dashboard/admin/?embed=1" onclick="switchDashboard(this);return false">🔑 帳號管理</a>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <iframe id="dashboardFrame" style="display:none;width:100%;height:calc(100vh - 56px);border:none;z-index:50"></iframe>
+
+  <div id="localContent">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="overview">總覽</button>
+      <button class="tab-btn" data-tab="people">業務 / 律師</button>
+      <button class="tab-btn" data-tab="clients">客戶 360</button>
+      <button class="tab-btn" data-tab="funnel">Inbound 漏斗</button>
+      <button class="tab-btn" data-tab="outbound">陌開拜訪</button>
+    </div>
+
+    <div class="main">
+
+      <div class="sync-info" id="syncInfo">
+        <span><span class="sync-dot" id="syncDot"></span><span id="syncText">載入中…</span></span>
+        <span id="syncCount" class="text-muted"></span>
+      </div>
+
+      <!-- ===== TAB: 總覽 ===== -->
+      <div class="page active" id="page-overview">
+
+        <div class="filter-bar">
+          <span class="filter-label">年度：</span>
+          <div class="year-btns" id="yearBtns"></div>
+          <span class="filter-label" style="margin-left:12px;">所別：</span>
+          <select class="filter-select" id="officeFilter">
+            <option value="">全部</option>
+          </select>
+        </div>
+
+        <div class="kpi-row k5">
+          <div class="kpi-card gold"><div class="kpi-label">本月成案數</div><div class="kpi-value gold" id="kpiMonthCount">—</div><div class="kpi-sub" id="kpiMonthCountSub"></div></div>
+          <div class="kpi-card blue"><div class="kpi-label">本月成案金額</div><div class="kpi-value blue" id="kpiMonthAmount">—</div><div class="kpi-sub" id="kpiMonthAmountSub"></div></div>
+          <div class="kpi-card green"><div class="kpi-label">續委任率</div><div class="kpi-value green" id="kpiRetention">—</div><div class="kpi-sub">續委任 / 全部成案</div></div>
+          <div class="kpi-card purple"><div class="kpi-label">舊客衍生比</div><div class="kpi-value purple" id="kpiSpread">—</div><div class="kpi-sub">舊客帶進新案</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">平均單筆金額</div><div class="kpi-value orange" id="kpiAvg">—</div><div class="kpi-sub" id="kpiAvgSub"></div></div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card">
+            <div class="chart-title">12 個月成案趨勢（按案源類別）</div>
+            <div class="chart-container"><canvas id="chartTrend"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">案源類別分布（年度累計）</div>
+            <div class="chart-container"><canvas id="chartCategory"></canvas></div>
+          </div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card">
+            <div class="chart-title">所別成案分布</div>
+            <div class="chart-container"><canvas id="chartOffice"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">月度金額（年度）</div>
+            <div class="chart-container"><canvas id="chartAmount"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">月度明細（年度）</div>
+            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">數值單位：件數 / 金額</span></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableMonthly">
+              <thead>
+                <tr>
+                  <th>月份</th>
+                  <th class="text-right">總成案</th>
+                  <th class="text-right">總金額</th>
+                  <th class="text-right">續委任</th>
+                  <th class="text-right">舊客衍生</th>
+                  <th class="text-right">諮詢轉案</th>
+                  <th class="text-right">人脈轉介</th>
+                  <th class="text-right">自行進線新案</th>
+                  <th class="text-right">未分類</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 業務 / 律師 ===== -->
+      <div class="page" id="page-people">
+        <div class="filter-bar">
+          <span class="filter-label">年度：</span>
+          <div class="year-btns" id="yearBtns2"></div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card">
+            <div class="chart-title">負責業務排行（年度累計）</div>
+            <div class="chart-container"><canvas id="chartSalesRank"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">承辦律師排行（年度累計）</div>
+            <div class="chart-container"><canvas id="chartLawyerRank"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header"><div class="table-title">負責業務明細</div></div>
+          <div style="overflow-x:auto;">
+            <table id="tableSales">
+              <thead><tr>
+                <th>業務</th><th class="text-right">成案數</th><th class="text-right">總金額</th>
+                <th class="text-right">平均單筆</th><th class="text-right">續委任</th><th class="text-right">續委任率</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header"><div class="table-title">承辦律師明細</div></div>
+          <div style="overflow-x:auto;">
+            <table id="tableLawyers">
+              <thead><tr>
+                <th>律師</th><th class="text-right">成案數</th><th class="text-right">總金額</th>
+                <th class="text-right">平均單筆</th><th>主要所別</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 客戶 360 ===== -->
+      <div class="page" id="page-clients">
+        <div class="kpi-row">
+          <div class="kpi-card gold"><div class="kpi-label">累計客戶數</div><div class="kpi-value gold" id="kpiClientCount">—</div></div>
+          <div class="kpi-card blue"><div class="kpi-label">回流客戶數</div><div class="kpi-value blue" id="kpiRepeatClient">—</div><div class="kpi-sub">≥ 2 次成案</div></div>
+          <div class="kpi-card green"><div class="kpi-label">客戶平均終身金額</div><div class="kpi-value green" id="kpiLtv">—</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">即將觸發續委任</div><div class="kpi-value orange" id="kpiDueClients">—</div><div class="kpi-sub">6 個月以上未回流</div></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">Top 客戶（累計金額）</div>
+            <div class="table-actions">
+              <select class="filter-select" id="topClientLimit"><option value="20">前 20</option><option value="50">前 50</option><option value="100">前 100</option></select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableTopClients">
+              <thead><tr>
+                <th>客戶</th><th class="text-right">成案次數</th><th class="text-right">累計金額</th>
+                <th>首次成案</th><th>最近成案</th><th>主要所別</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">即將觸發續委任清單</div>
+            <div class="table-actions">
+              <select class="filter-select" id="dueWindow">
+                <option value="6">6 個月以上未回流</option>
+                <option value="12">12 個月以上未回流</option>
+                <option value="3">3 個月以上未回流</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableDueClients">
+              <thead><tr>
+                <th>客戶</th><th class="text-right">歷史成案</th><th class="text-right">累計金額</th>
+                <th>最近成案</th><th class="text-right">距今天數</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: Inbound 漏斗 ===== -->
+      <div class="page" id="page-funnel">
+        <div class="filter-bar">
+          <span class="filter-label">年度：</span>
+          <div class="year-btns" id="yearBtns3"></div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card blue"><div class="kpi-label">年度法零轉介</div><div class="kpi-value blue" id="kpiFalingY">—</div></div>
+          <div class="kpi-card teal"><div class="kpi-label">年度委前轉介</div><div class="kpi-value teal" id="kpiPreRetainY">—</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">年度會議數</div><div class="kpi-value orange" id="kpiMeetingY">—</div><div class="kpi-sub">電話+視訊+現場</div></div>
+          <div class="kpi-card green"><div class="kpi-label">年度促成簽約</div><div class="kpi-value green" id="kpiSignedY">—</div></div>
+        </div>
+
+        <div class="chart-row eq">
+          <div class="chart-card"><div class="chart-title">月度漏斗（轉介 → 會議 → 簽約 → 付款）</div><div class="chart-container"><canvas id="chartFunnelMonthly"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">會議型態分布</div><div class="chart-container"><canvas id="chartMeetingType"></canvas></div></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header"><div class="table-title">月度漏斗明細</div></div>
+          <div style="overflow-x:auto;">
+            <table id="tableFunnel">
+              <thead><tr>
+                <th>月份</th><th class="text-right">法零</th><th class="text-right">委前</th><th class="text-right">電話</th>
+                <th class="text-right">視訊</th><th class="text-right">現場</th><th class="text-right">簽約</th><th class="text-right">付款</th>
+                <th class="text-right">轉介→簽約</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 陌開拜訪 ===== -->
+      <div class="page" id="page-outbound">
+        <div class="kpi-row">
+          <div class="kpi-card blue"><div class="kpi-label">總拜訪數</div><div class="kpi-value blue" id="kpiVisitTotal">—</div></div>
+          <div class="kpi-card green"><div class="kpi-label">已委任</div><div class="kpi-value green" id="kpiVisitRetained">—</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">委任率</div><div class="kpi-value orange" id="kpiVisitRate">—</div></div>
+          <div class="kpi-card gold"><div class="kpi-label">最近 30 天拜訪</div><div class="kpi-value gold" id="kpiVisit30">—</div></div>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:24px;">
+          <div class="chart-title">月度拜訪 vs 委任</div>
+          <div class="chart-container"><canvas id="chartVisitMonthly"></canvas></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">拜訪清單</div>
+            <div class="table-actions">
+              <select class="filter-select" id="visitFilter">
+                <option value="all">全部</option>
+                <option value="retained">已委任</option>
+                <option value="pending">未委任</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableVisits">
+              <thead><tr>
+                <th>編號</th><th>品牌</th><th>公司</th><th>地區</th><th>拜訪日</th>
+                <th>委任</th><th>法顧窗口</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.main -->
+  </div><!-- /#localContent -->
+</div><!-- /#dashboard -->
+
+<script>
+const SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const isEmbed = new URLSearchParams(location.search).get('embed') === '1';
+if (isEmbed) document.body.classList.add('embed-mode');
+
+// Theme
+const savedTheme = localStorage.getItem('dashboardTheme');
+if (savedTheme === 'light') document.documentElement.setAttribute('data-theme','light');
+document.getElementById('themeToggle').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  if (cur === 'light') { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('dashboardTheme','dark'); }
+  else { document.documentElement.setAttribute('data-theme','light'); localStorage.setItem('dashboardTheme','light'); }
+  rerenderAllCharts();
+};
+
+// ============ AUTH ============
+const loginPage    = document.getElementById('loginPage');
+const noAccessPage = document.getElementById('noAccessPage');
+const dashboard    = document.getElementById('dashboard');
+
+async function checkAuth() {
+  if (isEmbed) {
+    // Embed mode: parent shell already auth'd; show dashboard directly
+    loginPage.style.display = 'none';
+    dashboard.style.display = 'block';
+    init();
+    return;
+  }
+  const { data } = await sb.auth.getSession();
+  if (data.session) showDashboard(data.session.user);
+  else loginPage.style.display = 'flex';
+}
+
+async function showDashboard(user) {
+  // 權限對齊主 shell / finance：只有 admin 可存取
+  const { data: profile } = await sb.from('lawyers').select('*').eq('auth_user_id', user.id).maybeSingle();
+  const role = profile?.role;
+  if (role !== 'admin') {
+    document.getElementById('noAccessUser').textContent = profile?.name || user.email;
+    loginPage.style.display = 'none';
+    noAccessPage.style.display = 'flex';
+    return;
+  }
+  loginPage.style.display = 'none';
+  dashboard.style.display = 'block';
+  document.getElementById('userBadge').textContent = (profile?.name || user.email) + '（admin）';
+  document.getElementById('navLinkAdmin').style.display = '';
+  init();
+}
+
+document.getElementById('loginForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true; btn.textContent = '登入中…'; errEl.style.display = 'none';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = '登入';
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  showDashboard(data.user);
+};
+
+document.getElementById('logoutBtn').onclick = async () => {
+  await sb.auth.signOut();
+  location.reload();
+};
+document.getElementById('noAccessLogout').onclick = async () => {
+  await sb.auth.signOut();
+  location.reload();
+};
+
+// ============ NAV (between dashboards) ============
+function switchDashboard(link) {
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  link.classList.add('active');
+  const url = link.getAttribute('data-dashboard');
+  const frame = document.getElementById('dashboardFrame');
+  const local = document.getElementById('localContent');
+  if (!url) {
+    frame.style.display = 'none'; frame.src = '';
+    local.style.display = '';
+  } else {
+    local.style.display = 'none';
+    frame.src = url; frame.style.display = 'block';
+  }
+}
+
+// ============ TABS ============
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.tab).classList.add('active');
+  };
+});
+
+// ============ DATA + RENDER ============
+const CATEGORIES = ['續委任','舊客衍生','諮詢轉案','人脈轉介','自行進線新案','未分類'];
+const CATEGORY_COLORS = {
+  '續委任':'#4caf82','舊客衍生':'#b974e0','諮詢轉案':'#4dd0c5',
+  '人脈轉介':'#e0954a','自行進線新案':'#4f8ef7','未分類':'#8899aa'
+};
+const fmtNum = n => Number(n||0).toLocaleString('zh-TW');
+const fmtMoney = n => 'NT$ ' + Number(n||0).toLocaleString('zh-TW');
+const fmtMoneyShort = n => {
+  n = Number(n||0);
+  if (n >= 100000000) return (n/100000000).toFixed(2) + '億';
+  if (n >= 10000) return (n/10000).toFixed(1) + '萬';
+  return n.toLocaleString('zh-TW');
+};
+
+let STATE = {
+  cases: [], funnel: [], visits: [], lastSync: null,
+  selectedYear: null, selectedOffice: '',
+  charts: {}
+};
+
+async function init() {
+  showSyncLoading();
+  try {
+    const [cs, fn, vs, log] = await Promise.all([
+      sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
+      sb.from('advisor_inbound_funnel').select('*').order('fiscal_year').order('month'),
+      sb.from('advisor_outbound_visits').select('*').order('visited_at', { ascending: false }),
+      sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
+    ]);
+    if (cs.error) throw cs.error;
+    STATE.cases = cs.data || [];
+    STATE.funnel = fn.data || [];
+    STATE.visits = vs.data || [];
+    STATE.lastSync = log.data?.[0] || null;
+
+    setupYearFilter();
+    setupOfficeFilter();
+    bindFilters();
+    renderAll();
+    renderSyncStatus();
+  } catch (e) {
+    showSyncError(e.message);
+  }
+}
+
+function showSyncLoading() {
+  document.getElementById('syncText').textContent = '載入中…';
+  document.getElementById('syncDot').className = 'sync-dot stale';
+}
+function showSyncError(msg) {
+  document.getElementById('syncText').textContent = '載入失敗：' + msg;
+  document.getElementById('syncDot').className = 'sync-dot error';
+}
+function renderSyncStatus() {
+  const log = STATE.lastSync;
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  const cnt = document.getElementById('syncCount');
+  if (!log) {
+    dot.className = 'sync-dot error';
+    txt.textContent = '尚無同步紀錄 — Apps Script 尚未執行過';
+  } else {
+    const ts = new Date(log.finished_at || log.started_at);
+    const ageH = (Date.now() - ts.getTime()) / 36e5;
+    dot.className = 'sync-dot' + (ageH > 36 ? ' stale' : '');
+    txt.textContent = '上次同步：' + ts.toLocaleString('zh-TW') + (log.error_message ? '（有錯誤）' : '');
+  }
+  cnt.textContent = `成案 ${STATE.cases.length} 筆 · 漏斗 ${STATE.funnel.length} 月 · 拜訪 ${STATE.visits.length} 筆`;
+}
+
+function setupYearFilter() {
+  const years = new Set();
+  STATE.cases.forEach(c => { if (c.paid_at) years.add(new Date(c.paid_at).getFullYear()); });
+  STATE.funnel.forEach(f => years.add(f.fiscal_year));
+  const ys = [...years].sort((a,b)=>b-a);
+  const cur = new Date().getFullYear();
+  STATE.selectedYear = ys.includes(cur) ? cur : (ys[0] || cur);
+  ['yearBtns','yearBtns2','yearBtns3'].forEach(id => {
+    const c = document.getElementById(id);
+    if (!c) return;
+    c.innerHTML = ys.map(y => `<button class="year-btn ${y===STATE.selectedYear?'active':''}" data-year="${y}">${y}</button>`).join('');
+    c.querySelectorAll('.year-btn').forEach(b => b.onclick = () => {
+      STATE.selectedYear = +b.dataset.year;
+      ['yearBtns','yearBtns2','yearBtns3'].forEach(jd => {
+        const cc = document.getElementById(jd);
+        if (cc) cc.querySelectorAll('.year-btn').forEach(bb => bb.classList.toggle('active', +bb.dataset.year === STATE.selectedYear));
+      });
+      renderAll();
+    });
+  });
+}
+
+function setupOfficeFilter() {
+  const offices = [...new Set(STATE.cases.map(c => c.office).filter(Boolean))].sort();
+  const sel = document.getElementById('officeFilter');
+  sel.innerHTML = '<option value="">全部</option>' + offices.map(o => `<option value="${o}">${o}</option>`).join('');
+}
+
+function bindFilters() {
+  document.getElementById('officeFilter').onchange = e => { STATE.selectedOffice = e.target.value; renderOverview(); };
+  document.getElementById('topClientLimit').onchange = renderClients;
+  document.getElementById('dueWindow').onchange = renderClients;
+  document.getElementById('visitFilter').onchange = renderOutbound;
+}
+
+function filterCases() {
+  return STATE.cases.filter(c => {
+    if (!c.paid_at) return false;
+    if (new Date(c.paid_at).getFullYear() !== STATE.selectedYear) return false;
+    if (STATE.selectedOffice && c.office !== STATE.selectedOffice) return false;
+    return true;
+  });
+}
+
+function renderAll() {
+  renderOverview();
+  renderPeople();
+  renderClients();
+  renderFunnel();
+  renderOutbound();
+}
+
+function rerenderAllCharts() { renderAll(); }
+
+// ============ TAB: 總覽 ============
+function renderOverview() {
+  const cs = filterCases();
+  const now = new Date();
+  const thisMonth = cs.filter(c => {
+    const d = new Date(c.paid_at);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+  const lastMonth = STATE.cases.filter(c => {
+    if (!c.paid_at) return false;
+    const d = new Date(c.paid_at);
+    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+  });
+
+  const monthCount = thisMonth.length;
+  const monthAmount = thisMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+  const lmCount = lastMonth.length;
+  const lmAmount = lastMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+  document.getElementById('kpiMonthCount').textContent = fmtNum(monthCount);
+  document.getElementById('kpiMonthCountSub').textContent = `上月 ${fmtNum(lmCount)}`;
+  document.getElementById('kpiMonthAmount').textContent = fmtMoneyShort(monthAmount);
+  document.getElementById('kpiMonthAmountSub').textContent = `上月 ${fmtMoneyShort(lmAmount)}`;
+
+  const byCat = {};
+  CATEGORIES.forEach(k => byCat[k] = 0);
+  cs.forEach(c => { const k = c.case_category || '未分類'; byCat[k] = (byCat[k]||0) + 1; });
+  const total = cs.length || 1;
+  document.getElementById('kpiRetention').textContent = ((byCat['續委任'] / total) * 100).toFixed(1) + '%';
+  document.getElementById('kpiSpread').textContent = ((byCat['舊客衍生'] / total) * 100).toFixed(1) + '%';
+
+  const totalAmount = cs.reduce((s,c)=>s+(+c.amount_paid||0), 0);
+  const avg = total > 0 ? totalAmount / total : 0;
+  document.getElementById('kpiAvg').textContent = fmtMoneyShort(avg);
+  document.getElementById('kpiAvgSub').textContent = `年度總 ${fmtMoneyShort(totalAmount)}`;
+
+  // 12 個月趨勢
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ y: d.getFullYear(), m: d.getMonth(), label: `${d.getFullYear()}/${d.getMonth()+1}` });
+  }
+  const trendData = months.map(mm => {
+    const o = { label: mm.label }; CATEGORIES.forEach(k => o[k] = 0);
+    STATE.cases.filter(c => {
+      if (!c.paid_at) return false;
+      const d = new Date(c.paid_at);
+      return d.getFullYear() === mm.y && d.getMonth() === mm.m;
+    }).forEach(c => { const k = c.case_category || '未分類'; o[k]++; });
+    return o;
+  });
+  drawChart('chartTrend', 'bar', {
+    labels: trendData.map(d=>d.label),
+    datasets: CATEGORIES.map(k => ({
+      label: k, data: trendData.map(d=>d[k]),
+      backgroundColor: CATEGORY_COLORS[k], stack: 's1', borderWidth: 0
+    }))
+  }, { stacked: true });
+
+  // Category pie
+  drawChart('chartCategory', 'doughnut', {
+    labels: CATEGORIES,
+    datasets: [{ data: CATEGORIES.map(k=>byCat[k]), backgroundColor: CATEGORIES.map(k=>CATEGORY_COLORS[k]), borderWidth: 0 }]
+  }, { legend: true });
+
+  // Office distribution
+  const offBy = {};
+  cs.forEach(c => { const o = c.office || '未填'; offBy[o] = (offBy[o]||0) + 1; });
+  drawChart('chartOffice', 'bar', {
+    labels: Object.keys(offBy),
+    datasets: [{ label: '成案數', data: Object.values(offBy), backgroundColor: '#c9a84c', borderWidth: 0 }]
+  });
+
+  // Monthly amount
+  const yearMonths = Array.from({length:12}, (_,i)=>i);
+  const ma = yearMonths.map(m => cs.filter(c => new Date(c.paid_at).getMonth() === m).reduce((s,c)=>s+(+c.amount_paid||0), 0));
+  drawChart('chartAmount', 'bar', {
+    labels: yearMonths.map(m=>(m+1)+'月'),
+    datasets: [{ label: '金額', data: ma, backgroundColor: '#4f8ef7', borderWidth: 0 }]
+  });
+
+  // Monthly table
+  const tbody = document.querySelector('#tableMonthly tbody');
+  tbody.innerHTML = yearMonths.map(m => {
+    const ms = cs.filter(c => new Date(c.paid_at).getMonth() === m);
+    const counts = {}; CATEGORIES.forEach(k=>counts[k]=0);
+    ms.forEach(c => { counts[c.case_category||'未分類']++; });
+    const sum = ms.reduce((s,c)=>s+(+c.amount_paid||0), 0);
+    return `<tr>
+      <td>${m+1} 月</td>
+      <td class="text-right text-gold">${fmtNum(ms.length)}</td>
+      <td class="text-right">${fmtMoneyShort(sum)}</td>
+      <td class="text-right">${fmtNum(counts['續委任'])}</td>
+      <td class="text-right">${fmtNum(counts['舊客衍生'])}</td>
+      <td class="text-right">${fmtNum(counts['諮詢轉案'])}</td>
+      <td class="text-right">${fmtNum(counts['人脈轉介'])}</td>
+      <td class="text-right">${fmtNum(counts['自行進線新案'])}</td>
+      <td class="text-right text-muted">${fmtNum(counts['未分類'])}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============ TAB: 業務 / 律師 ============
+function renderPeople() {
+  const cs = filterCases();
+  // 業務
+  const sales = {};
+  cs.forEach(c => {
+    const s = c.salesperson || '未填';
+    if (!sales[s]) sales[s] = { count: 0, amount: 0, retention: 0 };
+    sales[s].count++; sales[s].amount += (+c.amount_paid||0);
+    if (c.case_category === '續委任') sales[s].retention++;
+  });
+  const salesArr = Object.entries(sales).map(([k,v]) => ({ name:k, ...v })).sort((a,b)=>b.amount-a.amount);
+  drawChart('chartSalesRank', 'bar', {
+    labels: salesArr.slice(0,10).map(s=>s.name),
+    datasets: [{ label: '金額', data: salesArr.slice(0,10).map(s=>s.amount), backgroundColor: '#c9a84c', borderWidth: 0 }]
+  }, { horizontal: true });
+  document.querySelector('#tableSales tbody').innerHTML = salesArr.map(s => `
+    <tr><td>${s.name}</td>
+      <td class="text-right">${fmtNum(s.count)}</td>
+      <td class="text-right text-gold">${fmtMoneyShort(s.amount)}</td>
+      <td class="text-right">${fmtMoneyShort(s.amount/(s.count||1))}</td>
+      <td class="text-right">${fmtNum(s.retention)}</td>
+      <td class="text-right">${((s.retention/(s.count||1))*100).toFixed(1)}%</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">無資料</td></tr>';
+
+  // 律師（拆分多人）
+  const lawyers = {};
+  cs.forEach(c => {
+    const list = (c.handling_lawyers && c.handling_lawyers.length) ? c.handling_lawyers : ['未填'];
+    list.forEach(l => {
+      if (!lawyers[l]) lawyers[l] = { count: 0, amount: 0, offices: {} };
+      lawyers[l].count++; lawyers[l].amount += (+c.amount_paid||0)/list.length;
+      if (c.office) lawyers[l].offices[c.office] = (lawyers[l].offices[c.office]||0)+1;
+    });
+  });
+  const lawArr = Object.entries(lawyers).map(([k,v]) => {
+    const mainOffice = Object.entries(v.offices).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+    return { name:k, count:v.count, amount:v.amount, mainOffice };
+  }).sort((a,b)=>b.amount-a.amount);
+  drawChart('chartLawyerRank', 'bar', {
+    labels: lawArr.slice(0,10).map(s=>s.name),
+    datasets: [{ label: '金額（依拆分）', data: lawArr.slice(0,10).map(s=>s.amount), backgroundColor: '#4f8ef7', borderWidth: 0 }]
+  }, { horizontal: true });
+  document.querySelector('#tableLawyers tbody').innerHTML = lawArr.map(s => `
+    <tr><td>${s.name}</td>
+      <td class="text-right">${fmtNum(s.count)}</td>
+      <td class="text-right text-blue">${fmtMoneyShort(s.amount)}</td>
+      <td class="text-right">${fmtMoneyShort(s.amount/(s.count||1))}</td>
+      <td>${s.mainOffice}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">無資料</td></tr>';
+}
+
+// ============ TAB: 客戶 360 ============
+function renderClients() {
+  const all = STATE.cases.filter(c => c.client_name && c.paid_at);
+  const byClient = {};
+  all.forEach(c => {
+    if (!byClient[c.client_name]) byClient[c.client_name] = { count:0, amount:0, dates:[], offices:{} };
+    const b = byClient[c.client_name];
+    b.count++; b.amount += (+c.amount_paid||0);
+    b.dates.push(new Date(c.paid_at));
+    if (c.office) b.offices[c.office] = (b.offices[c.office]||0)+1;
+  });
+  const arr = Object.entries(byClient).map(([n,v]) => {
+    const sorted = v.dates.sort((a,b)=>a-b);
+    const mainOffice = Object.entries(v.offices).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+    return { name:n, count:v.count, amount:v.amount, first:sorted[0], last:sorted[sorted.length-1], mainOffice };
+  });
+
+  document.getElementById('kpiClientCount').textContent = fmtNum(arr.length);
+  const repeat = arr.filter(x=>x.count>=2);
+  document.getElementById('kpiRepeatClient').textContent = fmtNum(repeat.length);
+  const ltv = arr.length ? arr.reduce((s,x)=>s+x.amount, 0)/arr.length : 0;
+  document.getElementById('kpiLtv').textContent = fmtMoneyShort(ltv);
+
+  const due = +document.getElementById('dueWindow').value || 6;
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-due);
+  const dueClients = arr.filter(x => x.last < cutoff).sort((a,b)=>b.amount-a.amount);
+  document.getElementById('kpiDueClients').textContent = fmtNum(dueClients.length);
+
+  // Top clients
+  const limit = +document.getElementById('topClientLimit').value || 20;
+  const top = arr.sort((a,b)=>b.amount-a.amount).slice(0, limit);
+  document.querySelector('#tableTopClients tbody').innerHTML = top.map(c => `
+    <tr><td>${c.name}</td>
+      <td class="text-right">${fmtNum(c.count)}${c.count>=2?' <span class="badge b2">回流</span>':''}</td>
+      <td class="text-right text-gold">${fmtMoneyShort(c.amount)}</td>
+      <td>${c.first.toISOString().slice(0,10)}</td>
+      <td>${c.last.toISOString().slice(0,10)}</td>
+      <td>${c.mainOffice}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">無資料</td></tr>';
+
+  document.querySelector('#tableDueClients tbody').innerHTML = dueClients.slice(0,100).map(c => {
+    const days = Math.floor((Date.now()-c.last.getTime())/86400000);
+    return `<tr><td>${c.name}</td>
+      <td class="text-right">${fmtNum(c.count)}</td>
+      <td class="text-right">${fmtMoneyShort(c.amount)}</td>
+      <td>${c.last.toISOString().slice(0,10)}</td>
+      <td class="text-right text-orange">${fmtNum(days)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty">無</td></tr>';
+}
+
+// ============ TAB: Inbound 漏斗 ============
+function renderFunnel() {
+  const fy = STATE.selectedYear;
+  const yearData = STATE.funnel.filter(f => f.fiscal_year === fy).sort((a,b)=>a.month-b.month);
+  const sum = (k) => yearData.reduce((s,f)=>s+(+f[k]||0), 0);
+  document.getElementById('kpiFalingY').textContent    = fmtNum(sum('referral_faling'));
+  document.getElementById('kpiPreRetainY').textContent = fmtNum(sum('referral_pre_retain'));
+  document.getElementById('kpiMeetingY').textContent   = fmtNum(sum('meeting_phone')+sum('meeting_video')+sum('meeting_onsite'));
+  document.getElementById('kpiSignedY').textContent    = fmtNum(sum('signed'));
+
+  drawChart('chartFunnelMonthly', 'line', {
+    labels: yearData.map(f=>f.month+'月'),
+    datasets: [
+      { label:'轉介(法零+委前)', data: yearData.map(f=>(+f.referral_faling||0)+(+f.referral_pre_retain||0)), borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', tension:0.3 },
+      { label:'會議', data: yearData.map(f=>(+f.meeting_phone||0)+(+f.meeting_video||0)+(+f.meeting_onsite||0)), borderColor:'#e0954a', backgroundColor:'rgba(224,149,74,0.1)', tension:0.3 },
+      { label:'簽約', data: yearData.map(f=>+f.signed||0), borderColor:'#4caf82', backgroundColor:'rgba(76,175,130,0.1)', tension:0.3 },
+      { label:'付款', data: yearData.map(f=>+f.paid||0), borderColor:'#c9a84c', backgroundColor:'rgba(201,168,76,0.1)', tension:0.3 }
+    ]
+  });
+
+  drawChart('chartMeetingType', 'doughnut', {
+    labels: ['電話','視訊','現場'],
+    datasets: [{ data:[sum('meeting_phone'),sum('meeting_video'),sum('meeting_onsite')], backgroundColor:['#4f8ef7','#b974e0','#4dd0c5'], borderWidth: 0 }]
+  }, { legend: true });
+
+  document.querySelector('#tableFunnel tbody').innerHTML = yearData.map(f => {
+    const refer = (+f.referral_faling||0)+(+f.referral_pre_retain||0);
+    const conv = refer > 0 ? ((+f.signed||0)/refer*100).toFixed(1)+'%' : '—';
+    return `<tr>
+      <td>${f.month} 月</td>
+      <td class="text-right">${fmtNum(f.referral_faling)}</td>
+      <td class="text-right">${fmtNum(f.referral_pre_retain)}</td>
+      <td class="text-right">${fmtNum(f.meeting_phone)}</td>
+      <td class="text-right">${fmtNum(f.meeting_video)}</td>
+      <td class="text-right">${fmtNum(f.meeting_onsite)}</td>
+      <td class="text-right text-green">${fmtNum(f.signed)}</td>
+      <td class="text-right text-gold">${fmtNum(f.paid)}</td>
+      <td class="text-right">${conv}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
+}
+
+// ============ TAB: 陌開拜訪 ============
+function renderOutbound() {
+  const vs = STATE.visits;
+  const total = vs.length;
+  const retained = vs.filter(v=>v.is_retained).length;
+  const rate = total ? (retained/total*100).toFixed(1)+'%' : '—';
+  document.getElementById('kpiVisitTotal').textContent = fmtNum(total);
+  document.getElementById('kpiVisitRetained').textContent = fmtNum(retained);
+  document.getElementById('kpiVisitRate').textContent = rate;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+  const recent = vs.filter(v => v.visited_at && new Date(v.visited_at) >= cutoff).length;
+  document.getElementById('kpiVisit30').textContent = fmtNum(recent);
+
+  // Monthly chart (last 12 months)
+  const now = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({ y:d.getFullYear(), m:d.getMonth(), label:`${d.getFullYear()}/${d.getMonth()+1}` });
+  }
+  const visitData = months.map(mm => {
+    const ms = vs.filter(v => v.visited_at && new Date(v.visited_at).getFullYear()===mm.y && new Date(v.visited_at).getMonth()===mm.m);
+    return { v:ms.length, r:ms.filter(x=>x.is_retained).length };
+  });
+  drawChart('chartVisitMonthly', 'bar', {
+    labels: months.map(m=>m.label),
+    datasets: [
+      { label:'拜訪', data: visitData.map(d=>d.v), backgroundColor:'#4f8ef7', borderWidth: 0 },
+      { label:'委任', data: visitData.map(d=>d.r), backgroundColor:'#4caf82', borderWidth: 0 }
+    ]
+  });
+
+  // Table
+  const filter = document.getElementById('visitFilter').value;
+  let list = vs;
+  if (filter === 'retained') list = vs.filter(v=>v.is_retained);
+  if (filter === 'pending') list = vs.filter(v=>!v.is_retained);
+  document.querySelector('#tableVisits tbody').innerHTML = list.slice(0,300).map(v => `
+    <tr>
+      <td>${v.seq||''}</td>
+      <td>${v.brand||''}</td>
+      <td>${v.company_name||''}</td>
+      <td>${v.region||''}</td>
+      <td>${v.visited_at||''}</td>
+      <td>${v.is_retained?'<span class="badge b2">已委任</span>':'<span class="badge b6">未委任</span>'}</td>
+      <td>${v.advisor_window||''}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">無資料</td></tr>';
+}
+
+// ============ Chart helper ============
+function drawChart(canvasId, type, data, opts) {
+  opts = opts || {};
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  if (STATE.charts[canvasId]) STATE.charts[canvasId].destroy();
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
+  const tickColor = isLight ? '#6b7280' : '#8899aa';
+  const config = {
+    type, data,
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: opts.horizontal ? 'y' : 'x',
+      plugins: {
+        legend: {
+          display: opts.legend !== false && (type === 'doughnut' || (data.datasets && data.datasets.length > 1)),
+          position: type === 'doughnut' ? 'right' : 'top',
+          labels: { color: tickColor, font: { size: 11 } }
+        },
+        tooltip: { backgroundColor: 'rgba(0,0,0,0.85)', titleColor:'#fff', bodyColor:'#fff' }
+      },
+      scales: type === 'doughnut' ? {} : {
+        x: { stacked: !!opts.stacked, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } } },
+        y: { stacked: !!opts.stacked, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } }, beginAtZero: true }
+      }
+    }
+  };
+  STATE.charts[canvasId] = new Chart(el, config);
+}
+
+// ============ START ============
+checkAuth();
+</script>
+</body>
+</html>

@@ -2,10 +2,12 @@
 
 ## 專案概覽
 
-喆律法律事務所內部 Web App，含三個獨立儀表板：
+喆律法律事務所內部 Web App，含多個獨立儀表板：
 - **諮詢分析** (`public/index.html`) — 律師諮詢案件分析、簽約率、年度追蹤、未成案追蹤
 - **營運** (`public/revenue/index.html`) — 營收、部門分析、來源分析、合署律師統計
 - **財務規劃** (`public/finance/index.html`) — 損益表、預算編列、實際 vs 預算、人事異動成本分析
+- **法律顧問** (`public/advisor/index.html`) — 法顧成案清單、進案/續委任分析、客戶 360、inbound 漏斗、陌開拜訪
+- **合署律師** (`public/partners/index.html`) — 合署律師案件 / 財務
 
 ## 架構
 

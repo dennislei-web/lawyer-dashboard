@@ -229,6 +229,7 @@
         <a class="nav-link active" data-route="consultation" href="#/consultation" onclick="switchRoute('consultation');return false;">諮詢分析</a>
         <a class="nav-link" data-route="revenue" data-restricted="1" href="#/revenue" onclick="switchRoute('revenue');return false;">營運</a>
         <a class="nav-link" data-route="finance" data-restricted="1" href="#/finance" onclick="switchRoute('finance');return false;">財務規劃</a>
+        <a class="nav-link" data-route="advisor" data-restricted="1" href="#/advisor" onclick="switchRoute('advisor');return false;">法律顧問</a>
         <a class="nav-link" data-route="partners" data-restricted="1" href="#/partners" onclick="switchRoute('partners');return false;">合署律師</a>
         <a id="navAdmin" class="nav-link" data-route="admin" data-admin-only="1" href="#/admin" onclick="switchRoute('admin');return false;" style="display:none">🔑 帳號管理</a>
       </div>
@@ -244,6 +245,7 @@
     <iframe class="route-frame" data-route="consultation" src="" title="consultation"></iframe>
     <iframe class="route-frame" data-route="revenue"      src="" title="revenue"></iframe>
     <iframe class="route-frame" data-route="finance"      src="" title="finance"></iframe>
+    <iframe class="route-frame" data-route="advisor"      src="" title="advisor"></iframe>
     <iframe class="route-frame" data-route="partners"     src="" title="partners"></iframe>
     <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
   </div>
@@ -286,6 +288,7 @@ var ROUTES = {
   consultation: BASE + '/consultation/?embed=1',
   revenue:      BASE + '/revenue/?embed=1',
   finance:      BASE + '/finance/?embed=1',
+  advisor:      BASE + '/advisor/?embed=1',
   partners:     BASE + '/partners/?embed=1',
   admin:        BASE + '/admin/?embed=1',
 };
