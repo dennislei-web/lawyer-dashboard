@@ -739,19 +739,23 @@ function setupYearFilter() {
   const ys = [...years].sort((a,b)=>b-a);
   const cur = new Date().getFullYear();
   STATE.selectedYear = ys.includes(cur) ? cur : (ys[0] || cur);
-  ['yearBtns','yearBtns2','yearBtns3'].forEach(id => {
-    const c = document.getElementById(id);
-    if (!c) return;
-    c.innerHTML = ys.map(y => `<button class="year-btn ${y===STATE.selectedYear?'active':''}" data-year="${y}">${y}</button>`).join('');
-    c.querySelectorAll('.year-btn').forEach(b => b.onclick = () => {
-      STATE.selectedYear = +b.dataset.year;
-      ['yearBtns','yearBtns2','yearBtns3'].forEach(jd => {
-        const cc = document.getElementById(jd);
-        if (cc) cc.querySelectorAll('.year-btn').forEach(bb => bb.classList.toggle('active', +bb.dataset.year === STATE.selectedYear));
+  // 'all' 代表全部年度
+  const renderBtns = (selected) => {
+    ['yearBtns','yearBtns2','yearBtns3'].forEach(id => {
+      const c = document.getElementById(id);
+      if (!c) return;
+      const allBtn = `<button class="year-btn ${selected==='all'?'active':''}" data-year="all">全部</button>`;
+      const yBtns = ys.map(y => `<button class="year-btn ${y===selected?'active':''}" data-year="${y}">${y}</button>`).join('');
+      c.innerHTML = allBtn + yBtns;
+      c.querySelectorAll('.year-btn').forEach(b => b.onclick = () => {
+        const v = b.dataset.year;
+        STATE.selectedYear = v === 'all' ? 'all' : +v;
+        renderBtns(STATE.selectedYear);
+        renderAll();
       });
-      renderAll();
     });
-  });
+  };
+  renderBtns(STATE.selectedYear);
 }
 
 function setupOfficeFilter() {
@@ -770,7 +774,7 @@ function bindFilters() {
 function filterCases() {
   return STATE.cases.filter(c => {
     if (!c.paid_at) return false;
-    if (new Date(c.paid_at).getFullYear() !== STATE.selectedYear) return false;
+    if (STATE.selectedYear !== 'all' && new Date(c.paid_at).getFullYear() !== STATE.selectedYear) return false;
     if (STATE.selectedOffice && c.office !== STATE.selectedOffice) return false;
     return true;
   });
@@ -994,7 +998,10 @@ function renderClients() {
 // ============ TAB: Inbound 漏斗 ============
 function renderFunnel() {
   const fy = STATE.selectedYear;
-  const yearData = STATE.funnel.filter(f => f.fiscal_year === fy).sort((a,b)=>a.month-b.month);
+  const yearData = fy === 'all'
+    ? STATE.funnel.slice().sort((a,b) => a.fiscal_year - b.fiscal_year || a.month - b.month)
+    : STATE.funnel.filter(f => f.fiscal_year === fy).sort((a,b) => a.month - b.month);
+  const labelOf = f => fy === 'all' ? `${f.fiscal_year}/${f.month}` : f.month + '月';
   const sum = (k) => yearData.reduce((s,f)=>s+(+f[k]||0), 0);
   document.getElementById('kpiFalingY').textContent    = fmtNum(sum('referral_faling'));
   document.getElementById('kpiPreRetainY').textContent = fmtNum(sum('referral_pre_retain'));
@@ -1002,7 +1009,7 @@ function renderFunnel() {
   document.getElementById('kpiSignedY').textContent    = fmtNum(sum('signed'));
 
   drawChart('chartFunnelMonthly', 'line', {
-    labels: yearData.map(f=>f.month+'月'),
+    labels: yearData.map(labelOf),
     datasets: [
       { label:'轉介(法零+委前)', data: yearData.map(f=>(+f.referral_faling||0)+(+f.referral_pre_retain||0)), borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', tension:0.3 },
       { label:'會議', data: yearData.map(f=>(+f.meeting_phone||0)+(+f.meeting_video||0)+(+f.meeting_onsite||0)), borderColor:'#e0954a', backgroundColor:'rgba(224,149,74,0.1)', tension:0.3 },
@@ -1020,7 +1027,7 @@ function renderFunnel() {
     const refer = (+f.referral_faling||0)+(+f.referral_pre_retain||0);
     const conv = refer > 0 ? ((+f.signed||0)/refer*100).toFixed(1)+'%' : '—';
     return `<tr>
-      <td>${f.month} 月</td>
+      <td>${labelOf(f)}</td>
       <td class="text-right">${fmtNum(f.referral_faling)}</td>
       <td class="text-right">${fmtNum(f.referral_pre_retain)}</td>
       <td class="text-right">${fmtNum(f.meeting_phone)}</td>
