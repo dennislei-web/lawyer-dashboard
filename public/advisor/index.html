@@ -863,8 +863,11 @@ function renderOverview() {
       .reduce((s,c)=>s + (+c.amount_paid||0), 0);
     avgSub = `${sy} 年度累計 ${fmtMoneyShort(yearTotal)}`;
   } else {
-    label1 = `${sy} 年成案數`;   val1 = fmtNum(totalCount);          sub1 = `月均 ${(totalCount/12).toFixed(1)} 件`;
-    label2 = `${sy} 年成案金額`; val2 = fmtMoneyShort(totalAmount);  sub2 = `月均 ${fmtMoneyShort(totalAmount/12)}`;
+    // 月均除數：當年用「已過月份」，過去年度用 12
+    const monthsElapsed = sy === now.getFullYear() ? (now.getMonth() + 1) : 12;
+    const avgLabel = sy === now.getFullYear() ? `月均（至 ${monthsElapsed} 月）` : '月均';
+    label1 = `${sy} 年成案數`;   val1 = fmtNum(totalCount);          sub1 = `${avgLabel} ${(totalCount/monthsElapsed).toFixed(1)} 件`;
+    label2 = `${sy} 年成案金額`; val2 = fmtMoneyShort(totalAmount);  sub2 = `${avgLabel} ${fmtMoneyShort(totalAmount/monthsElapsed)}`;
     avgSub = `${sy} 年度總 ${fmtMoneyShort(totalAmount)}`;
   }
   document.getElementById('kpiMonthCountLabel').textContent  = label1;
