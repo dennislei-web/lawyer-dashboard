@@ -1807,19 +1807,26 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
   window._compareBudgetMap = budgetMap;
   window._compareActualMap = actualMap;
 
+  // Pre-compute which months have any actual data so 累計預/累計差 only sum comparable months
+  var monthHasActual = {};
+  for (var mm = 1; mm <= 12; mm++) {
+    monthHasActual[mm] = categories.some(function(c) { return c.section === 'operating_expense' && !c.is_subtotal && (actualMap[c.id]||{})[mm]; });
+  }
+  var activeMonthCount = 0;
+  for (var mm = 1; mm <= 12; mm++) if (monthHasActual[mm]) activeMonthCount++;
+  var cumLabelSuffix = activeMonthCount > 0 ? '(' + activeMonthCount + '個月)' : '';
+
   var html = '<table><thead><tr><th>科目</th>';
   if (isYTD) {
     for (var m = 1; m <= 12; m++) {
-      // Check if this month has actual data
-      var hasData = categories.some(function(c) { return c.section === 'operating_expense' && !c.is_subtotal && (actualMap[c.id]||{})[m]; });
-      if (hasData) {
+      if (monthHasActual[m]) {
         html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th>';
         html += '<th class="text-right" style="cursor:pointer;color:var(--blue)" onclick="showMonthAnalysis(' + m + ')" title="點擊查看分析"><u>差</u> 📊</th>';
       } else {
         html += '<th class="text-right">' + m + '月預</th><th class="text-right">' + m + '月實</th><th class="text-right">差</th>';
       }
     }
-    html += '<th class="text-right" style="color:var(--gold-light)">累計預</th><th class="text-right" style="color:var(--blue)">累計實</th><th class="text-right">累計差</th>';
+    html += '<th class="text-right" style="color:var(--gold-light)" title="僅累計有實際資料月份">累計預' + cumLabelSuffix + '</th><th class="text-right" style="color:var(--blue)">累計實</th><th class="text-right" title="累計預 − 累計實，同月份比較">累計差</th>';
   } else {
     html += '<th class="text-right">預算</th><th class="text-right">實際</th><th class="text-right">差異</th><th class="text-right">執行率</th>';
   }
@@ -1845,7 +1852,7 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
         var cumB = 0, cumA = 0;
         for (var mo = 1; mo <= 12; mo++) {
           var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
-          cumB += b; cumA += a;
+          if (monthHasActual[mo]) { cumB += b; cumA += a; }
           totalB[mo-1] += b; totalA[mo-1] += a;
           var hasActual = a !== 0 || (actualMap[cat.id] && actualMap[cat.id][mo] !== undefined);
           html += '<td class="text-right text-muted">' + fmt(b) + '</td>';
@@ -1876,7 +1883,7 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
     var grandB = 0, grandA = 0;
     for (var mo = 0; mo < 12; mo++) {
       var d = totalB[mo] - totalA[mo];
-      grandB += totalB[mo]; grandA += totalA[mo];
+      if (monthHasActual[mo + 1]) { grandB += totalB[mo]; grandA += totalA[mo]; }
       html += '<td class="text-right text-gold" style="font-weight:600">' + fmt(totalB[mo]) + '</td>';
       html += '<td class="text-right text-blue" style="font-weight:600">' + fmt(totalA[mo]) + '</td>';
       html += '<td class="text-right ' + (d >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700">' + (d !== 0 ? (d > 0 ? '+' : '') + fmt(d) : '-') + '</td>';
