@@ -625,15 +625,37 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const isEmbed = new URLSearchParams(location.search).get('embed') === '1';
 if (isEmbed) document.body.classList.add('embed-mode');
 
-// Theme
-const savedTheme = localStorage.getItem('dashboardTheme');
-if (savedTheme === 'light') document.documentElement.setAttribute('data-theme','light');
-document.getElementById('themeToggle').onclick = () => {
+// ═══ Theme（對齊主 shell 跟 finance 的 'theme' key + postMessage） ═══
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.innerHTML = saved === 'light' ? '&#9728;' : '&#x1f313;';
+})();
+function _applyTheme(v) {
+  if (v === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.innerHTML = v === 'light' ? '&#9728;' : '&#x1f313;';
+  if (typeof rerenderAllCharts === 'function') rerenderAllCharts();
+}
+document.getElementById('themeToggle').addEventListener('click', () => {
   const cur = document.documentElement.getAttribute('data-theme');
-  if (cur === 'light') { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('dashboardTheme','dark'); }
-  else { document.documentElement.setAttribute('data-theme','light'); localStorage.setItem('dashboardTheme','light'); }
-  rerenderAllCharts();
-};
+  const next = cur === 'light' ? 'dark' : 'light';
+  localStorage.setItem('theme', next);
+  _applyTheme(next);
+});
+// 主 shell 切 theme 時透過 postMessage 通知 iframe
+window.addEventListener('message', (e) => {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    localStorage.setItem('theme', e.data.value);
+    _applyTheme(e.data.value);
+  }
+});
+// 跨分頁同步
+window.addEventListener('storage', (e) => {
+  if (e.key === 'theme' && e.newValue) _applyTheme(e.newValue);
+});
 
 // ============ AUTH ============
 const loginPage    = document.getElementById('loginPage');
