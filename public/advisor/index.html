@@ -335,8 +335,8 @@
         </div>
 
         <div class="kpi-row k5">
-          <div class="kpi-card gold"><div class="kpi-label">本月成案數</div><div class="kpi-value gold" id="kpiMonthCount">—</div><div class="kpi-sub" id="kpiMonthCountSub"></div></div>
-          <div class="kpi-card blue"><div class="kpi-label">本月成案金額</div><div class="kpi-value blue" id="kpiMonthAmount">—</div><div class="kpi-sub" id="kpiMonthAmountSub"></div></div>
+          <div class="kpi-card gold"><div class="kpi-label" id="kpiMonthCountLabel">本月成案數</div><div class="kpi-value gold" id="kpiMonthCount">—</div><div class="kpi-sub" id="kpiMonthCountSub"></div></div>
+          <div class="kpi-card blue"><div class="kpi-label" id="kpiMonthAmountLabel">本月成案金額</div><div class="kpi-value blue" id="kpiMonthAmount">—</div><div class="kpi-sub" id="kpiMonthAmountSub"></div></div>
           <div class="kpi-card green"><div class="kpi-label">續委任率</div><div class="kpi-value green" id="kpiRetention">—</div><div class="kpi-sub">續委任 / 全部成案</div></div>
           <div class="kpi-card purple"><div class="kpi-label">舊客衍生比</div><div class="kpi-value purple" id="kpiSpread">—</div><div class="kpi-sub">舊客帶進新案</div></div>
           <div class="kpi-card orange"><div class="kpi-label">平均單筆金額</div><div class="kpi-value orange" id="kpiAvg">—</div><div class="kpi-sub" id="kpiAvgSub"></div></div>
@@ -793,26 +793,48 @@ function rerenderAllCharts() { renderAll(); }
 // ============ TAB: 總覽 ============
 function renderOverview() {
   const cs = filterCases();
+  const sy = STATE.selectedYear;
   const now = new Date();
-  const thisMonth = cs.filter(c => {
-    const d = new Date(c.paid_at);
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  });
-  const lastMonth = STATE.cases.filter(c => {
-    if (!c.paid_at) return false;
-    const d = new Date(c.paid_at);
-    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
-    return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
-  });
+  const isCurrent = sy === now.getFullYear();
+  const isAll = sy === 'all';
 
-  const monthCount = thisMonth.length;
-  const monthAmount = thisMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
-  const lmCount = lastMonth.length;
-  const lmAmount = lastMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
-  document.getElementById('kpiMonthCount').textContent = fmtNum(monthCount);
-  document.getElementById('kpiMonthCountSub').textContent = `上月 ${fmtNum(lmCount)}`;
-  document.getElementById('kpiMonthAmount').textContent = fmtMoneyShort(monthAmount);
-  document.getElementById('kpiMonthAmountSub').textContent = `上月 ${fmtMoneyShort(lmAmount)}`;
+  const totalCount = cs.length;
+  const totalAmount = cs.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+
+  // KPI 1+2 動態：本年→本月 vs 上月；過去年度→年度合計 vs 月均；全部→累計
+  let label1, val1, sub1, label2, val2, sub2, avgSub;
+  if (isCurrent) {
+    const thisMonth = cs.filter(c => {
+      const d = new Date(c.paid_at);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+    const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const officeOk = c => !STATE.selectedOffice || c.office === STATE.selectedOffice;
+    const lastMonth = STATE.cases.filter(c => {
+      if (!c.paid_at || !officeOk(c)) return false;
+      const d = new Date(c.paid_at);
+      return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+    });
+    const lmAmount = lastMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+    const tmAmount = thisMonth.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+    label1 = '本月成案數';   val1 = fmtNum(thisMonth.length);     sub1 = `上月 ${fmtNum(lastMonth.length)}`;
+    label2 = '本月成案金額'; val2 = fmtMoneyShort(tmAmount);      sub2 = `上月 ${fmtMoneyShort(lmAmount)}`;
+    avgSub = `年度總 ${fmtMoneyShort(totalAmount)}`;
+  } else if (isAll) {
+    label1 = '累計成案數';   val1 = fmtNum(totalCount);                sub1 = '全部年度';
+    label2 = '累計成案金額'; val2 = fmtMoneyShort(totalAmount);        sub2 = '全部年度';
+    avgSub = `累計總 ${fmtMoneyShort(totalAmount)}`;
+  } else {
+    label1 = `${sy} 年成案數`;   val1 = fmtNum(totalCount);              sub1 = `月均 ${(totalCount/12).toFixed(1)} 件`;
+    label2 = `${sy} 年成案金額`; val2 = fmtMoneyShort(totalAmount);      sub2 = `月均 ${fmtMoneyShort(totalAmount/12)}`;
+    avgSub = `${sy} 年度總 ${fmtMoneyShort(totalAmount)}`;
+  }
+  document.getElementById('kpiMonthCountLabel').textContent  = label1;
+  document.getElementById('kpiMonthCount').textContent       = val1;
+  document.getElementById('kpiMonthCountSub').textContent    = sub1;
+  document.getElementById('kpiMonthAmountLabel').textContent = label2;
+  document.getElementById('kpiMonthAmount').textContent      = val2;
+  document.getElementById('kpiMonthAmountSub').textContent   = sub2;
 
   const byCat = {};
   CATEGORIES.forEach(k => byCat[k] = 0);
@@ -821,10 +843,9 @@ function renderOverview() {
   document.getElementById('kpiRetention').textContent = ((byCat['續委任'] / total) * 100).toFixed(1) + '%';
   document.getElementById('kpiSpread').textContent = ((byCat['舊客衍生'] / total) * 100).toFixed(1) + '%';
 
-  const totalAmount = cs.reduce((s,c)=>s+(+c.amount_paid||0), 0);
-  const avg = total > 0 ? totalAmount / total : 0;
+  const avg = totalCount > 0 ? totalAmount / totalCount : 0;
   document.getElementById('kpiAvg').textContent = fmtMoneyShort(avg);
-  document.getElementById('kpiAvgSub').textContent = `年度總 ${fmtMoneyShort(totalAmount)}`;
+  document.getElementById('kpiAvgSub').textContent = avgSub;
 
   // 12 個月趨勢
   const months = [];
