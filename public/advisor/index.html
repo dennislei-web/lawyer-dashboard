@@ -6,6 +6,7 @@
   <title>喆律法律事務所 - 法律顧問</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
       --bg-main:    #020b18;
@@ -438,7 +439,14 @@
 
         <div class="chart-row eq">
           <div class="chart-card">
-            <div class="chart-title">管道來源分布</div>
+            <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+              <span>管道來源分布</span>
+              <span style="display:flex;gap:6px;">
+                <button class="btn-sm" onclick="exportChannels()">📥 匯出</button>
+                <input type="file" id="channelMapInput" accept=".xlsx,.xls" style="display:none" onchange="importChannelMapping(event)">
+                <button class="btn-sm" onclick="document.getElementById('channelMapInput').click()">📤 匯入分類</button>
+              </span>
+            </div>
             <div class="chart-container"><canvas id="chartPendingChannel"></canvas></div>
           </div>
           <div class="chart-card">
@@ -725,12 +733,25 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], visits: [], pending: [], pendingState: {}, lastSync: null,
+  cases: [], visits: [], pending: [], pendingState: {}, channelMapping: {}, lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingSort: { field: 'assigned_at', dir: 'desc' },
   charts: {}
 };
+
+// 管道分類映射：raw → canonical
+//   未填  → '未填'
+//   有映射且 canonical 非空 → canonical
+//   有映射但 canonical 空    → '其他'
+//   無映射                    → 沿用 raw（待使用者匯出 Excel 分類）
+function mapChannel(raw) {
+  if (!raw) return '未填';
+  if (raw in STATE.channelMapping) {
+    return STATE.channelMapping[raw] || '其他';
+  }
+  return raw;
+}
 
 // 拆分多人業務（"克威 柏凱" → ["克威","柏凱"]）
 function parseSalespeople(s) {
@@ -741,11 +762,12 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, vs, pn, ps, log] = await Promise.all([
+    const [cs, vs, pn, ps, cm, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
+      sb.from('advisor_channel_mapping').select('*'),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
@@ -754,6 +776,8 @@ async function init() {
     STATE.pending = pn.data || [];
     STATE.pendingState = {};
     (ps.data || []).forEach(s => { STATE.pendingState[s.client_name] = s; });
+    STATE.channelMapping = {};
+    (cm.data || []).forEach(m => { STATE.channelMapping[m.raw_channel] = m.canonical; });
     STATE.lastSync = log.data?.[0] || null;
 
     setupYearFilter();
@@ -1096,6 +1120,71 @@ function sortPending(arr) {
   });
 }
 
+// ============ 管道分類 Excel 匯出 / 匯入 ============
+function exportChannels() {
+  // 取所有跟進中（不含已成案）案件的 raw channel + 計數
+  const counts = {};
+  STATE.pending.forEach(p => {
+    if (p.is_signed || p.current_stage === '已成案') return;
+    const raw = p.channel;
+    if (!raw) return;
+    counts[raw] = (counts[raw] || 0) + 1;
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length) { alert('目前沒有可分類的管道資料'); return; }
+
+  const rows = [
+    ['原始來源', '案件數', '分類（編輯此欄。留空 = 歸為「其他」）']
+  ];
+  sorted.forEach(([raw, count]) => {
+    const canonical = STATE.channelMapping[raw] || '';
+    rows.push([raw, count, canonical]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 36 }, { wch: 8 }, { wch: 24 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '管道來源分類');
+  const today = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `管道來源分類_${today}.xlsx`);
+}
+
+async function importChannelMapping(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const upserts = [];
+    for (let i = 1; i < rows.length; i++) {  // 跳過標題列
+      const r = rows[i];
+      if (!r) continue;
+      const raw = r[0];
+      const category = r[2];
+      if (raw == null || String(raw).trim() === '') continue;
+      const canonical = (category == null ? '' : String(category)).trim() || null;
+      upserts.push({
+        raw_channel: String(raw).trim(),
+        canonical: canonical,
+        updated_at: new Date().toISOString()
+      });
+    }
+    if (!upserts.length) { alert('Excel 沒有可匯入的資料列'); event.target.value = ''; return; }
+
+    const { error } = await sb.from('advisor_channel_mapping').upsert(upserts, { onConflict: 'raw_channel' });
+    if (error) { alert('匯入失敗：' + error.message); event.target.value = ''; return; }
+
+    upserts.forEach(u => { STATE.channelMapping[u.raw_channel] = u.canonical; });
+    alert(`匯入成功 ${upserts.length} 筆分類映射`);
+    renderPending();
+  } catch (e) {
+    alert('解析 Excel 失敗：' + e.message);
+  } finally {
+    event.target.value = '';
+  }
+}
+
 async function onFollowupChange(clientName, status, sel) {
   const payload = { client_name: clientName, followup_status: status, updated_at: new Date().toISOString() };
   const { error } = await sb.from('advisor_pending_state').upsert(payload, { onConflict: 'client_name' });
@@ -1164,10 +1253,10 @@ function renderPending() {
     datasets: [{ data: Object.values(salesCounts), backgroundColor: ['#c9a84c','#4f8ef7','#4caf82','#e0954a','#b974e0','#4dd0c5','#8899aa'], borderWidth: 0 }]
   }, { legend: true });
 
-  // 管道來源分布
+  // 管道來源分布（套用使用者的分類映射）
   const channelCounts = {};
-  fp.forEach(p => { const c = p.channel || '未填'; channelCounts[c] = (channelCounts[c]||0) + 1; });
-  const sortedChannels = Object.entries(channelCounts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  fp.forEach(p => { const c = mapChannel(p.channel); channelCounts[c] = (channelCounts[c]||0) + 1; });
+  const sortedChannels = Object.entries(channelCounts).sort((a,b)=>b[1]-a[1]).slice(0,15);
   drawChart('chartPendingChannel', 'bar', {
     labels: sortedChannels.map(x=>x[0]),
     datasets: [{ label: '案件數', data: sortedChannels.map(x=>x[1]), backgroundColor: '#4f8ef7', borderWidth: 0 }]
