@@ -14,7 +14,6 @@
 // ============================================================
 const TAB_CASES    = '1. 業績成案清單';     // 第 1 個分頁的名稱（含前綴 "1. "）
 const TAB_PENDING  = '2. 克威柏凱輪值表';     // 跟進中案件
-const TAB_FUNNEL   = 'inbound數據';
 const TAB_OUTBOUND = '電話陌開促成拜訪進度';
 
 // 業績成案清單 欄位對應（A=1, B=2, ...）
@@ -34,22 +33,6 @@ const COL_CASES = {
   weight_no: 29,         // AC
   weight_excl: 30,       // AD
   weight_other: 31       // AE
-};
-
-// inbound 數據 欄位對應
-const COL_FUNNEL = {
-  month_label: 1,            // A 例 "2023/10月" 或 "11月"
-  referral_faling: 2,        // B 法零轉介
-  referral_pre_retain: 3,    // C 委前轉介
-  notes_referral: 4,         // D 備註（公司名清單）
-  refused_line: 5,           // E
-  line_only: 6,              // F
-  meeting_phone: 7,          // G
-  meeting_video: 8,          // H
-  meeting_onsite: 9,         // I
-  signed: 10,                // J
-  paid: 11,                  // K
-  notes_remark: 12           // L
 };
 
 // 電話陌開 欄位對應
@@ -90,7 +73,6 @@ function syncAll() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   syncCases(ss);
   syncPending(ss);
-  syncFunnel(ss);
   syncOutbound(ss);
 }
 
@@ -268,63 +250,6 @@ function isPlaceholder(d) {
 function dateToStr(d) {
   if (!d || isPlaceholder(d)) return null;
   return Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
-}
-
-// ============================================================
-//  SYNC: inbound 數據 → advisor_inbound_funnel
-// ============================================================
-function syncFunnel(ss) {
-  const startedAt = new Date();
-  const sheet = ss.getSheetByName(TAB_FUNNEL);
-  if (!sheet) { logSync(TAB_FUNNEL, 0, 0, 0, '找不到分頁: ' + TAB_FUNNEL, startedAt); return; }
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) { logSync(TAB_FUNNEL, 0, 0, 0, '無資料列', startedAt); return; }
-
-  const range = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
-  const rows = [];
-  let currentYear = null;
-
-  range.forEach(r => {
-    const label = String(r[0] || '').trim();
-    if (!label) return;
-
-    // 年度標頭列（如 "2023" 或 "2024"）
-    const yearMatch = label.match(/^(\d{4})$/);
-    if (yearMatch) { currentYear = parseInt(yearMatch[1], 10); return; }
-
-    // 月份列：可能是 "2023/10月"、"10月"、"11月"
-    let m = label.match(/^(\d{4})\/(\d{1,2})月/);
-    let year, month;
-    if (m) { year = parseInt(m[1], 10); month = parseInt(m[2], 10); }
-    else {
-      m = label.match(/^(\d{1,2})月/);
-      if (!m || !currentYear) return;
-      year = currentYear; month = parseInt(m[1], 10);
-    }
-    if (!year || !month || month < 1 || month > 12) return;
-
-    rows.push({
-      fiscal_year: year,
-      month: month,
-      referral_faling:     toNum(r[COL_FUNNEL.referral_faling - 1]),
-      referral_pre_retain: toNum(r[COL_FUNNEL.referral_pre_retain - 1]),
-      refused_line:        toNum(r[COL_FUNNEL.refused_line - 1]),
-      line_only:           toNum(r[COL_FUNNEL.line_only - 1]),
-      meeting_phone:       toNum(r[COL_FUNNEL.meeting_phone - 1]),
-      meeting_video:       toNum(r[COL_FUNNEL.meeting_video - 1]),
-      meeting_onsite:      toNum(r[COL_FUNNEL.meeting_onsite - 1]),
-      signed:              toNum(r[COL_FUNNEL.signed - 1]),
-      paid:                toNum(r[COL_FUNNEL.paid - 1]),
-      notes_referral:      nullIfEmpty(r[COL_FUNNEL.notes_referral - 1]),
-      notes_remark:        nullIfEmpty(r[COL_FUNNEL.notes_remark - 1])
-    });
-  });
-
-  const del = supabaseRequest('DELETE', '/rest/v1/advisor_inbound_funnel?id=neq.00000000-0000-0000-0000-000000000000', null);
-  const ins = batchInsert('/rest/v1/advisor_inbound_funnel', rows);
-
-  logSync(TAB_FUNNEL, rows.length, 0, 0, ins.error || del.error || null, startedAt);
 }
 
 // ============================================================
