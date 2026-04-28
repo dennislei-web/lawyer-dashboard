@@ -236,6 +236,7 @@
       <a href="/lawyer-dashboard/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">諮詢分析</a>
       <a href="/lawyer-dashboard/revenue/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">營運</a>
       <a href="/lawyer-dashboard/finance/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">財務規劃</a>
+      <a href="/lawyer-dashboard/advisor/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">法律顧問</a>
       <a href="/lawyer-dashboard/partners/" class="btn-icon" style="text-decoration:none;font-size:0.75rem">合署律師</a>
       <a href="/lawyer-dashboard/admin/" class="btn-icon active" style="text-decoration:none;font-size:0.75rem">帳號管理</a>
       <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
@@ -246,7 +247,7 @@
   <div class="main">
     <div style="margin-bottom:20px;">
       <div class="page-title">總帳號管理</div>
-      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 4 個儀表板（諮詢分析 / 營運 / 財務規劃 / 合署律師）的登入權限</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 5 個儀表板（諮詢分析 / 營運 / 財務規劃 / 法律顧問 / 合署律師）的登入權限</div>
     </div>
 
     <!-- 權限對照 -->
@@ -255,7 +256,7 @@
         <div class="section-title">📊 權限對照</div>
       </div>
       <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
-        所有帳號使用同一套 Supabase Auth；下表列出各角色在 4 個儀表板能看到的範圍與額外功能。
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 5 個儀表板能看到的範圍與額外功能。
       </div>
       <div class="table-wrap">
         <table>
@@ -265,6 +266,7 @@
               <th style="text-align:center;">諮詢分析</th>
               <th style="text-align:center;">營運</th>
               <th style="text-align:center;">財務規劃</th>
+              <th style="text-align:center;">法律顧問</th>
               <th style="text-align:center;">合署律師</th>
               <th>額外功能</th>
             </tr>
@@ -272,6 +274,7 @@
           <tbody>
             <tr>
               <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
@@ -284,11 +287,13 @@
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料</td>
             </tr>
             <tr>
               <td>🔒 律師 (lawyer)</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
@@ -306,7 +311,7 @@
         <button class="btn-login" style="max-width:140px;padding:6px 14px;font-size:0.82rem;" onclick="openNewAccountModal()">➕ 新增帳號</button>
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
-        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 4 個儀表板。
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 5 個儀表板。
       </div>
       <div class="table-wrap">
         <table>
@@ -318,13 +323,14 @@
               <th style="text-align:center;font-size:0.72rem;">諮詢分析</th>
               <th style="text-align:center;font-size:0.72rem;">營運</th>
               <th style="text-align:center;font-size:0.72rem;">財務規劃</th>
+              <th style="text-align:center;font-size:0.72rem;">法律顧問</th>
               <th style="text-align:center;font-size:0.72rem;">合署律師</th>
               <th class="sortable" data-sort="status" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
               <th style="text-align:center;">密碼</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
-            <tr><td colspan="9"><div class="loading"><span class="spinner"></span></div></td></tr>
+            <tr><td colspan="10"><div class="loading"><span class="spinner"></span></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -615,6 +621,7 @@ function renderAdminPage() {
       '<td style="text-align:center;">' + accessCell(l, 'consultation') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'revenue') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'advisor') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
       '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
       '<td style="text-align:center;">' + passwordBtnHtml + '</td>' +
