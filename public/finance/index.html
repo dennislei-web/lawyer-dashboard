@@ -1836,6 +1836,7 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
       }
     }
     html += '<th class="text-right" style="color:var(--gold-light)" title="僅累計有實際資料月份">累計預' + cumLabelSuffix + '</th><th class="text-right" style="color:var(--blue)">累計實</th><th class="text-right" title="累計預 − 累計實，同月份比較">累計差</th>';
+    html += '<th class="text-right" style="color:var(--gold)" title="預估年度差 = 全年預算 − (已實際月份合計 + 未實際月份預算)">預估年度差</th>';
   } else {
     html += '<th class="text-right">預算</th><th class="text-right">實際</th><th class="text-right">差異</th><th class="text-right">執行率</th>';
   }
@@ -1859,9 +1860,12 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
 
       if (isYTD) {
         var cumB = 0, cumA = 0;
+        var projFullB = 0, projFullA = 0;
         for (var mo = 1; mo <= 12; mo++) {
           var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
           if (monthHasData[mo]) { cumB += b; cumA += a; }
+          projFullB += b;
+          projFullA += monthHasData[mo] ? a : b;
           totalB[mo-1] += b; totalA[mo-1] += a;
           if (isMonthExpanded(mo)) {
             var hasActual = a !== 0 || (actualMap[cat.id] && actualMap[cat.id][mo] !== undefined);
@@ -1873,9 +1877,11 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
           }
         }
         var cumD = cumB - cumA;
+        var projD = projFullB - projFullA;
         html += '<td class="text-right text-gold" style="font-weight:600">' + fmt(cumB) + '</td>';
         html += '<td class="text-right text-blue" style="font-weight:600">' + fmt(cumA) + '</td>';
         html += '<td class="text-right ' + (cumD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:600">' + fmt(cumD) + '</td>';
+        html += '<td class="text-right ' + (projD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:600">' + fmt(projD) + '</td>';
       } else {
         var mo = months[0];
         var b = bm[mo] || 0, a = am[mo] || 0, d = b - a;
@@ -1894,9 +1900,12 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
   html += '<tr class="net-row"><td style="font-weight:700">營業費用合計</td>';
   if (isYTD) {
     var grandB = 0, grandA = 0;
+    var grandProjB = 0, grandProjA = 0;
     for (var mo = 0; mo < 12; mo++) {
       var d = totalB[mo] - totalA[mo];
       if (monthHasData[mo + 1]) { grandB += totalB[mo]; grandA += totalA[mo]; }
+      grandProjB += totalB[mo];
+      grandProjA += monthHasData[mo + 1] ? totalA[mo] : totalB[mo];
       if (isMonthExpanded(mo + 1)) {
         html += '<td class="text-right text-gold" style="font-weight:600">' + fmt(totalB[mo]) + '</td>';
         html += '<td class="text-right text-blue" style="font-weight:600">' + fmt(totalA[mo]) + '</td>';
@@ -1906,9 +1915,11 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
       }
     }
     var grandD = grandB - grandA;
+    var grandProjD = grandProjB - grandProjA;
     html += '<td class="text-right text-gold" style="font-weight:700;font-size:0.9rem">' + fmtCurrency(grandB) + '</td>';
     html += '<td class="text-right text-blue" style="font-weight:700;font-size:0.9rem">' + fmtCurrency(grandA) + '</td>';
     html += '<td class="text-right ' + (grandD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700;font-size:0.9rem">' + (grandD >= 0 ? '+' : '') + fmtCurrency(grandD) + '</td>';
+    html += '<td class="text-right ' + (grandProjD >= 0 ? 'variance-pos' : 'variance-neg') + '" style="font-weight:700;font-size:0.9rem">' + (grandProjD >= 0 ? '+' : '') + fmtCurrency(grandProjD) + '</td>';
   } else {
     var mo = months[0] - 1;
     var d = totalB[mo] - totalA[mo];
