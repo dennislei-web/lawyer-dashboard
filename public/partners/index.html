@@ -1750,6 +1750,15 @@ function renderDrillCasesSenior(title, body) {
     <span style="color:var(--orange)">喆律 $${fmt(totalZ)}</span> /
     <span style="color:var(--green)">律師 $${fmt(totalL)}</span>
   </div>`;
+
+  // ---- 附屬收入明細（受僱/介紹/追溯/轉案/合作/成案獎金/其他/其他-自案 等）----
+  const mRecS = (DATA.monthly || []).find(m =>
+    m.lawyer === drillLawyer &&
+    m.year === selectedYear &&
+    String(m.month) === String(selectedMonth)
+  ) || {};
+  html += renderAuxIncomeTable(mRecS.tier || {});
+
   body.innerHTML = html;
 }
 
@@ -1794,6 +1803,7 @@ function renderDrillCasesJudicial(title, body) {
   const commA = mRec.commission_A || 0;
   const selfA = mRec.self_A || 0;
   const consultA = mRec.consult_a || 0;
+  const tierMap = mRec.tier || {};
 
   let html = `<div class="note" style="margin-bottom:8px">
     司法官合署的分潤是月度聚合（一/二/三段，按合約比例分），下列依案件分類顯示對應規則：
@@ -1835,7 +1845,74 @@ function renderDrillCasesJudicial(title, body) {
     </span>${diffNote}
     <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">※ 不含規費 / 郵資等支出列</span>
   </div>`;
+
+  // ---- 附屬收入明細 ----
+  html += renderAuxIncomeTable(tierMap);
+
   body.innerHTML = html;
+}
+
+// 附屬收入明細：從 monthly.tier 抽出非「主案」的 tier，依 tier 名分組顯示喆律/律師
+function renderAuxIncomeTable(tierMap) {
+  const isMainTier = (tier) => {
+    if (tier.startsWith('委任-')) return true;
+    if (tier === '自案(喆律)' || tier === '自案(律師)') return true;
+    if (tier.startsWith('諮詢成案(')) return true;
+    if (tier.startsWith('喆律轉案(')) return true;
+    if (tier.startsWith('法律010轉案(')) return true;
+    return false;
+  };
+  // 把 tier "XX(喆律)" / "XX(律師)" 配對；無括號的（如 "諮詢"、"成案獎金(律師)"）也處理
+  const groups = {};  // baseName → { z: 0, l: 0 }
+  for (const [k, v] of Object.entries(tierMap)) {
+    if (isMainTier(k)) continue;
+    if (Math.abs(v) < 0.01) continue;
+    let base, side;
+    const m = k.match(/^(.+?)\((喆律|律師)\)$/);
+    if (m) { base = m[1]; side = m[2]; }
+    else { base = k; side = '律師'; }  // 沒括號的視為律師端（諮詢、成案獎金等）
+    if (!groups[base]) groups[base] = { z: 0, l: 0 };
+    if (side === '喆律') groups[base].z += v;
+    else groups[base].l += v;
+  }
+  const keys = Object.keys(groups);
+  if (keys.length === 0) {
+    return `<div style="margin-top:14px;color:var(--text-muted);font-size:0.85rem">附屬收入：本月無</div>`;
+  }
+  // 排序：先 諮詢，再依字母
+  const order = ['諮詢', '介紹', '追溯', '轉案', '受僱', '續委', '合作', '成案獎金', '其他', '其他-自案'];
+  const ordered = [...order.filter(k => groups[k]), ...keys.filter(k => !order.includes(k))];
+
+  let totalZ = 0, totalL = 0;
+  let rows = '';
+  for (const k of ordered) {
+    const g = groups[k];
+    totalZ += g.z; totalL += g.l;
+    const subtotal = g.z + g.l;
+    rows += `<tr>
+      <td>${escapeHtml(k)}</td>
+      <td class="num" style="color:${g.z !== 0 ? 'var(--orange)' : 'var(--text-muted)'}">${g.z !== 0 ? '$' + fmt(g.z) : '—'}</td>
+      <td class="num" style="color:${g.l !== 0 ? 'var(--green)' : 'var(--text-muted)'}">${g.l !== 0 ? '$' + fmt(g.l) : '—'}</td>
+      <td class="num">$${fmt(subtotal)}</td>
+    </tr>`;
+  }
+
+  return `<div style="margin-top:24px;padding-top:14px;border-top:2px dashed var(--border)">
+    <h3 style="margin-bottom:6px">附屬收入明細</h3>
+    <div class="note" style="margin-bottom:8px">
+      不在主案件金額內，包含諮詢費、介紹佣金、轉案分潤等。對應 KPI 上的「附屬明細」。
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>類型</th><th class="num">喆律</th><th class="num">律師</th><th class="num">小計</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="border-top:1px solid var(--border);font-weight:600">
+        <td>合計</td>
+        <td class="num" style="color:var(--orange)">$${fmt(totalZ)}</td>
+        <td class="num" style="color:var(--green)">$${fmt(totalL)}</td>
+        <td class="num">$${fmt(totalZ + totalL)}</td>
+      </tr></tfoot>
+    </table></div>
+  </div>`;
 }
 
 function escapeHtml(s) {
