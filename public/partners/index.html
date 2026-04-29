@@ -638,8 +638,13 @@ if (window.location.search.indexOf('embed=1') > -1) {
   <div class="cohort-bar">
     <span class="cohort-label">律師族群</span>
     <div id="cohort-pills" style="display:flex;gap:6px"></div>
+    <button class="btn-sm" id="syncPartnersBtn" onclick="syncPartners()"
+            style="margin-left:auto;margin-right:8px" title="從 Drive 重新抓取律師案件明細">
+      🔄 立即同步
+    </button>
     <div class="year-filter" id="year-filter"></div>
   </div>
+  <div id="syncPartnersStatus" style="display:none;padding:6px 24px;font-size:0.8rem;color:var(--text-muted);background:var(--bg-row);border-bottom:1px solid var(--border)"></div>
 
   <!-- Tabs -->
 <div class="tabs" id="tabs">
@@ -895,6 +900,48 @@ document.getElementById('logoutBtn').addEventListener('click', async function() 
 });
 var _nal = document.getElementById('noAccessLogout');
 if (_nal) _nal.addEventListener('click', async function() { if(sb) await sb.auth.signOut(); location.reload(); });
+
+// ============================================================
+// 立即同步：呼叫 Edge Function trigger_partners_sync → GitHub Action
+// ============================================================
+async function syncPartners() {
+  var btn = document.getElementById('syncPartnersBtn');
+  var status = document.getElementById('syncPartnersStatus');
+  var orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 觸發中...';
+  status.style.display = 'block';
+  status.innerHTML = '正在通知 GitHub Action 開始同步...';
+  try {
+    var session = (await sb.auth.getSession()).data.session;
+    if (!session) throw new Error('未登入');
+    var resp = await fetch(SUPABASE_URL + '/functions/v1/trigger_partners_sync', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + session.access_token,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    var result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      throw new Error(result.error || ('HTTP ' + resp.status));
+    }
+    btn.innerHTML = '✅ 已觸發';
+    var url = result.actions_url || 'https://github.com/dennislei-web/lawyer-dashboard/actions';
+    status.innerHTML =
+      '✅ 已觸發 GitHub Action（' + (result.triggered_by || '') + '）。' +
+      '預計 2-3 分鐘後資料會自動更新並重新部署。' +
+      '<br><a href="' + url + '" target="_blank" style="color:var(--gold)">查看進度 →</a>' +
+      ' &nbsp; <span style="color:var(--text-muted)">完成後重新整理本頁即可</span>';
+  } catch (e) {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    status.innerHTML = '❌ 觸發失敗：' + (e.message || e);
+    status.style.color = 'var(--red)';
+  }
+}
 
 // ============================================================
 // Theme
