@@ -1734,39 +1734,27 @@ function renderDrillCasesSenior(title, body) {
   body.innerHTML = html;
 }
 
-// Judicial：profit_share 是 monthly 聚合（不分客戶），用 contract_matrix 顯示概略
+// Judicial：用 case-level classification 推導「案件來源 tier」（委任案 / 自案），
+// 每組從 monthly.tier 撈實際的喆律/律師分潤金額（聚合值，因 D 是月度共擔成本扣的）
+// 比照 senior 模式：每組顯示「這個來源帶來多少 案額 → 喆律/律師 各拿多少」
+const JUDICIAL_MAIN_CLASSES = ['首委', '1年內續委', '自案（首委>1年）'];
+const JUDICIAL_CLASS_TO_TIER = {
+  '首委': '委任案',
+  '1年內續委': '委任案',
+  '自案（首委>1年）': '自案',
+};
+
 function renderDrillCasesJudicial(title, body) {
-  const cases = (DATA.cases || []).filter(c =>
+  const casesAll = (DATA.cases || []).filter(c =>
     c.lawyer === drillLawyer &&
     c.year === selectedYear &&
     String(c.month) === String(selectedMonth) &&
     c.dept
   );
+  const cases = casesAll.filter(c => JUDICIAL_MAIN_CLASSES.includes(c.classification));
 
-  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 共 ${cases.length} 筆`;
+  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 主案 ${cases.length} 筆`;
 
-  if (cases.length === 0) {
-    body.innerHTML = '<div class="note">此月無案件</div>';
-    return;
-  }
-
-  const groups = {};
-  for (const c of cases) {
-    const k = c.classification || '未分類';
-    (groups[k] = groups[k] || []).push(c);
-  }
-  const groupOrder = ['首委', '1年內續委', '自案（首委>1年）', '諮詢', '未分類'];
-  const ordered = [...groupOrder.filter(k => groups[k]), ...Object.keys(groups).filter(k => !groupOrder.includes(k))];
-
-  const cm = (DATA.contract_matrix || {})[drillLawyer] || {};
-  function ratioForClass(cls) {
-    if (cls === '諮詢') return cm['諮詢'] || '0/100';
-    if (cls === '自案（首委>1年）') return cm['自案'] || '—';
-    if (cls === '首委' || cls === '1年內續委') return cm['委任'] || '—';
-    return '—';
-  }
-
-  // 從 monthly 撈當月聚合值，做清單合計 vs 主案件金額的對帳
   const mRec = (DATA.monthly || []).find(m =>
     m.lawyer === drillLawyer &&
     m.year === selectedYear &&
@@ -1774,21 +1762,69 @@ function renderDrillCasesJudicial(title, body) {
   ) || {};
   const commA = mRec.commission_A || 0;
   const selfA = mRec.self_A || 0;
-  const consultA = mRec.consult_a || 0;
+  const procD = mRec.proc_D || 0;
   const tierMap = mRec.tier || {};
 
+  if (cases.length === 0) {
+    body.innerHTML = '<div class="note">此月無主案件（諮詢、其他非主辦收入見下方）</div>'
+      + renderAuxIncomeTable(tierMap);
+    return;
+  }
+
+  // 依「案件來源 tier」分組
+  const groups = {};
+  for (const c of cases) {
+    const tier = JUDICIAL_CLASS_TO_TIER[c.classification] || '未分類';
+    (groups[tier] = groups[tier] || []).push(c);
+  }
+  const tierOrder = ['委任案', '自案'];
+  const ordered = tierOrder.filter(k => groups[k]);
+
+  const cm = (DATA.contract_matrix || {})[drillLawyer] || {};
+  // 每個 tier 的實際分潤（從 monthly.tier 聚合）
+  const tierStats = {
+    '委任案': {
+      ratio: cm['委任'] || '—',
+      z: (tierMap['委任-引案(喆律)'] || 0) + (tierMap['委任-利潤(喆律)'] || 0),
+      l: (tierMap['委任-咨詢(律師)'] || 0) + (tierMap['委任-利潤(律師)'] || 0),
+      kpi_amt: commA,
+      hasD: true,  // 委任案有處理費 D 扣除
+      desc: '客戶由喆律帶進來，按合約比例分（A − B − C − D 後分潤）',
+    },
+    '自案': {
+      ratio: cm['自案'] || '—',
+      z: tierMap['自案(喆律)'] || 0,
+      l: tierMap['自案(律師)'] || 0,
+      kpi_amt: selfA,
+      hasD: false,
+      desc: '律師自招案件',
+    },
+  };
+
   let html = `<div class="note" style="margin-bottom:8px">
-    司法官合署的分潤是月度聚合（一/二/三段，按合約比例分），下列依案件分類顯示對應規則：
+    司法官合署分潤是月度聚合（一/二/三段，依合約比例分）。下列依案件來源分組，金額為當月該來源 KPI 實際聚合值；
+    諮詢費等非主辦收入見下方表格：
   </div>`;
   let grandSum = 0;
-  for (const k of ordered) {
-    const list = groups[k];
+  for (const tier of ordered) {
+    const list = groups[tier];
     const sum = list.reduce((s, c) => s + (c.amount || 0), 0);
     grandSum += sum;
-    html += `<div style="margin-top:14px"><strong style="color:var(--gold)">${k}</strong>
+    const st = tierStats[tier];
+    const dNote = st.hasD && procD > 0
+      ? `（已扣處理費 D $${fmt(procD)} 共擔成本）`
+      : '';
+    html += `<div style="margin-top:14px">
+      <strong style="color:var(--gold)">${tier}</strong>
       <span style="color:var(--text-muted);font-size:0.82rem">
-        ${list.length} 筆 · 小計 $${fmt(sum)} · 比例 ${ratioForClass(k)}（喆律/律師）
-      </span></div>`;
+        ${list.length} 筆 · 案額合計 $${fmt(sum)} · 比例 ${st.ratio}（喆律/律師）
+        →
+        <span style="color:var(--orange)">喆律 $${fmt(st.z)}</span> /
+        <span style="color:var(--green)">律師 $${fmt(st.l)}</span>
+        ${dNote}
+      </span>
+      <div class="note" style="font-size:0.75rem;margin-top:2px">${st.desc}</div>
+    </div>`;
     html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
       <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>
     </tr></thead><tbody>`;
@@ -1803,22 +1839,19 @@ function renderDrillCasesJudicial(title, body) {
     }
     html += '</tbody></table></div>';
   }
-  // 對帳列：清單合計 vs 主案件金額（KPI）
-  const expected = commA + selfA + consultA;
-  const diff = grandSum - expected;
-  const diffNote = Math.abs(diff) > 1
-    ? `<br><span style="color:var(--red);font-size:0.78rem">⚠ 差 $${fmt(diff)} — 可能有 收入 sheet 的小額 row（規費/退款/調整）未被分類</span>`
-    : '';
+
+  // 合計列
+  const totalZ = (tierStats['委任案']?.z || 0) + (tierStats['自案']?.z || 0);
+  const totalL = (tierStats['委任案']?.l || 0) + (tierStats['自案']?.l || 0);
   html += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
-    <strong>當月案件總額</strong> $${fmt(grandSum)}
-    <span style="color:var(--text-muted);font-size:0.82rem">
-      = 委任 $${fmt(commA)} + 自案 $${fmt(selfA)} + 諮詢 $${fmt(consultA)}
-      <span style="font-size:0.75rem">（KPI 主案件金額 = 委任 + 自案 = $${fmt(commA + selfA)}，諮詢屬非主辦案件）</span>
-    </span>${diffNote}
-    <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">※ 不含規費 / 郵資等支出列</span>
+    <strong>當月主案合計</strong> &nbsp;
+    案額 $${fmt(commA + selfA)} &nbsp;→&nbsp;
+    <span style="color:var(--orange)">喆律 $${fmt(totalZ)}</span> /
+    <span style="color:var(--green)">律師 $${fmt(totalL)}</span>
+    ${procD > 0 ? `<span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">（扣除 D $${fmt(procD)} 共擔成本）</span>` : ''}
   </div>`;
 
-  // ---- 附屬收入明細 ----
+  // ---- 非主辦案件收入明細 ----
   html += renderAuxIncomeTable(tierMap);
 
   body.innerHTML = html;
