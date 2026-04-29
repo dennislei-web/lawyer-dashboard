@@ -340,20 +340,74 @@ SECTION_KEYWORDS = {
 
 def parse_income_sheet(ws, lawyer, year, month):
     out = []
-    current_section = '承辦'
-    idx = None  # header column map (left table)
+    current_section = '承辦'  # 持久狀態：only changed by 「XX明細」 header
+    idx = None  # header column map
+    in_compact_self = False  # 進入 compact 自案段（col1空 col2=client col3=amount）
+    inline_override = None  # 本列覆蓋 section（不影響後續 row）
+
+    def _emit_compact(client_val, amount_val, section):
+        if client_val is None or not isinstance(amount_val, (int, float)):
+            return False
+        cs = str(client_val).strip()
+        if not cs or cs in ('小計', '合計', '總計', '姓名', '當事人'):
+            return False
+        out.append({
+            'lawyer': lawyer, 'year': year, 'month': month,
+            'section': section,
+            'client': cs,
+            'handlers': None, 'amount': float(amount_val),
+            'date': None, 'note': None, 'brand': None,
+            'office': None, 'dept': None, 'case_type': None,
+            'voided': None, 'source': None,
+        })
+        return True
+
     for row in ws.iter_rows(values_only=True):
         vals = list(row)
         if all(v is None for v in vals):
+            in_compact_self = False
             continue
+        inline_override = None  # reset 每列
         joined = ' '.join(str(v) for v in vals[:13] if v is not None)
-
-        # Section line (might be the first cell before header or same header row)
         first = str(vals[0]).strip() if vals[0] is not None else ''
+
+        # 1. 「XX明細」header — 持久 section 改變
         for kw, sec in SECTION_KEYWORDS.items():
             if kw in first and '明細' in first:
                 current_section = sec
                 break
+
+        # 2. 標準段落 marker（first 整格剛好是 "自案"/"介紹" 等）
+        if first in SECTION_KEYWORDS and '明細' not in first:
+            sec = SECTION_KEYWORDS[first]
+            # 判 inline (主表金額位有值) vs compact (col 2-3 有值)
+            main_amt_pos = (idx or {}).get('amount', 5)
+            main_amt = vals[main_amt_pos] if main_amt_pos < len(vals) else None
+            if isinstance(main_amt, (int, float)):
+                # Inline 標記：本列覆蓋 section，不影響後續
+                inline_override = sec
+                # 流程繼續走下方一般 data row 處理
+            else:
+                # Compact 段開始
+                in_compact_self = True
+                _emit_compact(vals[1] if len(vals) > 1 else None,
+                              vals[2] if len(vals) > 2 else None, sec)
+                continue
+
+        # 3. Compact 段續行（col1 空、col2=client、col3=amount）
+        if in_compact_self and not first:
+            c_client = vals[1] if len(vals) > 1 else None
+            c_amt = vals[2] if len(vals) > 2 else None
+            if isinstance(c_amt, (int, float)):
+                cs = str(c_client or '').strip()
+                if cs in ('合計', '小計', '總計'):
+                    in_compact_self = False
+                    continue
+                if c_client is not None and not isinstance(c_client, (int, float, datetime)):
+                    if _emit_compact(c_client, c_amt, '自案'):
+                        continue
+            # 不符合 compact 結構（例：規費 row col2=日期）→ 結束 compact，回到一般處理
+            in_compact_self = False
 
         # Header row detection: contains 當事人/委任人 AND 金額
         if ('當事人' in joined or '委任人' in joined) and '金額' in joined and '日期' in joined:
@@ -412,7 +466,7 @@ def parse_income_sheet(ws, lawyer, year, month):
 
         out.append({
             'lawyer': lawyer, 'year': year, 'month': month,
-            'section': current_section,
+            'section': inline_override or current_section,
             'client': client_s,
             'handlers': gv('handlers'),
             'amount': amt,
