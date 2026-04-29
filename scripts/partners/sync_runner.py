@@ -126,6 +126,12 @@ def upsert_embedded(current: dict, fresh: dict) -> dict:
                       if (r["lawyer"], str(r["year"]), str(r["month"])) not in f_monthly_keys]
         m_cohort["cases"] = kept_cases + list(f_cohort.get("cases", []))
 
+        # profit_share: upsert by same key（senior 才有；judicial 跳過）
+        if "profit_share" in f_cohort:
+            kept_ps = [r for r in m_cohort.get("profit_share", [])
+                       if (r["lawyer"], str(r["year"]), str(r["month"])) not in f_monthly_keys]
+            m_cohort["profit_share"] = kept_ps + list(f_cohort["profit_share"])
+
         # cohort-level fields — 用 fresh 蓋過（這些是 hardcoded 或從 cases 衍生）
         for fld in ["lawyers", "colors", "contract_matrix", "contract_tiers",
                     "sources", "repeat_entries", "has_repeat_tab",

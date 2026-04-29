@@ -511,6 +511,29 @@ def build_senior_cohort():
             special_tier_tips[lawyer][tier] = (lawyer + ' 的「' + tier + '」明細：\n' +
                                                 '\n'.join(lines) + suffix)
 
+    # 保留 per-case profit_share（給 Tab 4 案件明細顯示用）
+    # schema: lawyer, year, month, side, tier, client, case_amount, ratio, lawyer_amt, zhelu_amt, note
+    profit_share_full = []
+    for r in profit:
+        if not r.get('client') or not r.get('year') or not r.get('month'):
+            continue
+        try:
+            profit_share_full.append({
+                'lawyer': r['lawyer'],
+                'year': r['year'],
+                'month': int(r['month']),
+                'side': r.get('side', ''),
+                'tier': r.get('tier', ''),
+                'client': r['client'],
+                'case_amount': float(r.get('case_amount') or 0),
+                'ratio': float(r.get('ratio') or 0),
+                'lawyer_amt': float(r.get('lawyer_amt') or 0),
+                'zhelu_amt': float(r.get('zhelu_amt') or 0),
+                'note': r.get('note') or '',
+            })
+        except (ValueError, KeyError):
+            continue
+
     return {
         'lawyers': LAWYERS,
         'colors': SENIOR_COLORS,
@@ -519,6 +542,7 @@ def build_senior_cohort():
         'monthly': monthly_flat,
         'sources': source_flat,
         'cases': cases_recent,
+        'profit_share': profit_share_full,
         'repeat_entries': repeat_entries,
         'special_tier_tips': special_tier_tips,
         'has_repeat_tab': True,

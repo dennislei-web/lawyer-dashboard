@@ -144,6 +144,12 @@ def download_partners_files(dest_dir: Path, verbose: bool = True) -> list[Path]:
             if not FILENAME_RE.search(stem):
                 skipped += 1
                 continue
+            # 跳過自動 Converted 副本（同檔內容兩份會讓 parser 混淆）
+            if "(Converted -" in name or "Converted -" in name or "的副本" in name:
+                if verbose:
+                    print(f"    ⤳ skip (Converted/副本): {name}")
+                skipped += 1
+                continue
 
             # 統一存成 .xlsx
             local_name = re.sub(r"\.gsheet$", ".xlsx", name, flags=re.IGNORECASE)
