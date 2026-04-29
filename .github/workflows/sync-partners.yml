@@ -1,0 +1,43 @@
+name: Sync partners dashboard
+
+on:
+  schedule:
+    # 每天 19:00 UTC = 03:00 Asia/Taipei (UTC+8)
+    # 律師月底才回填上月資料（4/29 填 3 月、5/29 填 4 月），daily 已足夠
+    - cron: "0 19 * * *"
+  workflow_dispatch:  # 手動觸發
+
+permissions:
+  contents: write  # 推送 commit 到 main
+
+concurrency:
+  group: sync-partners
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install openpyxl google-api-python-client google-auth
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run sync from Drive
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python scripts/partners/sync_runner.py --from-drive --commit

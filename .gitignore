@@ -1,6 +1,10 @@
 .env
 scripts/.env
 *.xlsx
+# Google Cloud service account keys（含 Drive API 私鑰，禁止進 repo）
+*-sa.json
+*service-account*.json
+lawyer-dashboard-sync-*.json
 node_modules/
 __pycache__/
 *.pyc

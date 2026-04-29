@@ -77,19 +77,17 @@ def extract_embedded_json(html_path: Path) -> tuple[str, dict]:
 
 
 def diff_embedded(current: dict, fresh: dict) -> dict:
-    """回傳 {cohort: [(lawyer, year, month, reason), ...]}"""
+    """回傳 {cohort: [(lawyer, year, month, reason), ...]} — REMOVED 過濾掉（upsert 不刪歷史）"""
     report = {"judicial": [], "senior": []}
     for cohort in ["judicial", "senior"]:
         cur = {(r["lawyer"], str(r["year"]), str(r["month"])): r
                for r in current["cohorts"][cohort]["monthly"]}
         fre = {(r["lawyer"], str(r["year"]), str(r["month"])): r
                for r in fresh["cohorts"][cohort]["monthly"]}
-        for key in sorted(set(cur) | set(fre)):
+        # 只報 fresh 有的 keys（NEW + CHANGED）；fresh 沒有的不算 diff（會被保留）
+        for key in sorted(fre):
             if key not in cur:
                 report[cohort].append((*key, "NEW"))
-                continue
-            if key not in fre:
-                report[cohort].append((*key, "REMOVED"))
                 continue
             c, f = cur[key], fre[key]
             for fld in ["commission_A", "self_A", "consult_a", "proc_D",
@@ -98,6 +96,48 @@ def diff_embedded(current: dict, fresh: dict) -> dict:
                     report[cohort].append((*key, f"{fld} {c.get(fld)}→{f.get(fld)}"))
                     break
     return report
+
+
+def upsert_embedded(current: dict, fresh: dict) -> dict:
+    """把 fresh 的 monthly+cases 套到 current 上：
+       - fresh 有的 (lawyer, year, month) → 用 fresh 覆蓋
+       - fresh 沒有的 (lawyer, year, month) → 保留 current 不動
+       - cohort-level 衍生欄位（sources, repeat_entries 等）優先用 fresh
+       回傳新的 dict（不 mutate inputs）。
+    """
+    import copy
+    merged = copy.deepcopy(current)
+
+    for cohort in ["judicial", "senior"]:
+        if cohort not in fresh.get("cohorts", {}):
+            continue
+        f_cohort = fresh["cohorts"][cohort]
+        m_cohort = merged["cohorts"][cohort]
+
+        # monthly: upsert by (lawyer, year, month)
+        f_monthly_keys = {(r["lawyer"], str(r["year"]), str(r["month"]))
+                          for r in f_cohort.get("monthly", [])}
+        kept_monthly = [r for r in m_cohort.get("monthly", [])
+                        if (r["lawyer"], str(r["year"]), str(r["month"])) not in f_monthly_keys]
+        m_cohort["monthly"] = kept_monthly + list(f_cohort.get("monthly", []))
+
+        # cases: upsert by same key
+        kept_cases = [r for r in m_cohort.get("cases", [])
+                      if (r["lawyer"], str(r["year"]), str(r["month"])) not in f_monthly_keys]
+        m_cohort["cases"] = kept_cases + list(f_cohort.get("cases", []))
+
+        # cohort-level fields — 用 fresh 蓋過（這些是 hardcoded 或從 cases 衍生）
+        for fld in ["lawyers", "colors", "contract_matrix", "contract_tiers",
+                    "sources", "repeat_entries", "has_repeat_tab",
+                    "repeat_config", "special_tier_tips"]:
+            if fld in f_cohort:
+                m_cohort[fld] = f_cohort[fld]
+
+    # top-level fields
+    for fld in ["default_cohort", "cohort_labels"]:
+        if fld in fresh:
+            merged[fld] = fresh[fld]
+    return merged
 
 
 def replace_embedded_block(html_path: Path, fresh_json_raw: str) -> None:
@@ -119,6 +159,9 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="只 diff 不寫檔")
     ap.add_argument("--commit", action="store_true", help="變動時 git commit + push")
     ap.add_argument("--workdir", help="工作目錄（CSV / dashboard.html 輸出）；預設 = temp")
+    ap.add_argument("--from-drive", action="store_true",
+                    help="從 Drive API 下載 xlsx（需 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON 或 GOOGLE_APPLICATION_CREDENTIALS）；"
+                         "未指定則用 PARTNERS_*_INPUT_DIRS env / 預設本機路徑")
     args = ap.parse_args()
 
     workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="partners_sync_"))
@@ -129,17 +172,33 @@ def main() -> int:
     env["PARTNERS_OUTPUT_DIR"] = str(workdir)
     env["PYTHONIOENCODING"] = "utf-8"
 
+    # Step 0: optional Drive download
+    if args.from_drive:
+        print("\n=== drive download ===")
+        from drive_client import download_partners_files
+        drive_dir = workdir / "drive_input"
+        downloaded = download_partners_files(drive_dir)
+        if not downloaded:
+            raise SystemExit("Drive 下載 0 個檔案 — 請確認 service account 對兩個資料夾有檢視權限")
+        # 兩個 cohort parser 都讀同一個 drive_input dir（FILENAME_PATTERN 各自過濾）
+        env["PARTNERS_JUDICIAL_INPUT_DIRS"] = str(drive_dir)
+        env["PARTNERS_SENIOR_INPUT_DIRS"] = str(drive_dir)
+
     # Step 1-2: parse + build
     run_step("parse_judicial", SCRIPT_DIR / "parse_judicial.py", env)
     run_step("parse_senior",   SCRIPT_DIR / "parse_senior.py", env)
     run_step("build_embedded", SCRIPT_DIR / "build_embedded.py", env)
 
-    # Step 3-4: extract + diff
+    # Step 3-4: extract + upsert + diff
     fresh_html = workdir / "dashboard.html"
     if not fresh_html.exists():
         raise SystemExit(f"build_embedded did not produce {fresh_html}")
-    fresh_raw, fresh_json = extract_embedded_json(fresh_html)
+    _, fresh_json = extract_embedded_json(fresh_html)
     _, current_json = extract_embedded_json(PARTNERS_HTML)
+
+    # Upsert: 用 fresh 的月份覆蓋 current，缺的月份保留 current（不刪歷史）
+    merged_json = upsert_embedded(current_json, fresh_json)
+    merged_raw = json.dumps(merged_json, ensure_ascii=False)
 
     print("\n=== Diff vs current partners/index.html ===")
     report = diff_embedded(current_json, fresh_json)
@@ -150,9 +209,11 @@ def main() -> int:
         for cohort, rows in report.items():
             if not rows:
                 continue
-            print(f"  {cohort}: {len(rows)} changes")
+            print(f"  {cohort}: {len(rows)} new/changed months")
             for lawyer, y, m, why in rows[:20]:
                 print(f"    {lawyer} {y}/{m}  {why}")
+            if len(rows) > 20:
+                print(f"    ... 還有 {len(rows) - 20} 個")
 
     # Step 5: replace
     if args.check:
@@ -165,8 +226,8 @@ def main() -> int:
             shutil.rmtree(workdir, ignore_errors=True)
         return 0
 
-    print("\n=== Apply ===")
-    replace_embedded_block(PARTNERS_HTML, fresh_raw)
+    print("\n=== Apply (upsert) ===")
+    replace_embedded_block(PARTNERS_HTML, merged_raw)
 
     # Step 6: optional commit + push
     if args.commit:
