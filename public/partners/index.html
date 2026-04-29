@@ -1774,6 +1774,7 @@ function renderDrillCasesJudicial(title, body) {
   const commA = mRec.commission_A || 0;
   const selfA = mRec.self_A || 0;
   const procD = mRec.proc_D || 0;
+  const consultA = mRec.consult_a || 0;
   const tierMap = mRec.tier || {};
 
   if (cases.length === 0) {
@@ -1868,19 +1869,45 @@ function renderDrillCasesJudicial(title, body) {
     </div>`;
 
     if (list.length > 0) {
+      const isCommissionGroup = tier === '委任案';
       html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
-        <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>
+        <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>${isCommissionGroup ? '<th>註記</th>' : ''}
       </tr></thead><tbody>`;
       list.sort((a, b) => (b.amount || 0) - (a.amount || 0));
       for (const c of list) {
+        const isMaybeConsult = isCommissionGroup && (c.amount || 0) === 2000;
+        const noteCell = isCommissionGroup
+          ? `<td style="font-size:0.75rem">${isMaybeConsult ? '<span style="color:var(--gold-light)" title="$2,000 案件可能屬諮詢費（依分潤 sheet 一段聚合決定，parser 無法逐筆辨別）">⚠ 可能屬諮詢</span>' : ''}</td>`
+          : '';
         html += `<tr>
           <td>${escapeHtml(c.client || '')}</td>
           <td class="num">$${fmt(c.amount || 0)}</td>
           <td>${escapeHtml(c.brand || '')}</td>
           <td style="color:var(--text-muted);font-size:0.78rem">${(c.date || '').slice(0, 10)}</td>
+          ${noteCell}
         </tr>`;
       }
       html += '</tbody></table></div>';
+
+      // 委任案 group 底下加 $2k 諮詢 footnote
+      if (isCommissionGroup) {
+        const small_cases = list.filter(c => (c.amount || 0) === 2000);
+        if (small_cases.length > 0 && consultA > 0) {
+          const consult_count_est = Math.round(consultA / 2000);
+          const consult_in_small = Math.min(consult_count_est, small_cases.length);
+          html += `<div style="margin-top:8px;padding:8px 12px;background:var(--bg-row);border-radius:4px;font-size:0.78rem;line-height:1.6;color:var(--text-muted)">
+            ⚠ 本群組有 <strong>${small_cases.length} 筆 $2,000 小額案件</strong>（sum $${fmt(small_cases.length * 2000)}）。
+            本月分潤 sheet 一、諮詢委任段 諮詢費 a = <strong>$${fmt(consultA)}</strong>（約 ${consult_count_est} 筆 × $2,000），
+            故這 ${small_cases.length} 筆中可能有 <strong>${consult_in_small} 筆</strong>實為諮詢費，
+            金額已正確計入下方非主辦明細的「諮詢」row（諮詢律師取 100%，喆律 0）。
+            Parser 無法精確判斷哪些屬諮詢哪些屬委任 — 律師在分潤 sheet 自己歸段。
+          </div>`;
+        } else if (small_cases.length > 0 && consultA === 0) {
+          html += `<div style="margin-top:8px;padding:8px 12px;background:var(--bg-row);border-radius:4px;font-size:0.78rem;line-height:1.6;color:var(--text-muted)">
+            ℹ️ 本群組 ${small_cases.length} 筆 $2,000 案件。本月諮詢費 a = $0，故這些 $2,000 全部都是真正的小額委任案（含在 委任案 KPI 內）。
+          </div>`;
+        }
+      }
     }
   }
 
