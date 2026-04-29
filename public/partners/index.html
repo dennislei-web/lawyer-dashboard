@@ -1777,67 +1777,101 @@ function renderDrillCasesJudicial(title, body) {
     const tier = JUDICIAL_CLASS_TO_TIER[c.classification] || '未分類';
     (groups[tier] = groups[tier] || []).push(c);
   }
-  const tierOrder = ['委任案', '自案'];
-  const ordered = tierOrder.filter(k => groups[k]);
 
   const cm = (DATA.contract_matrix || {})[drillLawyer] || {};
-  // 每個 tier 的實際分潤（從 monthly.tier 聚合）
+
+  // 每個 tier 的「實際」分潤（從 monthly.tier 聚合，是 source of truth）
+  const委任_B = tierMap['委任-引案(喆律)'] || 0;
+  const委任_C = tierMap['委任-咨詢(律師)'] || 0;
+  const委任_E_z = tierMap['委任-利潤(喆律)'] || 0;
+  const委任_E_l = tierMap['委任-利潤(律師)'] || 0;
+  const委任_E = 委任_E_z + 委任_E_l;
   const tierStats = {
     '委任案': {
       ratio: cm['委任'] || '—',
-      z: (tierMap['委任-引案(喆律)'] || 0) + (tierMap['委任-利潤(喆律)'] || 0),
-      l: (tierMap['委任-咨詢(律師)'] || 0) + (tierMap['委任-利潤(律師)'] || 0),
+      z: 委任_B + 委任_E_z,
+      l: 委任_C + 委任_E_l,
       kpi_amt: commA,
-      hasD: true,  // 委任案有處理費 D 扣除
-      desc: '客戶由喆律帶進來，按合約比例分（A − B − C − D 後分潤）',
+      breakdown: commA > 0 ? {
+        B: 委任_B, C: 委任_C, D: procD, E: 委任_E,
+        E_z: 委任_E_z, E_l: 委任_E_l,
+      } : null,
+      desc: '客戶由喆律帶進來。喆律先取 30% 引案費 B、律師先取 10% 咨詢費 C、扣處理費 D 共擔成本後，剩餘利潤 E 才按合約比例分',
     },
     '自案': {
       ratio: cm['自案'] || '—',
       z: tierMap['自案(喆律)'] || 0,
       l: tierMap['自案(律師)'] || 0,
       kpi_amt: selfA,
-      hasD: false,
-      desc: '律師自招案件',
+      breakdown: null,
+      desc: '律師自招案件，全額按合約比例直接分（無處理費 D 扣除）',
     },
   };
 
+  // 顯示順序：依 KPI 金額 > 0 為準，不依 case rows 是否存在
+  const tierOrder = ['委任案', '自案'].filter(k => tierStats[k].kpi_amt > 0);
+
   let html = `<div class="note" style="margin-bottom:8px">
-    司法官合署分潤是月度聚合（一/二/三段，依合約比例分）。下列依案件來源分組，金額為當月該來源 KPI 實際聚合值；
+    司法官合署分潤是月度聚合（一/二/三段，依合約比例分）。下列依案件來源分組，金額為 KPI 實際聚合值。
+    部分自案的單筆明細因 parser 分類限制可能落在「委任案」清單內（first_date 邏輯 vs 律師標記不一致）；
     諮詢費等非主辦收入見下方表格：
   </div>`;
-  let grandSum = 0;
-  for (const tier of ordered) {
-    const list = groups[tier];
+
+  for (const tier of tierOrder) {
+    const list = groups[tier] || [];
     const sum = list.reduce((s, c) => s + (c.amount || 0), 0);
-    grandSum += sum;
     const st = tierStats[tier];
-    const dNote = st.hasD && procD > 0
-      ? `（已扣處理費 D $${fmt(procD)} 共擔成本）`
+
+    // 分潤拆解（僅 委任案 有 B/C/D/E）
+    let breakdownHtml = '';
+    if (st.breakdown) {
+      const bd = st.breakdown;
+      breakdownHtml = `<div style="margin-top:6px;padding:8px 12px;background:var(--bg-row);border-radius:4px;font-size:0.78rem;line-height:1.7">
+        <span style="color:var(--text-muted)">分潤拆解：</span>
+        <span style="color:var(--orange)">引案 B = A×30% = $${fmt(bd.B)} → 喆律</span>
+        <span style="color:var(--green)">咨詢 C = A×10% = $${fmt(bd.C)} → 律師</span>
+        <span style="color:var(--text-muted)">處理費 D 扣 $${fmt(bd.D)}（人事共擔）</span>
+        利潤 E = A−B−C−D = $${fmt(bd.E)} →
+        <span style="color:var(--orange)">喆律 ${st.ratio.split('/')[0]}% = $${fmt(bd.E_z)}</span> /
+        <span style="color:var(--green)">律師 ${st.ratio.split('/')[1]}% = $${fmt(bd.E_l)}</span>
+      </div>`;
+    }
+
+    // 案件明細不齊警告
+    const caseSumNote = list.length > 0 && Math.abs(sum - st.kpi_amt) > 1
+      ? `<br><span style="color:var(--gold-light);font-size:0.75rem">⚠ 案件明細合計 $${fmt(sum)} 與 KPI 案額 $${fmt(st.kpi_amt)} 差 $${fmt(sum - st.kpi_amt)}（parser 分類差異）</span>`
       : '';
+    const noCaseNote = list.length === 0 && st.kpi_amt > 0
+      ? `<br><span style="color:var(--text-muted);font-size:0.75rem">（本月 ${tier} KPI 有金額但 case-level 明細落在其他分組，因 parser 的 classification 跟律師標記邏輯不同）</span>`
+      : '';
+
     html += `<div style="margin-top:14px">
       <strong style="color:var(--gold)">${tier}</strong>
       <span style="color:var(--text-muted);font-size:0.82rem">
-        ${list.length} 筆 · 案額合計 $${fmt(sum)} · 比例 ${st.ratio}（喆律/律師）
+        ${list.length} 筆 · 案額（KPI）$${fmt(st.kpi_amt)}
         →
         <span style="color:var(--orange)">喆律 $${fmt(st.z)}</span> /
         <span style="color:var(--green)">律師 $${fmt(st.l)}</span>
-        ${dNote}
       </span>
-      <div class="note" style="font-size:0.75rem;margin-top:2px">${st.desc}</div>
+      <div class="note" style="font-size:0.75rem;margin-top:2px">${st.desc}${caseSumNote}${noCaseNote}</div>
+      ${breakdownHtml}
     </div>`;
-    html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
-      <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>
-    </tr></thead><tbody>`;
-    list.sort((a, b) => (b.amount || 0) - (a.amount || 0));
-    for (const c of list) {
-      html += `<tr>
-        <td>${escapeHtml(c.client || '')}</td>
-        <td class="num">$${fmt(c.amount || 0)}</td>
-        <td>${escapeHtml(c.brand || '')}</td>
-        <td style="color:var(--text-muted);font-size:0.78rem">${(c.date || '').slice(0, 10)}</td>
-      </tr>`;
+
+    if (list.length > 0) {
+      html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
+        <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>
+      </tr></thead><tbody>`;
+      list.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+      for (const c of list) {
+        html += `<tr>
+          <td>${escapeHtml(c.client || '')}</td>
+          <td class="num">$${fmt(c.amount || 0)}</td>
+          <td>${escapeHtml(c.brand || '')}</td>
+          <td style="color:var(--text-muted);font-size:0.78rem">${(c.date || '').slice(0, 10)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
     }
-    html += '</tbody></table></div>';
   }
 
   // 合計列
