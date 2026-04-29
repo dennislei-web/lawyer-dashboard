@@ -1734,24 +1734,35 @@ function renderDrillCasesSenior(title, body) {
   body.innerHTML = html;
 }
 
-// Judicial：用 case-level classification 推導「案件來源 tier」（委任案 / 自案），
-// 每組從 monthly.tier 撈實際的喆律/律師分潤金額（聚合值，因 D 是月度共擔成本扣的）
-// 比照 senior 模式：每組顯示「這個來源帶來多少 案額 → 喆律/律師 各拿多少」
-const JUDICIAL_MAIN_CLASSES = ['首委', '1年內續委', '自案（首委>1年）'];
-const JUDICIAL_CLASS_TO_TIER = {
-  '首委': '委任案',
-  '1年內續委': '委任案',
-  '自案（首委>1年）': '自案',
-};
+// Judicial：依 收入 sheet 的 section 欄分主案 tier（承辦/自案）+ classification 補強。
+// section 是 parser 從 收入 sheet 子標題（如「自案」「介紹」）撥的，比 first_date
+// 推的 classification 更可靠（律師 explicit 標 vs 系統推測）。
+
+function _judicialDerivedTier(c) {
+  // 非主辦先過濾
+  if (c.section === '介紹') return null;
+  if (c.classification === '諮詢') return null;
+  // 自案：section=自案 OR classification=自案（首委>1年）
+  if (c.section === '自案' || c.classification === '自案（首委>1年）') return '自案';
+  // 預設委任案（section=承辦 + 首委/續委）
+  if (c.section === '承辦' || c.section === '原始檔') return '委任案';
+  return null;
+}
 
 function renderDrillCasesJudicial(title, body) {
   const casesAll = (DATA.cases || []).filter(c =>
     c.lawyer === drillLawyer &&
     c.year === selectedYear &&
-    String(c.month) === String(selectedMonth) &&
-    c.dept
+    String(c.month) === String(selectedMonth)
   );
-  const cases = casesAll.filter(c => JUDICIAL_MAIN_CLASSES.includes(c.classification));
+  // section='承辦' 但 dept 空的多半是規費/郵資/退款列 → 排除
+  // section='自案' 不要被 dept filter 卡掉（自案段 row 常常 dept 空）
+  const cases = casesAll.filter(c => {
+    const tier = _judicialDerivedTier(c);
+    if (!tier) return false;
+    if (tier === '委任案' && !c.dept) return false;  // 規費類過濾
+    return true;
+  });
 
   title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 主案 ${cases.length} 筆`;
 
@@ -1771,10 +1782,10 @@ function renderDrillCasesJudicial(title, body) {
     return;
   }
 
-  // 依「案件來源 tier」分組
+  // 依「案件來源 tier」分組（用 _judicialDerivedTier）
   const groups = {};
   for (const c of cases) {
-    const tier = JUDICIAL_CLASS_TO_TIER[c.classification] || '未分類';
+    const tier = _judicialDerivedTier(c) || '未分類';
     (groups[tier] = groups[tier] || []).push(c);
   }
 
@@ -1813,7 +1824,6 @@ function renderDrillCasesJudicial(title, body) {
 
   let html = `<div class="note" style="margin-bottom:8px">
     司法官合署分潤是月度聚合（一/二/三段，依合約比例分）。下列依案件來源分組，金額為 KPI 實際聚合值。
-    部分自案的單筆明細因 parser 分類限制可能落在「委任案」清單內（first_date 邏輯 vs 律師標記不一致）；
     諮詢費等非主辦收入見下方表格：
   </div>`;
 
