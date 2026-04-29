@@ -1785,6 +1785,16 @@ function renderDrillCasesJudicial(title, body) {
     return '—';
   }
 
+  // 從 monthly 撈當月聚合值，做清單合計 vs 主案件金額的對帳
+  const mRec = (DATA.monthly || []).find(m =>
+    m.lawyer === drillLawyer &&
+    m.year === selectedYear &&
+    String(m.month) === String(selectedMonth)
+  ) || {};
+  const commA = mRec.commission_A || 0;
+  const selfA = mRec.self_A || 0;
+  const consultA = mRec.consult_a || 0;
+
   let html = `<div class="note" style="margin-bottom:8px">
     司法官合署的分潤是月度聚合（一/二/三段，按合約比例分），下列依案件分類顯示對應規則：
   </div>`;
@@ -1811,8 +1821,18 @@ function renderDrillCasesJudicial(title, body) {
     }
     html += '</tbody></table></div>';
   }
+  // 對帳列：清單合計 vs 主案件金額（KPI）
+  const expected = commA + selfA + consultA;
+  const diff = grandSum - expected;
+  const diffNote = Math.abs(diff) > 1
+    ? `<br><span style="color:var(--red);font-size:0.78rem">⚠ 差 $${fmt(diff)} — 可能有 收入 sheet 的小額 row（規費/退款/調整）未被分類</span>`
+    : '';
   html += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
     <strong>當月案件總額</strong> $${fmt(grandSum)}
+    <span style="color:var(--text-muted);font-size:0.82rem">
+      = 委任 $${fmt(commA)} + 自案 $${fmt(selfA)} + 諮詢 $${fmt(consultA)}
+      <span style="font-size:0.75rem">（KPI 主案件金額 = 委任 + 自案 = $${fmt(commA + selfA)}，諮詢屬附屬）</span>
+    </span>${diffNote}
     <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">※ 不含規費 / 郵資等支出列</span>
   </div>`;
   body.innerHTML = html;
