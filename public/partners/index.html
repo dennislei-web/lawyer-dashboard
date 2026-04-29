@@ -1649,41 +1649,32 @@ function renderDrillCases() {
   }
 }
 
-// Senior：用 profit_share 精準顯示每筆 case 的 ratio + split
+// Senior：用 profit_share 精準顯示每筆主案的 ratio + split
+// 非主案（諮詢/其他/其他-自案/成案獎金）統一移到「非主辦案件收入明細」表格不重複
+const SENIOR_MAIN_TIERS = ['諮詢成案', '喆律轉案', '法律010轉案', '自案'];
+
 function renderDrillCasesSenior(title, body) {
-  const ps = (DATA.profit_share || []).filter(p =>
+  const psAll = (DATA.profit_share || []).filter(p =>
     p.lawyer === drillLawyer &&
     p.year === selectedYear &&
     String(p.month) === String(selectedMonth)
   );
-  // 諮詢費等沒進分潤表的 case，從 cases.csv 撈（amount=2000、不在 ps 裡）
-  const casesAll = (DATA.cases || []).filter(c =>
-    c.lawyer === drillLawyer &&
-    c.year === selectedYear &&
-    String(c.month) === String(selectedMonth) &&
-    c.dept
-  );
-  const psClients = new Set(ps.map(p => p.client + '|' + p.case_amount));
-  const consultOnly = casesAll.filter(c =>
-    !psClients.has(c.client + '|' + c.amount) &&
-    (c.classification === '諮詢' || (c.amount || 0) <= 3000)
-  );
+  const ps = psAll.filter(p => SENIOR_MAIN_TIERS.includes(p.tier));
 
-  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 分潤 ${ps.length} 筆 + 諮詢 ${consultOnly.length} 筆`;
+  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 主案 ${ps.length} 筆`;
 
-  if (ps.length === 0 && consultOnly.length === 0) {
-    body.innerHTML = '<div class="note">此月無案件</div>';
+  if (ps.length === 0) {
+    body.innerHTML = '<div class="note">此月無主案件（諮詢、協力等非主辦收入見下方）</div>';
     return;
   }
 
-  // 依 tier 群組
+  // 依 tier 群組（只剩主案 tier）
   const groups = {};
   for (const p of ps) {
     const k = p.tier || '未分類';
     (groups[k] = groups[k] || []).push(p);
   }
-  const tierOrder = ['諮詢成案', '喆律轉案', '法律010轉案', '自案', '其他', '其他-自案', '成案獎金', '諮詢'];
-  const ordered = [...tierOrder.filter(k => groups[k]), ...Object.keys(groups).filter(k => !tierOrder.includes(k))];
+  const ordered = SENIOR_MAIN_TIERS.filter(k => groups[k]);
 
   let html = '';
   let totalAmt = 0, totalZ = 0, totalL = 0;
@@ -1720,31 +1711,6 @@ function renderDrillCasesSenior(title, body) {
         <td class="num" style="color:var(--orange)">$${fmt(p.zhelu_amt)}</td>
         <td class="num" style="color:var(--green)">$${fmt(p.lawyer_amt)}</td>
         <td style="color:var(--text-muted);font-size:0.78rem">${escapeHtml(p.note || '')}</td>
-      </tr>`;
-    }
-    html += '</tbody></table></div>';
-  }
-
-  // 諮詢 group（從 cases）
-  if (consultOnly.length > 0) {
-    const sumC = consultOnly.reduce((s, c) => s + (c.amount || 0), 0);
-    totalAmt += sumC; totalL += sumC;  // 100% 律師
-    html += `<div style="margin-top:14px">
-      <strong style="color:var(--gold)">諮詢</strong>
-      <span style="color:var(--text-muted);font-size:0.82rem">
-        ${consultOnly.length} 筆 · 案額 $${fmt(sumC)} → 律師 $${fmt(sumC)}（100% 歸律師）
-      </span>
-    </div>`;
-    html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
-      <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th>
-    </tr></thead><tbody>`;
-    consultOnly.sort((a, b) => (b.amount || 0) - (a.amount || 0));
-    for (const c of consultOnly) {
-      html += `<tr>
-        <td>${escapeHtml(c.client || '')}</td>
-        <td class="num">$${fmt(c.amount || 0)}</td>
-        <td>${escapeHtml(c.brand || '')}</td>
-        <td style="color:var(--text-muted);font-size:0.78rem">${(c.date || '').slice(0, 10)}</td>
       </tr>`;
     }
     html += '</tbody></table></div>';
