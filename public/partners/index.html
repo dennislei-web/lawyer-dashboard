@@ -1781,20 +1781,20 @@ function renderDrillCasesJudicial(title, body) {
   const cm = (DATA.contract_matrix || {})[drillLawyer] || {};
 
   // 每個 tier 的「實際」分潤（從 monthly.tier 聚合，是 source of truth）
-  const委任_B = tierMap['委任-引案(喆律)'] || 0;
-  const委任_C = tierMap['委任-咨詢(律師)'] || 0;
-  const委任_E_z = tierMap['委任-利潤(喆律)'] || 0;
-  const委任_E_l = tierMap['委任-利潤(律師)'] || 0;
-  const委任_E = 委任_E_z + 委任_E_l;
+  const wt_B = tierMap['委任-引案(喆律)'] || 0;
+  const wt_C = tierMap['委任-咨詢(律師)'] || 0;
+  const wt_E_z = tierMap['委任-利潤(喆律)'] || 0;
+  const wt_E_l = tierMap['委任-利潤(律師)'] || 0;
+  const wt_E = wt_E_z + wt_E_l;
   const tierStats = {
     '委任案': {
       ratio: cm['委任'] || '—',
-      z: 委任_B + 委任_E_z,
-      l: 委任_C + 委任_E_l,
+      z: wt_B + wt_E_z,
+      l: wt_C + wt_E_l,
       kpi_amt: commA,
       breakdown: commA > 0 ? {
-        B: 委任_B, C: 委任_C, D: procD, E: 委任_E,
-        E_z: 委任_E_z, E_l: 委任_E_l,
+        B: wt_B, C: wt_C, D: procD, E: wt_E,
+        E_z: wt_E_z, E_l: wt_E_l,
       } : null,
       desc: '客戶由喆律帶進來。喆律先取 30% 引案費 B、律師先取 10% 咨詢費 C、扣處理費 D 共擔成本後，剩餘利潤 E 才按合約比例分',
     },
