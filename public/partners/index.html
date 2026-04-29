@@ -982,6 +982,7 @@ let DATA = RAW.cohorts[selectedCohort];
 let LAWYERS = DATA.lawyers;
 let COLORS = DATA.colors;
 let selectedYear = 'all';
+let selectedMonth = null;  // null = 整年；'1'..'12' = 該月（只在 specific year 才生效）
 let drillLawyer = LAWYERS[0];
 
 // 一筆案件若 source 含逗號，拆開；每個來源各算 1 件、金額平均拆分。
@@ -1018,6 +1019,7 @@ function switchCohort(c) {
   if (selectedYear !== 'all' && !years.includes(selectedYear)) {
     selectedYear = years.sort().slice(-1)[0] || 'all';
   }
+  selectedMonth = null;  // 切 cohort 月份重置（不同律師 cohort 月份覆蓋不同）
   // update cohort pill UI
   document.querySelectorAll('.cohort-pill').forEach(b => {
     b.classList.toggle('active', b.dataset.c === c);
@@ -1044,19 +1046,44 @@ function updateTabVisibility() {
 }
 
 function filteredMonthly(year) {
-  return year === 'all' ? DATA.monthly : DATA.monthly.filter(m => m.year === year);
+  let arr = year === 'all' ? DATA.monthly : DATA.monthly.filter(m => m.year === year);
+  if (year !== 'all' && selectedMonth) {
+    arr = arr.filter(m => String(m.month) === String(selectedMonth));
+  }
+  return arr;
 }
 
-// ---- year filter ----
+// ---- year + month filter ----
 function renderYearFilter() {
   const years = ['all', ...new Set(DATA.monthly.map(m=>m.year).sort())];
   const el = document.getElementById('year-filter');
-  el.innerHTML = years.map(y => {
+  let html = years.map(y => {
     const label = y === 'all' ? '全部' : `${y} 年`;
     return `<button class="year-btn ${y===selectedYear?'active':''}" data-y="${y}">${label}</button>`;
   }).join('');
-  el.querySelectorAll('button').forEach(b => b.onclick = () => {
+
+  // 選了某一年 → 出月份切換鈕
+  if (selectedYear !== 'all') {
+    const months = [...new Set(
+      DATA.monthly.filter(m => m.year === selectedYear).map(m => String(m.month))
+    )].sort((a, b) => Number(a) - Number(b));
+    if (months.length > 0) {
+      html += `<span style="color:var(--text-muted);font-size:0.75rem;margin:0 6px 0 12px">月份</span>`;
+      html += `<button class="year-btn ${!selectedMonth?'active':''}" data-m="">全部</button>`;
+      html += months.map(mo =>
+        `<button class="year-btn ${selectedMonth===mo?'active':''}" data-m="${mo}">${mo}月</button>`
+      ).join('');
+    }
+  }
+  el.innerHTML = html;
+
+  el.querySelectorAll('button[data-y]').forEach(b => b.onclick = () => {
     selectedYear = b.dataset.y;
+    selectedMonth = null;  // 切年度 → 重置月份
+    renderAll();
+  });
+  el.querySelectorAll('button[data-m]').forEach(b => b.onclick = () => {
+    selectedMonth = b.dataset.m || null;
     renderAll();
   });
 }
@@ -1345,7 +1372,11 @@ function renderKPITable() {
 
 // ---- Tab 3: Source ----
 function filteredCases(year) {
-  return year === 'all' ? DATA.cases : DATA.cases.filter(c => c.year === year);
+  let arr = year === 'all' ? DATA.cases : DATA.cases.filter(c => c.year === year);
+  if (year !== 'all' && selectedMonth) {
+    arr = arr.filter(c => String(c.month) === String(selectedMonth));
+  }
+  return arr;
 }
 
 function renderSourcePie() {
@@ -1583,8 +1614,12 @@ function renderDrill() {
 
 // ---- Tab 5: Repeat clients (unified repeat_entries) ----
 function filteredRepeatEntries(year) {
-  const arr = DATA.repeat_entries || [];
-  return year === 'all' ? arr : arr.filter(e => e.year === year);
+  const all = DATA.repeat_entries || [];
+  let arr = year === 'all' ? all : all.filter(e => e.year === year);
+  if (year !== 'all' && selectedMonth) {
+    arr = arr.filter(e => String(e.month) === String(selectedMonth));
+  }
+  return arr;
 }
 
 function renderRepeatRule() {
