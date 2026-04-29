@@ -1073,11 +1073,13 @@ function renderYearFilter() {
     )].sort((a, b) => Number(a) - Number(b));
     if (months.length > 0) {
       html += `<span style="color:var(--text-muted);font-size:0.75rem;margin:0 6px 0 12px">月份</span>`;
-      html += `<select id="month-select" class="year-btn" style="padding:5px 10px;cursor:pointer">`;
-      html += `<option value="">全部</option>`;
+      const mActive = selectedMonth ? 'active' : '';
+      html += `<select id="month-select" class="year-btn ${mActive}"
+        style="padding:5px 10px;cursor:pointer;color:var(--text);background:var(--bg-card);border:1px solid var(--border);font-weight:500">`;
+      html += `<option value="" style="color:#111;background:#fff">全部</option>`;
       html += months.map(mo => {
         const sel = selectedMonth === mo ? 'selected' : '';
-        return `<option value="${mo}" ${sel}>${mo} 月</option>`;
+        return `<option value="${mo}" ${sel} style="color:#111;background:#fff">${mo} 月</option>`;
       }).join('');
       html += `</select>`;
     }
