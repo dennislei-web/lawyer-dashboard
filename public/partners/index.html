@@ -779,6 +779,10 @@ if (window.location.search.indexOf('embed=1') > -1) {
         <div class="chart-box tall"><canvas id="chart-drill-tier-l"></canvas></div>
       </div>
     </div>
+    <div class="card" id="drill-cases-card" style="display:none; margin-top:16px">
+      <h3 id="drill-cases-title">案件明細</h3>
+      <div id="drill-cases-body"></div>
+    </div>
   </section>
 
 <section class="page" id="page-repeat">
@@ -1062,17 +1066,20 @@ function renderYearFilter() {
     return `<button class="year-btn ${y===selectedYear?'active':''}" data-y="${y}">${label}</button>`;
   }).join('');
 
-  // 選了某一年 → 出月份切換鈕
+  // 選了某一年 → 出月份下拉
   if (selectedYear !== 'all') {
     const months = [...new Set(
       DATA.monthly.filter(m => m.year === selectedYear).map(m => String(m.month))
     )].sort((a, b) => Number(a) - Number(b));
     if (months.length > 0) {
       html += `<span style="color:var(--text-muted);font-size:0.75rem;margin:0 6px 0 12px">月份</span>`;
-      html += `<button class="year-btn ${!selectedMonth?'active':''}" data-m="">全部</button>`;
-      html += months.map(mo =>
-        `<button class="year-btn ${selectedMonth===mo?'active':''}" data-m="${mo}">${mo}月</button>`
-      ).join('');
+      html += `<select id="month-select" class="year-btn" style="padding:5px 10px;cursor:pointer">`;
+      html += `<option value="">全部</option>`;
+      html += months.map(mo => {
+        const sel = selectedMonth === mo ? 'selected' : '';
+        return `<option value="${mo}" ${sel}>${mo} 月</option>`;
+      }).join('');
+      html += `</select>`;
     }
   }
   el.innerHTML = html;
@@ -1082,10 +1089,11 @@ function renderYearFilter() {
     selectedMonth = null;  // 切年度 → 重置月份
     renderAll();
   });
-  el.querySelectorAll('button[data-m]').forEach(b => b.onclick = () => {
-    selectedMonth = b.dataset.m || null;
+  const ms = el.querySelector('#month-select');
+  if (ms) ms.onchange = () => {
+    selectedMonth = ms.value || null;
     renderAll();
-  });
+  };
 }
 
 // ---- Tab 1: Overview ----
@@ -1610,6 +1618,94 @@ function renderDrill() {
     }
   });
 
+  // 案件清單（只在選了具體月份時顯示）
+  renderDrillCases();
+}
+
+// 案件清單：選月份時呈現該月該律師的每筆案件
+function renderDrillCases() {
+  const card = document.getElementById('drill-cases-card');
+  const title = document.getElementById('drill-cases-title');
+  const body = document.getElementById('drill-cases-body');
+  if (!selectedMonth || selectedYear === 'all') {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+
+  const cases = (DATA.cases || []).filter(c =>
+    c.lawyer === drillLawyer &&
+    c.year === selectedYear &&
+    String(c.month) === String(selectedMonth) &&
+    c.dept  // 過濾掉 規費 / 郵資 / 印章 等非案件 row（這些 dept 為空）
+  );
+
+  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 共 ${cases.length} 筆`;
+
+  if (cases.length === 0) {
+    body.innerHTML = '<div class="note">此月無案件</div>';
+    return;
+  }
+
+  // 依分類群組
+  const groups = {};
+  for (const c of cases) {
+    const k = c.classification || '未分類';
+    (groups[k] = groups[k] || []).push(c);
+  }
+  const groupOrder = ['首委', '1年內續委', '自案（首委>1年）', '諮詢', '未分類'];
+  const ordered = [...groupOrder.filter(k => groups[k]), ...Object.keys(groups).filter(k => !groupOrder.includes(k))];
+
+  // 對每筆 case 推「分配方式」說明 — 用 contract_matrix + classification 推估
+  const cm = (DATA.contract_matrix || {})[drillLawyer] || {};
+  const isJudicial = selectedCohort === 'judicial';
+  function ratioForClass(cls, brand) {
+    // judicial: 首委/續委 → 委任案；自案>1年 → 自案；諮詢 → 諮詢
+    // senior: 諮詢 → 諮詢；其他依品牌不一定
+    if (cls === '諮詢') return cm['諮詢'] || '0/100';
+    if (cls === '自案（首委>1年）') return cm['自案'] || '—';
+    if (cls === '首委' || cls === '1年內續委') {
+      if (isJudicial) return cm['委任'] || '—';
+      // senior: 主案分潤要看具體 tier，這邊只給概略
+      if (brand && (brand.includes('010') || brand.includes('010') || brand.toLowerCase().includes('law010'))) return '30/70 或 35/65';
+      return '依案件分潤表（諮詢成案 30/70、喆律轉案 40/60）';
+    }
+    return '—';
+  }
+
+  let html = '';
+  let grandSum = 0;
+  for (const k of ordered) {
+    const list = groups[k];
+    const sum = list.reduce((s, c) => s + (c.amount || 0), 0);
+    grandSum += sum;
+    html += `<div style="margin-top:14px"><strong style="color:var(--gold)">${k}</strong>  <span style="color:var(--text-muted);font-size:0.82rem">${list.length} 筆 · 小計 $${fmt(sum)}</span></div>`;
+    html += `<div style="overflow-x:auto"><table style="margin-top:6px"><thead><tr>
+      <th>客戶</th><th class="num">金額</th><th>品牌</th><th>日期</th><th>分配方式（喆律/律師）</th>
+    </tr></thead><tbody>`;
+    // 依金額遞減
+    list.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    for (const c of list) {
+      const date = (c.date || '').slice(0, 10);
+      html += `<tr>
+        <td>${escapeHtml(c.client || '')}</td>
+        <td class="num">$${fmt(c.amount || 0)}</td>
+        <td>${escapeHtml(c.brand || '')}</td>
+        <td style="color:var(--text-muted);font-size:0.78rem">${date}</td>
+        <td style="font-size:0.78rem;color:var(--text-muted)">${ratioForClass(k, c.brand)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+  html += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
+    <strong>當月案件總額</strong>  $${fmt(grandSum)}
+    <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">※ 不含規費 / 郵資等支出列</span>
+  </div>`;
+  body.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
 // ---- Tab 5: Repeat clients (unified repeat_entries) ----
