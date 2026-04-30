@@ -5023,6 +5023,8 @@ async function parseUploadedFiles() {
 
   // 2. Extract ZIP (if provided)
   const fileEntries = {};
+  const skippedExt = [];
+  const skippedPattern = [];
   if (uploadZipFile) {
     const zip = await JSZip.loadAsync(uploadZipFile);
 
@@ -5031,12 +5033,14 @@ async function parseUploadedFiles() {
       if (zipEntry.dir) continue;
       const filename = path.split('/').pop();
       if (!filename) continue;
+      // 忽略 macOS metadata
+      if (filename.startsWith('.') || path.includes('__MACOSX')) continue;
 
       const ext = filename.split('.').pop().toLowerCase();
-      if (!['docx', 'txt'].includes(ext)) continue;
+      if (!['docx', 'txt'].includes(ext)) { skippedExt.push(filename); continue; }
 
       const parsed = parseUploadFilename(filename);
-      if (!parsed) continue;
+      if (!parsed) { skippedPattern.push(filename); continue; }
 
       let content = '';
       if (ext === 'txt') {
@@ -5065,6 +5069,15 @@ async function parseUploadedFiles() {
         fileEntries[key].transcript = content;
       }
     }
+
+    if (skippedExt.length || skippedPattern.length) {
+      console.warn('[upload] ZIP 內檔案被跳過：', {
+        非 docx/txt: skippedExt,
+        檔名格式不符: skippedPattern,
+        提示: '預期格式 律師名_成案/未成案_YYYYMMDD_案件類型(會議記錄|逐字稿).docx',
+      });
+    }
+    window._lastUploadSkipped = { skippedExt: skippedExt, skippedPattern: skippedPattern };
   }
 
   // 3. Merge: xlsx-only mode (CRM data) or ZIP + xlsx
@@ -5287,16 +5300,27 @@ function renderUploadPreview() {
   var counts = { ready: 0, no_lawyer: 0, no_content: 0, no_match: 0, ambiguous: 0, duplicate: 0 };
   parsedCases.forEach(function(c) { if (counts[c.status] !== undefined) counts[c.status]++; });
 
+  var skipped = window._lastUploadSkipped || { skippedExt: [], skippedPattern: [] };
+  var skippedTotal = skipped.skippedExt.length + skipped.skippedPattern.length;
+
   document.getElementById('uploadStats').innerHTML =
     '<div style="display:flex;gap:20px;flex-wrap:wrap;">' +
     '<div style="font-size:0.9rem;">總案件：<strong>' + parsedCases.length + '</strong></div>' +
     '<div style="font-size:0.9rem;color:var(--green);">可匯入：<strong>' + counts.ready + '</strong></div>' +
+    (skippedTotal > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">ZIP 內跳過：<strong>' + skippedTotal + '</strong></div>' : '') +
     (counts.duplicate > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同批重複：<strong>' + counts.duplicate + '</strong></div>' : '') +
     (counts.no_lawyer > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">律師不存在：<strong>' + counts.no_lawyer + '</strong></div>' : '') +
     (counts.no_content > 0 ? '<div style="font-size:0.9rem;color:var(--red);">無內容：<strong>' + counts.no_content + '</strong></div>' : '') +
     (counts.no_match > 0 ? '<div style="font-size:0.9rem;color:var(--red);">CRM 查無：<strong>' + counts.no_match + '</strong></div>' : '') +
     (counts.ambiguous > 0 ? '<div style="font-size:0.9rem;color:var(--orange);">同日多筆無法判斷：<strong>' + counts.ambiguous + '</strong></div>' : '') +
     '</div>' +
+    (skippedTotal > 0
+      ? '<details style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);"><summary style="cursor:pointer;color:var(--orange);">ZIP 內 ' + skippedTotal + ' 個檔案被跳過（點開看清單）</summary>' +
+        '<div style="margin-top:6px;padding:8px;background:rgba(224,149,74,0.08);border-radius:4px;line-height:1.6;">' +
+        (skipped.skippedPattern.length ? '<div><strong>檔名格式不符（' + skipped.skippedPattern.length + '）</strong>：預期 <code>律師名_成案/未成案_YYYYMMDD_案件類型(會議記錄|逐字稿).docx</code></div><ul style="margin:4px 0 0 16px;">' + skipped.skippedPattern.map(function(n){return '<li>' + escHtml(n) + '</li>';}).join('') + '</ul>' : '') +
+        (skipped.skippedExt.length ? '<div style="margin-top:6px;"><strong>非 docx/txt（' + skipped.skippedExt.length + '）</strong></div><ul style="margin:4px 0 0 16px;">' + skipped.skippedExt.map(function(n){return '<li>' + escHtml(n) + '</li>';}).join('') + '</ul>' : '') +
+        '</div></details>'
+      : '') +
     ((counts.no_match > 0 || counts.ambiguous > 0 || counts.duplicate > 0)
       ? '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.5;">' +
         (counts.no_match > 0 ? 'CRM 查無：該案件 CRM 還沒同步，請等爬蟲跑完再上傳。<br>' : '') +
