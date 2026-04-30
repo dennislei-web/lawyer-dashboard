@@ -33,11 +33,24 @@ OFFICE_TO_CITY = {
     "高雄所": "高雄",
 }
 
-# 非諮詢律師：lawyers 表裡有但不做諮詢業務（財務、客服、停用等），
-# 不要進 LAWYER_DEPARTMENTS — 否則他們的 consultation_logs 雜訊
-# 會被歸到部門 tab。
+# 非諮詢律師：lawyers 表裡有但不做諮詢業務（財務、法務、客服、dummy 等），
+# 不要進 LAWYER_DEPARTMENTS — 否則他們會被歸到部門 tab。
+# 註：lawyers.role 不可靠（admin 同時包含創辦人雷皓明與財務張飛宇），
+#     legal_staff 都是法務不是諮詢律師。要明確列 ID 排除。
 NON_CONSULTING_LAWYER_IDS = {
+    # admin 但非諮詢
     "76636726-2f80-4888-895f-ccbaf7c2ba81",  # 張飛宇 — 財務主管
+    "27ea064c-98eb-477e-8c61-13b052ab23ed",  # 股東 — dummy
+    # manager
+    "ff69ecc5-224b-4ce8-8a6e-618721927479",  # 蘇思蓓
+    "7794fbee-c262-4a66-acba-11b712833165",  # 客戶關係部 — 部門帳號
+    # legal_staff（法務 — 不是諮詢律師）
+    "9409dfa5-4a02-45c0-9981-6b561a13141e",  # 謝依璇
+    "00068630-51ba-4239-890e-59bfb8e69cbd",  # 賴佳瑩
+    "3822ab76-80f0-4234-afef-2814a834ca70",  # 曾靖雯
+    "5b1d9857-df6f-4106-afd3-5482fa14b56a",  # 董沐穎
+    "62a18b12-394a-44af-b9c8-1538626a84df",  # 江欣柔
+    "27d25c54-6fa5-4b30-8367-851007e0a845",  # 黃逸庭
 }
 
 # 1. 律師列表
