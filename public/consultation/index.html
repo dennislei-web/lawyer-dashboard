@@ -4914,17 +4914,38 @@ function setupDropzone(dropzoneId, inputId, nameId, onFile) {
 
 // --- Filename parser ---
 function parseUploadFilename(filename) {
-  const clean = filename.replace(/\s*的副本/g, '');
-  const pattern = /^(.+?)_(成案|未成案)_?(\d{8})_?(.+?)\((會議記錄|會議紀錄|逐字稿)\)\.(docx|txt)$/;
-  const m = clean.match(pattern);
-  if (!m) return null;
-  return {
-    lawyer: m[1].trim(),
-    isSigned: m[2] === '成案',
-    date: m[3].slice(0,4) + '-' + m[3].slice(4,6) + '-' + m[3].slice(6,8),
-    caseType: m[4].trim(),
-    contentType: (m[5] === '逐字稿') ? 'transcript' : 'meeting',
-  };
+  // 清掉 Google Drive 重複下載的「.docx 的副本.docx」與「的副本」尾綴
+  var clean = filename
+    .replace(/\.(docx|txt)\s*的副本/g, '')
+    .replace(/\s*的副本/g, '')
+    .replace(/\s*\(\d+\)(?=\.(docx|txt)$)/g, '');  // 也清 (1) (2) 之類重複後綴
+
+  // Format B（CRM 匯出常見）：律師_成案/未成案[_]YYYYMMDD[_]案件類型[(當事人)]_(會議記錄|逐字稿).docx
+  var b = clean.match(/^(.+?)_(成案|未成案)_?(\d{8})_?(.+?)_(會議記錄|會議紀錄|逐字稿)\.(docx|txt)$/);
+  if (b) {
+    var caseTypeB = b[4].replace(/\s*\([^)]*\)\s*$/, '').trim();  // 去掉尾端 (當事人)
+    return {
+      lawyer: b[1].trim(),
+      isSigned: b[2] === '成案',
+      date: b[3].slice(0,4) + '-' + b[3].slice(4,6) + '-' + b[3].slice(6,8),
+      caseType: caseTypeB,
+      contentType: (b[5] === '逐字稿') ? 'transcript' : 'meeting',
+    };
+  }
+
+  // Format A（舊）：律師_成案/未成案_YYYYMMDD_案件類型(會議記錄|逐字稿).docx
+  var a = clean.match(/^(.+?)_(成案|未成案)_?(\d{8})_?(.+?)\((會議記錄|會議紀錄|逐字稿)\)\.(docx|txt)$/);
+  if (a) {
+    return {
+      lawyer: a[1].trim(),
+      isSigned: a[2] === '成案',
+      date: a[3].slice(0,4) + '-' + a[3].slice(4,6) + '-' + a[3].slice(6,8),
+      caseType: a[4].trim(),
+      contentType: (a[5] === '逐字稿') ? 'transcript' : 'meeting',
+    };
+  }
+
+  return null;
 }
 
 // --- Read docx from ArrayBuffer ---
