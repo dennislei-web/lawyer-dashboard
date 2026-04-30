@@ -106,7 +106,7 @@ js_lines.append("};")
 js_lines.append("")
 js_lines.append("var DEPARTMENT_ORDER = ['台北','桃園','新竹','台中','台南','高雄','合署','合署(司法官)'];")
 
-out_path = r"C:\projects\lawyer-dashboard\scripts\lawyer_departments.js"
+out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lawyer_departments.js")
 with open(out_path, "w", encoding="utf-8") as f:
     f.write("\n".join(js_lines))
 print()
