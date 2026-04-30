@@ -5072,9 +5072,9 @@ async function parseUploadedFiles() {
 
     if (skippedExt.length || skippedPattern.length) {
       console.warn('[upload] ZIP 內檔案被跳過：', {
-        非 docx/txt: skippedExt,
-        檔名格式不符: skippedPattern,
-        提示: '預期格式 律師名_成案/未成案_YYYYMMDD_案件類型(會議記錄|逐字稿).docx',
+        '非 docx/txt': skippedExt,
+        '檔名格式不符': skippedPattern,
+        '提示': '預期格式 律師名_成案/未成案_YYYYMMDD_案件類型(會議記錄|逐字稿).docx',
       });
     }
     window._lastUploadSkipped = { skippedExt: skippedExt, skippedPattern: skippedPattern };
