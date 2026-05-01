@@ -157,17 +157,19 @@
     .chart-subtitle { font-size:0.72rem; color:var(--text-muted); margin-top:-12px; margin-bottom:14px; }
     .chart-container { position:relative; height:300px; }
     .chart-container.tall { height:360px; }
-    .chart-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
-    .chart-card-head .chart-title { margin-bottom:4px; }
-    .chart-card-head .chart-subtitle { margin-top:0; margin-bottom:0; }
-    .mini-toggle { display:flex; flex-shrink:0; }
-    .mini-toggle button {
-      padding:4px 10px; font-size:0.72rem; border:1px solid var(--border);
-      background:var(--bg-row); color:var(--text-muted); cursor:pointer;
+    /* small-multiples 品牌成長 */
+    .brand-trend-grid { display:flex; flex-direction:column; gap:10px; }
+    .brand-trend-panel {
+      background:var(--bg-row); border:1px solid var(--border); border-radius:8px;
+      padding:8px 12px;
     }
-    .mini-toggle button.active { background:var(--gold); color:#0a0a0a; border-color:var(--gold); font-weight:600; }
-    .mini-toggle button:first-child { border-radius:6px 0 0 6px; }
-    .mini-toggle button:last-child { border-radius:0 6px 6px 0; border-left:0; }
+    .brand-trend-head { display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:0.78rem; flex-wrap:wrap; }
+    .brand-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .brand-trend-name { font-weight:600; color:var(--text); }
+    .brand-trend-meta { color:var(--text-muted); margin-left:auto; font-size:0.74rem; }
+    .brand-trend-meta .delta-pos { color:var(--green); }
+    .brand-trend-meta .delta-neg { color:var(--red); }
+    .brand-trend-canvas { height:80px; position:relative; }
 
     /* TABLE */
     .table-card {
@@ -320,17 +322,9 @@
 
       <div class="chart-row">
         <div class="chart-card">
-          <div class="chart-card-head">
-            <div>
-              <div class="chart-title">品牌好友成長曲線</div>
-              <div class="chart-subtitle" id="trendSubtitle">期間累計變化（起點 = 0）</div>
-            </div>
-            <div class="mini-toggle" id="trendModeToggle">
-              <button type="button" data-mode="delta" class="active">期間變化</button>
-              <button type="button" data-mode="abs">絕對值</button>
-            </div>
-          </div>
-          <div class="chart-container"><canvas id="brandTrendChart"></canvas></div>
+          <div class="chart-title">品牌好友成長曲線</div>
+          <div class="chart-subtitle">每品牌獨立刻度，看清各自漲跌</div>
+          <div id="brandTrendGrid" class="brand-trend-grid"></div>
         </div>
         <div class="chart-card">
           <div class="chart-title">品牌好友佔比（最新）</div>
@@ -397,10 +391,8 @@ var state = {
   startDate: defaultStartDate(),
   endDate: defaultEndDate(),
   preset: '30',
-  brand: '',
-  trendMode: 'delta'  // 'delta' = 期間變化（起點 0），'abs' = 絕對值
+  brand: ''
 };
-var lastBrandRows = [];
 
 // 品牌色票（brand_code 對應）
 var BRAND_COLORS = {
@@ -524,16 +516,6 @@ function initFilters() {
     state.brand = e.target.value;
     loadAll();
   });
-  document.getElementById('trendModeToggle').addEventListener('click', function(e) {
-    var b = e.target.closest('button[data-mode]'); if (!b) return;
-    document.querySelectorAll('#trendModeToggle button').forEach(function(x){ x.classList.remove('active'); });
-    b.classList.add('active');
-    state.trendMode = b.getAttribute('data-mode');
-    document.getElementById('trendSubtitle').textContent = state.trendMode === 'abs'
-      ? '每日 targeted_reaches（≈ LINE@ 後台「好友數」）'
-      : '期間累計變化（起點 = 0）';
-    if (lastBrandRows.length) renderBrandTrend(lastBrandRows);
-  });
 }
 
 // ═══ DATA ═══
@@ -634,60 +616,79 @@ function chartGridColor() {
 }
 
 function renderBrandTrend(rows) {
-  lastBrandRows = rows;
-  // 收集所有日期
-  var dateSet = {};
-  rows.forEach(function(r) { dateSet[r.insight_date] = 1; });
-  var labels = Object.keys(dateSet).sort();
-
-  // per-brand date → total_targeted
-  var brandData = {};
-  brandFilterArr().forEach(function(b) { brandData[b] = {}; });
+  // 依 brand 分組
+  var brandRows = {};
+  brandFilterArr().forEach(function(b) { brandRows[b] = []; });
   rows.forEach(function(r) {
-    if (brandData[r.brand_code]) brandData[r.brand_code][r.insight_date] = Number(r.total_targeted || 0);
+    if (brandRows[r.brand_code]) brandRows[r.brand_code].push(r);
   });
 
-  var datasets = brandFilterArr().map(function(b) {
-    var raw = labels.map(function(d) { return brandData[b][d] != null ? brandData[b][d] : null; });
-    var data;
-    if (state.trendMode === 'abs') {
-      data = raw;
-    } else {
-      // 期間變化：相對於該品牌期間第一個非空值的差
-      var base = null;
-      for (var i = 0; i < raw.length; i++) { if (raw[i] != null) { base = raw[i]; break; } }
-      data = raw.map(function(v) { return v == null || base == null ? null : v - base; });
-    }
-    return {
-      label: BRAND_NAMES[b] || b,
-      data: data,
-      borderColor: BRAND_COLORS[b],
-      backgroundColor: BRAND_COLORS[b] + '22',
-      fill: false,
-      tension: 0.3,
-      spanGaps: true,
-      pointRadius: 2
-    };
+  // 清掉舊 chart 與舊面板
+  Object.keys(charts).forEach(function(k) {
+    if (k.indexOf('brand_') === 0 && charts[k]) { charts[k].destroy(); delete charts[k]; }
   });
+  var grid = document.getElementById('brandTrendGrid');
+  grid.innerHTML = '';
 
-  if (charts.brandTrend) charts.brandTrend.destroy();
-  charts.brandTrend = new Chart(document.getElementById('brandTrendChart'), {
-    type:'line',
-    data:{ labels:labels, datasets:datasets },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ color: chartTextColor() } } },
-      scales:{
-        x:{ ticks:{ color: chartTextColor(), maxRotation:0, autoSkip:true, maxTicksLimit:10 }, grid:{ color: chartGridColor() } },
-        y:{
-          ticks:{ color: chartTextColor(), callback: function(v) {
-            if (state.trendMode === 'delta') return (v > 0 ? '+' : '') + v.toLocaleString();
-            return v.toLocaleString();
-          } },
-          grid:{ color: chartGridColor() }
+  brandFilterArr().forEach(function(b) {
+    var arr = (brandRows[b] || []).slice().sort(function(a,c) { return a.insight_date.localeCompare(c.insight_date); });
+    var labels = arr.map(function(r) { return r.insight_date; });
+    var data = arr.map(function(r) { return Number(r.total_targeted || 0); });
+
+    var first = data.length ? data[0] : 0;
+    var last = data.length ? data[data.length-1] : 0;
+    var delta = last - first;
+    var deltaCls = delta > 0 ? 'delta-pos' : (delta < 0 ? 'delta-neg' : '');
+    var deltaStr = (delta > 0 ? '+' : '') + delta.toLocaleString();
+    var pct = first > 0 ? ((delta/first)*100).toFixed(2) + '%' : '-';
+
+    var panel = document.createElement('div');
+    panel.className = 'brand-trend-panel';
+    panel.innerHTML =
+      '<div class="brand-trend-head">' +
+        '<span class="brand-dot" style="background:' + BRAND_COLORS[b] + '"></span>' +
+        '<span class="brand-trend-name">' + (BRAND_NAMES[b] || b) + '</span>' +
+        '<span class="brand-trend-meta">' +
+          '最新 <strong style="color:var(--text)">' + last.toLocaleString() + '</strong>' +
+          '　期間 <span class="' + deltaCls + '">' + deltaStr + '</span>' +
+          (first > 0 ? '（<span class="' + deltaCls + '">' + (delta > 0 ? '+' : '') + pct + '</span>）' : '') +
+        '</span>' +
+      '</div>' +
+      '<div class="brand-trend-canvas"><canvas></canvas></div>';
+    grid.appendChild(panel);
+
+    if (!data.length) return;
+    var canvas = panel.querySelector('canvas');
+    var min = Math.min.apply(null, data);
+    var max = Math.max.apply(null, data);
+    var spread = max - min;
+    var pad = spread > 0 ? spread * 0.2 : Math.max(1, max * 0.001);
+
+    charts['brand_' + b] = new Chart(canvas, {
+      type:'line',
+      data:{ labels:labels, datasets:[{
+        data:data,
+        borderColor: BRAND_COLORS[b],
+        backgroundColor: BRAND_COLORS[b] + '33',
+        fill:true, tension:0.3, pointRadius:2, borderWidth:2
+      }]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:function(ctx) { return ctx.parsed.y.toLocaleString() + ' 好友'; } } }
+        },
+        scales:{
+          x:{ ticks:{ color: chartTextColor(), maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{size:10} }, grid:{ display:false } },
+          y:{
+            ticks:{ color: chartTextColor(), maxTicksLimit:4, font:{size:10}, callback:function(v) { return v.toLocaleString(); } },
+            grid:{ color: chartGridColor() },
+            min: min - pad,
+            max: max + pad
+          }
         }
       }
-    }
+    });
   });
 }
 
@@ -856,19 +857,17 @@ function escapeHtml(s) {
 }
 
 function rerenderCharts() {
-  // theme 切換時重畫（顏色變數會更新）
-  if (charts.brandTrend && charts.brandTrend.options) {
-    ['brandTrend','brandShare','dailyDelta'].forEach(function(k) {
-      if (!charts[k]) return;
-      var o = charts[k].options;
-      if (o.plugins && o.plugins.legend && o.plugins.legend.labels) o.plugins.legend.labels.color = chartTextColor();
-      if (o.scales) Object.keys(o.scales).forEach(function(s) {
-        if (o.scales[s].ticks) o.scales[s].ticks.color = chartTextColor();
-        if (o.scales[s].grid) o.scales[s].grid.color = chartGridColor();
-      });
-      charts[k].update();
+  // theme 切換時重畫所有現存 chart 的軸色
+  Object.keys(charts).forEach(function(k) {
+    if (!charts[k] || !charts[k].options) return;
+    var o = charts[k].options;
+    if (o.plugins && o.plugins.legend && o.plugins.legend.labels) o.plugins.legend.labels.color = chartTextColor();
+    if (o.scales) Object.keys(o.scales).forEach(function(s) {
+      if (o.scales[s].ticks) o.scales[s].ticks.color = chartTextColor();
+      if (o.scales[s].grid && o.scales[s].grid.color) o.scales[s].grid.color = chartGridColor();
     });
-  }
+    charts[k].update();
+  });
 }
 
 // ═══ START ═══
