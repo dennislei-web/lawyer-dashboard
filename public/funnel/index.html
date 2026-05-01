@@ -157,6 +157,41 @@
     .chart-subtitle { font-size:0.72rem; color:var(--text-muted); margin-top:-12px; margin-bottom:14px; }
     .chart-container { position:relative; height:300px; }
     .chart-container.tall { height:360px; }
+
+    /* COLLAPSIBLE: 點 title 收/展卡片內容 */
+    .chart-card .chart-title,
+    .table-card .table-title {
+      cursor:pointer; user-select:none; transition:color 0.15s;
+    }
+    .chart-card .chart-title:hover,
+    .table-card .table-title:hover { color:var(--gold-light); }
+    .chart-card .chart-title::before,
+    .table-card .table-title::before {
+      content:'▼'; display:inline-block; width:14px; font-size:0.65em;
+      color:var(--text-muted); margin-right:6px;
+      transition:transform 0.18s;
+    }
+    .chart-card.collapsed .chart-title::before,
+    .table-card.collapsed .table-title::before { transform:rotate(-90deg); }
+    .chart-card.collapsed .chart-subtitle,
+    .chart-card.collapsed .chart-container,
+    .chart-card.collapsed > .brand-trend-grid,
+    .chart-card.collapsed > div[id$='Grid']:not(.kpi-row),
+    .table-card.collapsed table { display:none; }
+    .chart-card.collapsed .chart-title { margin-bottom:0; }
+
+    /* 月場次 section 整段也可收（h2 點擊） */
+    .section-header {
+      cursor:pointer; user-select:none; transition:color 0.15s;
+      display:flex; align-items:baseline; gap:8px;
+    }
+    .section-header:hover h2 { color:var(--gold-light); }
+    .section-header::before {
+      content:'▼'; display:inline-block; width:14px; font-size:0.7em;
+      color:var(--text-muted); transition:transform 0.18s;
+    }
+    .section-header.collapsed::before { transform:rotate(-90deg); }
+    .section-header.collapsed + .section-body { display:none; }
     /* small-multiples 品牌成長 */
     .brand-trend-grid { display:flex; flex-direction:column; gap:10px; }
     .brand-trend-panel {
@@ -362,10 +397,12 @@
 
       <!-- ────────── 月場次 / 進線 區塊 ────────── -->
       <div style="margin-top:36px; padding-top:20px; border-top:1px solid var(--border);">
-        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
+        <div class="section-header" data-section="monthly" style="margin-bottom:16px;">
           <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線</h2>
-          <span class="text-muted" style="font-size:0.78rem">資料源：「各帳號進線及場次數據統計表」（人工填報）</span>
+          <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">資料源：「各帳號進線及場次數據統計表」（人工填報）</span>
         </div>
+
+        <div class="section-body">
 
         <div class="kpi-row">
           <div class="kpi-card gold"><div class="kpi-label">期間總場次（約成）</div><div class="kpi-value gold" id="kpiSessions">-</div><div class="kpi-sub" id="kpiSessionsSub"></div></div>
@@ -401,6 +438,8 @@
             <tbody id="monthlyTableBody"></tbody>
           </table>
         </div>
+
+        </div><!-- /.section-body -->
       </div>
       <!-- ────────── /月場次 / 進線 ────────── -->
 
@@ -600,14 +639,20 @@ function monthlyStartDate() {
   d.setDate(1);
   return d.toISOString().substring(0,10);
 }
+function currentMonthStart() {
+  var d = new Date(); d.setDate(1);
+  return d.toISOString().substring(0,10);
+}
 async function fetchOaMonthly() {
   if (!sb) return [];
   var brands = brandFilterArr();
+  // 過濾邏輯：拉所有歷史月份（含 0/0，代表真實「該月沒成案」），
+  // 但排除「未來月份」的 ghost rows（sheet 公式預先放 0 造成）
   var r = await sb.from('v_consult_oa_monthly')
     .select('*')
     .in('brand_code', brands)
     .gte('month_start', monthlyStartDate())
-    .or('sessions.gt.0,leads.gt.0')   // 過濾 ghost 0/0 row
+    .lte('month_start', currentMonthStart())
     .order('month_start', { ascending: true });
   if (r.error) { console.error('oa_monthly:', r.error.message); return []; }
   return r.data || [];
@@ -619,9 +664,10 @@ async function fetchBrandMonthly() {
     .select('*')
     .in('brand_code', brands)
     .gte('month_start', monthlyStartDate())
+    .lte('month_start', currentMonthStart())
     .order('month_start', { ascending: true });
   if (r.error) { console.error('brand_monthly:', r.error.message); return []; }
-  return (r.data || []).filter(function(r) { return (r.total_sessions || 0) > 0 || (r.total_leads || 0) > 0; });
+  return r.data || [];
 }
 
 // ═══ MAIN LOAD ═══
@@ -1168,8 +1214,55 @@ function rerenderCharts() {
   });
 }
 
+// ═══ COLLAPSE ═══
+function setupCollapse() {
+  // chart-card / table-card：點 title 收展
+  document.querySelectorAll('.chart-card, .table-card').forEach(function(card) {
+    var titleEl = card.querySelector('.chart-title, .table-title');
+    if (!titleEl) return;
+    var label = card.dataset.section || titleEl.textContent.trim();
+    var key = 'funnel_collapsed_' + label;
+    try { if (localStorage.getItem(key) === '1') card.classList.add('collapsed'); } catch (e) {}
+    titleEl.addEventListener('click', function() {
+      var collapsed = card.classList.toggle('collapsed');
+      try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+      // 展開時 Chart.js 重新計算尺寸（之前隱藏可能算錯）
+      if (!collapsed) {
+        Object.keys(charts).forEach(function(k) {
+          var c = charts[k];
+          if (c && card.contains(c.canvas)) c.resize();
+        });
+      }
+    });
+  });
+
+  // section-header：整段收展（月場次區塊）
+  document.querySelectorAll('.section-header').forEach(function(header) {
+    var key = 'funnel_section_' + (header.dataset.section || '');
+    try { if (localStorage.getItem(key) === '1') header.classList.add('collapsed'); } catch (e) {}
+    header.addEventListener('click', function() {
+      var collapsed = header.classList.toggle('collapsed');
+      try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+      if (!collapsed) {
+        var body = header.nextElementSibling;
+        Object.keys(charts).forEach(function(k) {
+          var c = charts[k];
+          if (c && body && body.contains(c.canvas)) c.resize();
+        });
+      }
+    });
+  });
+}
+
 // ═══ START ═══
 checkSession();
+// 等資料載完 + DOM 渲染再綁 collapse
+var __setupCollapseDone = false;
+var __origLoadAll = loadAll;
+loadAll = async function() {
+  await __origLoadAll();
+  if (!__setupCollapseDone) { setupCollapse(); __setupCollapseDone = true; }
+};
 </script>
 </body>
 </html>
