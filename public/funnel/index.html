@@ -359,6 +359,51 @@
           <tbody id="oaTableBody"></tbody>
         </table>
       </div>
+
+      <!-- ────────── 月場次 / 進線 區塊 ────────── -->
+      <div style="margin-top:36px; padding-top:20px; border-top:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
+          <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線</h2>
+          <span class="text-muted" style="font-size:0.78rem">資料源：「各帳號進線及場次數據統計表」（人工填報）</span>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card gold"><div class="kpi-label">期間總場次（約成）</div><div class="kpi-value gold" id="kpiSessions">-</div><div class="kpi-sub" id="kpiSessionsSub"></div></div>
+          <div class="kpi-card blue"><div class="kpi-label">期間總進線</div><div class="kpi-value blue" id="kpiLeads">-</div><div class="kpi-sub" id="kpiLeadsSub"></div></div>
+          <div class="kpi-card green"><div class="kpi-label">平均約成率</div><div class="kpi-value green" id="kpiSchedRate">-</div><div class="kpi-sub" id="kpiSchedRateSub"></div></div>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:24px">
+          <div class="chart-title">月度品牌場次（堆疊）</div>
+          <div class="chart-subtitle">每月約成總場次，依品牌切色</div>
+          <div class="chart-container tall"><canvas id="monthlyBrandChart"></canvas></div>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:24px">
+          <div class="chart-title">各 OA 月場次趨勢</div>
+          <div class="chart-subtitle">每個 OA 獨立刻度；空白月份代表 sheet 沒填</div>
+          <div id="oaMonthlyGrid" class="brand-trend-grid"></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <span class="table-title">月度 OA 明細（最近 6 個月）</span>
+            <span class="text-muted" style="font-size:0.78rem" id="monthlyTableMeta"></span>
+          </div>
+          <table>
+            <thead>
+              <tr id="monthlyTableHead">
+                <th>OA</th>
+                <th>品牌</th>
+                <!-- 月份欄位由 JS 動態插入 -->
+              </tr>
+            </thead>
+            <tbody id="monthlyTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- ────────── /月場次 / 進線 ────────── -->
+
     </div>
 
   </div>
@@ -548,15 +593,54 @@ async function fetchOaDelta() {
   return r.data || [];
 }
 
+// 月場次：固定抓最近 12 個月（不跟 daily 期間過濾走）
+function monthlyStartDate() {
+  var d = new Date();
+  d.setMonth(d.getMonth() - 11);
+  d.setDate(1);
+  return d.toISOString().substring(0,10);
+}
+async function fetchOaMonthly() {
+  if (!sb) return [];
+  var brands = brandFilterArr();
+  var r = await sb.from('v_consult_oa_monthly')
+    .select('*')
+    .in('brand_code', brands)
+    .gte('month_start', monthlyStartDate())
+    .or('sessions.gt.0,leads.gt.0')   // 過濾 ghost 0/0 row
+    .order('month_start', { ascending: true });
+  if (r.error) { console.error('oa_monthly:', r.error.message); return []; }
+  return r.data || [];
+}
+async function fetchBrandMonthly() {
+  if (!sb) return [];
+  var brands = brandFilterArr();
+  var r = await sb.from('v_consult_brand_monthly')
+    .select('*')
+    .in('brand_code', brands)
+    .gte('month_start', monthlyStartDate())
+    .order('month_start', { ascending: true });
+  if (r.error) { console.error('brand_monthly:', r.error.message); return []; }
+  return (r.data || []).filter(function(r) { return (r.total_sessions || 0) > 0 || (r.total_leads || 0) > 0; });
+}
+
 // ═══ MAIN LOAD ═══
 async function loadAll() {
   document.getElementById('loadingMsg').style.display = 'block';
   document.getElementById('contentArea').style.display = 'none';
   var brandRows = [];
   var oaRows = [];
+  var oaMonthly = [];
+  var brandMonthly = [];
   try {
-    var res = await Promise.all([fetchBrandDaily(), fetchOaDelta()]);
+    var res = await Promise.all([
+      fetchBrandDaily(),
+      fetchOaDelta(),
+      fetchOaMonthly(),
+      fetchBrandMonthly()
+    ]);
     brandRows = res[0]; oaRows = res[1];
+    oaMonthly = res[2]; brandMonthly = res[3];
   } catch (e) {
     console.error('load:', e);
   }
@@ -568,6 +652,11 @@ async function loadAll() {
   renderBrandShare(brandRows);
   renderDailyDelta(oaRows);
   renderOaTable(oaRows);
+
+  renderMonthlyKpis(brandMonthly);
+  renderMonthlyBrandChart(brandMonthly);
+  renderOaMonthlyGrid(oaMonthly);
+  renderMonthlyTable(oaMonthly);
 }
 
 // ═══ KPIs ═══
@@ -854,6 +943,215 @@ function renderOaTable(rows) {
 function escapeHtml(s) {
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; });
+}
+
+// ═══ 月場次 RENDER ═══
+
+function renderMonthlyKpis(brandMonthly) {
+  var sessions = 0, leads = 0;
+  brandMonthly.forEach(function(r) {
+    sessions += Number(r.total_sessions || 0);
+    leads += Number(r.total_leads || 0);
+  });
+  var rate = leads > 0 ? (sessions / leads * 100) : 0;
+  var months = {};
+  brandMonthly.forEach(function(r) { months[r.month_start] = 1; });
+  var monthCount = Object.keys(months).length;
+
+  document.getElementById('kpiSessions').textContent = sessions.toLocaleString();
+  document.getElementById('kpiSessionsSub').textContent = monthCount + ' 個月、' + Object.keys(months).sort()[0] + ' 起';
+  document.getElementById('kpiLeads').textContent = leads.toLocaleString();
+  document.getElementById('kpiLeadsSub').textContent = '線上法諮接觸數';
+  document.getElementById('kpiSchedRate').textContent = rate.toFixed(1) + '%';
+  document.getElementById('kpiSchedRateSub').textContent = '場次 / 進線';
+}
+
+function renderMonthlyBrandChart(brandMonthly) {
+  if (charts.monthlyBrand) { charts.monthlyBrand.destroy(); delete charts.monthlyBrand; }
+  // 按 month_start 收集 unique
+  var months = Array.from(new Set(brandMonthly.map(function(r) { return r.month_start; }))).sort();
+  // datasets：每品牌一條
+  var brandsInData = Array.from(new Set(brandMonthly.map(function(r) { return r.brand_code; })));
+  var datasets = brandsInData.map(function(b) {
+    var rowsForB = {};
+    brandMonthly.forEach(function(r) {
+      if (r.brand_code === b) rowsForB[r.month_start] = r;
+    });
+    return {
+      label: BRAND_NAMES[b] || b,
+      data: months.map(function(m) { return rowsForB[m] ? Number(rowsForB[m].total_sessions || 0) : 0; }),
+      backgroundColor: BRAND_COLORS[b] || '#888',
+      borderColor: BRAND_COLORS[b] || '#888',
+      borderWidth: 1,
+      stack: 'sessions'
+    };
+  });
+
+  charts.monthlyBrand = new Chart(document.getElementById('monthlyBrandChart'), {
+    type: 'bar',
+    data: { labels: months.map(formatMonthLabel), datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { color: chartTextColor() } },
+        tooltip: {
+          callbacks: {
+            footer: function(items) {
+              var total = items.reduce(function(s, i) { return s + i.parsed.y; }, 0);
+              return '合計：' + total.toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: chartTextColor() }, grid: { color: chartGridColor() } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: chartTextColor() }, grid: { color: chartGridColor() } }
+      }
+    }
+  });
+}
+
+function formatMonthLabel(monthStart) {
+  // YYYY-MM-01 → YYYY/MM
+  return monthStart.substring(0, 7).replace('-', '/');
+}
+
+function renderOaMonthlyGrid(rows) {
+  // 按 oa_code 分組
+  Object.keys(charts).forEach(function(k) {
+    if (k.indexOf('oamon_') === 0 && charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+  var grid = document.getElementById('oaMonthlyGrid');
+  grid.innerHTML = '';
+
+  // 按 oa_code 分組 + 排序（is_main 放前面，再按 oa_code）
+  var byOa = {};
+  rows.forEach(function(r) {
+    if (!byOa[r.oa_code]) byOa[r.oa_code] = { meta: r, data: [] };
+    byOa[r.oa_code].data.push(r);
+  });
+  var oaCodes = Object.keys(byOa).sort(function(a, b) {
+    var ma = byOa[a].meta.is_main ? 0 : 1;
+    var mb = byOa[b].meta.is_main ? 0 : 1;
+    if (ma !== mb) return ma - mb;
+    var ba = byOa[a].meta.brand_code || '';
+    var bb = byOa[b].meta.brand_code || '';
+    if (ba !== bb) return ba.localeCompare(bb);
+    return a.localeCompare(b);
+  });
+
+  oaCodes.forEach(function(oa) {
+    var info = byOa[oa];
+    var arr = info.data.slice().sort(function(a, c) { return a.month_start.localeCompare(c.month_start); });
+    var labels = arr.map(function(r) { return formatMonthLabel(r.month_start); });
+    var data = arr.map(function(r) { return Number(r.sessions || 0); });
+    var totalSessions = data.reduce(function(s, n) { return s + n; }, 0);
+    var brandColor = BRAND_COLORS[info.meta.brand_code] || '#888';
+
+    // 面板 DOM
+    var panel = document.createElement('div');
+    panel.className = 'brand-trend-panel';
+    var header = document.createElement('div');
+    header.className = 'brand-trend-header';
+    header.innerHTML = '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + brandColor + ';margin-right:6px;"></span>' +
+                       escapeHtml(oa) + (info.meta.is_main ? ' <span class="text-muted" style="font-size:0.7rem">(主號)</span>' : '') +
+                       '</span>' +
+                       '<span class="text-muted" style="font-size:0.78rem">合計 <strong>' + totalSessions.toLocaleString() + '</strong> 場</span>';
+    panel.appendChild(header);
+    var canvasWrap = document.createElement('div');
+    canvasWrap.className = 'brand-trend-canvas';
+    var canvas = document.createElement('canvas');
+    canvasWrap.appendChild(canvas);
+    panel.appendChild(canvasWrap);
+    grid.appendChild(panel);
+
+    charts['oamon_' + oa] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '場次',
+          data: data,
+          borderColor: brandColor,
+          backgroundColor: brandColor + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: chartTextColor(), font: { size: 9 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: chartTextColor(), font: { size: 9 } }, grid: { color: chartGridColor() } }
+        }
+      }
+    });
+  });
+}
+
+function renderMonthlyTable(rows) {
+  // 取最近 6 個月（資料 frame 內最大月份往前 6 個）
+  var allMonths = Array.from(new Set(rows.map(function(r) { return r.month_start; }))).sort();
+  var recent = allMonths.slice(-6);
+
+  // 動態 header
+  var head = document.getElementById('monthlyTableHead');
+  // 清掉除了前兩欄外的 th
+  while (head.children.length > 2) head.removeChild(head.lastChild);
+  recent.forEach(function(m) {
+    var th = document.createElement('th');
+    th.className = 'text-right';
+    th.textContent = formatMonthLabel(m);
+    head.appendChild(th);
+  });
+
+  // 按 oa_code 整理 row
+  var byOa = {};
+  rows.forEach(function(r) {
+    if (!byOa[r.oa_code]) byOa[r.oa_code] = { meta: r, byMonth: {} };
+    byOa[r.oa_code].byMonth[r.month_start] = r;
+  });
+  var oaCodes = Object.keys(byOa).sort(function(a, b) {
+    var ma = byOa[a].meta.is_main ? 0 : 1;
+    var mb = byOa[b].meta.is_main ? 0 : 1;
+    if (ma !== mb) return ma - mb;
+    var ba = byOa[a].meta.brand_code || '';
+    var bb = byOa[b].meta.brand_code || '';
+    if (ba !== bb) return ba.localeCompare(bb);
+    return a.localeCompare(b);
+  });
+
+  var tbody = document.getElementById('monthlyTableBody');
+  tbody.innerHTML = '';
+  oaCodes.forEach(function(oa) {
+    var info = byOa[oa];
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + escapeHtml(oa) + (info.meta.is_main ? ' <span class="text-muted" style="font-size:0.7rem">主</span>' : '') + '</td>' +
+                   '<td>' + escapeHtml(BRAND_NAMES[info.meta.brand_code] || info.meta.brand_code) + '</td>';
+    recent.forEach(function(m) {
+      var r = info.byMonth[m];
+      var cell;
+      if (!r) {
+        cell = '<span class="text-muted">—</span>';
+      } else {
+        var sessions = Number(r.sessions || 0);
+        var leads = Number(r.leads || 0);
+        var rate = r.sched_pct !== null ? r.sched_pct + '%' : '—';
+        cell = '<strong>' + sessions + '</strong> / ' + leads +
+               '<br><span class="text-muted" style="font-size:0.7rem">' + rate + '</span>';
+      }
+      tr.innerHTML += '<td class="text-right">' + cell + '</td>';
+    });
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('monthlyTableMeta').textContent = '格式：場次 / 進線（月率%）';
 }
 
 function rerenderCharts() {
