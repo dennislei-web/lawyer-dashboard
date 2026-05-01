@@ -157,6 +157,17 @@
     .chart-subtitle { font-size:0.72rem; color:var(--text-muted); margin-top:-12px; margin-bottom:14px; }
     .chart-container { position:relative; height:300px; }
     .chart-container.tall { height:360px; }
+    .chart-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .chart-card-head .chart-title { margin-bottom:4px; }
+    .chart-card-head .chart-subtitle { margin-top:0; margin-bottom:0; }
+    .mini-toggle { display:flex; flex-shrink:0; }
+    .mini-toggle button {
+      padding:4px 10px; font-size:0.72rem; border:1px solid var(--border);
+      background:var(--bg-row); color:var(--text-muted); cursor:pointer;
+    }
+    .mini-toggle button.active { background:var(--gold); color:#0a0a0a; border-color:var(--gold); font-weight:600; }
+    .mini-toggle button:first-child { border-radius:6px 0 0 6px; }
+    .mini-toggle button:last-child { border-radius:0 6px 6px 0; border-left:0; }
 
     /* TABLE */
     .table-card {
@@ -309,8 +320,16 @@
 
       <div class="chart-row">
         <div class="chart-card">
-          <div class="chart-title">品牌好友成長曲線</div>
-          <div class="chart-subtitle">每日 targeted_reaches（≈ LINE@ 後台「好友數」）</div>
+          <div class="chart-card-head">
+            <div>
+              <div class="chart-title">品牌好友成長曲線</div>
+              <div class="chart-subtitle" id="trendSubtitle">期間累計變化（起點 = 0）</div>
+            </div>
+            <div class="mini-toggle" id="trendModeToggle">
+              <button type="button" data-mode="delta" class="active">期間變化</button>
+              <button type="button" data-mode="abs">絕對值</button>
+            </div>
+          </div>
           <div class="chart-container"><canvas id="brandTrendChart"></canvas></div>
         </div>
         <div class="chart-card">
@@ -322,7 +341,7 @@
 
       <div class="chart-card" style="margin-bottom:24px">
         <div class="chart-title">每日新增 / 封鎖（依品牌堆疊）</div>
-        <div class="chart-subtitle">向上 = 新增好友、向下 = 封鎖（負值）</div>
+        <div class="chart-subtitle">向上 = 毛新增好友（gross_new_friends）、向下 = 封鎖；淨增 = 新增 − 封鎖</div>
         <div class="chart-container tall"><canvas id="dailyDeltaChart"></canvas></div>
       </div>
 
@@ -378,8 +397,10 @@ var state = {
   startDate: defaultStartDate(),
   endDate: defaultEndDate(),
   preset: '30',
-  brand: ''
+  brand: '',
+  trendMode: 'delta'  // 'delta' = 期間變化（起點 0），'abs' = 絕對值
 };
+var lastBrandRows = [];
 
 // 品牌色票（brand_code 對應）
 var BRAND_COLORS = {
@@ -503,6 +524,16 @@ function initFilters() {
     state.brand = e.target.value;
     loadAll();
   });
+  document.getElementById('trendModeToggle').addEventListener('click', function(e) {
+    var b = e.target.closest('button[data-mode]'); if (!b) return;
+    document.querySelectorAll('#trendModeToggle button').forEach(function(x){ x.classList.remove('active'); });
+    b.classList.add('active');
+    state.trendMode = b.getAttribute('data-mode');
+    document.getElementById('trendSubtitle').textContent = state.trendMode === 'abs'
+      ? '每日 targeted_reaches（≈ LINE@ 後台「好友數」）'
+      : '期間累計變化（起點 = 0）';
+    if (lastBrandRows.length) renderBrandTrend(lastBrandRows);
+  });
 }
 
 // ═══ DATA ═══
@@ -603,6 +634,7 @@ function chartGridColor() {
 }
 
 function renderBrandTrend(rows) {
+  lastBrandRows = rows;
   // 收集所有日期
   var dateSet = {};
   rows.forEach(function(r) { dateSet[r.insight_date] = 1; });
@@ -616,9 +648,19 @@ function renderBrandTrend(rows) {
   });
 
   var datasets = brandFilterArr().map(function(b) {
+    var raw = labels.map(function(d) { return brandData[b][d] != null ? brandData[b][d] : null; });
+    var data;
+    if (state.trendMode === 'abs') {
+      data = raw;
+    } else {
+      // 期間變化：相對於該品牌期間第一個非空值的差
+      var base = null;
+      for (var i = 0; i < raw.length; i++) { if (raw[i] != null) { base = raw[i]; break; } }
+      data = raw.map(function(v) { return v == null || base == null ? null : v - base; });
+    }
     return {
       label: BRAND_NAMES[b] || b,
-      data: labels.map(function(d) { return brandData[b][d] != null ? brandData[b][d] : null; }),
+      data: data,
       borderColor: BRAND_COLORS[b],
       backgroundColor: BRAND_COLORS[b] + '22',
       fill: false,
@@ -637,7 +679,13 @@ function renderBrandTrend(rows) {
       plugins:{ legend:{ labels:{ color: chartTextColor() } } },
       scales:{
         x:{ ticks:{ color: chartTextColor(), maxRotation:0, autoSkip:true, maxTicksLimit:10 }, grid:{ color: chartGridColor() } },
-        y:{ ticks:{ color: chartTextColor() }, grid:{ color: chartGridColor() } }
+        y:{
+          ticks:{ color: chartTextColor(), callback: function(v) {
+            if (state.trendMode === 'delta') return (v > 0 ? '+' : '') + v.toLocaleString();
+            return v.toLocaleString();
+          } },
+          grid:{ color: chartGridColor() }
+        }
       }
     }
   });
@@ -674,14 +722,14 @@ function renderDailyDelta(rows) {
   rows.forEach(function(r) { dateSet[r.insight_date] = 1; });
   var labels = Object.keys(dateSet).sort();
 
-  // brand → date → {net, block}
+  // brand → date → {gross, block}
   var brandData = {};
   brandFilterArr().forEach(function(b) { brandData[b] = {}; });
   rows.forEach(function(r) {
     var b = r.brand_code, d = r.insight_date;
     if (!brandData[b]) return;
-    if (!brandData[b][d]) brandData[b][d] = { net:0, block:0 };
-    brandData[b][d].net += Number(r.net_new_friends || 0);
+    if (!brandData[b][d]) brandData[b][d] = { gross:0, block:0 };
+    brandData[b][d].gross += Number(r.gross_new_friends || 0);
     brandData[b][d].block += Number(r.new_blocks || 0);
   });
 
@@ -689,7 +737,7 @@ function renderDailyDelta(rows) {
   brandFilterArr().forEach(function(b) {
     datasets.push({
       label: (BRAND_NAMES[b] || b) + ' 新增',
-      data: labels.map(function(d) { return brandData[b][d] ? brandData[b][d].net : 0; }),
+      data: labels.map(function(d) { return brandData[b][d] ? brandData[b][d].gross : 0; }),
       backgroundColor: BRAND_COLORS[b],
       stack: 'positive'
     });
