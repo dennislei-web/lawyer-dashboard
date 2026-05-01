@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 委前漏斗儀表板</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a;
+      --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+      --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+      --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+      --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+      --header-bg:rgba(10,22,40,0.95);
+      --login-shadow:rgba(0,0,0,0.5);
+      --tab-active-bg:rgba(201,168,76,0.12);
+      --tab-active-border:rgba(201,168,76,0.2);
+      --tab-active-color:var(--gold-light);
+      --ghost-bg:rgba(255,255,255,0.07);
+      --ghost-hover-bg:rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e;
+      --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.1);
+      --green:#15803d; --green-dim:rgba(21,128,61,0.12);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.1);
+      --orange:#d97706; --orange-dim:rgba(217,119,6,0.1);
+      --header-bg:rgba(255,255,255,0.95);
+      --login-shadow:rgba(0,0,0,0.12);
+      --tab-active-bg:rgba(37,99,235,0.1);
+      --tab-active-border:rgba(37,99,235,0.25);
+      --tab-active-color:#2563eb;
+      --ghost-bg:rgba(0,0,0,0.04);
+      --ghost-hover-bg:rgba(0,0,0,0.08);
+    }
+    .embed-mode .header { display:none !important; }
+    .embed-mode #loginPage { display:none !important; }
+    .embed-mode #dashboard { display:block !important; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main); color:var(--text); min-height:100vh; font-size:14px;
+    }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background:radial-gradient(ellipse at 20% 50%,rgba(79,142,247,0.08) 0%,transparent 60%),
+                 radial-gradient(ellipse at 80% 20%,rgba(201,168,76,0.06) 0%,transparent 50%),
+                 var(--bg-main);
+    }
+    .login-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+      padding:44px 40px; width:100%; max-width:420px; box-shadow:0 24px 64px var(--login-shadow);
+    }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .firm-name { font-size:1.6rem; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+    .subtitle { margin-top:6px; font-size:0.85rem; color:var(--text-muted); letter-spacing:1px; }
+    .login-divider { height:1px; background:linear-gradient(to right,transparent,var(--border-light),transparent); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+    .form-group input {
+      width:100%; padding:12px 16px; background:var(--bg-row); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-size:0.95rem;
+    }
+    .form-group input:focus { outline:none; border-color:var(--gold); }
+    .btn-login {
+      width:100%; padding:13px; background:linear-gradient(135deg,var(--gold),#b8942e);
+      color:#0a0a0a; font-weight:700; font-size:0.95rem; border:none; border-radius:8px;
+      cursor:pointer; margin-top:8px;
+    }
+    .btn-login:hover { opacity:0.9; }
+    .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+    .login-error { color:var(--red); font-size:0.85rem; margin-top:12px; text-align:center; display:none; }
+
+    /* HEADER (only visible if non-embed) */
+    .header {
+      position:sticky; top:0; z-index:100;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 24px; height:56px;
+      background:var(--header-bg); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+    }
+    .header-left { display:flex; align-items:center; gap:16px; }
+    .header-brand { font-size:1.1rem; font-weight:700; color:var(--gold-light); letter-spacing:1px; }
+    .header-subtitle { font-size:0.78rem; color:var(--text-muted); }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .btn-icon {
+      background:var(--ghost-bg); border:1px solid var(--border); border-radius:8px;
+      color:var(--text-muted); cursor:pointer; padding:6px 10px; font-size:0.85rem;
+    }
+    .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
+    .user-badge { font-size:0.8rem; color:var(--text-muted); padding:4px 10px; background:var(--ghost-bg); border-radius:6px; }
+
+    /* MAIN */
+    .main { padding:20px 24px; max-width:1400px; margin:0 auto; }
+
+    /* FILTER BAR */
+    .filter-bar {
+      display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;
+    }
+    .filter-label { font-size:0.78rem; color:var(--text-muted); white-space:nowrap; }
+    .filter-select, .filter-input {
+      padding:6px 12px; background:var(--bg-row); border:1px solid var(--border);
+      border-radius:6px; color:var(--text); font-size:0.85rem;
+    }
+    .filter-select:focus, .filter-input:focus { outline:none; border-color:var(--gold); }
+    .preset-btns { display:flex; gap:4px; }
+    .preset-btn {
+      padding:5px 14px; font-size:0.8rem; border:1px solid var(--border);
+      border-radius:6px; background:var(--bg-row); color:var(--text-muted); cursor:pointer;
+    }
+    .preset-btn:hover { background:var(--ghost-hover-bg); }
+    .preset-btn.active { background:var(--gold); color:#0a0a0a; border-color:var(--gold); font-weight:600; }
+    .filter-note { font-size:0.72rem; color:var(--text-muted); margin-left:auto; }
+    #customRange { display:none; gap:8px; align-items:center; }
+    #customRange.show { display:flex; }
+
+    /* KPI */
+    .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+    .kpi-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+      padding:20px; position:relative; overflow:hidden;
+    }
+    .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+    .kpi-card.gold::before { background:var(--gold); }
+    .kpi-card.green::before { background:var(--green); }
+    .kpi-card.red::before { background:var(--red); }
+    .kpi-card.blue::before { background:var(--blue); }
+    .kpi-label { font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+    .kpi-value { font-size:1.6rem; font-weight:700; }
+    .kpi-value.gold { color:var(--gold-light); }
+    .kpi-value.green { color:var(--green); }
+    .kpi-value.red { color:var(--red); }
+    .kpi-value.blue { color:var(--blue); }
+    .kpi-sub { font-size:0.75rem; color:var(--text-muted); margin-top:4px; }
+
+    /* CHARTS */
+    .chart-row { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:24px; }
+    .chart-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px;
+    }
+    .chart-title { font-size:0.9rem; font-weight:600; margin-bottom:16px; color:var(--text); }
+    .chart-subtitle { font-size:0.72rem; color:var(--text-muted); margin-top:-12px; margin-bottom:14px; }
+    .chart-container { position:relative; height:300px; }
+    .chart-container.tall { height:360px; }
+
+    /* TABLE */
+    .table-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px; overflow:hidden;
+    }
+    .table-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px; border-bottom:1px solid var(--border);
+    }
+    .table-title { font-size:0.9rem; font-weight:600; }
+    table { width:100%; border-collapse:collapse; }
+    thead th {
+      padding:10px 14px; text-align:left; font-size:0.75rem; font-weight:600;
+      color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    tbody td {
+      padding:10px 14px; font-size:0.85rem; border-bottom:1px solid var(--border);
+    }
+    tbody tr:hover { background:var(--bg-hover); }
+    tbody tr.brand-row td { background:var(--bg-row); font-weight:600; color:var(--gold-light); }
+    .text-right { text-align:right; }
+    .text-green { color:var(--green); }
+    .text-red { color:var(--red); }
+    .text-gold { color:var(--gold-light); }
+    .text-muted { color:var(--text-muted); }
+
+    .badge {
+      display:inline-block; padding:2px 8px; border-radius:4px;
+      font-size:0.7rem; font-weight:600;
+    }
+    .badge-main { background:var(--gold-light); color:#0a0a0a; }
+    .badge-clone { background:var(--ghost-bg); color:var(--text-muted); }
+
+    .loading { text-align:center; padding:40px; color:var(--text-muted); }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
+
+    /* RESPONSIVE */
+    @media (max-width:900px) {
+      .kpi-row { grid-template-columns:repeat(2,1fr); }
+      .chart-row { grid-template-columns:1fr; }
+      .chart-container { height:260px; }
+      .main { padding:16px; }
+    }
+    @media (max-width:640px) {
+      body { font-size:13px; }
+      .main { padding:12px; }
+      .kpi-row { gap:10px; margin-bottom:16px; }
+      .kpi-card { padding:12px; }
+      .kpi-value { font-size:1.15rem; }
+      .filter-bar { gap:8px; }
+      .preset-btn { padding:4px 10px; font-size:0.75rem; }
+      .filter-select, .filter-input { font-size:0.8rem; padding:5px 10px; }
+      .filter-note { width:100%; margin-left:0; }
+      thead th { padding:8px 10px; font-size:0.7rem; }
+      tbody td { padding:8px 10px; font-size:0.78rem; }
+      .table-card { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">委前漏斗儀表板</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage" style="display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:480px;text-align:center;">
+    <div style="font-size:2.4rem;margin-bottom:12px;">🔒</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:10px;">無權限存取此儀表板</div>
+    <div style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:24px;">
+      您的帳號（<span id="noAccessUser"></span>）目前僅能存取<strong style="color:var(--gold-light);">諮詢分析</strong>儀表板。<br>
+      如需存取此儀表板，請聯繫管理員調整權限。
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/lawyer-dashboard/" class="btn-login" style="text-decoration:none;display:inline-block;max-width:200px;padding:10px 20px;">返回諮詢分析</a>
+      <button class="btn-icon" id="noAccessLogout" style="padding:10px 20px;">登出</button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">委前漏斗儀表板</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <div class="filter-bar">
+      <div class="filter-label">期間：</div>
+      <div class="preset-btns" id="presetBtns">
+        <button class="preset-btn" data-preset="7">近 7 天</button>
+        <button class="preset-btn active" data-preset="30">近 30 天</button>
+        <button class="preset-btn" data-preset="90">近 90 天</button>
+        <button class="preset-btn" data-preset="custom">自訂</button>
+      </div>
+      <div id="customRange">
+        <input type="date" class="filter-input" id="startDate">
+        <span class="text-muted">→</span>
+        <input type="date" class="filter-input" id="endDate">
+      </div>
+      <div class="filter-label" style="margin-left:12px">品牌：</div>
+      <select class="filter-select" id="brandFilter">
+        <option value="">全部</option>
+        <option value="FA">85010</option>
+        <option value="MB">金貝殼</option>
+        <option value="Z">吉他</option>
+      </select>
+      <div class="filter-note" id="dateRangeNote">資料延遲 2 天（LINE Insight API 規則）</div>
+    </div>
+
+    <div id="loadingMsg" class="loading"><div>載入中...</div></div>
+
+    <div id="contentArea" style="display:none">
+      <div class="kpi-row">
+        <div class="kpi-card gold"><div class="kpi-label">最新總好友數</div><div class="kpi-value gold" id="kpiTotal">-</div><div class="kpi-sub" id="kpiTotalSub"></div></div>
+        <div class="kpi-card green"><div class="kpi-label">期間淨增</div><div class="kpi-value green" id="kpiNet">-</div><div class="kpi-sub" id="kpiNetSub"></div></div>
+        <div class="kpi-card red"><div class="kpi-label">期間封鎖</div><div class="kpi-value red" id="kpiBlock">-</div><div class="kpi-sub" id="kpiBlockSub"></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">期間封鎖率</div><div class="kpi-value blue" id="kpiBlockRate">-</div><div class="kpi-sub" id="kpiBlockRateSub"></div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">品牌好友成長曲線</div>
+          <div class="chart-subtitle">每日 targeted_reaches（≈ LINE@ 後台「好友數」）</div>
+          <div class="chart-container"><canvas id="brandTrendChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">品牌好友佔比（最新）</div>
+          <div class="chart-subtitle">&nbsp;</div>
+          <div class="chart-container"><canvas id="brandShareChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:24px">
+        <div class="chart-title">每日新增 / 封鎖（依品牌堆疊）</div>
+        <div class="chart-subtitle">向上 = 新增好友、向下 = 封鎖（負值）</div>
+        <div class="chart-container tall"><canvas id="dailyDeltaChart"></canvas></div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">OA 明細</span>
+          <span class="text-muted" style="font-size:0.78rem" id="tableMeta"></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>OA</th>
+              <th>類型</th>
+              <th class="text-right">最新好友</th>
+              <th class="text-right">期間新增</th>
+              <th class="text-right">期間封鎖</th>
+              <th class="text-right">淨增</th>
+              <th class="text-right">封鎖率</th>
+            </tr>
+          </thead>
+          <tbody id="oaTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// 直接打開 → 跳回 shell
+if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
+  window.location.replace('/lawyer-dashboard/#/funnel');
+  throw new Error('redirecting to shell');
+}
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer, charts = {};
+
+// 預設窗口：D-2 為終點往前 30 天
+function defaultEndDate() {
+  var d = new Date(); d.setDate(d.getDate() - 2);
+  return d.toISOString().substring(0,10);
+}
+function defaultStartDate() {
+  var d = new Date(); d.setDate(d.getDate() - 31);
+  return d.toISOString().substring(0,10);
+}
+var state = {
+  startDate: defaultStartDate(),
+  endDate: defaultEndDate(),
+  preset: '30',
+  brand: ''
+};
+
+// 品牌色票
+var BRAND_COLORS = {
+  'FA': '#c9a84c',  // 85010 = 蜂蜜黃
+  'MB': '#e0954a',  // 金貝殼 = 橙
+  'Z':  '#4f8ef7'   // 吉他 = 藍
+};
+var BRAND_NAMES = { 'FA':'85010', 'MB':'金貝殼', 'Z':'吉他' };
+var ACTIVE_BRANDS = ['FA','MB','Z'];
+
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══ AUTH ═══
+function hasAccess() { return currentLawyer && currentLawyer.role === 'admin'; }
+function showNoAccess() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='none';
+  var p = document.getElementById('noAccessPage');
+  p.style.display='flex';
+  var u = document.getElementById('noAccessUser');
+  if (u) u.textContent = currentLawyer ? currentLawyer.name : '';
+}
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) {
+    currentUser = s.data.session.user;
+    await loadUserProfile();
+    if (!hasAccess()) { showNoAccess(); return; }
+    showDashboard();
+  } else showLogin();
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) currentLawyer = r.data;
+}
+function showLogin() { document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; }
+async function showDashboard() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  initFilters();
+  await loadAll();
+}
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({
+      email: document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value
+    });
+    if (r.error) throw r.error;
+    currentUser = r.data.user; await loadUserProfile();
+    if (!hasAccess()) { showNoAccess(); return; }
+    showDashboard();
+  } catch(ex) {
+    err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼');
+    err.style.display='block';
+  } finally { btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut();
+  currentUser = null; currentLawyer = null;
+  showLogin();
+});
+var nal = document.getElementById('noAccessLogout');
+if (nal) nal.addEventListener('click', async function() { if (sb) await sb.auth.signOut(); location.reload(); });
+
+// ═══ THEME (sync from shell) ═══
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    document.documentElement.setAttribute('data-theme', e.data.value === 'light' ? 'light' : '');
+    rerenderCharts();
+  }
+});
+(function() {
+  var t = localStorage.getItem('theme');
+  if (t === 'light') document.documentElement.setAttribute('data-theme','light');
+})();
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var next = document.documentElement.getAttribute('data-theme') === 'light' ? '' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next === 'light' ? 'light' : 'dark');
+  try { window.parent.postMessage({ type:'theme', value: next === 'light' ? 'light' : 'dark' }, '*'); } catch(e) {}
+  rerenderCharts();
+});
+
+// ═══ FILTERS ═══
+function initFilters() {
+  document.getElementById('startDate').value = state.startDate;
+  document.getElementById('endDate').value = state.endDate;
+  document.getElementById('presetBtns').addEventListener('click', function(e) {
+    var b = e.target.closest('.preset-btn'); if (!b) return;
+    document.querySelectorAll('#presetBtns .preset-btn').forEach(function(x){x.classList.remove('active')});
+    b.classList.add('active');
+    state.preset = b.getAttribute('data-preset');
+    var custom = document.getElementById('customRange');
+    if (state.preset === 'custom') {
+      custom.classList.add('show');
+      return; // 等使用者改 input 才 reload
+    }
+    custom.classList.remove('show');
+    var days = parseInt(state.preset, 10);
+    state.endDate = defaultEndDate();
+    var start = new Date(); start.setDate(start.getDate() - 2 - days);
+    state.startDate = start.toISOString().substring(0,10);
+    document.getElementById('startDate').value = state.startDate;
+    document.getElementById('endDate').value = state.endDate;
+    loadAll();
+  });
+  document.getElementById('startDate').addEventListener('change', function(e) {
+    state.startDate = e.target.value; if (state.preset === 'custom') loadAll();
+  });
+  document.getElementById('endDate').addEventListener('change', function(e) {
+    state.endDate = e.target.value; if (state.preset === 'custom') loadAll();
+  });
+  document.getElementById('brandFilter').addEventListener('change', function(e) {
+    state.brand = e.target.value;
+    loadAll();
+  });
+}
+
+// ═══ DATA ═══
+function brandFilterArr() {
+  if (state.brand) return [state.brand];
+  return ACTIVE_BRANDS;
+}
+async function fetchBrandDaily() {
+  if (!sb) return [];
+  var brands = brandFilterArr();
+  var r = await sb.from('v_consult_brand_daily')
+    .select('*')
+    .in('brand_code', brands)
+    .gte('insight_date', state.startDate)
+    .lte('insight_date', state.endDate)
+    .order('insight_date', { ascending: true });
+  if (r.error) { console.error('brand_daily:', r.error.message); return []; }
+  return r.data || [];
+}
+async function fetchOaDelta() {
+  if (!sb) return [];
+  var brands = brandFilterArr();
+  var r = await sb.from('v_consult_oa_daily_delta')
+    .select('*')
+    .in('brand_code', brands)
+    .gte('insight_date', state.startDate)
+    .lte('insight_date', state.endDate)
+    .order('insight_date', { ascending: true });
+  if (r.error) { console.error('oa_delta:', r.error.message); return []; }
+  return r.data || [];
+}
+
+// ═══ MAIN LOAD ═══
+async function loadAll() {
+  document.getElementById('loadingMsg').style.display = 'block';
+  document.getElementById('contentArea').style.display = 'none';
+  var brandRows = [];
+  var oaRows = [];
+  try {
+    var res = await Promise.all([fetchBrandDaily(), fetchOaDelta()]);
+    brandRows = res[0]; oaRows = res[1];
+  } catch (e) {
+    console.error('load:', e);
+  }
+  document.getElementById('loadingMsg').style.display = 'none';
+  document.getElementById('contentArea').style.display = 'block';
+
+  renderKpis(brandRows, oaRows);
+  renderBrandTrend(brandRows);
+  renderBrandShare(brandRows);
+  renderDailyDelta(oaRows);
+  renderOaTable(oaRows);
+}
+
+// ═══ KPIs ═══
+function renderKpis(brandRows, oaRows) {
+  // 最新總好友：取每個品牌最新一筆 total_targeted 加總
+  var latestPerBrand = {};
+  brandRows.forEach(function(r) {
+    var b = r.brand_code;
+    if (!latestPerBrand[b] || r.insight_date > latestPerBrand[b].insight_date) latestPerBrand[b] = r;
+  });
+  var totalNow = 0; var brandsCount = 0;
+  Object.keys(latestPerBrand).forEach(function(b) {
+    totalNow += Number(latestPerBrand[b].total_targeted || 0);
+    brandsCount++;
+  });
+
+  // 期間淨增 / 封鎖（從 oa_delta 加總）
+  var netSum = 0, blockSum = 0, grossSum = 0;
+  oaRows.forEach(function(r) {
+    netSum += Number(r.net_new_friends || 0);
+    blockSum += Number(r.new_blocks || 0);
+    grossSum += Number(r.gross_new_friends || 0);
+  });
+  var blockRate = grossSum > 0 ? (blockSum / grossSum * 100) : 0;
+
+  document.getElementById('kpiTotal').textContent = totalNow.toLocaleString();
+  document.getElementById('kpiTotalSub').textContent = brandsCount + ' 品牌、' + uniqueOaCount(oaRows) + ' OA';
+  document.getElementById('kpiNet').textContent = (netSum >= 0 ? '+' : '') + netSum.toLocaleString();
+  document.getElementById('kpiNetSub').textContent = state.startDate + ' → ' + state.endDate;
+  document.getElementById('kpiBlock').textContent = blockSum.toLocaleString();
+  document.getElementById('kpiBlockSub').textContent = '毛新增 ' + grossSum.toLocaleString();
+  document.getElementById('kpiBlockRate').textContent = blockRate.toFixed(1) + '%';
+  document.getElementById('kpiBlockRateSub').textContent = '封鎖 / 毛新增';
+}
+function uniqueOaCount(rows) {
+  var s = {}; rows.forEach(function(r) { s[r.oa_code] = 1; });
+  return Object.keys(s).length;
+}
+
+// ═══ CHARTS ═══
+function chartTextColor() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? '#6b7280' : '#8899aa';
+}
+function chartGridColor() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(208,213,221,0.5)' : 'rgba(30,48,80,0.4)';
+}
+
+function renderBrandTrend(rows) {
+  // 收集所有日期
+  var dateSet = {};
+  rows.forEach(function(r) { dateSet[r.insight_date] = 1; });
+  var labels = Object.keys(dateSet).sort();
+
+  // per-brand date → total_targeted
+  var brandData = {};
+  brandFilterArr().forEach(function(b) { brandData[b] = {}; });
+  rows.forEach(function(r) {
+    if (brandData[r.brand_code]) brandData[r.brand_code][r.insight_date] = Number(r.total_targeted || 0);
+  });
+
+  var datasets = brandFilterArr().map(function(b) {
+    return {
+      label: BRAND_NAMES[b] || b,
+      data: labels.map(function(d) { return brandData[b][d] != null ? brandData[b][d] : null; }),
+      borderColor: BRAND_COLORS[b],
+      backgroundColor: BRAND_COLORS[b] + '22',
+      fill: false,
+      tension: 0.3,
+      spanGaps: true,
+      pointRadius: 2
+    };
+  });
+
+  if (charts.brandTrend) charts.brandTrend.destroy();
+  charts.brandTrend = new Chart(document.getElementById('brandTrendChart'), {
+    type:'line',
+    data:{ labels:labels, datasets:datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color: chartTextColor() } } },
+      scales:{
+        x:{ ticks:{ color: chartTextColor(), maxRotation:0, autoSkip:true, maxTicksLimit:10 }, grid:{ color: chartGridColor() } },
+        y:{ ticks:{ color: chartTextColor() }, grid:{ color: chartGridColor() } }
+      }
+    }
+  });
+}
+
+function renderBrandShare(rows) {
+  // 取每個品牌最新一筆
+  var latest = {};
+  rows.forEach(function(r) {
+    if (!latest[r.brand_code] || r.insight_date > latest[r.brand_code].insight_date) latest[r.brand_code] = r;
+  });
+  var labels = [], data = [], colors = [];
+  brandFilterArr().forEach(function(b) {
+    if (latest[b]) {
+      labels.push(BRAND_NAMES[b] || b);
+      data.push(Number(latest[b].total_targeted || 0));
+      colors.push(BRAND_COLORS[b]);
+    }
+  });
+  if (charts.brandShare) charts.brandShare.destroy();
+  charts.brandShare = new Chart(document.getElementById('brandShareChart'), {
+    type:'doughnut',
+    data:{ labels:labels, datasets:[{ data:data, backgroundColor:colors, borderWidth:0 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'right', labels:{ color: chartTextColor(), padding:12, font:{size:11} } } }
+    }
+  });
+}
+
+function renderDailyDelta(rows) {
+  // x = date, stacks = brand
+  var dateSet = {};
+  rows.forEach(function(r) { dateSet[r.insight_date] = 1; });
+  var labels = Object.keys(dateSet).sort();
+
+  // brand → date → {net, block}
+  var brandData = {};
+  brandFilterArr().forEach(function(b) { brandData[b] = {}; });
+  rows.forEach(function(r) {
+    var b = r.brand_code, d = r.insight_date;
+    if (!brandData[b]) return;
+    if (!brandData[b][d]) brandData[b][d] = { net:0, block:0 };
+    brandData[b][d].net += Number(r.net_new_friends || 0);
+    brandData[b][d].block += Number(r.new_blocks || 0);
+  });
+
+  var datasets = [];
+  brandFilterArr().forEach(function(b) {
+    datasets.push({
+      label: (BRAND_NAMES[b] || b) + ' 新增',
+      data: labels.map(function(d) { return brandData[b][d] ? brandData[b][d].net : 0; }),
+      backgroundColor: BRAND_COLORS[b],
+      stack: 'positive'
+    });
+  });
+  brandFilterArr().forEach(function(b) {
+    datasets.push({
+      label: (BRAND_NAMES[b] || b) + ' 封鎖',
+      data: labels.map(function(d) { return brandData[b][d] ? -brandData[b][d].block : 0; }),
+      backgroundColor: BRAND_COLORS[b] + '99',
+      borderColor: BRAND_COLORS[b],
+      borderWidth: 1,
+      stack: 'negative'
+    });
+  });
+
+  if (charts.dailyDelta) charts.dailyDelta.destroy();
+  charts.dailyDelta = new Chart(document.getElementById('dailyDeltaChart'), {
+    type:'bar',
+    data:{ labels:labels, datasets:datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ labels:{ color: chartTextColor(), boxWidth:12, font:{size:11} } },
+        tooltip:{ callbacks:{ label:function(ctx) {
+          var v = ctx.parsed.y;
+          return ctx.dataset.label + ': ' + (v < 0 ? Math.abs(v) : v).toLocaleString();
+        } } }
+      },
+      scales:{
+        x:{ stacked:true, ticks:{ color: chartTextColor(), maxRotation:0, autoSkip:true, maxTicksLimit:15 }, grid:{ color: chartGridColor() } },
+        y:{ stacked:true, ticks:{ color: chartTextColor(), callback:function(v){ return Math.abs(v); } }, grid:{ color: chartGridColor() } }
+      }
+    }
+  });
+}
+
+// ═══ TABLE ═══
+function renderOaTable(rows) {
+  // 依 OA 聚合：最新 targeted_reaches、期間 sum
+  var byOa = {};
+  rows.forEach(function(r) {
+    var k = r.oa_code;
+    if (!byOa[k]) {
+      byOa[k] = {
+        oa_code: r.oa_code,
+        oa_display_name: r.oa_display_name,
+        brand_code: r.brand_code,
+        latestDate: r.insight_date,
+        latestTargeted: Number(r.targeted_reaches || 0),
+        gross: 0, blocks: 0, net: 0
+      };
+    }
+    var o = byOa[k];
+    if (r.insight_date >= o.latestDate) {
+      o.latestDate = r.insight_date;
+      o.latestTargeted = Number(r.targeted_reaches || 0);
+    }
+    o.gross += Number(r.gross_new_friends || 0);
+    o.blocks += Number(r.new_blocks || 0);
+    o.net += Number(r.net_new_friends || 0);
+  });
+
+  // 依 brand 分組，brand 內依 oa_code 排序（主號用 is_main 推測 → oa_code 不含數字當主號）
+  var byBrand = { 'FA':[], 'MB':[], 'Z':[] };
+  Object.values(byOa).forEach(function(o) {
+    if (byBrand[o.brand_code]) byBrand[o.brand_code].push(o);
+  });
+  // 排序：主號（純字母）放最前，分身依 oa_code 排
+  function isMain(code) { return /^[A-Z]+$/.test(code); }
+  Object.keys(byBrand).forEach(function(b) {
+    byBrand[b].sort(function(a,c) {
+      if (isMain(a.oa_code) !== isMain(c.oa_code)) return isMain(a.oa_code) ? -1 : 1;
+      return a.oa_code.localeCompare(c.oa_code);
+    });
+  });
+
+  var html = '';
+  var totalRows = 0;
+  var brands = brandFilterArr();
+  brands.forEach(function(b) {
+    var arr = byBrand[b] || [];
+    if (!arr.length) return;
+    var bSum = arr.reduce(function(s, o) {
+      s.targeted += o.latestTargeted; s.gross += o.gross; s.blocks += o.blocks; s.net += o.net;
+      return s;
+    }, { targeted:0, gross:0, blocks:0, net:0 });
+    var bRate = bSum.gross > 0 ? (bSum.blocks / bSum.gross * 100).toFixed(1) + '%' : '-';
+    html += '<tr class="brand-row">' +
+      '<td colspan="2">' + (BRAND_NAMES[b] || b) + ' 小計（' + arr.length + ' OA）</td>' +
+      '<td class="text-right">' + bSum.targeted.toLocaleString() + '</td>' +
+      '<td class="text-right">' + bSum.gross.toLocaleString() + '</td>' +
+      '<td class="text-right">' + bSum.blocks.toLocaleString() + '</td>' +
+      '<td class="text-right ' + (bSum.net >= 0 ? 'text-green' : 'text-red') + '">' + (bSum.net >= 0 ? '+' : '') + bSum.net.toLocaleString() + '</td>' +
+      '<td class="text-right">' + bRate + '</td></tr>';
+    arr.forEach(function(o) {
+      totalRows++;
+      var rate = o.gross > 0 ? (o.blocks / o.gross * 100).toFixed(1) + '%' : '-';
+      html += '<tr>' +
+        '<td>' + escapeHtml(o.oa_display_name || o.oa_code) + ' <span class="text-muted" style="font-size:0.7rem">' + o.oa_code + '</span></td>' +
+        '<td>' + (isMain(o.oa_code) ? '<span class="badge badge-main">主號</span>' : '<span class="badge badge-clone">分身</span>') + '</td>' +
+        '<td class="text-right text-gold">' + o.latestTargeted.toLocaleString() + '</td>' +
+        '<td class="text-right">' + o.gross.toLocaleString() + '</td>' +
+        '<td class="text-right text-red">' + o.blocks.toLocaleString() + '</td>' +
+        '<td class="text-right ' + (o.net >= 0 ? 'text-green' : 'text-red') + '">' + (o.net >= 0 ? '+' : '') + o.net.toLocaleString() + '</td>' +
+        '<td class="text-right">' + rate + '</td></tr>';
+    });
+  });
+  if (!totalRows) html = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">期間內查無資料</td></tr>';
+  document.getElementById('oaTableBody').innerHTML = html;
+  document.getElementById('tableMeta').textContent = totalRows + ' OA';
+}
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; });
+}
+
+function rerenderCharts() {
+  // theme 切換時重畫（顏色變數會更新）
+  if (charts.brandTrend && charts.brandTrend.options) {
+    ['brandTrend','brandShare','dailyDelta'].forEach(function(k) {
+      if (!charts[k]) return;
+      var o = charts[k].options;
+      if (o.plugins && o.plugins.legend && o.plugins.legend.labels) o.plugins.legend.labels.color = chartTextColor();
+      if (o.scales) Object.keys(o.scales).forEach(function(s) {
+        if (o.scales[s].ticks) o.scales[s].ticks.color = chartTextColor();
+        if (o.scales[s].grid) o.scales[s].grid.color = chartGridColor();
+      });
+      charts[k].update();
+    });
+  }
+}
+
+// ═══ START ═══
+checkSession();
+</script>
+</body>
+</html>
