@@ -290,9 +290,9 @@
       <div class="filter-label" style="margin-left:12px">品牌：</div>
       <select class="filter-select" id="brandFilter">
         <option value="">全部</option>
-        <option value="FA">85010</option>
-        <option value="MB">金貝殼</option>
-        <option value="Z">吉他</option>
+        <option value="85010">85010</option>
+        <option value="JBK">金貝殼</option>
+        <option value="GUITAR">吉他</option>
       </select>
       <div class="filter-note" id="dateRangeNote">資料延遲 2 天（LINE Insight API 規則）</div>
     </div>
@@ -381,14 +381,14 @@ var state = {
   brand: ''
 };
 
-// 品牌色票
+// 品牌色票（brand_code 對應）
 var BRAND_COLORS = {
-  'FA': '#c9a84c',  // 85010 = 蜂蜜黃
-  'MB': '#e0954a',  // 金貝殼 = 橙
-  'Z':  '#4f8ef7'   // 吉他 = 藍
+  '85010':  '#c9a84c',  // 蜂蜜黃
+  'JBK':    '#e0954a',  // 金貝殼 = 橙
+  'GUITAR': '#4f8ef7'   // 吉他 = 藍
 };
-var BRAND_NAMES = { 'FA':'85010', 'MB':'金貝殼', 'Z':'吉他' };
-var ACTIVE_BRANDS = ['FA','MB','Z'];
+var BRAND_NAMES = { '85010':'85010', 'JBK':'金貝殼', 'GUITAR':'吉他' };
+var ACTIVE_BRANDS = ['85010','JBK','GUITAR'];
 
 try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
 
@@ -753,7 +753,8 @@ function renderOaTable(rows) {
   });
 
   // 依 brand 分組，brand 內依 oa_code 排序（主號用 is_main 推測 → oa_code 不含數字當主號）
-  var byBrand = { 'FA':[], 'MB':[], 'Z':[] };
+  var byBrand = {};
+  ACTIVE_BRANDS.forEach(function(b){ byBrand[b] = []; });
   Object.values(byOa).forEach(function(o) {
     if (byBrand[o.brand_code]) byBrand[o.brand_code].push(o);
   });
