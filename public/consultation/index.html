@@ -3727,48 +3727,77 @@ function renderDetailChart(stats) {
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 function renderTrackingPage() {
-  const currentYear = new Date().getFullYear().toString();
+  const now = new Date();
+  const currentYear = now.getFullYear().toString();
   const prevYear    = (parseInt(currentYear) - 1).toString();
-
-  document.getElementById('trackingTitle').textContent = currentYear + ' 年度追蹤';
 
   const currStats = allStats.filter(s => s.month && s.month.startsWith(currentYear));
   const prevStats = allStats.filter(s => s.month && s.month.startsWith(prevYear));
 
-  // Limit prev to same months as current year
-  const currMonths = new Set(currStats.map(s => s.month.slice(5, 7)));
-  const prevSame   = prevStats.filter(s => currMonths.has(s.month.slice(5, 7)));
+  // Decide which months count as "complete" for a fair YoY comparison.
+  // The current calendar month is excluded unless today is its last day.
+  const currentMonthMM = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const currentMonthComplete = now.getDate() === lastDay;
 
-  const currT = aggregateStats(currStats);
+  const completeMonths = new Set();
+  currStats.forEach(s => {
+    const mm = s.month.slice(5, 7);
+    if (mm !== currentMonthMM || currentMonthComplete) completeMonths.add(mm);
+  });
+
+  const currCompleteStats = currStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
+  const prevSame          = prevStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
+
+  const currT = aggregateStats(currCompleteStats);
   const prevT = aggregateStats(prevSame);
 
-  // YoY KPIs
-  setYoy('yoy-consults',   currT.consult_count, prevT.consult_count, false,  currT.consult_count.toLocaleString());
-  setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false,  currT.signed_count.toLocaleString());
-  setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, '$' + Math.round(currT.collected).toLocaleString());
-  setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  currT.sign_rate.toFixed(1) + '%');
-  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, '$' + Math.round(currT.consult_eff).toLocaleString());
+  // Build period label like "1-4 月" for the title and YoY captions
+  const sortedMM = [...completeMonths].sort();
+  let periodLabel = '';
+  if (sortedMM.length > 0) {
+    const start = parseInt(sortedMM[0]);
+    const end   = parseInt(sortedMM[sortedMM.length - 1]);
+    periodLabel = start === end ? (start + ' 月') : (start + '-' + end + ' 月');
+  }
 
-  // Month cards
-  renderMonthCards(currStats, currentYear);
+  const titleEl = document.getElementById('trackingTitle');
+  titleEl.textContent = currentYear + ' 年度追蹤';
+  if (periodLabel) {
+    const note = document.createElement('span');
+    note.style.cssText = 'font-size:0.85rem;color:var(--text-muted);margin-left:10px;font-weight:400;';
+    note.textContent = 'KPI 比較期間：' + currentYear + ' ' + periodLabel + ' vs ' + prevYear + ' ' + periodLabel;
+    titleEl.appendChild(note);
+  }
+
+  // YoY KPIs
+  setYoy('yoy-consults',   currT.consult_count, prevT.consult_count, false,  currT.consult_count.toLocaleString(), periodLabel);
+  setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false,  currT.signed_count.toLocaleString(), periodLabel);
+  setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, '$' + Math.round(currT.collected).toLocaleString(), periodLabel);
+  setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  currT.sign_rate.toFixed(1) + '%', periodLabel);
+  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, '$' + Math.round(currT.consult_eff).toLocaleString(), periodLabel);
+
+  // Month cards still show all months, including the partial current month
+  renderMonthCards(currStats, currentYear, currentMonthComplete ? null : currentMonthMM);
 }
 
-function setYoy(id, curr, prev, isPercent, display) {
+function setYoy(id, curr, prev, isPercent, display, periodLabel) {
   document.getElementById(id).textContent = display;
   const changeEl = document.getElementById(id + '-change');
+  const periodSuffix = periodLabel ? '同期 (' + periodLabel + ')' : '';
   if (prev === 0) {
-    changeEl.textContent = 'vs 上一年 (N/A)';
+    changeEl.textContent = 'vs 上一年' + (periodSuffix ? ' ' + periodSuffix : '') + ' (N/A)';
     changeEl.className = 'yoy-change flat';
     return;
   }
   const diff   = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
   const sign   = diff > 0 ? '+' : '';
   const label  = isPercent ? (sign + diff.toFixed(1) + '%') : (sign + diff.toFixed(1) + '%');
-  changeEl.textContent = 'vs 上一年 ' + label;
+  changeEl.textContent = 'vs 上一年' + (periodSuffix ? ' ' + periodSuffix : '') + ' ' + label;
   changeEl.className   = 'yoy-change ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
 }
 
-function renderMonthCards(stats, year) {
+function renderMonthCards(stats, year, partialMonthMM) {
   const grid = document.getElementById('monthCardsGrid');
 
   // Get unique months present in data, in order
@@ -3789,6 +3818,10 @@ function renderMonthCards(stats, year) {
     const mLabel = MONTH_NAMES[mNum - 1];
     const t = aggregateStats(ms);
     const rateClass = t.sign_rate >= 45 ? 'sign-rate-green' : t.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    const isPartial = partialMonthMM && key.slice(5, 7) === partialMonthMM;
+    const partialBadge = isPartial
+      ? ' <span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:rgba(255,180,0,0.18);color:#ffb400;font-weight:500;margin-left:6px;vertical-align:middle;">進行中・未列入 YoY</span>'
+      : '';
 
     // Per-lawyer rows for this month (store for sorting)
     const lawyerRows = buildLawyerRows(ms);
@@ -3796,7 +3829,7 @@ function renderMonthCards(stats, year) {
     return `<div class="month-expand-card" id="mcard-${key}" data-month="${key}">
       <div class="month-card-header" onclick="toggleMonthCard('${key}')">
         <div>
-          <div class="month-card-name">${year}年 ${mLabel}</div>
+          <div class="month-card-name">${year}年 ${mLabel}${partialBadge}</div>
           <div class="month-card-stats">
             <div class="month-stat">諮詢效益 <span>$${Math.round(t.consult_eff).toLocaleString()}</span></div>
             <div class="month-stat">諮詢 <span>${t.consult_count}</span></div>
