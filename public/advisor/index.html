@@ -265,6 +265,18 @@
     .notes-modal-body a { color: var(--blue); text-decoration: underline; word-break: break-all; }
     .notes-empty-text { color: var(--text-muted); font-style: italic; }
 
+    .pager { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 14px 0 4px; flex-wrap: wrap; }
+    .pager-info { color: var(--text-muted); font-size: 0.78rem; margin-right: 12px; }
+    .pager-btn {
+      min-width: 32px; padding: 4px 10px; font-size: 0.78rem;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+    }
+    .pager-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+    .pager-btn.active { background: var(--gold-dim); color: var(--gold-light); border-color: var(--gold); font-weight: 600; }
+    .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pager-ellipsis { color: var(--text-muted); padding: 0 4px; }
+
     .empty { text-align: center; padding: 40px; color: var(--text-muted); }
     .loading { text-align: center; padding: 40px; color: var(--text-muted); }
     .spinner { display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -629,42 +641,42 @@
 
         <div class="table-card">
           <div class="table-header">
-            <div class="table-title">Top 客戶（累計金額）</div>
-            <div class="table-actions">
-              <select class="filter-select" id="topClientLimit"><option value="20">前 20</option><option value="50">前 50</option><option value="100">前 100</option></select>
-            </div>
-          </div>
-          <div style="overflow-x:auto;">
-            <table id="tableTopClients">
-              <thead><tr>
-                <th>客戶</th><th>類別</th><th class="text-right">成案次數</th><th class="text-right">累計金額</th>
-                <th>首次成案</th><th>最近成案</th><th>主要所別</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="table-card">
-          <div class="table-header">
-            <div class="table-title">即將觸發續委任清單</div>
-            <div class="table-actions">
-              <select class="filter-select" id="dueWindow">
-                <option value="6">6 個月以上未回流</option>
-                <option value="12">12 個月以上未回流</option>
-                <option value="3">3 個月以上未回流</option>
+            <div class="table-title">客戶清單</div>
+            <div class="table-actions" style="gap:8px;flex-wrap:wrap;">
+              <select class="filter-select" id="clientsFilter">
+                <option value="all">全部客戶</option>
+                <option value="overdue6">6 個月以上未回流</option>
+                <option value="overdue12">12 個月以上未回流</option>
+                <option value="overdue3">3 個月以上未回流</option>
+              </select>
+              <select class="filter-select" id="clientsCategory">
+                <option value="">全部類別</option>
+              </select>
+              <select class="filter-select" id="clientsPageSize">
+                <option value="50">每頁 50</option>
+                <option value="20">每頁 20</option>
+                <option value="100">每頁 100</option>
+                <option value="200">每頁 200</option>
               </select>
             </div>
           </div>
           <div style="overflow-x:auto;">
-            <table id="tableDueClients">
-              <thead><tr>
-                <th>客戶</th><th>類別</th><th class="text-right">歷史成案</th><th class="text-right">累計金額</th>
-                <th>最近成案</th><th class="text-right">距今天數</th>
+            <table id="tableClients">
+              <thead><tr id="clientsHeader">
+                <th>#</th>
+                <th class="sortable" data-sort="name">客戶 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="category">類別 <span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="count">成案次數 <span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="amount">累計金額 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="first">首次成案 <span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="last">最近成案 <span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="days">距今天數 <span class="sort-arrow"></span></th>
+                <th>主要所別</th>
               </tr></thead>
               <tbody></tbody>
             </table>
           </div>
+          <div id="clientsPager" class="pager"></div>
         </div>
       </div>
 
@@ -819,6 +831,8 @@ let STATE = {
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingSort: { field: 'assigned_at', dir: 'desc' },
+  clientsFilter: 'all', clientsCategory: '', clientsPageSize: 50, clientsPage: 1,
+  clientsSort: { field: 'amount', dir: 'desc' },
   charts: {}
 };
 
@@ -977,8 +991,35 @@ function bindFilters() {
     STATE.selectedMonth = e.target.value === 'all' ? 'all' : +e.target.value;
     renderOverview();
   };
-  document.getElementById('topClientLimit').onchange = renderClients;
-  document.getElementById('dueWindow').onchange = renderClients;
+  document.getElementById('clientsFilter').onchange = e => {
+    STATE.clientsFilter = e.target.value;
+    STATE.clientsPage = 1;
+    renderClients();
+  };
+  document.getElementById('clientsCategory').onchange = e => {
+    STATE.clientsCategory = e.target.value;
+    STATE.clientsPage = 1;
+    renderClients();
+  };
+  document.getElementById('clientsPageSize').onchange = e => {
+    STATE.clientsPageSize = +e.target.value || 50;
+    STATE.clientsPage = 1;
+    renderClients();
+  };
+  document.querySelectorAll('#clientsHeader .sortable').forEach(th => {
+    th.onclick = () => {
+      const f = th.dataset.sort;
+      if (STATE.clientsSort.field === f) {
+        STATE.clientsSort.dir = STATE.clientsSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        STATE.clientsSort.field = f;
+        // 數值/日期類預設 desc，其他預設 asc
+        STATE.clientsSort.dir = ['amount','count','days','first','last'].includes(f) ? 'desc' : 'asc';
+      }
+      STATE.clientsPage = 1;
+      renderClients();
+    };
+  });
   document.getElementById('pendingSalesFilter').onchange = e => { STATE.pendingSales = e.target.value; renderPending(); };
 }
 
@@ -1616,47 +1657,142 @@ function renderClients() {
     b.dates.push(new Date(c.paid_at));
     if (c.office) b.offices[c.office] = (b.offices[c.office]||0)+1;
   });
+  const now = Date.now();
   const arr = Object.entries(byClient).map(([n,v]) => {
     const sorted = v.dates.sort((a,b)=>a-b);
     const mainOffice = Object.entries(v.offices).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
-    return { name:n, count:v.count, amount:v.amount, first:sorted[0], last:sorted[sorted.length-1], mainOffice };
+    const last = sorted[sorted.length-1];
+    return {
+      name: n,
+      count: v.count,
+      amount: v.amount,
+      first: sorted[0],
+      last,
+      days: Math.floor((now - last.getTime()) / 86400000),
+      mainOffice,
+      category: STATE.companyCategories[n]?.category || null
+    };
   });
 
+  // KPI
   document.getElementById('kpiClientCount').textContent = fmtNum(arr.length);
   const repeat = arr.filter(x=>x.count>=2);
   document.getElementById('kpiRepeatClient').textContent = fmtNum(repeat.length);
   const ltv = arr.length ? arr.reduce((s,x)=>s+x.amount, 0)/arr.length : 0;
   document.getElementById('kpiLtv').textContent = fmtMoneyShort(ltv);
+  const overdue6 = arr.filter(x => x.days >= 30 * 6).length;
+  document.getElementById('kpiDueClients').textContent = fmtNum(overdue6);
 
-  const due = +document.getElementById('dueWindow').value || 6;
-  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-due);
-  const dueClients = arr.filter(x => x.last < cutoff).sort((a,b)=>b.amount-a.amount);
-  document.getElementById('kpiDueClients').textContent = fmtNum(dueClients.length);
+  // 補上類別下拉選單（依現有 STATE.companyCategories 動態產生）
+  populateCategoryFilter();
 
-  // Top clients
-  const limit = +document.getElementById('topClientLimit').value || 20;
-  const top = arr.sort((a,b)=>b.amount-a.amount).slice(0, limit);
-  document.querySelector('#tableTopClients tbody').innerHTML = top.map(c => `
-    <tr><td>${c.name}</td>
+  // 篩選
+  const overdueDays = STATE.clientsFilter === 'overdue3' ? 90
+                    : STATE.clientsFilter === 'overdue6' ? 180
+                    : STATE.clientsFilter === 'overdue12' ? 365
+                    : null;
+  let list = arr;
+  if (overdueDays != null) list = list.filter(x => x.days >= overdueDays);
+  if (STATE.clientsCategory) {
+    list = STATE.clientsCategory === '__none__'
+      ? list.filter(x => !x.category)
+      : list.filter(x => x.category === STATE.clientsCategory);
+  }
+
+  // 排序
+  const { field, dir } = STATE.clientsSort;
+  const factor = dir === 'asc' ? 1 : -1;
+  list = list.slice().sort((a, b) => {
+    let va = a[field], vb = b[field];
+    if (field === 'first' || field === 'last') {
+      va = va ? va.getTime() : 0; vb = vb ? vb.getTime() : 0;
+    }
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') return factor * va.localeCompare(String(vb), 'zh-Hant');
+    return factor * (va - vb);
+  });
+
+  // 排序箭頭
+  document.querySelectorAll('#clientsHeader .sortable').forEach(th => {
+    const arrow = th.querySelector('.sort-arrow');
+    if (!arrow) return;
+    arrow.textContent = th.dataset.sort === field ? (dir === 'asc' ? '▲' : '▼') : '';
+  });
+
+  // 分頁
+  const pageSize = STATE.clientsPageSize;
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  if (STATE.clientsPage > totalPages) STATE.clientsPage = totalPages;
+  const startIdx = (STATE.clientsPage - 1) * pageSize;
+  const slice = list.slice(startIdx, startIdx + pageSize);
+
+  document.querySelector('#tableClients tbody').innerHTML = slice.map((c, i) => {
+    const overdueCls = c.days >= 180 ? 'text-orange' : '';
+    return `<tr>
+      <td class="text-muted">${startIdx + i + 1}</td>
+      <td>${c.name}</td>
       <td>${categoryBadge(c.name)}</td>
       <td class="text-right">${fmtNum(c.count)}${c.count>=2?' <span class="badge b2">回流</span>':''}</td>
       <td class="text-right text-gold">${fmtMoneyShort(c.amount)}</td>
       <td>${c.first.toISOString().slice(0,10)}</td>
       <td>${c.last.toISOString().slice(0,10)}</td>
+      <td class="text-right ${overdueCls}">${fmtNum(c.days)} 天</td>
       <td>${c.mainOffice}</td>
-    </tr>`).join('') || '<tr><td colspan="7" class="empty">無資料</td></tr>';
-
-  document.querySelector('#tableDueClients tbody').innerHTML = dueClients.slice(0,100).map(c => {
-    const days = Math.floor((Date.now()-c.last.getTime())/86400000);
-    return `<tr><td>${c.name}</td>
-      <td>${categoryBadge(c.name)}</td>
-      <td class="text-right">${fmtNum(c.count)}</td>
-      <td class="text-right">${fmtMoneyShort(c.amount)}</td>
-      <td>${c.last.toISOString().slice(0,10)}</td>
-      <td class="text-right text-orange">${fmtNum(days)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" class="empty">無</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="empty">無資料</td></tr>';
+
+  renderClientsPager(list.length, totalPages);
 }
+
+function populateCategoryFilter() {
+  const sel = document.getElementById('clientsCategory');
+  if (!sel) return;
+  const cats = [...new Set(Object.values(STATE.companyCategories).map(c => c.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全部類別</option>'
+    + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+    + '<option value="__none__">未分類</option>';
+  if (cur) sel.value = cur;
+}
+
+function renderClientsPager(totalRows, totalPages) {
+  const pager = document.getElementById('clientsPager');
+  if (!pager) return;
+  if (totalRows === 0) { pager.innerHTML = ''; return; }
+  const cur = STATE.clientsPage;
+  const startIdx = (cur - 1) * STATE.clientsPageSize;
+  const endIdx = Math.min(startIdx + STATE.clientsPageSize, totalRows);
+
+  // 頁碼：1, ..., cur-1, cur, cur+1, ..., totalPages
+  const pages = [];
+  const push = p => { if (!pages.includes(p) && p >= 1 && p <= totalPages) pages.push(p); };
+  push(1);
+  for (let p = cur - 2; p <= cur + 2; p++) push(p);
+  push(totalPages);
+  pages.sort((a, b) => a - b);
+
+  let html = `<span class="pager-info">顯示 ${startIdx + 1}–${endIdx} / 共 ${fmtNum(totalRows)} 筆</span>`;
+  html += `<button class="pager-btn" ${cur === 1 ? 'disabled' : ''} onclick="setClientsPage(${cur - 1})">‹</button>`;
+  let lastP = 0;
+  pages.forEach(p => {
+    if (lastP && p - lastP > 1) html += `<span class="pager-ellipsis">…</span>`;
+    html += `<button class="pager-btn ${p === cur ? 'active' : ''}" onclick="setClientsPage(${p})">${p}</button>`;
+    lastP = p;
+  });
+  html += `<button class="pager-btn" ${cur === totalPages ? 'disabled' : ''} onclick="setClientsPage(${cur + 1})">›</button>`;
+  pager.innerHTML = html;
+}
+
+function setClientsPage(p) {
+  STATE.clientsPage = p;
+  renderClients();
+  // 捲到表格頂端
+  document.getElementById('tableClients').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.setClientsPage = setClientsPage;
 
 // 客戶名 → 類別 badge（取自 advisor_company_categories）
 function categoryBadge(clientName) {
