@@ -564,6 +564,7 @@
                 <th class="sortable text-right" data-sort="days_since_assigned">交辦距今 <span class="sort-arrow"></span></th>
                 <th class="sortable text-right" data-sort="days_since_last_action">距上次行動 <span class="sort-arrow"></span></th>
                 <th class="sortable" data-sort="last_contact_text">最近聯繫 <span class="sort-arrow"></span></th>
+                <th>LINE 對話</th>
                 <th>備註</th>
               </tr></thead>
               <tbody></tbody>
@@ -1526,6 +1527,8 @@ function renderPending() {
     const noteCell = hasNote
       ? `<td class="text-muted notes-cell" style="font-size:0.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="點擊看全文" onclick="showCaseNotes('${safeClient}')">${escapeHtml(notePreview)}</td>`
       : `<td class="text-muted notes-cell" style="font-size:0.78rem;" title="點擊看全文" onclick="showCaseNotes('${safeClient}')">—</td>`;
+    const lineUrl = st && st.line_chat_url ? st.line_chat_url : '';
+    const lineCell = `<td class="advisor-line-chat-cell" data-client="${safeClient}" data-url="${escapeHtml(lineUrl)}" style="text-align:center;font-size:0.78rem;vertical-align:middle;">${advisorLineChatInnerHtml(lineUrl)}</td>`;
     return `<tr>
       <td class="text-muted">${idx + 1}</td>
       <td><select class="followup-select ${cls}" data-client="${safeClient}">${opts}</select></td>
@@ -1536,9 +1539,10 @@ function renderPending() {
       <td class="text-right">${p.days_since_assigned != null ? p.days_since_assigned + ' 天' : '—'}</td>
       <td class="text-right ${overdueCls}">${p.days_since_last_action != null ? p.days_since_last_action + ' 天' : '—'}</td>
       <td class="text-muted" style="font-size:0.78rem;">${formatLastContact(p.last_contact_text)}</td>
+      ${lineCell}
       ${noteCell}
     </tr>`;
-  }).join('') || '<tr><td colspan="10" class="empty">無資料</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="empty">無資料</td></tr>';
 
   // 綁 select change → upsert
   document.querySelectorAll('.followup-select').forEach(sel => {
@@ -1725,6 +1729,80 @@ window.closeCaseNotes = closeCaseNotes;
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeCaseNotes();
 });
+
+// ============ LINE OA 對話連結 (advisor_pending_state.line_chat_url) ============
+const ADVISOR_LINE_CHAT_URL_RE = /^https:\/\/chat\.line\.biz\/U[0-9a-f]+\/chat\/[UCR][0-9a-f]+/;
+
+function advisorLineChatInnerHtml(url) {
+  if (url) {
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;" title="${escapeHtml(url)}">🔗 對話</a> <button onclick="event.stopPropagation();startEditAdvisorLineChat(this.closest('td'))" title="編輯連結" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.72rem;padding:0 2px;">✎</button>`;
+  }
+  return `<button onclick="event.stopPropagation();startEditAdvisorLineChat(this.closest('td'))" style="background:none;border:1px dashed var(--border);border-radius:4px;cursor:pointer;color:var(--text-muted);font-size:0.72rem;padding:2px 8px;">＋ 貼連結</button>`;
+}
+
+function renderAdvisorLineChatCell(tdEl) {
+  tdEl.innerHTML = advisorLineChatInnerHtml(tdEl.dataset.url || '');
+}
+
+function startEditAdvisorLineChat(tdEl) {
+  const url = tdEl.dataset.url || '';
+  tdEl.innerHTML = `
+    <input type="url" value="${escapeHtml(url)}" placeholder="https://chat.line.biz/..."
+           style="width:calc(100% - 4px);padding:2px 4px;font-size:0.7rem;border:1px solid var(--border);border-radius:3px;background:var(--bg-row);color:var(--text);box-sizing:border-box;"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();saveAdvisorLineChatFromInput(this);}else if(event.key==='Escape'){event.preventDefault();cancelEditAdvisorLineChat(this);}" />
+    <div style="margin-top:3px;display:flex;gap:4px;">
+      <button onclick="saveAdvisorLineChatFromInput(this.closest('td').querySelector('input'))" style="flex:1;padding:2px 4px;border:1px solid var(--green);background:transparent;color:var(--green);border-radius:3px;cursor:pointer;font-size:0.7rem;">✓ 存</button>
+      <button onclick="cancelEditAdvisorLineChat(this)" style="flex:1;padding:2px 4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:3px;cursor:pointer;font-size:0.7rem;">✗</button>
+    </div>
+  `;
+  const input = tdEl.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+async function saveAdvisorLineChatFromInput(inputEl) {
+  const tdEl = inputEl.closest('td');
+  const clientName = tdEl.dataset.client;
+  const newUrl = (inputEl.value || '').trim();
+  if (newUrl && !ADVISOR_LINE_CHAT_URL_RE.test(newUrl)) {
+    alert('網址格式錯誤\n\n請貼 LINE OA 後台對話頁網址，格式類似：\nhttps://chat.line.biz/Uxxxx.../chat/{U|C|R}xxxx...\n（U=個人對話、C=群組、R=多人聊天室）');
+    inputEl.focus();
+    return;
+  }
+  const valueToSend = newUrl || null;
+  try {
+    const payload = {
+      client_name: clientName,
+      line_chat_url: valueToSend,
+      line_chat_updated_at: valueToSend ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await sb.from('advisor_pending_state').upsert(payload, { onConflict: 'client_name' });
+    if (error) throw error;
+    const cur = STATE.pendingState[clientName] || { client_name: clientName };
+    cur.line_chat_url = valueToSend;
+    cur.line_chat_updated_at = payload.line_chat_updated_at;
+    STATE.pendingState[clientName] = cur;
+    tdEl.dataset.url = valueToSend || '';
+    renderAdvisorLineChatCell(tdEl);
+    const msg = document.createElement('div');
+    msg.textContent = '✓ 已儲存';
+    msg.style.cssText = 'color:var(--green);font-size:0.7rem;margin-top:2px;';
+    tdEl.appendChild(msg);
+    setTimeout(() => msg.remove(), 1500);
+  } catch (e) {
+    alert('儲存失敗：' + (e.message || e));
+    console.error('saveAdvisorLineChat error:', e);
+  }
+}
+
+function cancelEditAdvisorLineChat(el) {
+  renderAdvisorLineChatCell(el.closest('td'));
+}
+
+window.startEditAdvisorLineChat   = startEditAdvisorLineChat;
+window.saveAdvisorLineChatFromInput = saveAdvisorLineChatFromInput;
+window.cancelEditAdvisorLineChat  = cancelEditAdvisorLineChat;
 
 // ============ START ============
 checkAuth();
