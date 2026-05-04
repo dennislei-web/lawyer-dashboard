@@ -544,7 +544,15 @@ var ACTIVE_BRANDS = ['85010','JBK','GUITAR'];
 try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
 
 // ═══ AUTH ═══
-function hasAccess() { return currentLawyer && currentLawyer.role === 'admin'; }
+function hasAccess() {
+  if (!currentLawyer) return false;
+  if (currentLawyer.role === 'admin') return true;
+  if (currentLawyer.role === 'manager') {
+    var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+    return allowed.indexOf('funnel') > -1;
+  }
+  return false;
+}
 function showNoAccess() {
   document.getElementById('loginPage').style.display='none';
   document.getElementById('dashboard').style.display='none';

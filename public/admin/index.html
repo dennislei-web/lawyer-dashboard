@@ -247,7 +247,7 @@
   <div class="main">
     <div style="margin-bottom:20px;">
       <div class="page-title">總帳號管理</div>
-      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 5 個儀表板（諮詢分析 / 營運 / 財務規劃 / 法律顧問 / 合署律師）的登入權限</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 6 個儀表板（諮詢分析 / 營運 / 財務規劃 / 法律顧問 / 合署律師 / 委前漏斗）的登入權限</div>
     </div>
 
     <!-- 權限對照 -->
@@ -256,7 +256,8 @@
         <div class="section-title">📊 權限對照</div>
       </div>
       <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
-        所有帳號使用同一套 Supabase Auth；下表列出各角色在 5 個儀表板能看到的範圍與額外功能。
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 6 個儀表板能看到的範圍與額外功能。<br>
+        <strong style="color:var(--gold-light);">部門主管</strong>的可見儀表板與上傳權限可在下方表格逐一勾選。
       </div>
       <div class="table-wrap">
         <table>
@@ -268,6 +269,7 @@
               <th style="text-align:center;">財務規劃</th>
               <th style="text-align:center;">法律顧問</th>
               <th style="text-align:center;">合署律師</th>
+              <th style="text-align:center;">委前漏斗</th>
               <th>額外功能</th>
             </tr>
           </thead>
@@ -279,20 +281,23 @@
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料、編列預算、管理帳號</td>
             </tr>
             <tr>
-              <td><span style="color:var(--blue);font-weight:600;">📊 主管 (manager)</span></td>
-              <td style="text-align:center;" class="text-green">全部資料</td>
-              <td style="text-align:center;" class="text-red">✗ 無權限</td>
-              <td style="text-align:center;" class="text-red">✗ 無權限</td>
-              <td style="text-align:center;" class="text-red">✗ 無權限</td>
-              <td style="text-align:center;" class="text-red">✗ 無權限</td>
-              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料</td>
+              <td><span style="color:var(--blue);font-weight:600;">📊 部門主管 (manager)</span></td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料（可勾選）</td>
             </tr>
             <tr>
               <td>🔒 律師 (lawyer)</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
@@ -311,7 +316,8 @@
         <button class="btn-login" style="max-width:140px;padding:6px 14px;font-size:0.82rem;" onclick="openNewAccountModal()">➕ 新增帳號</button>
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
-        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 5 個儀表板。
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 6 個儀表板。<br>
+        <span style="color:var(--blue);">部門主管</span>列可勾選個別儀表板與上傳權限；<span style="color:var(--gold-light);">管理員</span>永遠全開、<span style="color:var(--text-muted);">律師</span>僅諮詢分析。
       </div>
       <div class="table-wrap">
         <table>
@@ -325,12 +331,14 @@
               <th style="text-align:center;font-size:0.72rem;">財務規劃</th>
               <th style="text-align:center;font-size:0.72rem;">法律顧問</th>
               <th style="text-align:center;font-size:0.72rem;">合署律師</th>
+              <th style="text-align:center;font-size:0.72rem;">委前漏斗</th>
+              <th style="text-align:center;font-size:0.72rem;">資料上傳</th>
               <th class="sortable" data-sort="status" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
               <th style="text-align:center;">密碼</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
-            <tr><td colspan="10"><div class="loading"><span class="spinner"></span></div></td></tr>
+            <tr><td colspan="12"><div class="loading"><span class="spinner"></span></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -358,9 +366,10 @@
         <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">角色</label>
         <select id="newAccRole" style="width:100%;padding:9px 12px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;">
           <option value="lawyer">🔒 律師</option>
-          <option value="manager">📊 主管</option>
+          <option value="manager">📊 部門主管</option>
           <option value="admin">🔑 管理員</option>
         </select>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">部門主管預設只開「諮詢分析」、未啟用上傳；建立後可在表格逐一勾選。</div>
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600;">初始密碼</label>
@@ -509,19 +518,44 @@ async function loadLawyers() {
 
 // ═══ ACCESS CELL ═══
 // 規則：
-//   - admin：4 個儀表板都 ✓ 全部 + 上傳 + 編列預算 + 管理帳號
-//   - manager：只能看諮詢分析（✓ 全部）+ 可上傳；其他 3 個儀表板 ✗ 無權限
-//   - lawyer：只能看諮詢分析（✓ 全部）；其他 3 個儀表板 ✗；無上傳權限
+//   - admin   → 6 個儀表板全部 ✓ + 上傳 + 編列預算 + 管理帳號（不顯示 checkbox）
+//   - manager → dashboard_access[] 決定可見儀表板、can_upload 決定上傳權限（顯示 checkbox）
+//   - lawyer  → 只能看諮詢分析（✓ 全部）；其他 ✗；無上傳
 //   - 無 auth 帳號：登不進任何儀表板（—）
+var DASHBOARDS = ['consultation','revenue','finance','advisor','partners','funnel'];
+
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
   var role = l.role || 'lawyer';
   if (role === 'admin') {
     return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
   }
-  // manager 和 lawyer 都只能看諮詢
+  if (role === 'manager') {
+    var allowed = Array.isArray(l.dashboard_access) ? l.dashboard_access : [];
+    var checked = allowed.indexOf(dashboard) > -1;
+    return '<input type="checkbox" data-dashboard="' + dashboard + '"' +
+           (checked ? ' checked' : '') +
+           ' onchange="toggleDashboard(\'' + l.id + '\',\'' + dashboard + '\',this.checked,this)"' +
+           ' style="cursor:pointer;width:16px;height:16px;accent-color:var(--blue);">';
+  }
+  // lawyer：諮詢分析永遠開、其他永遠關
   if (dashboard === 'consultation') {
     return '<span style="color:var(--green);font-weight:700;">✓ 全部</span>';
+  }
+  return '<span style="color:var(--red);">✗</span>';
+}
+
+function uploadCell(l) {
+  if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
+  var role = l.role || 'lawyer';
+  if (role === 'admin') {
+    return '<span style="color:var(--green);font-weight:700;">✓</span>';
+  }
+  if (role === 'manager') {
+    var checked = !!l.can_upload;
+    return '<input type="checkbox"' + (checked ? ' checked' : '') +
+           ' onchange="toggleUpload(\'' + l.id + '\',this.checked,this)"' +
+           ' style="cursor:pointer;width:16px;height:16px;accent-color:var(--blue);">';
   }
   return '<span style="color:var(--red);">✗</span>';
 }
@@ -590,7 +624,7 @@ function renderAdminPage() {
   updateSortIndicators();
 
   if (lawyers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
     return;
   }
 
@@ -607,14 +641,14 @@ function renderAdminPage() {
       : (l.auth_user_id
           ? '<button class="btn-ghost" style="font-size:0.72rem;padding:3px 8px;" onclick="resetPassword(\'' + l.auth_user_id + '\',\'' + escHtml(l.name).replace(/'/g,"\\'") + '\')">🔄 重設</button>'
           : '<span style="font-size:0.72rem;color:var(--text-muted);">無帳號</span>');
-    return '<tr style="' + rowBg + '">' +
+    return '<tr data-lawyer-id="' + l.id + '" style="' + rowBg + '">' +
       '<td style="font-weight:600;">' + escHtml(l.name) + selfTag + '</td>' +
       '<td style="color:var(--text-muted);font-size:0.82rem;">' + escHtml(l.email || '-') + '</td>' +
       '<td style="text-align:center;">' +
         '<select style="background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.82rem;' + (isSelf ? 'cursor:not-allowed;opacity:0.6;' : 'cursor:pointer;') + '"' +
           roleSelectAttrs + '>' +
           '<option value="lawyer"' + (role === 'lawyer' ? ' selected' : '') + '>🔒 律師</option>' +
-          '<option value="manager"' + (role === 'manager' ? ' selected' : '') + '>📊 主管</option>' +
+          '<option value="manager"' + (role === 'manager' ? ' selected' : '') + '>📊 部門主管</option>' +
           '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>🔑 管理員</option>' +
         '</select>' +
       '</td>' +
@@ -623,6 +657,8 @@ function renderAdminPage() {
       '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'advisor') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'funnel') + '</td>' +
+      '<td style="text-align:center;">' + uploadCell(l) + '</td>' +
       '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
       '<td style="text-align:center;">' + passwordBtnHtml + '</td>' +
     '</tr>';
@@ -633,17 +669,66 @@ function renderAdminPage() {
 async function changeRole(lawyerId, newRole) {
   var lawyer = allLawyers.find(function(x){ return x.id === lawyerId; });
   if (!lawyer) return;
-  var roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '主管' : '律師';
+  var roleLabel = newRole === 'admin' ? '管理員' : newRole === 'manager' ? '部門主管' : '律師';
   if (!confirm('確定將「' + lawyer.name + '」設為「' + roleLabel + '」嗎？')) {
     renderAdminPage(); return;
   }
-  // admin/manager/lawyer 都設定 can_view_all=true（維持原本的行為）
-  var canViewAll = true;
-  var res = await sb.from('lawyers').update({ role: newRole, can_view_all: canViewAll }).eq('id', lawyerId);
+  // 角色切換時同步重置存取範圍：
+  //   admin   → 全部 6 個儀表板 + can_upload
+  //   manager → 預設只給諮詢分析 + 不給上傳（可在 checkbox 再勾）
+  //   lawyer  → 諮詢分析（前端硬編、欄位本身仍寫一份保留）+ 不給上傳
+  var patch = { role: newRole, can_view_all: true };
+  if (newRole === 'admin') {
+    patch.dashboard_access = DASHBOARDS.slice();
+    patch.can_upload = true;
+  } else if (newRole === 'manager') {
+    patch.dashboard_access = ['consultation'];
+    patch.can_upload = false;
+  } else {
+    patch.dashboard_access = ['consultation'];
+    patch.can_upload = false;
+  }
+  var res = await sb.from('lawyers').update(patch).eq('id', lawyerId);
   if (res.error) { alert('更新失敗：' + res.error.message); renderAdminPage(); return; }
-  lawyer.role = newRole;
-  lawyer.can_view_all = canViewAll;
+  Object.assign(lawyer, patch);
   renderAdminPage();
+}
+
+async function toggleDashboard(lawyerId, dashboard, checked, el) {
+  var lawyer = allLawyers.find(function(x){ return x.id === lawyerId; });
+  if (!lawyer) return;
+  var current = Array.isArray(lawyer.dashboard_access) ? lawyer.dashboard_access.slice() : [];
+  var next;
+  if (checked) {
+    next = current.indexOf(dashboard) > -1 ? current : current.concat([dashboard]);
+  } else {
+    next = current.filter(function(x){ return x !== dashboard; });
+  }
+  // 排序固定，避免 DB 內順序漂移
+  next = DASHBOARDS.filter(function(d){ return next.indexOf(d) > -1; });
+  el.disabled = true;
+  var res = await sb.from('lawyers').update({ dashboard_access: next }).eq('id', lawyerId);
+  el.disabled = false;
+  if (res.error) {
+    alert('更新失敗：' + res.error.message);
+    el.checked = !checked;
+    return;
+  }
+  lawyer.dashboard_access = next;
+}
+
+async function toggleUpload(lawyerId, checked, el) {
+  var lawyer = allLawyers.find(function(x){ return x.id === lawyerId; });
+  if (!lawyer) return;
+  el.disabled = true;
+  var res = await sb.from('lawyers').update({ can_upload: checked }).eq('id', lawyerId);
+  el.disabled = false;
+  if (res.error) {
+    alert('更新失敗：' + res.error.message);
+    el.checked = !checked;
+    return;
+  }
+  lawyer.can_upload = checked;
 }
 
 var DEFAULT_PASSWORD = 'ChangeMe123!';
@@ -745,6 +830,15 @@ async function handleNewAccount(e) {
     msg.textContent = '寫入 lawyers 表...';
 
     // Step 3: 插入 lawyers 表（此時 auth.uid() 是 admin）
+    var defaultAccess, defaultUpload;
+    if (role === 'admin') {
+      defaultAccess = DASHBOARDS.slice();
+      defaultUpload = true;
+    } else {
+      // manager 與 lawyer 預設都只有諮詢分析、不開上傳
+      defaultAccess = ['consultation'];
+      defaultUpload = false;
+    }
     var lawyerRow = {
       name: name,
       email: email,
@@ -753,6 +847,8 @@ async function handleNewAccount(e) {
       office: '喆律法律事務所',
       auth_user_id: authUser.id,
       can_view_all: true,
+      dashboard_access: defaultAccess,
+      can_upload: defaultUpload,
     };
     var insertRes = await sb.from('lawyers').insert(lawyerRow).select().single();
 

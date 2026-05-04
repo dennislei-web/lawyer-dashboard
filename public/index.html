@@ -347,18 +347,29 @@ function switchRoute(route) {
 
 function canAccessRoute(route) {
   if (!currentLawyer) return false;
-  if (route === 'consultation') return true; // 所有登入者都可看
-  // 其他 3 個儀表板 + admin 頁：只有 admin
-  return currentLawyer.role === 'admin';
+  var role = currentLawyer.role;
+  if (route === 'admin') return role === 'admin';
+  if (role === 'admin') return true;
+  if (route === 'consultation' && role === 'lawyer') return true;
+  if (role === 'manager') {
+    var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+    return allowed.indexOf(route) > -1;
+  }
+  return false;
 }
 
 function updateNavVisibility() {
   var role = currentLawyer ? currentLawyer.role : null;
   var isAdmin = role === 'admin';
+  var allowed = Array.isArray(currentLawyer && currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
 
-  // 律師/主管只看到「諮詢分析」，其他 nav 全部隱藏（含 restricted 和 admin）
+  // 每個受限 nav-link 依角色與 dashboard_access 個別決定是否顯示
   document.querySelectorAll('.nav-link[data-restricted]').forEach(function(l) {
-    l.style.display = isAdmin ? '' : 'none';
+    var route = l.getAttribute('data-route');
+    var visible = false;
+    if (isAdmin) visible = true;
+    else if (role === 'manager') visible = allowed.indexOf(route) > -1;
+    l.style.display = visible ? '' : 'none';
   });
   var navAdmin = document.getElementById('navAdmin');
   if (navAdmin) navAdmin.style.display = isAdmin ? '' : 'none';
@@ -391,10 +402,18 @@ function showShell() {
   document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
   updateNavVisibility();
 
-  // 初始路由 — 若 hash 指定不可存取的 route，退回 consultation
+  // 初始路由 — 若 hash 指定不可存取的 route，挑第一個可存取的
   var initial = getRouteFromHash();
-  if (!canAccessRoute(initial)) initial = 'consultation';
+  if (!canAccessRoute(initial)) initial = pickDefaultRoute();
   switchRoute(initial);
+}
+
+function pickDefaultRoute() {
+  var order = ['consultation','revenue','finance','advisor','partners','funnel','admin'];
+  for (var i = 0; i < order.length; i++) {
+    if (canAccessRoute(order[i])) return order[i];
+  }
+  return 'consultation';
 }
 
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -499,7 +518,7 @@ document.addEventListener('visibilitychange', function () {
 window.addEventListener('hashchange', function() {
   if (document.getElementById('shell').style.display === 'none') return;
   var r = getRouteFromHash();
-  if (!canAccessRoute(r)) r = 'consultation';
+  if (!canAccessRoute(r)) r = pickDefaultRoute();
   switchRoute(r);
 });
 
