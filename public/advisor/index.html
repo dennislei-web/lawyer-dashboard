@@ -676,10 +676,13 @@ async function checkAuth() {
 }
 
 async function showDashboard(user) {
-  // 權限對齊主 shell / finance：只有 admin 可存取
+  // 權限：admin 全開；部門主管需 dashboard_access 包含 'advisor'
   const { data: profile } = await sb.from('lawyers').select('*').eq('auth_user_id', user.id).maybeSingle();
   const role = profile?.role;
-  if (role !== 'admin') {
+  const allowed = Array.isArray(profile?.dashboard_access) ? profile.dashboard_access : [];
+  const isAdmin = role === 'admin';
+  const isManagerWithAccess = role === 'manager' && allowed.indexOf('advisor') > -1;
+  if (!isAdmin && !isManagerWithAccess) {
     document.getElementById('noAccessUser').textContent = profile?.name || user.email;
     loginPage.style.display = 'none';
     noAccessPage.style.display = 'flex';
@@ -687,8 +690,9 @@ async function showDashboard(user) {
   }
   loginPage.style.display = 'none';
   dashboard.style.display = 'block';
-  document.getElementById('userBadge').textContent = (profile?.name || user.email) + '（admin）';
-  document.getElementById('navLinkAdmin').style.display = '';
+  const roleLabel = isAdmin ? 'admin' : '部門主管';
+  document.getElementById('userBadge').textContent = (profile?.name || user.email) + '（' + roleLabel + '）';
+  if (isAdmin) document.getElementById('navLinkAdmin').style.display = '';
   init();
 }
 

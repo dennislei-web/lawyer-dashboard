@@ -839,8 +839,12 @@ function showLogin() {
 }
 function hasAccess() {
   if (!currentLawyer) return false;
-  // 只有 admin 可存取此儀表板
-  return currentLawyer.role === 'admin';
+  if (currentLawyer.role === 'admin') return true;
+  if (currentLawyer.role === 'manager') {
+    var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+    return allowed.indexOf('partners') > -1;
+  }
+  return false;
 }
 function showNoAccess() {
   document.getElementById('loginPage').style.display = 'none';

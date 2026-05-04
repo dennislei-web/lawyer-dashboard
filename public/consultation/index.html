@@ -2631,15 +2631,18 @@ function canViewAll() {
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
-  // Show tabs based on role: admin/manager see upload; admin sees 帳號管理 link
+  // Show tabs based on role/upload permission:
+  //   admin → 永遠可上傳
+  //   manager → 看 can_upload flag
+  //   lawyer → 不可上傳
   const isAdmin = currentLawyer && currentLawyer.role === 'admin';
-  const isManager = currentLawyer && currentLawyer.role === 'manager';
+  const canUpload = isAdmin || (currentLawyer && currentLawyer.role === 'manager' && currentLawyer.can_upload === true);
   const uploadTab = document.getElementById('tab-upload');
-  if (uploadTab) uploadTab.style.display = (isAdmin || isManager) ? '' : 'none';
+  if (uploadTab) uploadTab.style.display = canUpload ? '' : 'none';
   const adminLink = document.getElementById('adminLink');
   if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
   const manualSyncBtn = document.getElementById('manualSyncBtn');
-  if (manualSyncBtn) manualSyncBtn.style.display = (isAdmin || isManager) ? '' : 'none';
+  if (manualSyncBtn) manualSyncBtn.style.display = canUpload ? '' : 'none';
 
   // Build year filter options from data
   const years = getAvailableYears(allStats);

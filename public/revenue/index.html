@@ -883,8 +883,12 @@ try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catc
 // ═══ AUTH ═══
 function hasAccess() {
   if (!currentLawyer) return false;
-  // 只有 admin 可存取此儀表板
-  return currentLawyer.role === 'admin';
+  if (currentLawyer.role === 'admin') return true;
+  if (currentLawyer.role === 'manager') {
+    var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+    return allowed.indexOf('revenue') > -1;
+  }
+  return false;
 }
 function showNoAccess() {
   document.getElementById('loginPage').style.display = 'none';
