@@ -637,7 +637,7 @@
           <div style="overflow-x:auto;">
             <table id="tableTopClients">
               <thead><tr>
-                <th>客戶</th><th class="text-right">成案次數</th><th class="text-right">累計金額</th>
+                <th>客戶</th><th>類別</th><th class="text-right">成案次數</th><th class="text-right">累計金額</th>
                 <th>首次成案</th><th>最近成案</th><th>主要所別</th>
               </tr></thead>
               <tbody></tbody>
@@ -659,7 +659,7 @@
           <div style="overflow-x:auto;">
             <table id="tableDueClients">
               <thead><tr>
-                <th>客戶</th><th class="text-right">歷史成案</th><th class="text-right">累計金額</th>
+                <th>客戶</th><th>類別</th><th class="text-right">歷史成案</th><th class="text-right">累計金額</th>
                 <th>最近成案</th><th class="text-right">距今天數</th>
               </tr></thead>
               <tbody></tbody>
@@ -815,7 +815,7 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], pending: [], pendingState: {}, channelMapping: {}, lastSync: null,
+  cases: [], pending: [], pendingState: {}, channelMapping: {}, companyCategories: {}, lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingSort: { field: 'assigned_at', dir: 'desc' },
@@ -844,11 +844,12 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, pn, ps, cm, log] = await Promise.all([
+    const [cs, pn, ps, cm, cc, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
       sb.from('advisor_channel_mapping').select('*'),
+      sb.from('advisor_company_categories').select('*'),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
     ]);
     if (cs.error) throw cs.error;
@@ -858,6 +859,8 @@ async function init() {
     (ps.data || []).forEach(s => { STATE.pendingState[s.client_name] = s; });
     STATE.channelMapping = {};
     (cm.data || []).forEach(m => { STATE.channelMapping[m.raw_channel] = m.canonical; });
+    STATE.companyCategories = {};
+    (cc.data || []).forEach(c => { STATE.companyCategories[c.company_name] = c; });
     STATE.lastSync = log.data?.[0] || null;
 
     setupYearFilter();
@@ -1635,22 +1638,32 @@ function renderClients() {
   const top = arr.sort((a,b)=>b.amount-a.amount).slice(0, limit);
   document.querySelector('#tableTopClients tbody').innerHTML = top.map(c => `
     <tr><td>${c.name}</td>
+      <td>${categoryBadge(c.name)}</td>
       <td class="text-right">${fmtNum(c.count)}${c.count>=2?' <span class="badge b2">回流</span>':''}</td>
       <td class="text-right text-gold">${fmtMoneyShort(c.amount)}</td>
       <td>${c.first.toISOString().slice(0,10)}</td>
       <td>${c.last.toISOString().slice(0,10)}</td>
       <td>${c.mainOffice}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="empty">無資料</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">無資料</td></tr>';
 
   document.querySelector('#tableDueClients tbody').innerHTML = dueClients.slice(0,100).map(c => {
     const days = Math.floor((Date.now()-c.last.getTime())/86400000);
     return `<tr><td>${c.name}</td>
+      <td>${categoryBadge(c.name)}</td>
       <td class="text-right">${fmtNum(c.count)}</td>
       <td class="text-right">${fmtMoneyShort(c.amount)}</td>
       <td>${c.last.toISOString().slice(0,10)}</td>
       <td class="text-right text-orange">${fmtNum(days)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="empty">無</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">無</td></tr>';
+}
+
+// 客戶名 → 類別 badge（取自 advisor_company_categories）
+function categoryBadge(clientName) {
+  const cc = STATE.companyCategories[clientName];
+  if (!cc || !cc.category) return '<span class="text-muted" style="font-size:0.78rem;">—</span>';
+  const title = cc.note ? ` title="${escapeHtml(cc.note)}"` : '';
+  return `<span class="badge b3" style="background:var(--gold-dim);color:var(--gold-light);"${title}>${escapeHtml(cc.category)}</span>`;
 }
 
 
