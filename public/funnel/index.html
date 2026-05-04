@@ -177,15 +177,18 @@
     .table-card.collapsed table { display:none; }
     .chart-card.collapsed .chart-title { margin-bottom:0; }
 
-    /* 月場次 section 整段也可收（h2 點擊） */
+    /* 月場次 section header 也用 chart-card 的框樣式，視覺一致 */
     .section-header {
       cursor:pointer; user-select:none; transition:color 0.15s;
-      display:flex; align-items:baseline; gap:8px;
+      display:flex; align-items:baseline; gap:12px;
+      background:var(--bg-card); border:1px solid var(--border);
+      border-radius:12px; padding:16px 20px;
     }
     .section-header:hover h2 { color:var(--gold-light); }
     .section-header::before {
-      content:'▼'; display:inline-block; width:14px; font-size:0.7em;
+      content:'▼'; display:inline-block; width:14px; font-size:0.75em;
       color:var(--text-muted); transition:transform 0.18s;
+      flex-shrink:0;
     }
     .section-header.collapsed::before { transform:rotate(-90deg); }
     .section-header.collapsed + .section-body { display:none; }
@@ -429,8 +432,8 @@
       </div>
 
       <!-- ────────── 月場次 / 進線 區塊 ────────── -->
-      <div style="margin-top:36px; padding-top:20px; border-top:1px solid var(--border);">
-        <div class="section-header" data-section="monthly" style="margin-bottom:8px;">
+      <div style="margin-top:24px;">
+        <div class="section-header" data-section="monthly" style="margin-bottom:16px;">
           <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線（<span id="threeStageMonthLabel">上月</span>漏斗）</h2>
           <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">進線=LINE 加好友、開始訊息+場次=「各帳號統計」人工填報</span>
         </div>
