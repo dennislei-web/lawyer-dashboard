@@ -772,15 +772,15 @@
 
       <div class="table-card" style="margin-top:24px">
         <div class="table-header">
-          <span class="table-title">去年同月比較</span>
+          <span class="table-title">本年 vs 去年 各月比較（淨收入）</span>
         </div>
         <div style="overflow-x:auto">
           <table>
             <thead>
               <tr>
-                <th>項目</th>
-                <th class="text-right">本月</th>
-                <th class="text-right">去年同月</th>
+                <th>月份</th>
+                <th class="text-right" id="ytYoyCurHead">本年</th>
+                <th class="text-right" id="ytYoyPrevHead">去年</th>
                 <th class="text-right">YoY 成長</th>
               </tr>
             </thead>
@@ -1468,11 +1468,10 @@ async function loadYearlyPage() {
     });
   });
 
-  // YoY comparison
+  // YoY comparison - 12 months side-by-side (淨收入)
   var prevRecs = excludePartner(await loadRecords({ year: TRACK_YEAR - 1, office: office||undefined }));
-  var prevMonth = filterByMonth(prevRecs, ytSelectedMonth);
-  var prevPay = sumBy(prevMonth,'PaymentTransaction'), prevRef = sumBy(prevMonth,'RefundTransaction');
-  var prevNet = prevPay - prevRef;
+  document.getElementById('ytYoyCurHead').textContent = TRACK_YEAR + ' 淨收入';
+  document.getElementById('ytYoyPrevHead').textContent = (TRACK_YEAR - 1) + ' 淨收入';
   var yoyBody = document.getElementById('ytYoyBody');
   function yoyRow(label, cur, prev) {
     var pct = prev>0 ? ((cur-prev)/prev*100) : (cur>0?999:0);
@@ -1480,7 +1479,26 @@ async function loadYearlyPage() {
     var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
     return '<tr><td>'+label+'</td><td class="text-right text-gold">'+formatMoney(cur)+'</td><td class="text-right text-muted">'+formatMoney(prev)+'</td><td class="text-right '+cls+'">'+txt+'</td></tr>';
   }
-  yoyBody.innerHTML = yoyRow('付款金額', pay, prevPay) + yoyRow('退款金額', ref, prevRef) + yoyRow('淨收入', net, prevNet);
+  var yoyHtml = '', curTotal = 0, prevTotal = 0;
+  for (var ym=1; ym<=12; ym++) {
+    var curM = filterByMonth(allRecs, ym);
+    var prvM = filterByMonth(prevRecs, ym);
+    var curNet = sumBy(curM,'PaymentTransaction') - sumBy(curM,'RefundTransaction');
+    var prvNet = sumBy(prvM,'PaymentTransaction') - sumBy(prvM,'RefundTransaction');
+    curTotal += curNet; prevTotal += prvNet;
+    yoyHtml += yoyRow(ym+'月', curNet, prvNet);
+  }
+  yoyHtml += '<tr style="border-top:2px solid var(--border);font-weight:600">' +
+    '<td>合計</td>' +
+    '<td class="text-right text-gold">'+formatMoney(curTotal)+'</td>' +
+    '<td class="text-right text-muted">'+formatMoney(prevTotal)+'</td>' +
+    (function(){
+      var pct = prevTotal>0 ? ((curTotal-prevTotal)/prevTotal*100) : (curTotal>0?999:0);
+      var txt = prevTotal>0 ? (pct>0?'+':'')+pct.toFixed(1)+'%' : (curTotal>0?'N/A':'-');
+      var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
+      return '<td class="text-right '+cls+'">'+txt+'</td>';
+    })() + '</tr>';
+  yoyBody.innerHTML = yoyHtml;
 }
 document.getElementById('yearlyOfficeFilter').addEventListener('change', loadYearlyPage);
 
