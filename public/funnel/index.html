@@ -206,6 +206,42 @@
     .brand-trend-meta .delta-neg { color:var(--red); }
     .brand-trend-canvas { height:80px; position:relative; }
 
+    /* OA 三階段漏斗條圖 */
+    .oa-funnel-list { display:flex; flex-direction:column; gap:10px; }
+    .oa-funnel-row {
+      background:var(--bg-row); border:1px solid var(--border);
+      border-radius:8px; padding:10px 14px;
+    }
+    .oa-funnel-head {
+      display:flex; align-items:center; gap:8px; margin-bottom:6px;
+      font-size:0.82rem; flex-wrap:wrap;
+    }
+    .oa-funnel-name { font-weight:600; color:var(--text); }
+    .oa-funnel-meta { color:var(--text-muted); font-size:0.74rem; margin-left:auto; }
+    .oa-funnel-bars {
+      display:grid; grid-template-columns:74px 50px 1fr; gap:6px 8px;
+      align-items:center;
+    }
+    .oa-funnel-stage-label { font-size:0.74rem; color:var(--text-muted); text-align:right; }
+    .oa-funnel-stage-rate {
+      font-size:0.72rem; color:var(--text-muted); text-align:right;
+      font-variant-numeric:tabular-nums;
+    }
+    .oa-funnel-bar-wrap { position:relative; height:20px; }
+    .oa-funnel-bar {
+      height:100%; border-radius:3px; min-width:2px;
+      display:flex; align-items:center; padding-left:6px;
+      font-size:0.72rem; font-weight:600;
+      color:#0a0a0a;
+      font-variant-numeric:tabular-nums;
+      white-space:nowrap;
+      transition:width 0.3s;
+    }
+    .oa-funnel-bar.adds { background:rgba(201,168,76,0.92); }   /* gold = 進線 */
+    .oa-funnel-bar.msg  { background:rgba(79,142,247,0.85);  color:#fff; }  /* blue = 開始訊息 */
+    .oa-funnel-bar.sess { background:rgba(34,170,89,0.88);  color:#fff; }   /* green = 約成場次 */
+    .oa-funnel-bar.empty { background:transparent; color:var(--text-muted); padding-left:0; }
+
     /* TABLE */
     .table-card {
       background:var(--bg-card); border:1px solid var(--border); border-radius:12px; overflow:hidden;
@@ -397,17 +433,35 @@
 
       <!-- ────────── 月場次 / 進線 區塊 ────────── -->
       <div style="margin-top:36px; padding-top:20px; border-top:1px solid var(--border);">
-        <div class="section-header" data-section="monthly" style="margin-bottom:16px;">
-          <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線</h2>
-          <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">資料源：「各帳號進線及場次數據統計表」（人工填報）</span>
+        <div class="section-header" data-section="monthly" style="margin-bottom:8px;">
+          <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線（<span id="threeStageMonthLabel">上月</span>漏斗）</h2>
+          <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">進線=LINE 加好友、開始訊息+場次=「各帳號統計」人工填報</span>
         </div>
 
         <div class="section-body">
 
         <div class="kpi-row">
-          <div class="kpi-card gold"><div class="kpi-label">期間總場次（約成）</div><div class="kpi-value gold" id="kpiSessions">-</div><div class="kpi-sub" id="kpiSessionsSub"></div></div>
-          <div class="kpi-card blue"><div class="kpi-label">期間總進線</div><div class="kpi-value blue" id="kpiLeads">-</div><div class="kpi-sub" id="kpiLeadsSub"></div></div>
-          <div class="kpi-card green"><div class="kpi-label">平均約成率</div><div class="kpi-value green" id="kpiSchedRate">-</div><div class="kpi-sub" id="kpiSchedRateSub"></div></div>
+          <div class="kpi-card gold">
+            <div class="kpi-label">① 進線（加好友）</div>
+            <div class="kpi-value gold" id="kpiAdds">-</div>
+            <div class="kpi-sub" id="kpiAddsSub"></div>
+          </div>
+          <div class="kpi-card blue">
+            <div class="kpi-label">② 開始訊息</div>
+            <div class="kpi-value blue" id="kpiMsg">-</div>
+            <div class="kpi-sub" id="kpiMsgSub"></div>
+          </div>
+          <div class="kpi-card green">
+            <div class="kpi-label">③ 約成場次</div>
+            <div class="kpi-value green" id="kpiSess3s">-</div>
+            <div class="kpi-sub" id="kpiSess3sSub"></div>
+          </div>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:24px">
+          <div class="chart-title">各 OA 三階段漏斗（<span id="threeStageMonthLabel2">上月</span>）</div>
+          <div class="chart-subtitle">寬度依「進線」最大者為基準；右側百分比是相對前一階段的轉換率</div>
+          <div id="oa3StageList" class="oa-funnel-list"></div>
         </div>
 
         <div class="chart-card" style="margin-bottom:24px">
@@ -670,6 +724,25 @@ async function fetchBrandMonthly() {
   return r.data || [];
 }
 
+// 上個完整月：今天月份的 1 號 - 1 個月
+function lastCompleteMonth() {
+  var d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().substring(0,10);
+}
+async function fetchOa3Stage() {
+  if (!sb) return [];
+  var brands = brandFilterArr();
+  var r = await sb.from('v_consult_oa_3stage_monthly')
+    .select('*')
+    .in('brand_code', brands)
+    .eq('month_start', lastCompleteMonth())
+    .order('messages', { ascending: false });
+  if (r.error) { console.error('oa_3stage:', r.error.message); return []; }
+  return r.data || [];
+}
+
 // ═══ MAIN LOAD ═══
 async function loadAll() {
   document.getElementById('loadingMsg').style.display = 'block';
@@ -678,15 +751,18 @@ async function loadAll() {
   var oaRows = [];
   var oaMonthly = [];
   var brandMonthly = [];
+  var oa3Stage = [];
   try {
     var res = await Promise.all([
       fetchBrandDaily(),
       fetchOaDelta(),
       fetchOaMonthly(),
-      fetchBrandMonthly()
+      fetchBrandMonthly(),
+      fetchOa3Stage()
     ]);
     brandRows = res[0]; oaRows = res[1];
     oaMonthly = res[2]; brandMonthly = res[3];
+    oa3Stage = res[4];
   } catch (e) {
     console.error('load:', e);
   }
@@ -699,7 +775,8 @@ async function loadAll() {
   renderDailyDelta(oaRows);
   renderOaTable(oaRows);
 
-  renderMonthlyKpis(brandMonthly);
+  render3StageKpis(oa3Stage);
+  renderOa3StageList(oa3Stage);
   renderMonthlyBrandChart(brandMonthly);
   renderOaMonthlyGrid(oaMonthly);
   renderMonthlyTable(oaMonthly);
@@ -993,23 +1070,107 @@ function escapeHtml(s) {
 
 // ═══ 月場次 RENDER ═══
 
-function renderMonthlyKpis(brandMonthly) {
-  var sessions = 0, leads = 0;
-  brandMonthly.forEach(function(r) {
-    sessions += Number(r.total_sessions || 0);
-    leads += Number(r.total_leads || 0);
-  });
-  var rate = leads > 0 ? (sessions / leads * 100) : 0;
-  var months = {};
-  brandMonthly.forEach(function(r) { months[r.month_start] = 1; });
-  var monthCount = Object.keys(months).length;
+// 3 stage：① 進線（LINE 加好友）→ ② 開始訊息 → ③ 約成場次
+function render3StageKpis(rows) {
+  var month = lastCompleteMonth();
+  var monthLabel = formatMonthLabel(month);
+  document.getElementById('threeStageMonthLabel').textContent = monthLabel;
+  document.getElementById('threeStageMonthLabel2').textContent = monthLabel;
 
-  document.getElementById('kpiSessions').textContent = sessions.toLocaleString();
-  document.getElementById('kpiSessionsSub').textContent = monthCount + ' 個月、' + Object.keys(months).sort()[0] + ' 起';
-  document.getElementById('kpiLeads').textContent = leads.toLocaleString();
-  document.getElementById('kpiLeadsSub').textContent = '線上法諮接觸數';
-  document.getElementById('kpiSchedRate').textContent = rate.toFixed(1) + '%';
-  document.getElementById('kpiSchedRateSub').textContent = '場次 / 進線';
+  var totalAdds = 0, totalMsg = 0, totalSess = 0;
+  rows.forEach(function(r) {
+    totalAdds += Number(r.line_adds || 0);
+    totalMsg  += Number(r.messages  || 0);
+    totalSess += Number(r.sessions  || 0);
+  });
+  var msgRate   = totalAdds > 0 ? (totalMsg / totalAdds * 100) : null;
+  var schedRate = totalMsg  > 0 ? (totalSess / totalMsg * 100) : null;
+
+  document.getElementById('kpiAdds').textContent = totalAdds > 0 ? totalAdds.toLocaleString() : '—';
+  document.getElementById('kpiAddsSub').textContent = monthLabel + '・' + rows.length + ' OA';
+
+  document.getElementById('kpiMsg').textContent = totalMsg.toLocaleString();
+  document.getElementById('kpiMsgSub').textContent = msgRate !== null
+      ? '進線→訊息 ' + msgRate.toFixed(1) + '%'
+      : '（無進線資料）';
+
+  document.getElementById('kpiSess3s').textContent = totalSess.toLocaleString();
+  document.getElementById('kpiSess3sSub').textContent = schedRate !== null
+      ? '訊息→場次 ' + schedRate.toFixed(1) + '%'
+      : '—';
+}
+
+function renderOa3StageList(rows) {
+  var list = document.getElementById('oa3StageList');
+  list.innerHTML = '';
+  if (!rows.length) {
+    list.innerHTML = '<div class="text-muted" style="padding:14px;text-align:center;">該月份暫無資料</div>';
+    return;
+  }
+
+  // 全 OA 進線最大值（所有 bar 寬度的 baseline）
+  var maxAdds = 0;
+  rows.forEach(function(r) {
+    var v = Number(r.line_adds || 0);
+    if (v > maxAdds) maxAdds = v;
+    // 也比較 messages，避免 line_adds 0/null 時整列空白
+    var m = Number(r.messages || 0);
+    if (m > maxAdds) maxAdds = m;
+  });
+  if (maxAdds === 0) maxAdds = 1;
+
+  // 排序：主號優先 → 品牌 → 進線量
+  rows.slice().sort(function(a, b) {
+    var ma = a.is_main ? 0 : 1;
+    var mb = b.is_main ? 0 : 1;
+    if (ma !== mb) return ma - mb;
+    if (a.brand_code !== b.brand_code) return a.brand_code.localeCompare(b.brand_code);
+    return Number(b.line_adds || 0) - Number(a.line_adds || 0);
+  }).forEach(function(r) {
+    var adds = r.line_adds == null ? null : Number(r.line_adds);
+    var msg  = Number(r.messages || 0);
+    var sess = Number(r.sessions || 0);
+    var msgRate   = (adds && adds > 0) ? (msg / adds * 100) : null;
+    var schedRate = (msg > 0) ? (sess / msg * 100) : null;
+    var brandColor = BRAND_COLORS[r.brand_code] || '#888';
+
+    function pctOfMax(n) { return Math.max(2, n / maxAdds * 100); }
+
+    var addsBar = adds == null
+      ? '<div class="oa-funnel-bar empty">— 無 LINE Insight</div>'
+      : '<div class="oa-funnel-bar adds" style="width:' + pctOfMax(adds) + '%">' + adds.toLocaleString() + '</div>';
+    var msgBar = msg > 0
+      ? '<div class="oa-funnel-bar msg" style="width:' + pctOfMax(msg) + '%">' + msg.toLocaleString() + '</div>'
+      : '<div class="oa-funnel-bar empty">—</div>';
+    var sessBar = sess > 0
+      ? '<div class="oa-funnel-bar sess" style="width:' + pctOfMax(sess) + '%">' + sess.toLocaleString() + '</div>'
+      : '<div class="oa-funnel-bar empty">—</div>';
+
+    var row = document.createElement('div');
+    row.className = 'oa-funnel-row';
+    row.innerHTML =
+      '<div class="oa-funnel-head">' +
+        '<span class="brand-dot" style="background:' + brandColor + '"></span>' +
+        '<span class="oa-funnel-name">' + escapeHtml(r.oa_code) + '</span>' +
+        '<span class="text-muted" style="font-size:0.74rem">' + escapeHtml(r.oa_display_name || '') + '</span>' +
+        (r.is_main ? '<span class="badge badge-main" style="margin-left:4px;font-size:0.65rem;padding:1px 6px;">主</span>' : '') +
+        '<span class="oa-funnel-meta">' + escapeHtml(BRAND_NAMES[r.brand_code] || r.brand_code) + '</span>' +
+      '</div>' +
+      '<div class="oa-funnel-bars">' +
+        '<div class="oa-funnel-stage-label">① 進線</div>' +
+        '<div class="oa-funnel-stage-rate">&nbsp;</div>' +
+        '<div class="oa-funnel-bar-wrap">' + addsBar + '</div>' +
+
+        '<div class="oa-funnel-stage-label">② 訊息</div>' +
+        '<div class="oa-funnel-stage-rate">' + (msgRate !== null ? msgRate.toFixed(0) + '%' : '—') + '</div>' +
+        '<div class="oa-funnel-bar-wrap">' + msgBar + '</div>' +
+
+        '<div class="oa-funnel-stage-label">③ 場次</div>' +
+        '<div class="oa-funnel-stage-rate">' + (schedRate !== null ? schedRate.toFixed(0) + '%' : '—') + '</div>' +
+        '<div class="oa-funnel-bar-wrap">' + sessBar + '</div>' +
+      '</div>';
+    list.appendChild(row);
+  });
 }
 
 function renderMonthlyBrandChart(brandMonthly) {
