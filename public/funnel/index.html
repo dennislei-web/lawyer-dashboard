@@ -435,7 +435,8 @@
       <div style="margin-top:24px;">
         <div class="section-header" data-section="monthly" style="margin-bottom:16px;">
           <h2 style="margin:0; font-size:1.15rem; color:var(--gold-light);">月場次 / 進線（<span id="threeStageMonthLabel">上月</span>漏斗）</h2>
-          <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">進線=LINE 加好友、開始訊息+場次=「各帳號統計」人工填報</span>
+          <span class="text-muted" style="font-size:0.78rem; margin-left:auto;">① 加好友 = LINE API ・ ② 訊息 = OA 月份標籤 ・ ③ 場次 = sheet 人工填報</span>
+          <button id="btnEditTagChats" class="btn-icon" style="margin-left:10px;font-size:0.78rem;padding:4px 10px;display:none;" onclick="event.stopPropagation();openTagChatsModal();">✏️ 編輯訊息</button>
         </div>
 
         <div class="section-body">
@@ -447,9 +448,10 @@
             <div class="kpi-sub" id="kpiAddsSub"></div>
           </div>
           <div class="kpi-card blue">
-            <div class="kpi-label">② 開始訊息</div>
+            <div class="kpi-label">② 開始訊息（OA 標籤）</div>
             <div class="kpi-value blue" id="kpiMsg">-</div>
             <div class="kpi-sub" id="kpiMsgSub"></div>
+            <div class="kpi-compare" id="kpiMsgCompare" style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;line-height:1.4;"></div>
           </div>
           <div class="kpi-card green">
             <div class="kpi-label">③ 約成場次</div>
@@ -499,6 +501,46 @@
 
     </div>
 
+  </div>
+</div>
+
+<!-- ────────── 編輯 OA 月份標籤聊天室數 Modal（admin only） ────────── -->
+<div id="tagChatsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:1.1rem;font-weight:700;color:var(--gold-light);">✏️ 編輯 OA 月份標籤聊天室數</div>
+      <button class="btn-icon" style="padding:4px 10px;" onclick="closeTagChatsModal()">✕</button>
+    </div>
+    <div style="font-size:0.78rem;color:var(--text-muted);background:var(--bg-row);padding:10px 12px;border-radius:6px;line-height:1.55;margin-bottom:14px;">
+      資料源：LINE OA Manager → 聊天設定 → 標籤 → 「<span id="tagChatsLabelHint">115年MM月</span>」標籤的「聊天室數量」。<br>
+      右側「LINE 加好友 / Sheet 進線」是參考值，幫你核對數字合理性。
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <label style="font-size:0.85rem;color:var(--text-muted);">月份：</label>
+      <input id="tagChatsMonth" type="month" style="padding:6px 10px;background:var(--bg-row);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;" onchange="loadTagChatsRows()">
+      <span id="tagChatsLoadStatus" style="font-size:0.78rem;color:var(--text-muted);"></span>
+    </div>
+    <div style="overflow:auto;flex:1;border:1px solid var(--border);border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead style="position:sticky;top:0;background:var(--bg-row);">
+          <tr style="font-size:0.78rem;color:var(--text-muted);">
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);">OA</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);">顯示名</th>
+            <th style="text-align:right;padding:8px 10px;border-bottom:1px solid var(--border);">聊天室數 *</th>
+            <th style="text-align:right;padding:8px 10px;border-bottom:1px solid var(--border);">LINE 加好友</th>
+            <th style="text-align:right;padding:8px 10px;border-bottom:1px solid var(--border);">Sheet 進線</th>
+          </tr>
+        </thead>
+        <tbody id="tagChatsTableBody">
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">選擇月份後載入</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;align-items:center;">
+      <button class="btn-login" id="tagChatsSave" style="flex:1;padding:10px;" onclick="saveTagChats()">儲存</button>
+      <button class="btn-icon" style="padding:10px 20px;" onclick="closeTagChatsModal()">取消</button>
+    </div>
+    <div id="tagChatsMsg" style="margin-top:10px;font-size:0.85rem;text-align:center;"></div>
   </div>
 </div>
 
@@ -581,6 +623,11 @@ async function showDashboard() {
   document.getElementById('loginPage').style.display='none';
   document.getElementById('dashboard').style.display='block';
   document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  // 編輯訊息按鈕：僅 admin 可見（與 RLS is_admin() 一致）
+  if (currentLawyer && currentLawyer.role === 'admin') {
+    var editBtn = document.getElementById('btnEditTagChats');
+    if (editBtn) editBtn.style.display = '';
+  }
   initFilters();
   await loadAll();
 }
@@ -1085,22 +1132,27 @@ function render3StageKpis(rows) {
   document.getElementById('threeStageMonthLabel').textContent = monthLabel;
   document.getElementById('threeStageMonthLabel2').textContent = monthLabel;
 
-  var totalAdds = 0, totalMsg = 0, totalSess = 0;
+  var totalAdds = 0, totalMsg = 0, totalSess = 0, totalManualAdds = 0;
+  var anyMsgFilled = false;
   rows.forEach(function(r) {
-    totalAdds += Number(r.line_adds || 0);
-    totalMsg  += Number(r.messages  || 0);
-    totalSess += Number(r.sessions  || 0);
+    totalAdds       += Number(r.line_adds   || 0);
+    totalSess       += Number(r.sessions    || 0);
+    totalManualAdds += Number(r.manual_adds || 0);
+    if (r.messages != null) { totalMsg += Number(r.messages); anyMsgFilled = true; }
   });
-  var msgRate   = totalAdds > 0 ? (totalMsg / totalAdds * 100) : null;
+  var msgRate   = (totalAdds > 0 && anyMsgFilled) ? (totalMsg / totalAdds * 100) : null;
   var schedRate = totalMsg  > 0 ? (totalSess / totalMsg * 100) : null;
 
   document.getElementById('kpiAdds').textContent = totalAdds > 0 ? totalAdds.toLocaleString() : '—';
   document.getElementById('kpiAddsSub').textContent = monthLabel + '・' + rows.length + ' OA';
 
-  document.getElementById('kpiMsg').textContent = totalMsg.toLocaleString();
+  document.getElementById('kpiMsg').textContent = anyMsgFilled ? totalMsg.toLocaleString() : '尚未填';
   document.getElementById('kpiMsgSub').textContent = msgRate !== null
-      ? '進線→訊息 ' + msgRate.toFixed(1) + '%'
-      : '（無進線資料）';
+      ? '加好友→訊息 ' + msgRate.toFixed(1) + '%'
+      : '（admin 點右上「✏️ 編輯訊息」填）';
+  document.getElementById('kpiMsgCompare').innerHTML =
+    '對照：LINE API <span style="color:var(--gold-light)">' + totalAdds.toLocaleString() + '</span>'
+    + ' ・ Sheet 進線 <span style="color:var(--text)">' + totalManualAdds.toLocaleString() + '</span>';
 
   document.getElementById('kpiSess3s').textContent = totalSess.toLocaleString();
   document.getElementById('kpiSess3sSub').textContent = schedRate !== null
@@ -1422,6 +1474,155 @@ function setupCollapse() {
     });
   });
 }
+
+// ═══ 編輯 OA 月份標籤聊天室數 Modal ═══
+
+// 14 個有效 OA（與 Apps Script KNOWN_OA_CODES 一致，FL 已 paused 不列）
+var TAG_CHATS_OA_CODES = ['FA','1FA','2FA','3FA','4FA','5FA','6FA','MB','1MB','2MB','3MB','4MB','Z','1Z'];
+
+function openTagChatsModal() {
+  if (!currentLawyer || currentLawyer.role !== 'admin') return;
+  var picker = document.getElementById('tagChatsMonth');
+  picker.value = lastCompleteMonth().substring(0, 7);
+  document.getElementById('tagChatsMsg').textContent = '';
+  document.getElementById('tagChatsModal').style.display = 'flex';
+  loadTagChatsRows();
+}
+
+function closeTagChatsModal() {
+  document.getElementById('tagChatsModal').style.display = 'none';
+}
+
+function rocLabelFromMonth(monthStr) {
+  // monthStr: "2026-04" → "115年4月"
+  var parts = monthStr.split('-');
+  return (parseInt(parts[0], 10) - 1911) + '年' + parseInt(parts[1], 10) + '月';
+}
+
+async function loadTagChatsRows() {
+  var monthStr = document.getElementById('tagChatsMonth').value;  // "YYYY-MM"
+  if (!monthStr) return;
+  var monthStart = monthStr + '-01';
+  document.getElementById('tagChatsLabelHint').textContent = rocLabelFromMonth(monthStr);
+  var status = document.getElementById('tagChatsLoadStatus');
+  status.textContent = '載入中…';
+
+  var results;
+  try {
+    results = await Promise.all([
+      sb.from('consult_oa_master').select('oa_code,oa_display_name,brand_code,is_main,status'),
+      sb.from('v_consult_oa_3stage_monthly').select('oa_code,line_adds,manual_adds').eq('month_start', monthStart),
+      sb.from('consult_oa_tag_chats_monthly').select('oa_code,chat_rooms').eq('month_start', monthStart),
+    ]);
+  } catch (e) {
+    status.textContent = '載入失敗：' + (e.message || e);
+    return;
+  }
+  var masterErr = results[0].error, viewErr = results[1].error, existingErr = results[2].error;
+  if (masterErr || viewErr || existingErr) {
+    status.textContent = '載入失敗：' + ((masterErr || viewErr || existingErr).message);
+    return;
+  }
+  var masters = results[0].data || [];
+  var viewByOa = {};
+  (results[1].data || []).forEach(function(r) { viewByOa[r.oa_code] = r; });
+  var existingByOa = {};
+  (results[2].data || []).forEach(function(r) { existingByOa[r.oa_code] = r.chat_rooms; });
+
+  var rows = masters
+    .filter(function(m) { return m.status === 'active' && TAG_CHATS_OA_CODES.indexOf(m.oa_code) !== -1; })
+    .sort(function(a, b) {
+      var ma = a.is_main ? 0 : 1, mb = b.is_main ? 0 : 1;
+      if (ma !== mb) return ma - mb;
+      if (a.brand_code !== b.brand_code) return a.brand_code.localeCompare(b.brand_code);
+      return a.oa_code.localeCompare(b.oa_code);
+    });
+
+  var html = '';
+  rows.forEach(function(m) {
+    var view = viewByOa[m.oa_code] || {};
+    var existing = existingByOa[m.oa_code];
+    html +=
+      '<tr style="border-bottom:1px solid var(--border-light);">' +
+        '<td style="padding:8px 10px;font-weight:600;">' + escapeHtml(m.oa_code) + '</td>' +
+        '<td style="padding:8px 10px;font-size:0.82rem;color:var(--text-muted);">' + escapeHtml(m.oa_display_name || '') + (m.is_main ? ' <span style="color:var(--gold-light);font-size:0.7rem;">主</span>' : '') + '</td>' +
+        '<td style="padding:6px 10px;text-align:right;">' +
+          '<input type="number" min="0" step="1" data-oa="' + escapeHtml(m.oa_code) + '" value="' + (existing != null ? existing : '') + '" placeholder="—" ' +
+          'style="width:90px;padding:5px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:5px;color:var(--text);text-align:right;font-size:0.9rem;">' +
+        '</td>' +
+        '<td style="padding:8px 10px;text-align:right;font-size:0.82rem;color:var(--gold-light);">' + (view.line_adds != null ? Number(view.line_adds).toLocaleString() : '—') + '</td>' +
+        '<td style="padding:8px 10px;text-align:right;font-size:0.82rem;color:var(--text-muted);">' + (view.manual_adds != null ? Number(view.manual_adds).toLocaleString() : '—') + '</td>' +
+      '</tr>';
+  });
+  if (!html) html = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">沒有 active OA</td></tr>';
+  document.getElementById('tagChatsTableBody').innerHTML = html;
+  status.textContent = rows.length + ' OA・已填 ' + Object.keys(existingByOa).length + ' 筆';
+}
+
+async function saveTagChats() {
+  if (!currentLawyer || currentLawyer.role !== 'admin') return;
+  var monthStr = document.getElementById('tagChatsMonth').value;
+  if (!monthStr) return;
+  var monthStart = monthStr + '-01';
+  var btn = document.getElementById('tagChatsSave');
+  var msg = document.getElementById('tagChatsMsg');
+  btn.disabled = true; msg.style.color = 'var(--text-muted)'; msg.textContent = '儲存中…';
+
+  var inputs = document.querySelectorAll('#tagChatsTableBody input[data-oa]');
+  var rowsToUpsert = [];
+  var rowsToDelete = [];
+  inputs.forEach(function(inp) {
+    var oa = inp.getAttribute('data-oa');
+    var raw = inp.value.trim();
+    if (raw === '') {
+      rowsToDelete.push(oa);
+    } else {
+      var n = Math.round(Number(raw));
+      if (Number.isFinite(n) && n >= 0) {
+        rowsToUpsert.push({
+          oa_code: oa,
+          month_start: monthStart,
+          chat_rooms: n,
+          source: 'admin_ui',
+          updated_by: currentUser ? currentUser.id : null,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+  });
+
+  try {
+    if (rowsToUpsert.length > 0) {
+      var up = await sb.from('consult_oa_tag_chats_monthly')
+        .upsert(rowsToUpsert, { onConflict: 'oa_code,month_start' });
+      if (up.error) throw up.error;
+    }
+    if (rowsToDelete.length > 0) {
+      var del = await sb.from('consult_oa_tag_chats_monthly')
+        .delete()
+        .eq('month_start', monthStart)
+        .in('oa_code', rowsToDelete);
+      if (del.error) throw del.error;
+    }
+    msg.style.color = 'var(--green)';
+    msg.textContent = '已儲存 ' + rowsToUpsert.length + ' 筆' + (rowsToDelete.length ? '、清空 ' + rowsToDelete.length + ' 筆' : '');
+    if (monthStart === lastCompleteMonth()) {
+      setTimeout(function() { loadAll(); }, 600);
+    }
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = '儲存失敗：' + (e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var modal = document.getElementById('tagChatsModal');
+  if (modal) modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeTagChatsModal();
+  });
+});
 
 // ═══ START ═══
 checkSession();
