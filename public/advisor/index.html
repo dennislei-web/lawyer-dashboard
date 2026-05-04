@@ -158,6 +158,21 @@
     .kpi-value.teal { color: var(--teal); }
     .kpi-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 
+    /* YoY (與去年同期比較) */
+    .yoy-section { margin-bottom: 24px; }
+    .yoy-section-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .yoy-section-title { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+    .yoy-section-note { font-size: 0.78rem; color: var(--text-muted); }
+    .yoy-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+    .yoy-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .yoy-card .yoy-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .yoy-card .yoy-value { font-size: 1.4rem; font-weight: 700; color: var(--blue); }
+    .yoy-card .yoy-prev { font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; }
+    .yoy-card .yoy-change { margin-top: 4px; font-size: 0.78rem; font-weight: 500; }
+    .yoy-change.up   { color: var(--green); }
+    .yoy-change.down { color: var(--red); }
+    .yoy-change.flat { color: var(--text-muted); }
+
     /* CHARTS */
     .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart-row.eq { grid-template-columns: 1fr 1fr; }
@@ -228,6 +243,7 @@
     @media (max-width: 900px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .kpi-row.k5 { grid-template-columns: repeat(2, 1fr); }
+      .yoy-grid { grid-template-columns: repeat(2, 1fr); }
       .chart-row { grid-template-columns: 1fr; }
       .chart-row.eq { grid-template-columns: 1fr; }
       .chart-container { height: 260px; }
@@ -360,6 +376,46 @@
           <div class="kpi-card green"><div class="kpi-label">續委任率</div><div class="kpi-value green" id="kpiRetention">—</div><div class="kpi-sub">續委任 / 全部成案</div></div>
           <div class="kpi-card purple"><div class="kpi-label">舊客衍生比</div><div class="kpi-value purple" id="kpiSpread">—</div><div class="kpi-sub">舊客帶進新案</div></div>
           <div class="kpi-card orange"><div class="kpi-label">平均單筆金額</div><div class="kpi-value orange" id="kpiAvg">—</div><div class="kpi-sub" id="kpiAvgSub"></div></div>
+        </div>
+
+        <!-- YoY: 與去年同期比較 -->
+        <div class="yoy-section" id="yoySection">
+          <div class="yoy-section-header">
+            <div class="yoy-section-title">與去年同期比較</div>
+            <div class="yoy-section-note" id="yoyPeriodNote">—</div>
+          </div>
+          <div class="yoy-grid">
+            <div class="yoy-card">
+              <div class="yoy-label">成案數</div>
+              <div class="yoy-value" id="yoyCount">—</div>
+              <div class="yoy-prev" id="yoyCountPrev">去年 —</div>
+              <div class="yoy-change flat" id="yoyCountChange">—</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">成案金額</div>
+              <div class="yoy-value" id="yoyAmount">—</div>
+              <div class="yoy-prev" id="yoyAmountPrev">去年 —</div>
+              <div class="yoy-change flat" id="yoyAmountChange">—</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">續委任率</div>
+              <div class="yoy-value" id="yoyRetention">—</div>
+              <div class="yoy-prev" id="yoyRetentionPrev">去年 —</div>
+              <div class="yoy-change flat" id="yoyRetentionChange">—</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">舊客衍生比</div>
+              <div class="yoy-value" id="yoySpread">—</div>
+              <div class="yoy-prev" id="yoySpreadPrev">去年 —</div>
+              <div class="yoy-change flat" id="yoySpreadChange">—</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">平均單筆金額</div>
+              <div class="yoy-value" id="yoyAvg">—</div>
+              <div class="yoy-prev" id="yoyAvgPrev">去年 —</div>
+              <div class="yoy-change flat" id="yoyAvgChange">—</div>
+            </div>
+          </div>
         </div>
 
         <div class="chart-row eq">
@@ -1009,6 +1065,9 @@ function renderOverview() {
   document.getElementById('kpiAvg').textContent = fmtMoneyShort(avg);
   document.getElementById('kpiAvgSub').textContent = avgSub;
 
+  // 與去年同期比較
+  renderYoy();
+
   // 12 個月趨勢
   const months = [];
   for (let i = 11; i >= 0; i--) {
@@ -1074,6 +1133,101 @@ function renderOverview() {
       <td class="text-right text-muted">${fmtNum(counts['未分類'])}</td>
     </tr>`;
   }).join('');
+}
+
+// ============ YoY: 與去年同期比較 ============
+function aggregateAdvisor(arr) {
+  const count = arr.length;
+  const amount = arr.reduce((s,c)=>s + (+c.amount_paid||0), 0);
+  const cat = {};
+  arr.forEach(c => { const k = c.case_category || '未分類'; cat[k] = (cat[k]||0) + 1; });
+  const retention = count > 0 ? (cat['續委任']||0) / count * 100 : 0;
+  const spread    = count > 0 ? (cat['舊客衍生']||0) / count * 100 : 0;
+  const avg       = count > 0 ? amount / count : 0;
+  return { count, amount, retention, spread, avg };
+}
+
+function setYoyAdvisor(id, curr, prev, displayCurr, fmtPrev, isPercent) {
+  document.getElementById(id).textContent = displayCurr;
+  document.getElementById(id + 'Prev').textContent = '去年 ' + fmtPrev(prev);
+  const changeEl = document.getElementById(id + 'Change');
+  if (prev === 0 && curr === 0) {
+    changeEl.textContent = '— vs 去年';
+    changeEl.className = 'yoy-change flat';
+    return;
+  }
+  if (prev === 0) {
+    changeEl.textContent = '新增（去年 0）';
+    changeEl.className = 'yoy-change up';
+    return;
+  }
+  const diff = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
+  const sign = diff > 0 ? '+' : '';
+  const txt = isPercent
+    ? `${sign}${diff.toFixed(1)} 個百分點`
+    : `${sign}${diff.toFixed(1)}%`;
+  changeEl.textContent = `${txt} vs 去年`;
+  changeEl.className = 'yoy-change ' + (diff > 0.05 ? 'up' : diff < -0.05 ? 'down' : 'flat');
+}
+
+function renderYoy() {
+  const sy = STATE.selectedYear;
+  const sm = STATE.selectedMonth;
+  const section = document.getElementById('yoySection');
+  if (!section) return;
+
+  if (sy === 'all') { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const prevYear = sy - 1;
+  const officeOk = c => !STATE.selectedOffice || c.office === STATE.selectedOffice;
+
+  // 決定要比的月份集合
+  const now = new Date();
+  let monthSet;
+  if (sm !== 'all') {
+    monthSet = new Set([sm]);
+  } else {
+    const isCurYear = sy === now.getFullYear();
+    const curMM = now.getMonth() + 1;
+    const lastDay = new Date(now.getFullYear(), curMM, 0).getDate();
+    const curComplete = now.getDate() === lastDay;
+    monthSet = new Set();
+    STATE.cases.forEach(c => {
+      if (!c.paid_at || !officeOk(c)) return;
+      const d = new Date(c.paid_at);
+      if (d.getFullYear() !== sy) return;
+      const m = d.getMonth() + 1;
+      if (isCurYear && m === curMM && !curComplete) return;
+      monthSet.add(m);
+    });
+  }
+
+  const inPeriod = (c, year) => {
+    if (!c.paid_at || !officeOk(c)) return false;
+    const d = new Date(c.paid_at);
+    return d.getFullYear() === year && monthSet.has(d.getMonth() + 1);
+  };
+
+  const curStats = aggregateAdvisor(STATE.cases.filter(c => inPeriod(c, sy)));
+  const prvStats = aggregateAdvisor(STATE.cases.filter(c => inPeriod(c, prevYear)));
+
+  const sortedM = [...monthSet].sort((a,b) => a - b);
+  const note = document.getElementById('yoyPeriodNote');
+  if (sortedM.length === 0) {
+    note.textContent = `${sy} 年無資料可比較`;
+  } else {
+    const periodLabel = sortedM[0] === sortedM[sortedM.length-1]
+      ? `${sortedM[0]} 月`
+      : `${sortedM[0]}-${sortedM[sortedM.length-1]} 月`;
+    note.textContent = `比較期間：${sy} ${periodLabel} vs ${prevYear} ${periodLabel}`;
+  }
+
+  setYoyAdvisor('yoyCount',     curStats.count,     prvStats.count,     fmtNum(curStats.count),              v => fmtNum(v),           false);
+  setYoyAdvisor('yoyAmount',    curStats.amount,    prvStats.amount,    fmtMoneyShort(curStats.amount),      v => fmtMoneyShort(v),    false);
+  setYoyAdvisor('yoyRetention', curStats.retention, prvStats.retention, curStats.retention.toFixed(1) + '%', v => v.toFixed(1) + '%',  true);
+  setYoyAdvisor('yoySpread',    curStats.spread,    prvStats.spread,    curStats.spread.toFixed(1) + '%',    v => v.toFixed(1) + '%',  true);
+  setYoyAdvisor('yoyAvg',       curStats.avg,       prvStats.avg,       fmtMoneyShort(curStats.avg),         v => fmtMoneyShort(v),    false);
 }
 
 // ============ TAB: 跟進中案件 ============
