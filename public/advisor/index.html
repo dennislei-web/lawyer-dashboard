@@ -229,6 +229,42 @@
     .badge.b5 { background: var(--teal-dim); color: var(--teal); }
     .badge.b6 { background: var(--red-dim); color: var(--red); }
 
+    .notes-cell { cursor: pointer; }
+    .notes-cell:hover { color: var(--gold-light); text-decoration: underline; }
+
+    .notes-modal-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999;
+      display: none; align-items: center; justify-content: center;
+    }
+    .notes-modal-mask.show { display: flex; }
+    .notes-modal {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+      width: min(640px, 92vw); max-height: 80vh; display: flex; flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .notes-modal-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .notes-modal-title { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+    .notes-modal-close {
+      background: none; border: none; color: var(--text-muted); font-size: 1.4rem;
+      cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    .notes-modal-close:hover { color: var(--text); }
+    .notes-modal-body {
+      padding: 16px 18px; overflow-y: auto; font-size: 0.9rem; color: var(--text);
+      line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+    }
+    .notes-modal-section { margin-bottom: 14px; }
+    .notes-modal-section:last-child { margin-bottom: 0; }
+    .notes-modal-label {
+      font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 4px;
+    }
+    .notes-modal-body a { color: var(--blue); text-decoration: underline; word-break: break-all; }
+    .notes-empty-text { color: var(--text-muted); font-style: italic; }
+
     .empty { text-align: center; padding: 40px; color: var(--text-muted); }
     .loading { text-align: center; padding: 40px; color: var(--text-muted); }
     .spinner { display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -343,7 +379,6 @@
       <button class="tab-btn" data-tab="pending">跟進中案件</button>
       <button class="tab-btn" data-tab="people">業務 / 律師</button>
       <button class="tab-btn" data-tab="clients">客戶 360</button>
-      <button class="tab-btn" data-tab="outbound">陌開拜訪</button>
     </div>
 
     <div class="main">
@@ -632,43 +667,6 @@
         </div>
       </div>
 
-      <!-- ===== TAB: 陌開拜訪 ===== -->
-      <div class="page" id="page-outbound">
-        <div class="kpi-row">
-          <div class="kpi-card blue"><div class="kpi-label">總拜訪數</div><div class="kpi-value blue" id="kpiVisitTotal">—</div></div>
-          <div class="kpi-card green"><div class="kpi-label">已委任</div><div class="kpi-value green" id="kpiVisitRetained">—</div></div>
-          <div class="kpi-card orange"><div class="kpi-label">委任率</div><div class="kpi-value orange" id="kpiVisitRate">—</div></div>
-          <div class="kpi-card gold"><div class="kpi-label">最近 30 天拜訪</div><div class="kpi-value gold" id="kpiVisit30">—</div></div>
-        </div>
-
-        <div class="chart-card" style="margin-bottom:24px;">
-          <div class="chart-title">月度拜訪 vs 委任</div>
-          <div class="chart-container"><canvas id="chartVisitMonthly"></canvas></div>
-        </div>
-
-        <div class="table-card">
-          <div class="table-header">
-            <div class="table-title">拜訪清單</div>
-            <div class="table-actions">
-              <select class="filter-select" id="visitFilter">
-                <option value="all">全部</option>
-                <option value="retained">已委任</option>
-                <option value="pending">未委任</option>
-              </select>
-            </div>
-          </div>
-          <div style="overflow-x:auto;">
-            <table id="tableVisits">
-              <thead><tr>
-                <th>編號</th><th>品牌</th><th>公司</th><th>地區</th><th>拜訪日</th>
-                <th>委任</th><th>法顧窗口</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
     </div><!-- /.main -->
   </div><!-- /#localContent -->
 </div><!-- /#dashboard -->
@@ -816,7 +814,7 @@ const fmtMoneyShort = n => {
 };
 
 let STATE = {
-  cases: [], visits: [], pending: [], pendingState: {}, channelMapping: {}, lastSync: null,
+  cases: [], pending: [], pendingState: {}, channelMapping: {}, lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingSort: { field: 'assigned_at', dir: 'desc' },
@@ -845,9 +843,8 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, vs, pn, ps, cm, log] = await Promise.all([
+    const [cs, pn, ps, cm, log] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
-      sb.from('advisor_outbound_visits').select('*').order('seq', { ascending: false, nullsFirst: false }).order('visited_at', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
       sb.from('advisor_channel_mapping').select('*'),
@@ -855,7 +852,6 @@ async function init() {
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
-    STATE.visits = vs.data || [];
     STATE.pending = pn.data || [];
     STATE.pendingState = {};
     (ps.data || []).forEach(s => { STATE.pendingState[s.client_name] = s; });
@@ -896,7 +892,7 @@ function renderSyncStatus() {
     dot.className = 'sync-dot' + (ageH > 36 ? ' stale' : '');
     txt.textContent = '上次同步：' + ts.toLocaleString('zh-TW') + (log.error_message ? '（有錯誤）' : '');
   }
-  cnt.textContent = `成案 ${STATE.cases.length} 筆 · 拜訪 ${STATE.visits.length} 筆`;
+  cnt.textContent = `成案 ${STATE.cases.length} 筆`;
 }
 
 function setupYearFilter() {
@@ -979,7 +975,6 @@ function bindFilters() {
   };
   document.getElementById('topClientLimit').onchange = renderClients;
   document.getElementById('dueWindow').onchange = renderClients;
-  document.getElementById('visitFilter').onchange = renderOutbound;
   document.getElementById('pendingSalesFilter').onchange = e => { STATE.pendingSales = e.target.value; renderPending(); };
 }
 
@@ -1001,7 +996,6 @@ function renderAll() {
   renderPending();
   renderPeople();
   renderClients();
-  renderOutbound();
 }
 
 function rerenderAllCharts() { renderAll(); }
@@ -1241,9 +1235,14 @@ const PENDING_STAGE_COLORS = {
   '提報方案':'#e0954a','提報追蹤':'#4dd0c5','第二次追蹤':'#4caf82','已成案':'#c9a84c'
 };
 
+function isPendingActive(p) {
+  // Sheet 上 E 欄已付款 / Q 欄已簽約 / 階段已成案 任一成立 → 不算跟進中
+  return !p.is_paid && !p.is_signed && p.current_stage !== '已成案';
+}
+
 function filterPending() {
   return STATE.pending.filter(p => {
-    if (p.is_signed || p.current_stage === '已成案') return false;
+    if (!isPendingActive(p)) return false;
     if (STATE.pendingSales) {
       const ind = parseSalespeople(p.salesperson);
       if (!ind.includes(STATE.pendingSales)) return false;
@@ -1347,7 +1346,7 @@ function exportChannels() {
   // 取所有跟進中（不含已成案）案件的 raw channel + 計數
   const counts = {};
   STATE.pending.forEach(p => {
-    if (p.is_signed || p.current_stage === '已成案') return;
+    if (!isPendingActive(p)) return;
     const raw = p.channel;
     if (!raw) return;
     counts[raw] = (counts[raw] || 0) + 1;
@@ -1423,7 +1422,7 @@ async function onFollowupChange(clientName, status, sel) {
 }
 
 function renderPending() {
-  const all = STATE.pending.filter(p => !p.is_signed && p.current_stage !== '已成案');  // 跟進中（不論 filter）
+  const all = STATE.pending.filter(isPendingActive);  // 跟進中（不論 filter）
   const fp  = filterPending();  // 適用 filter 的清單
 
   // KPI（用 all 算大盤；filter 只影響圖表跟下方表格）
@@ -1513,12 +1512,20 @@ function renderPending() {
   document.querySelector('#tablePending tbody').innerHTML = sorted.slice(0,500).map((p, idx) => {
     const overdueCls = (p.days_since_last_action || 0) > 14 ? 'text-red' : '';
     const stageBadge = `<span class="badge b1">${p.current_stage || '—'}</span>`;
-    const summary = (p.case_summary || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    // 備註欄優先顯示 lawyer_notes（Sheet 上的「備註」P 欄），fallback 用 case_summary
+    const noteRaw = (p.lawyer_notes && p.lawyer_notes.trim())
+      ? p.lawyer_notes
+      : (p.case_summary || '');
+    const notePreview = noteRaw.replace(/\s+/g, ' ').trim().slice(0, 80);
     const st = STATE.pendingState[p.client_name];
     const status = st ? st.followup_status : '持續追蹤';
     const cls = FOLLOWUP_CLS[status] || '';
     const safeClient = (p.client_name || '').replace(/"/g, '&quot;');
     const opts = FOLLOWUP_STATUSES.map(s => `<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('');
+    const hasNote = !!notePreview;
+    const noteCell = hasNote
+      ? `<td class="text-muted notes-cell" style="font-size:0.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="點擊看全文" onclick="showCaseNotes('${safeClient}')">${escapeHtml(notePreview)}</td>`
+      : `<td class="text-muted notes-cell" style="font-size:0.78rem;" title="點擊看全文" onclick="showCaseNotes('${safeClient}')">—</td>`;
     return `<tr>
       <td class="text-muted">${idx + 1}</td>
       <td><select class="followup-select ${cls}" data-client="${safeClient}">${opts}</select></td>
@@ -1529,7 +1536,7 @@ function renderPending() {
       <td class="text-right">${p.days_since_assigned != null ? p.days_since_assigned + ' 天' : '—'}</td>
       <td class="text-right ${overdueCls}">${p.days_since_last_action != null ? p.days_since_last_action + ' 天' : '—'}</td>
       <td class="text-muted" style="font-size:0.78rem;">${formatLastContact(p.last_contact_text)}</td>
-      <td class="text-muted" style="font-size:0.78rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(p.case_summary||'').replace(/"/g,'&quot;')}">${summary}</td>
+      ${noteCell}
     </tr>`;
   }).join('') || '<tr><td colspan="10" class="empty">無資料</td></tr>';
 
@@ -1642,54 +1649,6 @@ function renderClients() {
   }).join('') || '<tr><td colspan="5" class="empty">無</td></tr>';
 }
 
-// ============ TAB: 陌開拜訪 ============
-function renderOutbound() {
-  const vs = STATE.visits;
-  const total = vs.length;
-  const retained = vs.filter(v=>v.is_retained).length;
-  const rate = total ? (retained/total*100).toFixed(1)+'%' : '—';
-  document.getElementById('kpiVisitTotal').textContent = fmtNum(total);
-  document.getElementById('kpiVisitRetained').textContent = fmtNum(retained);
-  document.getElementById('kpiVisitRate').textContent = rate;
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
-  const recent = vs.filter(v => v.visited_at && new Date(v.visited_at) >= cutoff).length;
-  document.getElementById('kpiVisit30').textContent = fmtNum(recent);
-
-  // Monthly chart (last 12 months)
-  const now = new Date();
-  const months = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    months.push({ y:d.getFullYear(), m:d.getMonth(), label:`${d.getFullYear()}/${d.getMonth()+1}` });
-  }
-  const visitData = months.map(mm => {
-    const ms = vs.filter(v => v.visited_at && new Date(v.visited_at).getFullYear()===mm.y && new Date(v.visited_at).getMonth()===mm.m);
-    return { v:ms.length, r:ms.filter(x=>x.is_retained).length };
-  });
-  drawChart('chartVisitMonthly', 'bar', {
-    labels: months.map(m=>m.label),
-    datasets: [
-      { label:'拜訪', data: visitData.map(d=>d.v), backgroundColor:'#4f8ef7', borderWidth: 0 },
-      { label:'委任', data: visitData.map(d=>d.r), backgroundColor:'#4caf82', borderWidth: 0 }
-    ]
-  });
-
-  // Table
-  const filter = document.getElementById('visitFilter').value;
-  let list = vs;
-  if (filter === 'retained') list = vs.filter(v=>v.is_retained);
-  if (filter === 'pending') list = vs.filter(v=>!v.is_retained);
-  document.querySelector('#tableVisits tbody').innerHTML = list.slice(0,300).map(v => `
-    <tr>
-      <td>${v.seq||''}</td>
-      <td>${v.brand||''}</td>
-      <td>${v.company_name||''}</td>
-      <td>${v.region||''}</td>
-      <td>${v.visited_at||''}</td>
-      <td>${v.is_retained?'<span class="badge b2">已委任</span>':'<span class="badge b6">未委任</span>'}</td>
-      <td>${v.advisor_window||''}</td>
-    </tr>`).join('') || '<tr><td colspan="7" class="empty">無資料</td></tr>';
-}
 
 // ============ Chart helper ============
 function drawChart(canvasId, type, data, opts) {
@@ -1722,8 +1681,64 @@ function drawChart(canvasId, type, data, opts) {
   STATE.charts[canvasId] = new Chart(el, config);
 }
 
+// ============ 備註全文 Modal ============
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function linkify(s) {
+  return escapeHtml(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function showCaseNotes(clientName) {
+  const p = STATE.pending.find(x => x.client_name === clientName);
+  if (!p) return;
+  const titleEl = document.getElementById('notesModalTitle');
+  const bodyEl  = document.getElementById('notesModalBody');
+  titleEl.textContent = p.client_name + '・備註全文';
+  const sections = [];
+  if (p.lawyer_notes && p.lawyer_notes.trim()) {
+    sections.push({ label: '備註', text: p.lawyer_notes });
+  }
+  if (p.case_summary && p.case_summary.trim()) {
+    sections.push({ label: '案件摘要', text: p.case_summary });
+  }
+  if (p.last_contact_text && p.last_contact_text.trim()) {
+    sections.push({ label: '最近聯繫', text: formatLastContact(p.last_contact_text) });
+  }
+  if (!sections.length) {
+    bodyEl.innerHTML = '<div class="notes-empty-text">（這筆案件目前沒有備註內容）</div>';
+  } else {
+    bodyEl.innerHTML = sections.map(s =>
+      `<div class="notes-modal-section">
+        <div class="notes-modal-label">${s.label}</div>
+        <div>${linkify(s.text)}</div>
+      </div>`).join('');
+  }
+  document.getElementById('notesModalMask').classList.add('show');
+}
+function closeCaseNotes() {
+  document.getElementById('notesModalMask').classList.remove('show');
+}
+window.showCaseNotes = showCaseNotes;
+window.closeCaseNotes = closeCaseNotes;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCaseNotes();
+});
+
 // ============ START ============
 checkAuth();
 </script>
+
+<!-- 備註全文 Modal -->
+<div class="notes-modal-mask" id="notesModalMask" onclick="if(event.target===this)closeCaseNotes()">
+  <div class="notes-modal">
+    <div class="notes-modal-header">
+      <div class="notes-modal-title" id="notesModalTitle">備註全文</div>
+      <button class="notes-modal-close" onclick="closeCaseNotes()" aria-label="關閉">×</button>
+    </div>
+    <div class="notes-modal-body" id="notesModalBody"></div>
+  </div>
+</div>
 </body>
 </html>
