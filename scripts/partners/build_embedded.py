@@ -1,6 +1,6 @@
 """
 讀 profit_share.csv + cases.csv + monthly_totals.csv（司法官合署 4 位）
- 及 senior_*.csv（資深轉合署 7 位），聚合後塞進 dashboard.html template，
+ 及 senior_*.csv（資深轉合署 8 位），聚合後塞進 dashboard.html template，
 產出自足 HTML（可 file:// 直接開，不需伺服器）。
 """
 import csv, json, os, sys, io
@@ -581,7 +581,7 @@ data = {
     'default_cohort': 'judicial',
     'cohort_labels': {
         'judicial': '司法官合署（4 位）',
-        'senior':   '資深轉合署（7 位）',
+        'senior':   '資深轉合署（8 位）',
     },
 }
 
@@ -678,7 +678,7 @@ select {background:var(--bg3); color:var(--fg); border:1px solid var(--line); pa
   <header>
     <div>
       <h1>喆律合署律師財務分析</h1>
-      <div class="subtitle" id="subtitle">共識營原型 · 4 位司法官合署 + 7 位資深轉合署律師</div>
+      <div class="subtitle" id="subtitle">共識營原型 · 4 位司法官合署 + 8 位資深轉合署律師</div>
     </div>
     <div class="year-filter" id="year-filter"></div>
   </header>

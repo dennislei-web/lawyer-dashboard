@@ -55,16 +55,26 @@ def find_input_files():
 
 # ---------- sheet 分類 ----------
 YYMM_RE = re.compile(r'^(\d{3})(\d{2})$')
+MONTH_ONLY_RE = re.compile(r'^(\d{1,2})月$')
 
-def classify_sheet(sn):
+def classify_sheet(sn, fallback_roc_year=None):
     sn = sn.strip()
     if sn == '綜合': return (None, None, 'summary')
+    if sn == '總匯': return (None, None, 'summary')
+    # 版型 A：YYMM 例如 11501
     m = YYMM_RE.match(sn)
-    if not m: return (None, None, f'unrecognised name: {sn}')
-    y, mo = int(m.group(1)), int(m.group(2))
-    if not (100 <= y <= 120 and 1 <= mo <= 12):
+    if m:
+        y, mo = int(m.group(1)), int(m.group(2))
+        if 100 <= y <= 120 and 1 <= mo <= 12:
+            return (y, mo, None)
         return (None, None, f'year/month out of range: {sn}')
-    return (y, mo, None)
+    # 版型 B：「9月」「10月」— 需要從檔名帶 roc_year
+    m = MONTH_ONLY_RE.match(sn)
+    if m and fallback_roc_year is not None:
+        mo = int(m.group(1))
+        if 1 <= mo <= 12:
+            return (fallback_roc_year, mo, None)
+    return (None, None, f'unrecognised name: {sn}')
 
 # ---------- helpers ----------
 def is_num(x):
@@ -188,18 +198,22 @@ def find_profit_header(rows):
       B. consult 版（雪莉等）— col 0 空、col 1 = 「喆律應付」、row 內某 col 含「分潤」
     """
     results = []
+    other_markers = ('喆律應付-其他', '喆律應付 - 其他')
     for i, row in enumerate(rows):
         first = str(row[0]).strip() if row[0] is not None else ''
         all_text = ' '.join(str(v) for v in row if v is not None)
+        c1s = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ''
         # 版型 A：col 0 自帶「分潤」
         if '分潤' in first and '喆律應付' in all_text:
             pass  # OK, fall through to right_col detect
         # 版型 B：col 0 空、col 1 = 「喆律應付」、row 含「分潤」或「利潤」
         # （「分潤」雪莉 11501/11502/11504；「利潤」雪莉 11503）
-        elif (len(row) > 1 and row[1] is not None
-              and str(row[1]).strip() == '喆律應付'
-              and ('分潤' in all_text or '利潤' in all_text)):
+        elif c1s == '喆律應付' and ('分潤' in all_text or '利潤' in all_text):
             pass
+        # 版型 C：只有 sub-section（雪莉 114 年），「喆律應付-其他」可能在 col 0 或 col 1
+        elif first in other_markers or c1s in other_markers:
+            results.append((i, None))  # 沒有 right table
+            continue
         else:
             continue
         # find right-table start col (XX應付 != 喆律應付，排除「喆律應付-其他」之類)
@@ -221,88 +235,105 @@ def parse_profit_section(rows, lawyer, year, month):
 
     start_idx, right_col = headers[0]
 
-    # optional: skip over the 姓名/金額/比例 sub-header row(s)
-    i = start_idx + 1
+    # 若 entry point 本身就是「喆律應付-其他」(版型 C，雪莉 114)，直接 in_other 起
+    start_row = rows[start_idx]
+    start_c0 = str(start_row[0]).strip() if start_row and start_row[0] is not None else ''
+    start_c1 = str(start_row[1]).strip() if len(start_row) > 1 and start_row[1] is not None else ''
+    other_markers = ('喆律應付-其他', '喆律應付 - 其他')
+    in_other_section = start_c0 in other_markers or start_c1 in other_markers
 
-    in_other_section = False  # 喆律應付-其他
-    # 「喆律應付-其他」sub-section 的欄位 layout（兩種版型）：
-    #   senior 版（昭萱等）：c1=client, c2=amount, c3=ratio, c5=tier_text
-    #   consult 版（雪莉等）：c1=client, c2=tier_text, c3=amount, c4=ratio, c5=lawyer_amt
-    other_layout = 'senior'  # 預設 senior 版
+    i = start_idx + 1
+    # 「喆律應付-其他」sub-section 的欄位 layout（多種版型）：
+    #   senior 版（昭萱等）：client_col=1; c1=client, c2=amount, c3=ratio, c5=tier_text
+    #   consult 版 col1（雪莉 115）：client_col=1; c1=client, c2=tier_text, c3=amount, c4=ratio, c5=payable
+    #   consult 版 col0（雪莉 114）：client_col=0; col 0=client, 1=tier, 2=amount, 3=ratio, 4=payable
+    other_layout = 'senior'   # senior / consult
+    other_client_col = 1       # 1 or 0（依 sub-section header 偵測）
     while i < len(rows):
         row = rows[i]
         first = str(row[0]).strip() if row[0] is not None else ''
+        c1 = row[1] if len(row) > 1 else None
+        c1s = str(c1).strip() if c1 is not None else ''
 
         # stop if hit end keywords at col 0
         if any(k in first for k in SECTION_END_KEYWORDS):
-            # if 喆律應付 appears again in col 1 (e.g. summary 喆律應付 xxx), stop
             break
 
-        # check col 1 sub-section markers
-        c1 = row[1] if len(row) > 1 else None
-        c1s = str(c1).strip() if c1 is not None else ''
-        if c1s in ('喆律應付-其他', '喆律應付 - 其他'):
+        # 「喆律應付-其他」標記（col 0 或 col 1）
+        if c1s in ('喆律應付-其他', '喆律應付 - 其他') or first in ('喆律應付-其他', '喆律應付 - 其他'):
             in_other_section = True
             i += 1
             continue
-        # 偵測 sub-section header「客戶名稱 | 類型 | 實付金額 | 比例 | 應付金額」→ consult 版
-        if (in_other_section and c1s == '客戶名稱'
-                and len(row) > 4
-                and (str(row[2] or '').strip() == '類型'
-                     or '類型' in str(row[2] or ''))
-                and '比例' in str(row[4] or '')):
-            other_layout = 'consult'
-            i += 1
-            continue
-        if c1s in ('姓名', '小計', '合計'):
-            i += 1
-            continue
-        if c1s in ('喆律應付', '喆律利潤'):
-            # summary row
-            i += 1
-            continue
-
-        # extract left-table cells
-        c2 = row[2] if len(row) > 2 else None
-        c3 = row[3] if len(row) > 3 else None
-        c4 = row[4] if len(row) > 4 else None
-        c5 = row[5] if len(row) > 5 else None
-
-        # 偵測欄位含意（依 in_other_section + layout）
-        left_tier_hint = None
+        # 偵測 sub-section header「客戶名稱 | 類型 | 實付金額 | 比例 | 應付金額」
+        # 「客戶名稱」可能在 col 0（雪莉 114）或 col 1（雪莉 115/senior）
         if in_other_section:
-            if other_layout == 'consult':
-                # c1=client, c2=tier_text, c3=amount, c4=ratio, c5=lawyer_amt
-                if isinstance(c2, str) and c2.strip() in ('諮詢', '成案獎金'):
-                    left_tier_hint = c2.strip()
-                # 重映射讓下方的數值檢查吃 c3=amount, c4=ratio
-                amt_cell, ratio_cell, lawyer_amt_cell = c3, c4, c5
-            else:
-                # senior 版：c5 為 tier
-                if isinstance(c5, str) and c5.strip() in ('諮詢', '成案獎金'):
-                    left_tier_hint = c5.strip()
-                amt_cell, ratio_cell, lawyer_amt_cell = c2, c3, c4
-        else:
-            amt_cell, ratio_cell, lawyer_amt_cell = c2, c3, c4
+            for off in (1, 0):
+                if (len(row) > off + 4 and row[off] is not None
+                        and str(row[off]).strip() == '客戶名稱'
+                        and '類型' in str(row[off + 1] or '')
+                        and '比例' in str(row[off + 3] or '')):
+                    other_layout = 'consult'
+                    other_client_col = off
+                    break
+            else:  # no header detected this row
+                pass
+            if other_layout == 'consult' and (
+                (other_client_col == 0 and first == '客戶名稱')
+                or (other_client_col == 1 and c1s == '客戶名稱')
+            ):
+                i += 1
+                continue
+        # 結尾/摘要列（col 0 或 col 1）
+        if c1s in ('姓名', '小計', '合計', '喆律應付', '喆律利潤'):
+            i += 1
+            continue
+        if first in ('小計', '合計', '喆律應付', '喆律利潤'):
+            i += 1
+            continue
 
-        # left-table data row: client=c1, amount/ratio 依 layout 找
-        if (c1s and c1s not in ('姓名',)
+        # 依 layout 取欄位
+        if in_other_section and other_layout == 'consult':
+            cc = other_client_col
+            client_val = row[cc] if cc < len(row) else None
+            type_val = row[cc + 1] if cc + 1 < len(row) else None
+            amt_cell = row[cc + 2] if cc + 2 < len(row) else None
+            ratio_cell = row[cc + 3] if cc + 3 < len(row) else None
+            lawyer_amt_cell = row[cc + 4] if cc + 4 < len(row) else None
+            client_str = str(client_val).strip() if client_val is not None else ''
+            left_tier_hint = type_val.strip() if isinstance(type_val, str) and type_val.strip() in ('諮詢', '成案獎金') else None
+            # 退款列可能含「退款」字樣（「巫秀碧-退款」型）
+            if not left_tier_hint and isinstance(type_val, str) and '退款' in type_val:
+                left_tier_hint = '成案獎金'
+        else:
+            # senior 版（含主表 row）
+            client_str = c1s
+            c2 = row[2] if len(row) > 2 else None
+            c3 = row[3] if len(row) > 3 else None
+            c4 = row[4] if len(row) > 4 else None
+            c5 = row[5] if len(row) > 5 else None
+            amt_cell, ratio_cell, lawyer_amt_cell = c2, c3, c4
+            left_tier_hint = None
+            if in_other_section and isinstance(c5, str) and c5.strip() in ('諮詢', '成案獎金'):
+                left_tier_hint = c5.strip()
+
+        # left-table data row
+        if (client_str and client_str not in ('姓名', '客戶名稱')
                 and is_num(amt_cell) and is_num(ratio_cell)
                 and 0 < float(ratio_cell) <= 1):
             amt = to_num(amt_cell)
             ratio = float(ratio_cell)
             lawyer_amt = to_num(lawyer_amt_cell) if is_num(lawyer_amt_cell) else amt * ratio
             if in_other_section:
-                # consult 版 c5 = lawyer_amt; senior 版 c5 = tier text，所以喆律端不從 c5 取
                 zhelu_amt = amt - lawyer_amt
             else:
+                c5 = row[5] if len(row) > 5 else None
                 zhelu_amt = to_num(c5) if is_num(c5) else amt - lawyer_amt
             tier = tier_from_ratio('left', ratio, left_tier_hint)
             entries.append({
                 'lawyer': lawyer, 'year': year, 'month': month,
                 'side': 'zhelu_handled',
                 'tier': tier,
-                'client': c1s,
+                'client': client_str,
                 'case_amount': amt,
                 'ratio': ratio,
                 'lawyer_amt': lawyer_amt,
@@ -361,7 +392,7 @@ def main():
             continue
 
         for sheet_name in wb.sheetnames:
-            year, month, note = classify_sheet(sheet_name)
+            year, month, note = classify_sheet(sheet_name, fallback_roc_year=roc_year)
             if year is None:
                 if note and 'summary' not in note:
                     issues.append(f'{fpath.name} :: {sheet_name}  -  skipped ({note})')
