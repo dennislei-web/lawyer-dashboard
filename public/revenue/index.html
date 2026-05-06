@@ -1069,6 +1069,9 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
 
   var tbody=document.getElementById(tbodyId);
   var html='';
+  // YTD 加總只算「已完整結束的月份」：當年度排除本月及之後；歷史年度全 12 個月
+  var now=new Date();
+  var maxCompleteM = (selectedYear===now.getFullYear()) ? (now.getMonth()) : 12; // getMonth() 0-indexed = 上個月
   var ytdCur={pay:0,ref:0,n:0}, ytdPrev={pay:0}, firstM=13, lastM=0;
   for (var m3=1;m3<=12;m3++) {
     var k=String(m3).padStart(2,'0');
@@ -1078,7 +1081,7 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
     var yoyText = prev.pay>0 ? (yoyPct>0?'+':'')+yoyPct.toFixed(1)+'%' : (cur.pay>0?'N/A':'-');
     var yoyClass = yoyPct>0?'text-green':(yoyPct<0?'text-red':'text-muted');
     var hasData = !(cur.pay===0&&cur.ref===0&&cur.n===0);
-    if (hasData) {
+    if (hasData && m3<=maxCompleteM) {
       ytdCur.pay+=cur.pay; ytdCur.ref+=cur.ref; ytdCur.n+=cur.n;
       ytdPrev.pay+=prev.pay;
       if (m3<firstM) firstM=m3;
