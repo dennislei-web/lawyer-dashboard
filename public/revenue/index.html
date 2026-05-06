@@ -1069,6 +1069,7 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
 
   var tbody=document.getElementById(tbodyId);
   var html='';
+  var ytdCur={pay:0,ref:0,n:0}, ytdPrev={pay:0}, firstM=13, lastM=0;
   for (var m3=1;m3<=12;m3++) {
     var k=String(m3).padStart(2,'0');
     var cur=months[k], prev=prevMonths[k];
@@ -1076,7 +1077,14 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
     var yoyPct = prev.pay>0 ? ((cur.pay-prev.pay)/prev.pay*100) : (cur.pay>0?999:0);
     var yoyText = prev.pay>0 ? (yoyPct>0?'+':'')+yoyPct.toFixed(1)+'%' : (cur.pay>0?'N/A':'-');
     var yoyClass = yoyPct>0?'text-green':(yoyPct<0?'text-red':'text-muted');
-    if (cur.pay===0&&cur.ref===0&&cur.n===0) {
+    var hasData = !(cur.pay===0&&cur.ref===0&&cur.n===0);
+    if (hasData) {
+      ytdCur.pay+=cur.pay; ytdCur.ref+=cur.ref; ytdCur.n+=cur.n;
+      ytdPrev.pay+=prev.pay;
+      if (m3<firstM) firstM=m3;
+      if (m3>lastM) lastM=m3;
+    }
+    if (!hasData) {
       html+='<tr><td>'+m3+'月</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">-</td><td class="text-right text-muted">'+formatMoney(prev.pay)+'</td><td class="text-right text-muted">-</td></tr>';
     } else {
       html+='<tr><td><strong>'+m3+'月</strong></td>' +
@@ -1088,7 +1096,23 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
         '<td class="text-right '+yoyClass+'">'+yoyText+'</td></tr>';
     }
   }
-  tbody.innerHTML=html;
+  var summaryHtml='';
+  if (lastM>0) {
+    var ytdNet=ytdCur.pay-ytdCur.ref;
+    var ytdPct = ytdPrev.pay>0 ? ((ytdCur.pay-ytdPrev.pay)/ytdPrev.pay*100) : (ytdCur.pay>0?999:0);
+    var ytdText = ytdPrev.pay>0 ? (ytdPct>0?'+':'')+ytdPct.toFixed(1)+'%' : (ytdCur.pay>0?'N/A':'-');
+    var ytdCls = ytdPct>0?'text-green':(ytdPct<0?'text-red':'text-muted');
+    var ytdLabel = (firstM===lastM ? firstM+'月' : firstM+'-'+lastM+'月') + '加總 (YTD vs 去年同期)';
+    summaryHtml = '<tr style="background:rgba(201,168,76,0.10);border-bottom:2px solid rgba(201,168,76,0.4)">' +
+      '<td><strong>'+ytdLabel+'</strong></td>' +
+      '<td class="text-right text-gold"><strong>'+formatMoney(ytdCur.pay)+'</strong></td>' +
+      '<td class="text-right text-red"><strong>'+formatMoney(ytdCur.ref)+'</strong></td>' +
+      '<td class="text-right" style="font-weight:700">'+formatMoney(ytdNet)+'</td>' +
+      '<td class="text-right"><strong>'+ytdCur.n+'</strong></td>' +
+      '<td class="text-right text-muted"><strong>'+formatMoney(ytdPrev.pay)+'</strong></td>' +
+      '<td class="text-right '+ytdCls+'"><strong>'+ytdText+'</strong></td></tr>';
+  }
+  tbody.innerHTML=summaryHtml+html;
 }
 function excludePartner(recs) { return recs.filter(function(r) { return !isPartner(r); }); }
 function onlyPartner(recs) { return recs.filter(isPartner); }
