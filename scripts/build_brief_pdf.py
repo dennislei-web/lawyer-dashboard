@@ -269,15 +269,61 @@ def _try_recover_actions_json(text):
         return None
 
 
+def _load_inline_actions(lawyer_name):
+    """
+    優先讀取 inline 產的 actions JSON（由 Claude Opus 在對話中產，品質最佳、$0、無 rate limit）。
+
+    Schema：briefs/raw_data/{律師名}_actions.json
+        {"actions": [{"title": "...", "why": "...", "how": ["...", ...], "metric": "...", "cited_cases": ["..."]}]}
+
+    回傳 list of action dicts；找不到或格式不對回 None。
+    """
+    path = RAW_DIR / f"{lawyer_name}_actions.json"
+    if not path.exists():
+        return None
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        actions = d.get("actions") or []
+        cleaned = []
+        for a in actions:
+            title = (a.get("title") or "").strip()
+            why = (a.get("why") or "").strip()
+            how = a.get("how") or []
+            metric = (a.get("metric") or "").strip()
+            cited = a.get("cited_cases") or []
+            if not title or not why or not how or not metric:
+                continue
+            cleaned.append({
+                "title": title,
+                "why": why,
+                "how": [str(h).strip() for h in how if str(h).strip()],
+                "metric": metric,
+                "cited_cases": [str(c).strip() for c in cited if str(c).strip()],
+            })
+        if not cleaned:
+            print(f"  [actions inline] {path.name} 無有效 action，忽略", flush=True)
+            return None
+        print(f"  [actions inline] 載入 {path.name}（{len(cleaned)} actions）", flush=True)
+        return cleaned
+    except Exception as e:
+        print(f"  [actions inline] 讀檔失敗 {path.name}: {type(e).__name__}: {e}", flush=True)
+        return None
+
+
 def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts, reason_total,
                                    behavior_counts, lag_stats, rec, ov, extra_fn,
                                    strengths_types, weaknesses_types, rule_based_actions):
     """
-    用 LLM 根據該律師個案分析產出個人化 actions。
-    失敗或被停用時回傳 rule_based_actions。
+    產出個人化 actions。
 
-    回傳：list of {title, why, how, metric, cited_cases(optional)}
+    優先順序：
+    1. Inline JSON（Claude Opus 在對話中產，$0、品質最佳）
+    2. API call（Claude Sonnet 4.5）
+    3. rule_based_actions
     """
+    inline = _load_inline_actions(lw["name"])
+    if inline:
+        return inline
     if not _USE_LLM_ACTIONS or not _ANTHROPIC_AVAILABLE:
         return rule_based_actions
     api_key = os.environ.get("ANTHROPIC_API_KEY")
