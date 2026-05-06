@@ -81,7 +81,13 @@ def diff_embedded(current: dict, fresh: dict) -> dict:
     cohort_keys = ["judicial", "senior", "consult"]
     report = {c: [] for c in cohort_keys}
     for cohort in cohort_keys:
-        if cohort not in current.get("cohorts", {}) or cohort not in fresh.get("cohorts", {}):
+        if cohort not in fresh.get("cohorts", {}):
+            continue
+        # cohort 全新（current 裡沒有）→ 把 fresh 全部標 NEW
+        if cohort not in current.get("cohorts", {}):
+            for r in fresh["cohorts"][cohort].get("monthly", []):
+                key = (r["lawyer"], str(r["year"]), str(r["month"]))
+                report[cohort].append((*key, "NEW (cohort)"))
             continue
         cur = {(r["lawyer"], str(r["year"]), str(r["month"])): r
                for r in current["cohorts"][cohort]["monthly"]}
