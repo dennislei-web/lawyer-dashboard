@@ -1127,6 +1127,7 @@ function renderContractMatrix() {
   const tiers = DATA.contract_tiers;
   const tbl = document.getElementById('pct-matrix');
   const isJudicial = selectedCohort === 'judicial';
+  const isConsult = selectedCohort === 'consult';
   let html = '<thead><tr><th>律師</th>' + tiers.map(t=>`<th>${t}</th>`).join('') + '</tr></thead><tbody>';
   for (const l of LAWYERS) {
     html += `<tr><td><span class="lawyer-dot" style="background:${COLORS[l]}"></span>${l}</td>`;
@@ -1145,7 +1146,10 @@ function renderContractMatrix() {
       const z = parts[0];
       let cls = 'standard';
       if (isSpecial) cls = 'special';
-      else if (z === 0) cls = 'premium';
+      else if (isConsult) {
+        // consult cohort 的高 z 比例都是預設正常規則，不標紅
+        cls = 'standard';
+      } else if (z === 0) cls = 'premium';
       else if (z >= 40) cls = 'firm-heavy';
       const title = isSpecial ? '與預設合約規則不同' : '';
       html += `<td class="pct-cell ${cls}" title="${title}">${v}</td>`;
@@ -1155,13 +1159,23 @@ function renderContractMatrix() {
   tbl.innerHTML = html + '</tbody>';
 
   // note
-  document.getElementById('matrix-note').innerHTML = isJudicial
-    ? '* 比例為「喆律 / 律師」；孫、許的自案在 113 年中從 15/85 調為 5/95（取主要出現比例）。<br>'
+  let note;
+  if (isJudicial) {
+    note = '* 比例為「喆律 / 律師」；孫、許的自案在 113 年中從 15/85 調為 5/95（取主要出現比例）。<br>'
       + '* 委任案的引案（A×30%）與咨詢（A×10%）在計算利潤 E 之前先扣除 — 引案歸喆律、咨詢歸律師。E 剩餘部分再按比例分。<br>'
-      + '* <span style="color:#b58bff">介紹 / 追溯</span> 是「依附他人案件」的衍生項。'
-    : '* 比例為「喆律 / 律師」。預設規則：諮詢成案 30/70、喆律轉案 40/60、自案 10/90、純諮詢 0/100、成案獎金律師額外得 5%。<br>'
+      + '* <span style="color:#b58bff">介紹 / 追溯</span> 是「依附他人案件」的衍生項。';
+  } else if (isConsult) {
+    note = '* 比例為「喆律 / 律師」。<br>'
+      + '* 諮詢費 100/0：諮詢費全進喆律帳戶；律師獎金率每月不同（看當月委任金額/諮詢場次倍數，0/3/5/8%）。<br>'
+      + '* 顯皓承辦 40/60：諮詢後律師自帶承辦，款項進律師帳戶，喆律抽 40%。<br>'
+      + '* 顯皓自案 10/90：律師自招案件，喆律抽 10%。<br>'
+      + '* 喆律每月給律師月固定費 130,000（已從喆律端淨收入扣除）。';
+  } else {
+    note = '* 比例為「喆律 / 律師」。預設規則：諮詢成案 30/70、喆律轉案 40/60、自案 10/90、純諮詢 0/100、成案獎金律師額外得 5%。<br>'
       + '* <span style="color:#b58bff">標 * 的比例</span>：該律師實際資料出現頻率最高的比例與預設規則不同（通常為特殊協議或混合案型）。<br>'
       + '* 「其他」為解析時未對上標準比例的案件（如 0.35 / 0.4 / 0.3 等），保留供後續規則釐清。';
+  }
+  document.getElementById('matrix-note').innerHTML = note;
 }
 
 function aggregateYear(monthly) {
@@ -1198,9 +1212,16 @@ function renderKPI() {
   const totalD = Object.values(data).reduce((s,d)=>s+(d.proc_D||0), 0);
   const lawyerCount = LAWYERS.length;
   const isJudicial = selectedCohort === 'judicial';
+  const isConsult = selectedCohort === 'consult';
   const dSub = isJudicial && totalD > 0
     ? `<br><span style="color:var(--orange)">內扣處理費 D $${fmt(totalD)}（人事等共擔成本）</span>`
     : '';
+  const subLawyer = isConsult
+    ? '顯皓承辦 60% + 顯皓自案 90% + 成案獎金 + 月固定費'
+    : '諮詢 + 咨詢 + 分成 + 其他';
+  const subZhelu = isConsult
+    ? '諮詢費 100% + 諮詢成案 + 顯皓承辦 40% + 顯皓自案 10% − 月固定費'
+    : '引案費 + 利潤分成 + 其他 tier';
 
   const el = document.getElementById('kpi-cards');
   el.innerHTML = `
@@ -1209,10 +1230,10 @@ function renderKPI() {
       <div class="sub">委任案 + 自案的總額${dSub}</div></div>
     <div class="kpi"><div class="label">喆律總收入</div>
       <div class="value" style="color:var(--gold)">$${fmt(totalZ)}</div>
-      <div class="sub">引案費 + 利潤分成 + 其他 tier</div></div>
+      <div class="sub">${subZhelu}</div></div>
     <div class="kpi"><div class="label">律師總收入</div>
       <div class="value" style="color:var(--blue)">$${fmt(totalL)}</div>
-      <div class="sub">諮詢 + 咨詢 + 分成 + 其他</div></div>
+      <div class="sub">${subLawyer}</div></div>
     <div class="kpi"><div class="label">喆律 / 律師 收入比</div>
       <div class="value">${totalL>0 ? (totalZ/totalL).toFixed(2) : '—'}</div>
       <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>`;
