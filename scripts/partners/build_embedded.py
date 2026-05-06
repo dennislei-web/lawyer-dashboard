@@ -570,11 +570,178 @@ def build_senior_cohort():
     }
 
 # ============================================================
-# Build both cohorts
+# Cohort 3: 諮詢律師（黃顯皓型，1 位）
+# ============================================================
+CONSULT_LAWYERS = ['黃顯皓']
+CONSULT_COLORS = {
+    '黃顯皓': '#26c6da',
+}
+CONSULT_TIERS = ['諮詢費', '諮詢成案', '顯皓承辦', '顯皓自案']
+CONSULT_DEFAULT_CONTRACT = {
+    '諮詢費':   '100/0',     # 喆律 100% / 律師 0
+    '諮詢成案': '95/5',      # 律師獎金率 5%（≥3 萬倍）；實際每月不同 (0/3/5/8)
+    '顯皓承辦': '40/60',     # 喆律 40% / 律師 60%（款進律師帳戶）
+    '顯皓自案': '10/90',     # 喆律 10% / 律師 90%
+}
+
+
+def build_consult_cohort():
+    profit_path = OUT / 'consult_profit_share.csv'
+    cases_path = OUT / 'consult_cases.csv'
+    totals_path = OUT / 'consult_monthly_totals.csv'
+    if not profit_path.exists():
+        return None
+    with open(profit_path, encoding='utf-8-sig') as f:
+        profit = list(csv.DictReader(f))
+    with open(cases_path, encoding='utf-8-sig') as f:
+        cases = list(csv.DictReader(f))
+    with open(totals_path, encoding='utf-8-sig') as f:
+        totals = list(csv.DictReader(f))
+    if not profit:
+        return None
+
+    LAWYERS = CONSULT_LAWYERS
+
+    # contract matrix（顯皓的諮詢成案實際比例每月不同，標 *）
+    contract_matrix = {l: dict(CONSULT_DEFAULT_CONTRACT) for l in LAWYERS}
+
+    # monthly aggregate
+    monthly = {l: defaultdict(lambda: defaultdict(lambda: {
+        'commission_A': 0, 'self_A': 0, 'consult_a': 0,
+        'zhelu_total': 0, 'lawyer_total': 0,
+        'tier': defaultdict(float),
+    })) for l in LAWYERS}
+
+    for r in profit:
+        lawyer, year, month, tier = r['lawyer'], r['year'], r['month'], r['tier']
+        if lawyer not in LAWYERS:
+            continue
+        m = monthly[lawyer][year][month]
+        case_amount = num(r['case_amount'])
+        Z = num(r['zhelu_amt']); L = num(r['lawyer_amt'])
+        if tier == '諮詢費':
+            m['consult_a'] += case_amount
+            m['tier']['諮詢費(喆律)'] += Z
+        elif tier == '諮詢成案':
+            m['commission_A'] += case_amount
+            m['tier']['諮詢成案(喆律)'] += Z
+            m['tier']['諮詢成案(律師)'] += L
+        elif tier == '顯皓承辦':
+            m['commission_A'] += case_amount
+            m['tier']['顯皓承辦(喆律)'] += Z
+            m['tier']['顯皓承辦(律師)'] += L
+        elif tier == '顯皓自案':
+            m['self_A'] += case_amount
+            m['tier']['顯皓自案(喆律)'] += Z
+            m['tier']['顯皓自案(律師)'] += L
+
+    # 月固定費（喆律→律師）：從 monthly_totals 的 fixed_cost 欄位拿
+    monthly_fixed = {}
+    for r in totals:
+        lawyer, year, month = r['lawyer'], r['year'], r['month']
+        if lawyer not in LAWYERS:
+            continue
+        fc = num(r.get('fixed_cost'))
+        zt = num(r.get('zhelu_total'))
+        lt = num(r.get('lawyer_total'))
+        # 把 fixed_cost 反映到 monthly[lawyer][year][month]
+        m = monthly[lawyer][year][month]
+        m['zhelu_total'] = zt - fc  # 扣掉月固定費
+        m['lawyer_total'] = lt + fc
+        m['tier']['月固定費(律師)'] += fc
+        monthly_fixed[(lawyer, year, month)] = fc
+
+    # source breakdown
+    source_by_lawyer = defaultdict(lambda: defaultdict(lambda: {'count': 0, 'amount': 0}))
+    for c in cases:
+        if c.get('voided') == '是':
+            continue
+        lawyer = c['lawyer']
+        source = (c.get('source') or '未填') or '未填'
+        source_by_lawyer[lawyer][source]['count'] += 1
+        source_by_lawyer[lawyer][source]['amount'] += num(c.get('amount'))
+
+    # cases recent
+    cases_recent = []
+    for c in cases:
+        if c.get('voided') == '是':
+            continue
+        cases_recent.append({
+            'lawyer': c['lawyer'], 'year': c['year'], 'month': c['month'],
+            'section': c.get('section', '承辦'),
+            'client': c.get('client') or '',
+            'amount': num(c.get('amount')),
+            'date': c.get('date'),
+            'source': c.get('source'), 'brand': c.get('brand'), 'dept': c.get('dept'),
+            'classification': 'n/a',
+            'days_since_first': None, 'first_date': None,
+        })
+    cases_recent.sort(key=lambda x: (x['year'] or '', x['month'] or '', -x['amount']), reverse=True)
+
+    # monthly flatten
+    monthly_flat = []
+    for lawyer in LAWYERS:
+        for year, months in monthly[lawyer].items():
+            for month, m in months.items():
+                monthly_flat.append({
+                    'lawyer': lawyer, 'year': year, 'month': month,
+                    'commission_A': m['commission_A'],
+                    'self_A': m['self_A'],
+                    'consult_a': m['consult_a'],
+                    'proc_D': 0,
+                    'zhelu_total': m['zhelu_total'],
+                    'lawyer_total': m['lawyer_total'],
+                    'tier': dict(m['tier']),
+                })
+    monthly_flat.sort(key=lambda x: (x['year'], int(x['month'])))
+
+    profit_share_full = []
+    for r in profit:
+        if not r.get('client') or not r.get('year') or not r.get('month'):
+            continue
+        try:
+            profit_share_full.append({
+                'lawyer': r['lawyer'],
+                'year': r['year'],
+                'month': int(r['month']),
+                'side': r.get('side', ''),
+                'tier': r.get('tier', ''),
+                'client': r['client'],
+                'case_amount': float(r.get('case_amount') or 0),
+                'ratio': float(r.get('ratio') or 0),
+                'lawyer_amt': float(r.get('lawyer_amt') or 0),
+                'zhelu_amt': float(r.get('zhelu_amt') or 0),
+                'note': r.get('note') or '',
+            })
+        except (ValueError, KeyError):
+            continue
+
+    return {
+        'lawyers': LAWYERS,
+        'colors': CONSULT_COLORS,
+        'contract_matrix': contract_matrix,
+        'contract_tiers': CONSULT_TIERS,
+        'monthly': monthly_flat,
+        'sources': {l: dict(srcs) for l, srcs in source_by_lawyer.items()},
+        'cases': cases_recent,
+        'profit_share': profit_share_full,
+        'repeat_entries': [],
+        'special_tier_tips': {},
+        'has_repeat_tab': False,
+        'extra_kpis': {
+            'monthly_fixed_cost': 130000,
+            'description': '喆律每月給顯皓 130,000（已從 zhelu_total 扣除）',
+        },
+    }
+
+
+# ============================================================
+# Build all cohorts
 # ============================================================
 cohorts = {
     'judicial': build_judicial_cohort(),
     'senior':   build_senior_cohort(),
+    'consult':  build_consult_cohort(),
 }
 data = {
     'cohorts': {k: v for k, v in cohorts.items() if v is not None},
@@ -582,6 +749,7 @@ data = {
     'cohort_labels': {
         'judicial': '司法官合署（4 位）',
         'senior':   '資深轉合署（8 位）',
+        'consult':  '諮詢律師（1 位）',
     },
 }
 

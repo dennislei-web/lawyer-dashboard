@@ -78,8 +78,11 @@ def extract_embedded_json(html_path: Path) -> tuple[str, dict]:
 
 def diff_embedded(current: dict, fresh: dict) -> dict:
     """回傳 {cohort: [(lawyer, year, month, reason), ...]} — REMOVED 過濾掉（upsert 不刪歷史）"""
-    report = {"judicial": [], "senior": []}
-    for cohort in ["judicial", "senior"]:
+    cohort_keys = ["judicial", "senior", "consult"]
+    report = {c: [] for c in cohort_keys}
+    for cohort in cohort_keys:
+        if cohort not in current.get("cohorts", {}) or cohort not in fresh.get("cohorts", {}):
+            continue
         cur = {(r["lawyer"], str(r["year"]), str(r["month"])): r
                for r in current["cohorts"][cohort]["monthly"]}
         fre = {(r["lawyer"], str(r["year"]), str(r["month"])): r
@@ -108,8 +111,12 @@ def upsert_embedded(current: dict, fresh: dict) -> dict:
     import copy
     merged = copy.deepcopy(current)
 
-    for cohort in ["judicial", "senior"]:
+    for cohort in ["judicial", "senior", "consult"]:
         if cohort not in fresh.get("cohorts", {}):
+            continue
+        if cohort not in merged.get("cohorts", {}):
+            # cohort 是新加的（如 consult 第一次出現），直接複製
+            merged["cohorts"][cohort] = copy.deepcopy(fresh["cohorts"][cohort])
             continue
         f_cohort = fresh["cohorts"][cohort]
         m_cohort = merged["cohorts"][cohort]
@@ -135,7 +142,7 @@ def upsert_embedded(current: dict, fresh: dict) -> dict:
         # cohort-level fields — 用 fresh 蓋過（這些是 hardcoded 或從 cases 衍生）
         for fld in ["lawyers", "colors", "contract_matrix", "contract_tiers",
                     "sources", "repeat_entries", "has_repeat_tab",
-                    "repeat_config", "special_tier_tips"]:
+                    "repeat_config", "special_tier_tips", "extra_kpis"]:
             if fld in f_cohort:
                 m_cohort[fld] = f_cohort[fld]
 
@@ -186,13 +193,15 @@ def main() -> int:
         downloaded = download_partners_files(drive_dir)
         if not downloaded:
             raise SystemExit("Drive 下載 0 個檔案 — 請確認 service account 對兩個資料夾有檢視權限")
-        # 兩個 cohort parser 都讀同一個 drive_input dir（FILENAME_PATTERN 各自過濾）
+        # 各 cohort parser 都讀同一個 drive_input dir（FILENAME_PATTERN 各自過濾）
         env["PARTNERS_JUDICIAL_INPUT_DIRS"] = str(drive_dir)
         env["PARTNERS_SENIOR_INPUT_DIRS"] = str(drive_dir)
+        env["PARTNERS_CONSULT_INPUT_DIRS"] = str(drive_dir)
 
     # Step 1-2: parse + build
     run_step("parse_judicial", SCRIPT_DIR / "parse_judicial.py", env)
     run_step("parse_senior",   SCRIPT_DIR / "parse_senior.py", env)
+    run_step("parse_consult",  SCRIPT_DIR / "parse_consult.py", env)
     run_step("build_embedded", SCRIPT_DIR / "build_embedded.py", env)
 
     # Step 3-4: extract + upsert + diff
