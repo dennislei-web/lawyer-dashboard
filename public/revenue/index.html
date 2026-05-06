@@ -507,6 +507,25 @@
   <!-- Main Content -->
   <div class="main">
 
+    <!-- ========== 同步狀態 + 手動同步 ========== -->
+    <div id="revSyncBar" class="section" style="display:none;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-weight:600;color:var(--text-primary);">CRM 對帳資料同步狀態</span>
+          <span id="revSyncStatusContent" style="font-size:0.85rem;color:var(--text-muted);">載入中…</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="revSyncMonths" class="filter-select" title="一次抓最近 N 個月" style="display:none;">
+            <option value="2">最近 2 個月</option>
+            <option value="3">最近 3 個月</option>
+            <option value="6" selected>最近 6 個月</option>
+            <option value="12">最近 12 個月</option>
+          </select>
+          <button class="btn btn-outline btn-sm" id="revManualSyncBtn" onclick="triggerRevenueSync()" style="display:none;">立即手動同步</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ========== 總覽 ========== -->
     <div class="page active" id="page-overview">
       <div class="filter-bar">
@@ -924,6 +943,15 @@ async function showDashboard() {
   // admin 才顯示「帳號管理」連結
   var adminLink = document.getElementById('adminLink');
   if (adminLink && currentLawyer && currentLawyer.role === 'admin') adminLink.style.display = '';
+  // 任何登入使用者都可看狀態；admin/manager 才看到手動同步按鈕
+  var bar = document.getElementById('revSyncBar');
+  if (bar) bar.style.display = '';
+  var canTrigger = currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager');
+  ['revManualSyncBtn','revSyncMonths'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.style.display = canTrigger ? '' : 'none';
+  });
+  renderRevenueSyncStatus();
   populateOfficeFilters(); initYearButtons(); initMonthBtns(); await loadOverviewData();
 }
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -1649,6 +1677,116 @@ window.addEventListener('message', function(e) {
 });
 
 function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return n.toLocaleString('zh-TW'); }
+
+// ═══ 手動同步 (CRM 對帳) ═══
+var TRIGGER_SYNC_FN_URL = SUPABASE_URL + '/functions/v1/trigger_sync';
+var REV_SYNC_STATUS_ID = 'daily_revenue';
+var revSyncPollTimer = null;
+
+async function triggerRevenueSync() {
+  var btn = document.getElementById('revManualSyncBtn');
+  if (!btn || !sb) return;
+  var months = (document.getElementById('revSyncMonths') || {}).value || '2';
+  if (!confirm('要立即觸發一次 CRM 對帳爬取嗎？將更新最近 ' + months + ' 個月的資料，通常 1–3 分鐘。')) return;
+
+  var origLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = '觸發中...';
+  try {
+    var sess = await sb.auth.getSession();
+    var token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+    if (!token) { alert('請重新登入'); return; }
+
+    var resp = await fetch(TRIGGER_SYNC_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        workflow: 'update-revenue.yml',
+        sync_status_id: REV_SYNC_STATUS_ID,
+        months: String(months),
+      }),
+    });
+    var result = await resp.json().catch(function(){ return {}; });
+    if (!resp.ok) {
+      alert('觸發失敗：' + (result.error || result.details || JSON.stringify(result)));
+      console.error('trigger_sync error', result);
+      return;
+    }
+    btn.textContent = '同步進行中...';
+    await renderRevenueSyncStatus();
+    startRevenueSyncPolling();
+  } catch (e) {
+    console.error('triggerRevenueSync', e);
+    alert('觸發失敗：' + String(e));
+  } finally {
+    setTimeout(function(){ btn.disabled = false; btn.textContent = origLabel; }, 3000);
+  }
+}
+
+function startRevenueSyncPolling() {
+  if (revSyncPollTimer) clearInterval(revSyncPollTimer);
+  var startedAt = Date.now();
+  var MAX_MS = 15 * 60 * 1000;
+  revSyncPollTimer = setInterval(async function() {
+    if (Date.now() - startedAt > MAX_MS) {
+      clearInterval(revSyncPollTimer); revSyncPollTimer = null; return;
+    }
+    try {
+      var r = await sb.from('sync_status').select('status').eq('id', REV_SYNC_STATUS_ID).single();
+      await renderRevenueSyncStatus();
+      if (r.data && (r.data.status === 'success' || r.data.status === 'error')) {
+        clearInterval(revSyncPollTimer); revSyncPollTimer = null;
+        // 成功時清快取重新載入畫面
+        if (r.data.status === 'success') {
+          _cache = {};
+          if (typeof loadOverviewData === 'function') loadOverviewData();
+        }
+      }
+    } catch (e) { /* ignore single tick */ }
+  }, 5000);
+}
+
+async function renderRevenueSyncStatus() {
+  var el = document.getElementById('revSyncStatusContent');
+  if (!el || !sb) return;
+  try {
+    var r = await sb.from('sync_status').select('*').eq('id', REV_SYNC_STATUS_ID).single();
+    if (r.error || !r.data) {
+      el.innerHTML = '<span style="color:var(--text-muted);">尚未執行過 CRM 對帳同步</span>';
+      return;
+    }
+    var d = r.data;
+    var statusMap = {
+      success: { icon: '✅', label: '同步成功', color: 'var(--green)' },
+      error:   { icon: '❌', label: '同步失敗', color: 'var(--red)' },
+      running: { icon: '⏳', label: '同步中...', color: 'var(--gold)' },
+      pending: { icon: '⏸️', label: '尚未執行', color: 'var(--text-muted)' },
+    };
+    var s = statusMap[d.status] || statusMap.pending;
+    var timeAgo = '';
+    if (d.finished_at) {
+      var diff = Date.now() - new Date(d.finished_at).getTime();
+      var mins = Math.floor(diff / 60000), hrs = Math.floor(mins / 60), days = Math.floor(hrs / 24);
+      timeAgo = days > 0 ? days + ' 天前' : (hrs > 0 ? hrs + ' 小時前' : (mins > 0 ? mins + ' 分鐘前' : '剛剛'));
+    }
+    var html = '<span style="display:inline-flex;align-items:center;gap:6px;">';
+    html += '<span>' + s.icon + '</span>';
+    html += '<span style="font-weight:600;color:' + s.color + ';">' + s.label + '</span>';
+    html += '</span>';
+    if (d.scraped_months) html += ' <span style="color:var(--text-muted);">· ' + d.scraped_months + '</span>';
+    if (timeAgo) {
+      var local = d.finished_at ? new Date(d.finished_at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '';
+      html += ' <span style="color:var(--text-muted);" title="' + local + '">· ' + timeAgo + '</span>';
+    }
+    if (d.rows_scraped) html += ' <span style="color:var(--text-muted);">· 爬取 ' + d.rows_scraped + ' 筆</span>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--text-muted);">無法讀取同步狀態</span>';
+  }
+}
 
 checkSession();
 

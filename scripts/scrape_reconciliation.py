@@ -236,6 +236,41 @@ def get_month_range(year, month):
     return f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last_day}"
 
 
+SYNC_STATUS_ID = "daily_revenue"
+
+
+def write_sync_status(status, message, scraped_months="", rows_scraped=0, rows_updated=0, started_at=None):
+    """將同步結果寫入 sync_status 表（id='daily_revenue'）；失敗不影響主流程。"""
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    payload = {
+        "id": SYNC_STATUS_ID,
+        "status": status,
+        "message": message,
+        "scraped_months": scraped_months,
+        "rows_scraped": rows_scraped,
+        "rows_updated": rows_updated,
+        "started_at": started_at,
+        "finished_at": None if status == "running" else now_iso,
+        "updated_at": now_iso,
+    }
+    try:
+        resp = requests.post(
+            f"{REST_URL}/sync_status",
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates,return=minimal",
+            },
+            json=payload,
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            print(f"   (sync_status 寫入失敗 {resp.status_code}: {resp.text[:120]})")
+    except Exception as e:
+        print(f"   (sync_status 寫入失敗: {e})")
+
+
 def main():
     parser = argparse.ArgumentParser(description="爬取 CRM 對帳資訊")
     parser.add_argument("--month", help="指定月份 (例: 2026-03)")
@@ -262,30 +297,60 @@ def main():
     else:
         months_to_scrape.append((today.year, today.month))
 
-    # 登入 CRM
-    print("1. 登入 CRM...")
-    session = crm_login(CRM_USERNAME, CRM_PASSWORD)
-    print("   ✓ 登入成功\n")
+    sorted_months = sorted(months_to_scrape)
+    month_label = (
+        f"{sorted_months[0][0]}-{sorted_months[0][1]:02d}"
+        if len(sorted_months) == 1
+        else f"{sorted_months[0][0]}-{sorted_months[0][1]:02d}~{sorted_months[-1][0]}-{sorted_months[-1][1]:02d}"
+    )
+    started_at = datetime.utcnow().isoformat() + "Z"
+    write_sync_status("running", f"正在更新 {month_label}...", month_label, started_at=started_at)
 
-    # 爬取每個月份
-    all_records = []
-    print("2. 爬取對帳資料...")
-    for year, month in months_to_scrape:
-        start_date, end_date = get_month_range(year, month)
-        raw_data = scrape_reconciliation(session, start_date, end_date)
-        records = [transform_record(item) for item in raw_data]
-        all_records.extend(records)
+    try:
+        # 登入 CRM
+        print("1. 登入 CRM...")
+        session = crm_login(CRM_USERNAME, CRM_PASSWORD)
+        print("   ✓ 登入成功\n")
 
-    print(f"\n   共取得 {len(all_records)} 筆記錄\n")
+        # 爬取每個月份
+        all_records = []
+        print("2. 爬取對帳資料...")
+        for year, month in months_to_scrape:
+            start_date, end_date = get_month_range(year, month)
+            raw_data = scrape_reconciliation(session, start_date, end_date)
+            records = [transform_record(item) for item in raw_data]
+            all_records.extend(records)
 
-    # 匯入 Supabase
-    print("3. 匯入 Supabase...")
-    if all_records:
-        upsert_records(all_records)
-    else:
-        print("   沒有資料需要匯入")
+        print(f"\n   共取得 {len(all_records)} 筆記錄\n")
 
-    print(f"\n═══ 完成！共處理 {len(all_records)} 筆 ═══")
+        # 匯入 Supabase
+        print("3. 匯入 Supabase...")
+        rows_updated = 0
+        if all_records:
+            upsert_records(all_records)
+            rows_updated = len(all_records)
+        else:
+            print("   沒有資料需要匯入")
+
+        print(f"\n═══ 完成！共處理 {len(all_records)} 筆 ═══")
+        write_sync_status(
+            "success",
+            f"更新完成 {month_label}",
+            month_label,
+            rows_scraped=len(all_records),
+            rows_updated=rows_updated,
+            started_at=started_at,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        write_sync_status(
+            "error",
+            f"更新失敗：{str(e)[:200]}",
+            month_label,
+            started_at=started_at,
+        )
+        raise
 
 
 if __name__ == "__main__":

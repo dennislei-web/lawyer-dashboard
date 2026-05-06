@@ -30,11 +30,14 @@ jobs:
 
       - name: 爬取 CRM 對帳 + 更新 Supabase
         run: |
-          ARGS=""
+          # 排程預設抓最近 2 個月（避免月初切換後上月補登/改單漏抓）；
+          # workflow_dispatch 可帶 month 或 months 覆寫。
           if [ -n "${{ github.event.inputs.month }}" ]; then
             ARGS="--month ${{ github.event.inputs.month }}"
           elif [ -n "${{ github.event.inputs.months }}" ]; then
             ARGS="--months ${{ github.event.inputs.months }}"
+          else
+            ARGS="--months 2"
           fi
           python scripts/scrape_reconciliation.py $ARGS
         env:

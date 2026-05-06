@@ -1,5 +1,12 @@
 // Supabase Edge Function: trigger_sync
-// 從儀表板手動觸發 GitHub Actions 的「每日更新諮詢統計」workflow。
+// 從儀表板手動觸發 GitHub Actions 的同步 workflow。
+// Body 參數（皆可選）：
+//   month            - "2026-04"（覆寫指定月份）
+//   months           - "6"（最近 N 個月）
+//   workflow         - workflow filename，預設 "update-stats.yml"
+//                       例：營收頁傳 "update-revenue.yml"
+//   sync_status_id   - sync_status 表的 row id，預設 "daily_update"
+//                       營收頁傳 "daily_revenue"
 // Runtime: Deno
 // Deploy: supabase functions deploy trigger_sync
 // Secrets needed:
@@ -72,6 +79,24 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const months = typeof body.months === 'string' ? body.months : '';
     const month = typeof body.month === 'string' ? body.month : '';
+    // 允許前端指定要觸發哪個 workflow / 寫到 sync_status 的哪一筆
+    const requestedWorkflow = typeof body.workflow === 'string' ? body.workflow.trim() : '';
+    const requestedStatusId = typeof body.sync_status_id === 'string' ? body.sync_status_id.trim() : '';
+    // 白名單：只允許目前已知的兩個 workflow
+    const ALLOWED_WORKFLOWS: Record<string, string> = {
+      'update-stats.yml':   'daily_update',
+      'update-revenue.yml': 'daily_revenue',
+    };
+    const workflowFile = requestedWorkflow && ALLOWED_WORKFLOWS[requestedWorkflow]
+      ? requestedWorkflow
+      : GITHUB_WORKFLOW_FILE;
+    if (requestedWorkflow && !ALLOWED_WORKFLOWS[requestedWorkflow]) {
+      return Response.json(
+        { error: `unsupported workflow: ${requestedWorkflow}` },
+        { status: 400, headers: CORS_HEADERS },
+      );
+    }
+    const statusId = requestedStatusId || ALLOWED_WORKFLOWS[workflowFile] || 'daily_update';
 
     // 用 service client 預先寫一筆 running，前端就不用等 GH runner 啟動才有畫面變化
     const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
@@ -79,7 +104,7 @@ serve(async (req) => {
     });
     const nowIso = new Date().toISOString();
     await sbAdmin.from('sync_status').upsert({
-      id: 'daily_update',
+      id: statusId,
       status: 'running',
       message: `${lawyerRow.name} 手動觸發中...`,
       scraped_months: months || month || '',
@@ -92,7 +117,7 @@ serve(async (req) => {
 
     // 觸發 GitHub workflow_dispatch
     const dispatchUrl =
-      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GITHUB_WORKFLOW_FILE}/dispatches`;
+      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
     const inputs: Record<string, string> = {};
     if (month) inputs.month = month;
     if (months) inputs.months = months;
@@ -112,7 +137,7 @@ serve(async (req) => {
       const errTxt = await ghResp.text();
       // 寫回 error 狀態，避免 UI 一直停在 running
       await sbAdmin.from('sync_status').upsert({
-        id: 'daily_update',
+        id: statusId,
         status: 'error',
         message: `觸發 GitHub workflow 失敗 (HTTP ${ghResp.status})`,
         finished_at: new Date().toISOString(),
@@ -125,7 +150,7 @@ serve(async (req) => {
     }
 
     return Response.json(
-      { ok: true, triggered_by: lawyerRow.name, inputs },
+      { ok: true, triggered_by: lawyerRow.name, workflow: workflowFile, inputs },
       { status: 202, headers: CORS_HEADERS },
     );
   } catch (err) {
