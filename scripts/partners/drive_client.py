@@ -32,10 +32,10 @@ from googleapiclient.http import MediaIoBaseDownload
 FOLDER_115_PLUS = "1f9h24a3C6X1HMYmUil4kEU_S9b3dgGiy"  # 16【財務】(115+)
 FOLDER_114_MINUS = "1Bf3QnFu4JxmDc5d971aL-er5kIHaSFAM"  # 16【財務】/合署律師 (114-)
 
-# 11 位律師（4 司法官 + 7 資深）+ '孫' alias（孫少輔舊檔名）
+# 12 位律師（4 司法官 + 8 資深含雪莉）+ '孫' alias（孫少輔舊檔名）
 TARGET_LAWYERS = [
     "方心瑜", "孫少輔", "許致維", "劉明潔",  # judicial
-    "李昭萱", "林昀", "徐棠娜", "許煜婕", "陳璽仲", "蕭予馨", "吳柏慶",  # senior
+    "李昭萱", "林昀", "徐棠娜", "許煜婕", "陳璽仲", "蕭予馨", "吳柏慶", "柯雪莉",  # senior
     "孫",  # alias for 孫少輔（112/113 舊檔名）
 ]
 FILENAME_RE = re.compile(
