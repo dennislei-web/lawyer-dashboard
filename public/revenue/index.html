@@ -684,6 +684,9 @@
         <div class="kpi-card green"><div class="kpi-label">合署淨收入</div><div class="kpi-value green" id="pKpiNet">-</div><div class="kpi-sub" id="pKpiNetSub"></div></div>
         <div class="kpi-card blue"><div class="kpi-label">合署交易筆數</div><div class="kpi-value blue" id="pKpiCount">-</div><div class="kpi-sub" id="pKpiCountSub"></div></div>
       </div>
+      <div class="kpi-row" style="margin-top:8px">
+        <div class="kpi-card" style="border-left:4px solid #6b8a52"><div class="kpi-label">估算喆律端入帳（諮詢律師型）</div><div class="kpi-value" id="pKpiFirm">-</div><div class="kpi-sub text-muted" id="pKpiFirmSub">基於 partner_terms（雪莉/昭萱/煜婕/顯皓）；不含其他合署</div></div>
+      </div>
 
       <div class="chart-row">
         <div class="chart-card">
@@ -710,6 +713,7 @@
               <th class="text-right">付款金額</th>
               <th class="text-right">退款</th>
               <th class="text-right">淨收入</th>
+              <th class="text-right">估算喆律入帳</th>
               <th class="text-right">退款率</th>
             </tr>
           </thead>
@@ -1092,6 +1096,18 @@ async function renderMonthlyYoY(tbodyId, filterFn) {
 }
 function excludePartner(recs) { return recs.filter(function(r) { return !isPartner(r); }); }
 function onlyPartner(recs) { return recs.filter(isPartner); }
+// 諮詢律師型 partner_terms 套用過的 records（self_take + consult_fee + case_close）
+function partnerAttributed(recs) {
+  return recs.filter(function(r) {
+    return r.attribution_basis && r.attribution_basis !== 'firm_default';
+  });
+}
+function sumFirmAmount(recs) {
+  return recs.reduce(function(s, r) {
+    var v = r.firm_amount;
+    return s + (v == null ? 0 : Number(v));
+  }, 0);
+}
 
 // ═══ OVERVIEW ═══
 async function loadOverviewData() {
@@ -1306,9 +1322,11 @@ async function loadSourcePage() {
 var partnerGroups = [];
 async function loadPartnerPage() {
   var office = document.getElementById('partnerOfficeFilter').value;
-  var recs = onlyPartner(await loadRecords({ year: selectedYear, office: office||undefined }));
+  var allRecs = await loadRecords({ year: selectedYear, office: office||undefined });
+  var recs = onlyPartner(allRecs);
+  var attribRecs = partnerAttributed(allRecs);  // 含轉喆律承辦的諮詢成案
 
-  // KPI
+  // KPI（既有，自合署組）
   var pay = sumBy(recs,'PaymentTransaction'), ref = sumBy(recs,'RefundTransaction'), net = pay - ref;
   var payN = recs.filter(function(r){return r.transaction_type==='PaymentTransaction'}).length;
   var refN = recs.filter(function(r){return r.transaction_type==='RefundTransaction'}).length;
@@ -1321,13 +1339,24 @@ async function loadPartnerPage() {
   document.getElementById('pKpiNetSub').textContent = pay>0 ? '退款率 '+(ref/pay*100).toFixed(1)+'%' : '';
   document.getElementById('pKpiCountSub').textContent = '';
 
-  // Group by partner lawyer
+  // 估算喆律端入帳（partner_terms 套用過的全部 records，含轉去事務所部門承辦的諮詢成案）
+  var firmTotal = sumFirmAmount(attribRecs);
+  var selfTakeFirm = sumFirmAmount(attribRecs.filter(function(r){return r.attribution_basis==='self_take'}));
+  var consultFeeFirm = sumFirmAmount(attribRecs.filter(function(r){return r.attribution_basis==='consult_fee'}));
+  var caseCloseFirm = sumFirmAmount(attribRecs.filter(function(r){return r.attribution_basis==='case_close'}));
+  document.getElementById('pKpiFirm').textContent = formatMoney(firmTotal);
+  document.getElementById('pKpiFirmSub').textContent = '自帶承辦 '+formatMoney(selfTakeFirm)+
+    ' + 諮詢成案 '+formatMoney(caseCloseFirm)+
+    ' + 諮詢費 '+formatMoney(consultFeeFirm);
+
+  // Group by partner lawyer (合署 group only)
   var map = {};
   recs.forEach(function(r) {
     var g = r.group_name || '無';
-    if (!map[g]) map[g]={name:g,office:r.office||'',payN:0,pay:0,ref:0};
+    if (!map[g]) map[g]={name:g,office:r.office||'',payN:0,pay:0,ref:0,firmAmt:0};
     if (r.transaction_type==='PaymentTransaction') { map[g].payN++; map[g].pay+=Number(r.amount||0); }
     else map[g].ref+=Number(r.amount||0);
+    if (r.firm_amount != null) map[g].firmAmt += Number(r.firm_amount);
   });
   partnerGroups = Object.values(map).sort(function(a,b){return b.pay-a.pay});
   var colors = ['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#f39c12','#8e44ad','#d35400','#16a085'];
@@ -1359,13 +1388,16 @@ async function loadPartnerPage() {
   var tbody = document.getElementById('partnerTableBody');
   tbody.innerHTML = partnerGroups.map(function(d) {
     var net=d.pay-d.ref, refRate=d.pay>0?(d.ref/d.pay*100).toFixed(1)+'%':'0%';
+    var firmCell = d.firmAmt ? '<td class="text-right" style="color:#6b8a52">'+formatMoney(d.firmAmt)+'</td>'
+                              : '<td class="text-right text-muted">-</td>';
     return '<tr><td><strong>'+d.name+'</strong></td><td>'+d.office+'</td>' +
       '<td class="text-right">'+d.payN+'</td><td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
       '<td class="text-right text-red">'+(d.ref>0?formatMoney(d.ref):'-')+'</td>' +
       '<td class="text-right" style="font-weight:600">'+formatMoney(net)+'</td>' +
+      firmCell +
       '<td class="text-right '+(d.pay>0&&d.ref/d.pay>0.1?'text-red':'text-muted')+'">'+refRate+'</td></tr>';
   }).join('');
-  if (!partnerGroups.length) tbody.innerHTML='<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+  if (!partnerGroups.length) tbody.innerHTML='<tr><td colspan="8" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
   renderMonthlyYoY('partnerMonthlyBody', onlyPartner);
 }
 document.getElementById('partnerExportBtn').addEventListener('click', function() {

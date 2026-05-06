@@ -155,6 +155,69 @@ def scrape_reconciliation(session, start_date, end_date):
 
 
 # ═══════════════════════════════════════════════════════════
+#  Partner Attribution（合署律師分潤計算）
+# ═══════════════════════════════════════════════════════════
+_PARTNER_TERMS_CACHE = None
+
+
+def fetch_partner_terms():
+    """從 lawyers 表抓所有 partner_terms 不為 null 的律師，返回 {name: terms}。"""
+    global _PARTNER_TERMS_CACHE
+    if _PARTNER_TERMS_CACHE is not None:
+        return _PARTNER_TERMS_CACHE
+    try:
+        resp = requests.get(
+            f"{REST_URL}/lawyers",
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
+            params={"select": "name,partner_terms", "partner_terms": "not.is.null"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        _PARTNER_TERMS_CACHE = {row["name"]: row["partner_terms"] for row in resp.json()}
+    except Exception as e:
+        print(f"   (取 partner_terms 失敗，跳過 attribution: {e})")
+        _PARTNER_TERMS_CACHE = {}
+    return _PARTNER_TERMS_CACHE
+
+
+def compute_attribution(rec, terms_map):
+    """回傳 (firm_amount, basis)。rec 已是 transform_record 後的 dict。"""
+    amt = float(rec.get("amount") or 0)
+    al = rec.get("assigned_lawyers") or ""
+    g = rec.get("group_name") or ""
+    ttype = rec.get("transaction_type") or ""
+
+    sign = -1 if ttype == "RefundTransaction" else 1
+    base_amt = abs(amt) * sign
+
+    if not terms_map:
+        return base_amt, "firm_default"
+
+    lawyers = [s.strip() for s in al.split(",") if s.strip()]
+    partner_name = next((L for L in lawyers if L in terms_map), None)
+    if not partner_name:
+        return base_amt, "firm_default"
+
+    t = terms_map[partner_name]
+    consult_fee_amount = float(t.get("consult_fee_amount") or 0)
+    self_take_pct = float(t.get("self_take_firm_pct") or 0)
+    consult_fee_pct = float(t.get("consult_fee_firm_pct") or 0)
+    case_close_pct = float(t.get("case_close_firm_pct") or 0)
+    self_take_inc_consult = bool(t.get("self_take_includes_consult_fee", True))
+
+    is_self_partner_group = ("合署" in g) and (partner_name in g)
+    is_consult_fee_amount = abs(amt) == consult_fee_amount
+
+    if is_self_partner_group:
+        if is_consult_fee_amount and not self_take_inc_consult:
+            return base_amt * consult_fee_pct, "consult_fee"
+        return base_amt * self_take_pct, "self_take"
+    if is_consult_fee_amount:
+        return base_amt * consult_fee_pct, "consult_fee"
+    return base_amt * case_close_pct, "case_close"
+
+
+# ═══════════════════════════════════════════════════════════
 #  Transform CRM Data → DB Records
 # ═══════════════════════════════════════════════════════════
 def transform_record(item):
@@ -209,7 +272,15 @@ def transform_record(item):
 #  Upsert to Supabase
 # ═══════════════════════════════════════════════════════════
 def upsert_records(records):
-    """批次 upsert 到 Supabase。"""
+    """批次 upsert 到 Supabase。順便補上 partner attribution。"""
+    terms_map = fetch_partner_terms()
+
+    # 算 firm_amount + attribution_basis
+    for rec in records:
+        firm_amt, basis = compute_attribution(rec, terms_map)
+        rec["firm_amount"] = firm_amt
+        rec["attribution_basis"] = basis
+
     batch_size = 50
     total = len(records)
 
