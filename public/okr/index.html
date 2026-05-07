@@ -1068,11 +1068,13 @@ function renderKR1() {
   row.appendChild(makeMetricCell({ label: fm==null?'YTD 諮詢場次':(fm+'月 諮詢場次'), value:cntActual, unit:'場', target:cntTarget, krCode:'kr1_consult_count', targetMonth:fm }));
   card.appendChild(row);
 
-  // YTD 進度（年累計 vs 年目標）
-  var ytdRow = document.createElement('div'); ytdRow.className='kr-metric-row';
-  ytdRow.appendChild(makeMetricCell({ label:'YTD 營業額（年累計）', value:actualYTD('kr1_revenue'), unit:'萬', target:targetValue('kr1_revenue', null) }));
-  ytdRow.appendChild(makeMetricCell({ label:'YTD 諮詢場次（年累計）', value:actualYTD('kr1_consult_count'), unit:'場', target:targetValue('kr1_consult_count', null) }));
-  card.appendChild(ytdRow);
+  // YTD 進度（年累計 vs 年目標）— 只在 YTD 模式（fm==null）顯示，避免和上方月度資料混淆
+  if (fm == null) {
+    var ytdRow = document.createElement('div'); ytdRow.className='kr-metric-row';
+    ytdRow.appendChild(makeMetricCell({ label:'YTD 營業額（年累計）', value:actualYTD('kr1_revenue'), unit:'萬', target:targetValue('kr1_revenue', null) }));
+    ytdRow.appendChild(makeMetricCell({ label:'YTD 諮詢場次（年累計）', value:actualYTD('kr1_consult_count'), unit:'場', target:targetValue('kr1_consult_count', null) }));
+    card.appendChild(ytdRow);
+  }
 
   var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
   setTimeout(function() { makeMonthlyChart(cvs, 'kr1_revenue', '營業額', 'gold', '萬'); }, 0);
