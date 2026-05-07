@@ -104,7 +104,7 @@
     .filter-spacer { flex:1; }
 
     /* HERO */
-    .hero-grid { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .hero-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
     .hero-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; }
     .hero-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
     .hero-card.kr3::before { background:var(--blue); }
@@ -322,13 +322,6 @@
         <div class="hero-target" id="hero-kr4-target">目標 —</div>
         <div class="hero-bar"><div id="hero-kr4-bar" style="width:0"></div></div>
         <div class="hero-pct"><span class="pct" id="hero-kr4-pct">—</span><span class="est" id="hero-kr4-est"></span></div>
-      </div>
-      <div class="hero-card kr6">
-        <div class="hero-title">💰 純利推估</div>
-        <div class="hero-value" id="hero-kr6-val">—</div>
-        <div class="hero-target" id="hero-kr6-target">目標 4000 萬</div>
-        <div class="hero-bar"><div id="hero-kr6-bar" style="width:0"></div></div>
-        <div class="hero-pct"><span class="pct" id="hero-kr6-pct">—</span><span class="est" id="hero-kr6-est"></span></div>
       </div>
     </div>
 
@@ -842,20 +835,6 @@ function renderHero() {
   // KR4 合署 = 營運頁合署淨收入；目標 = 轉案 280 + 自案 137.5 月目標合計
   var kr4Target = (targetValue('kr4_referred_revenue', fm) || 0) + (targetValue('kr4_partner_self_revenue', fm) || 0);
   setHero('kr4', actualValue('kr4_partner_net_revenue', fm), kr4Target || null, '萬');
-  // KR6 純利推估: 推算 = 營收估 - 成本估
-  // 簡化版：YTD 營收 - YTD 成本，營收 = 喆律(KR1) + 法顧(KR3) + 法0(KR5) + 合署淨收入(KR4)
-  var revenue = (actualValue('kr1_revenue', fm) || 0) + (actualValue('kr3_total_revenue', fm) || 0)
-              + (actualValue('kr5_revenue', fm) || 0) + (actualValue('kr4_partner_net_revenue', fm) || 0);
-  var cost = actualValue('kr6_monthly_cost_cap', fm) || 0;
-  var profit = revenue - cost;
-  // 年度純利目標 4000 萬。fm null = YTD 對到 (4000 * (m_done / 12))
-  var profitTarget;
-  if (fm != null) profitTarget = 4000 / 12;
-  else {
-    var doneM = monthsElapsed();
-    profitTarget = 4000 * doneM / 12;
-  }
-  setHero('kr6', profit, profitTarget, '萬');
 }
 function actualValue(krCode, fm) {
   if (fm == null) return actualYTD(krCode);
@@ -1288,17 +1267,24 @@ function buildManualGrid(krCode) {
 // ═══ KR6 成本 ═══
 function renderKR6() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR6｜成本控制', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃', route:'finance'} });
+  var card = makeCard({ title:'KR6｜月成本控制（≤ 1450 萬/月）', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃', route:'finance'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
   row.appendChild(makeMetricCell({ label: fm==null?'YTD 總成本':(fm+'月 成本'), value:actualValue('kr6_monthly_cost_cap', fm), unit:'萬', target:targetValue('kr6_monthly_cost_cap', fm), lowerBetter:true, krCode:'kr6_monthly_cost_cap', targetMonth:fm }));
-  // 純利推估
-  var revActual = actualValue('kr1_revenue', fm) || 0;
-  var advisorActual = actualValue('kr3_total_revenue', fm) || 0;
-  var partnerActual = actualValue('kr4_case_volume', fm) || 0;
-  var law0Actual = actualValue('kr5_revenue', fm) || 0;
-  var costActual = actualValue('kr6_monthly_cost_cap', fm) || 0;
-  var profit = revActual + advisorActual + partnerActual + law0Actual - costActual;
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 推估純利':(fm+'月 推估純利'), value:profit, unit:'萬' }));
+  if (fm == null) {
+    // YTD 模式：對比年度成本上限
+    row.appendChild(makeMetricCell({ label:'YTD 累計上限', value: getTarget('kr6_monthly_cost_cap', 1) ? getTarget('kr6_monthly_cost_cap', 1) * monthsElapsed() : null, unit:'萬' }));
+  } else {
+    // 月度模式：顯示與上限差距
+    var actual = actualValue('kr6_monthly_cost_cap', fm) || 0;
+    var cap = targetValue('kr6_monthly_cost_cap', fm) || 0;
+    var diff = cap - actual;
+    var box = document.createElement('div'); box.className='kr-metric';
+    box.innerHTML = '<div class="label">與上限差距</div>'
+      + '<div class="value" style="color:' + (diff >= 0 ? 'var(--green)' : 'var(--red)') + ';">'
+      + (diff >= 0 ? '+' : '') + fmt(diff) + '<span class="unit"> 萬</span></div>'
+      + '<div class="target-line">' + (diff >= 0 ? '低於上限 ✓' : '超出上限 ✗') + '</div>';
+    row.appendChild(box);
+  }
   card.appendChild(row);
 
   var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
