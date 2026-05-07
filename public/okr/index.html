@@ -1322,61 +1322,108 @@ function renderKR4() {
 }
 
 // ═══ KR5 法0 ═══
+// KR5 用的指標清單（順序＝展示順序＝編輯矩陣的列順序）
+var KR5_METRICS = [
+  { code:'kr5_revenue',   label:'月營收',   unit:'萬', hasTarget:true },
+  { code:'kr5_referrals', label:'轉諮場次', unit:'場', hasTarget:false },
+  { code:'kr5_avg_signed',label:'均單',     unit:'萬', hasTarget:false },
+  { code:'kr5_followers', label:'加入好友', unit:'人', hasTarget:false }
+];
+
 function renderKR5() {
   var card = makeCard({ title:'KR5｜法0（法律010）', owner:'負責：雷皓明', full:true });
   var hint = document.createElement('div'); hint.className='info-hint';
-  hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。請 admin 在下方逐月填入「加入好友數 / 轉諮場次 / 平均成案金額 / 月營收」。';
+  if (state.editing) {
+    hint.innerHTML = '✏️ <b>編輯模式：</b>下方矩陣請對照 Google Sheet「轉案業績查詢」逐月填寫。輸入完按右上角「💾 儲存全部」。';
+  } else {
+    hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。點右上「✏️ 編輯目標 / 里程碑」進入編輯模式，再依 Google Sheet「轉案業績查詢」逐月填寫月營收 / 轉諮場次 / 均單。';
+  }
   card.appendChild(hint);
 
   var fm = state.focusMonth;
+  // 上方四欄當月（或 YTD）總覽
   var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(4, 1fr)';
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 法0 月營收':(fm+'月 法0 營收'), value:actualValue('kr5_revenue', fm), unit:'萬', target:targetValue('kr5_revenue', fm), krCode:'kr5_revenue', targetMonth:fm }));
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 加入好友數':(fm+'月 好友數'), value:actualValue('kr5_followers', fm), unit:'人' }));
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉諮場次':(fm+'月 轉諮場次'), value:actualValue('kr5_referrals', fm), unit:'場' }));
-  row.appendChild(makeMetricCell({ label:'平均成案金額（最後填寫月）', value: actualMonth('kr5_avg_signed', fm || 12), unit:'萬' }));
+  KR5_METRICS.forEach(function(spec) {
+    var label = (fm==null ? 'YTD' : fm+'月') + ' ' + spec.label;
+    // 均單 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
+    if (spec.code === 'kr5_avg_signed' && fm == null) {
+      var lastFilled = null;
+      for (var mm=12; mm>=1; mm--) {
+        if (getManualActual('kr5_avg_signed', mm) != null) { lastFilled = mm; break; }
+      }
+      row.appendChild(makeMetricCell({
+        label: lastFilled ? ('最近 ' + lastFilled + ' 月 均單') : '均單',
+        value: lastFilled ? getManualActual('kr5_avg_signed', lastFilled) : null,
+        unit: spec.unit
+      }));
+      return;
+    }
+    row.appendChild(makeMetricCell({
+      label: label,
+      value: actualValue(spec.code, fm),
+      unit: spec.unit,
+      target: spec.hasTarget ? targetValue(spec.code, fm) : undefined,
+      krCode: spec.hasTarget ? spec.code : null,
+      targetMonth: fm
+    }));
+  });
   card.appendChild(row);
 
-  // 手動實績編輯區（admin + edit mode）
+  // 編輯模式：4 列 × 12 月矩陣
   if (state.editing) {
-    ['kr5_revenue','kr5_followers','kr5_referrals','kr5_avg_signed'].forEach(function(kr) {
-      card.appendChild(buildManualGrid(kr));
-    });
+    card.appendChild(buildKR5Matrix());
   } else {
-    var summary = document.createElement('div'); summary.className='small-note';
-    summary.innerHTML = '12 月實績預覽：<br>' +
-      ['kr5_revenue','kr5_followers','kr5_referrals','kr5_avg_signed'].map(function(kr) {
-        var label = ({'kr5_revenue':'月營收','kr5_followers':'好友','kr5_referrals':'轉諮','kr5_avg_signed':'均單'})[kr];
-        var arr = [];
-        for (var m=1; m<=12; m++) { var v = getManualActual(kr, m); arr.push(v == null ? '–' : fmt(v, 0)); }
-        return '<b>' + label + '</b>：' + arr.join(' / ');
-      }).join('<br>');
+    var summary = document.createElement('div'); summary.className='small-note'; summary.style.marginTop='10px';
+    summary.innerHTML = '<b>12 月實績預覽：</b><br>' + KR5_METRICS.map(function(spec) {
+      var arr = [];
+      for (var m=1; m<=12; m++) { var v = getManualActual(spec.code, m); arr.push(v == null ? '–' : fmt(v, 0)); }
+      return '<b>' + spec.label + '</b>：' + arr.join(' / ');
+    }).join('<br>');
     card.appendChild(summary);
   }
   return card;
 }
 
-function buildManualGrid(krCode) {
-  var label = ({'kr5_revenue':'月營收 (萬)','kr5_followers':'加入好友','kr5_referrals':'轉諮場次','kr5_avg_signed':'均單 (萬)'})[krCode] || krCode;
-  var wrap = document.createElement('div'); wrap.style.marginTop = '10px';
-  var title = document.createElement('div'); title.className='small-note'; title.style.fontWeight='600'; title.textContent = label; wrap.appendChild(title);
-  var grid = document.createElement('div'); grid.className = 'manual-grid';
-  var head = document.createElement('div'); head.className='label-col'; head.textContent='月份'; grid.appendChild(head);
-  for (var m=1; m<=12; m++) { var h = document.createElement('div'); h.className='month-h'; h.textContent = m+'月'; grid.appendChild(h); }
-  var lblc = document.createElement('div'); lblc.className='label-col'; lblc.textContent='實績'; grid.appendChild(lblc);
-  for (var m2=1; m2<=12; m2++) {
-    var inp = document.createElement('input'); inp.type='number'; inp.step='any';
-    var v = getManualActual(krCode, m2);
-    if (v != null) inp.value = v;
-    (function(monthN) {
-      inp.addEventListener('input', function() {
-        var key = state.year + '|' + krCode + '|' + monthN;
-        state.pendingActuals[key] = inp.value === '' ? null : Number(inp.value);
-        updatePendingBadge();
-      });
-    })(m2);
-    grid.appendChild(inp);
+function buildKR5Matrix() {
+  // 整合矩陣：4 列指標 × 13 欄（指標名 + 12 月），用 grid 直接堆出來
+  var wrap = document.createElement('div'); wrap.style.marginTop = '12px';
+  var title = document.createElement('div'); title.className='small-note'; title.style.fontWeight='600'; title.style.marginBottom='4px';
+  title.textContent = '🗒️ 月度實績矩陣（從 Google Sheet 轉案業績查詢逐月填入）';
+  wrap.appendChild(title);
+
+  var matrix = document.createElement('div');
+  matrix.style.cssText = 'display:grid; grid-template-columns:90px repeat(12, 1fr); gap:3px; font-size:0.78rem;';
+
+  // 標頭列：「指標」+ 1月..12月
+  var hLabel = document.createElement('div'); hLabel.style.cssText='font-size:0.7rem;color:var(--text-muted);padding:4px 2px;'; hLabel.textContent = '指標 ＼ 月';
+  matrix.appendChild(hLabel);
+  for (var m=1; m<=12; m++) {
+    var h = document.createElement('div'); h.style.cssText='font-size:0.7rem;text-align:center;color:var(--text-muted);padding:2px 0;';
+    h.textContent = m+'月';
+    matrix.appendChild(h);
   }
-  wrap.appendChild(grid);
+  // 4 列
+  KR5_METRICS.forEach(function(spec) {
+    var rowLabel = document.createElement('div'); rowLabel.style.cssText='font-size:0.78rem;color:var(--text);padding:6px 2px;';
+    rowLabel.innerHTML = '<b>' + spec.label + '</b><br><span style="font-size:0.7rem;color:var(--text-muted);">(' + spec.unit + ')</span>';
+    matrix.appendChild(rowLabel);
+    for (var mn=1; mn<=12; mn++) {
+      var inp = document.createElement('input'); inp.type='number'; inp.step='any';
+      inp.style.cssText='width:100%; padding:4px; font-size:0.78rem; background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:4px; text-align:right;';
+      var existing = getManualActual(spec.code, mn);
+      if (existing != null) inp.value = existing;
+      (function(code, monthN, el) {
+        el.addEventListener('input', function() {
+          var key = state.year + '|' + code + '|' + monthN;
+          state.pendingActuals[key] = el.value === '' ? null : Number(el.value);
+          updatePendingBadge();
+        });
+        el.addEventListener('focus', function() { el.select(); });
+      })(spec.code, mn, inp);
+      matrix.appendChild(inp);
+    }
+  });
+  wrap.appendChild(matrix);
   return wrap;
 }
 
