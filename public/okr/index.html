@@ -325,10 +325,12 @@
       </div>
     </div>
 
-    <!-- ALERT -->
+    <!-- ALERT (預設摺疊，按 toggle 展開) -->
     <div class="alert-card" id="alertCard">
-      <div class="alert-title">⚠️ 落後 / 警示</div>
-      <div class="alert-list" id="alertList"></div>
+      <div class="alert-title" id="alertTitle" style="cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:space-between; margin-bottom:0;">
+        <span><span id="alertCaret">▶</span> ⚠️ 落後 / 警示 <span id="alertCount" style="font-weight:400; color:var(--text-muted); margin-left:6px;"></span></span>
+      </div>
+      <div class="alert-list" id="alertList" style="display:none; margin-top:6px;"></div>
     </div>
 
     <div id="krContainer">
@@ -963,11 +965,25 @@ function renderAlerts() {
   });
   var box = document.getElementById('alertCard');
   var list = document.getElementById('alertList');
+  var titleEl = document.getElementById('alertTitle');
+  var countEl = document.getElementById('alertCount');
+  var caret = document.getElementById('alertCaret');
   if (alerts.length === 0) { box.classList.remove('show'); list.innerHTML = ''; return; }
   box.classList.add('show');
   list.innerHTML = alerts.map(function(a) {
     return '<span><b>' + a.label + '：</b>' + a.msg + '</span>';
   }).join('');
+  countEl.textContent = '（' + alerts.length + ' 項）';
+  // 套用當前 expanded 狀態
+  var expanded = !!state.alertsExpanded;
+  list.style.display = expanded ? 'flex' : 'none';
+  caret.textContent = expanded ? '▼' : '▶';
+  // 綁 toggle（每次 render 重綁無妨；用 onclick 確保覆蓋）
+  titleEl.onclick = function() {
+    state.alertsExpanded = !state.alertsExpanded;
+    list.style.display = state.alertsExpanded ? 'flex' : 'none';
+    caret.textContent = state.alertsExpanded ? '▼' : '▶';
+  };
 }
 
 function renderKRs() {
