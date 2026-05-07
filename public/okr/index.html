@@ -981,7 +981,6 @@ function renderKRs() {
   grid.appendChild(renderKR4());
   grid.appendChild(renderKR5());
   grid.appendChild(renderKR6());
-  grid.appendChild(renderKR7());
 }
 
 function makeCard(opts) {
@@ -1555,13 +1554,6 @@ function renderKR6() {
         } }
     });
   }, 0);
-  return card;
-}
-
-// ═══ KR7 AI 提效 ═══
-function renderKR7() {
-  var card = makeCard({ title:'KR7｜AI 協助提升效率', owner:'負責：雷皓明' });
-  card.appendChild(renderMilestonesTable('kr7_ai'));
   return card;
 }
 
