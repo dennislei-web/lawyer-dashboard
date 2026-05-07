@@ -915,7 +915,6 @@ function renderAlerts() {
   var checks = [
     { kr:'kr1_revenue',   label:'喆律營收（不含法顧/合署）' },
     { kr:'kr1_consult_count', label:'諮詢場次' },
-    { kr:'kr1_refund_cap',label:'退款',         lowerBetter:true },
     { kr:'kr2_conversion',label:'諮詢轉化率' },
     { kr:'kr3a_active_cases',     label:'法顧主動進線' },
     { kr:'kr3a_referral_cases',   label:'法顧介紹' },
@@ -1071,14 +1070,11 @@ function renderKR1() {
   row.appendChild(makeMetricCell({ label: fm==null?'YTD 諮詢場次':(fm+'月 諮詢場次'), value:cntActual, unit:'場', target:cntTarget, krCode:'kr1_consult_count', targetMonth:fm }));
   card.appendChild(row);
 
-  var refActual = actualValue('kr1_refund_cap', fm);
-  var refTarget = targetValue('kr1_refund_cap', fm);
-  var refRow = document.createElement('div'); refRow.className='kr-metric-row';
-  refRow.appendChild(makeMetricCell({ label: fm==null?'YTD 退款':(fm+'月 退款'), value:refActual, unit:'萬', target:refTarget, lowerBetter:true, krCode:'kr1_refund_cap', targetMonth:fm }));
   // YTD 進度（年累計 vs 年目標）
-  var ytdAct = actualYTD('kr1_revenue'), ytdTar = targetValue('kr1_revenue', null);
-  refRow.appendChild(makeMetricCell({ label:'YTD 達成（年累計）', value:ytdAct, unit:'萬', target:ytdTar, krCode:null }));
-  card.appendChild(refRow);
+  var ytdRow = document.createElement('div'); ytdRow.className='kr-metric-row';
+  ytdRow.appendChild(makeMetricCell({ label:'YTD 營業額（年累計）', value:actualYTD('kr1_revenue'), unit:'萬', target:targetValue('kr1_revenue', null) }));
+  ytdRow.appendChild(makeMetricCell({ label:'YTD 諮詢場次（年累計）', value:actualYTD('kr1_consult_count'), unit:'場', target:targetValue('kr1_consult_count', null) }));
+  card.appendChild(ytdRow);
 
   var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
   setTimeout(function() { makeMonthlyChart(cvs, 'kr1_revenue', '營業額', 'gold', '萬'); }, 0);
