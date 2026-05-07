@@ -657,18 +657,30 @@ function aggregateFinance(rows) {
 
 function aggregatePartners(partnersJSON) {
   // 合署人數：只算 senior + judicial（consult cohort 是諮詢律師，不計入合署人數目標 15 位）
+  // 每月 commission_A（轉案案件總額）+ self_A（自案案件總額）也只加總 senior+judicial 的
   var d = state.data;
   d.partnerCount = 0;
   d.partnerCohorts = { judicial:[], senior:[], consult:[] };
+  d.partnersByMonth = {};
+  for (var i=1; i<=12; i++) d.partnersByMonth[i] = { commission:0, self:0 };
   if (!partnersJSON || !partnersJSON.cohorts) return;
   var cohorts = partnersJSON.cohorts;
+  var rocYear = String(state.year - 1911);
   Object.keys(cohorts).forEach(function(key) {
     var c = cohorts[key];
-    if (!c || !c.lawyers) return;
-    d.partnerCohorts[key] = c.lawyers.slice();
-    if (key === 'judicial' || key === 'senior') {
-      d.partnerCount += c.lawyers.length;
+    if (!c) return;
+    if (c.lawyers) {
+      d.partnerCohorts[key] = c.lawyers.slice();
+      if (key === 'judicial' || key === 'senior') d.partnerCount += c.lawyers.length;
     }
+    if (key !== 'judicial' && key !== 'senior') return;
+    (c.monthly || []).forEach(function(rec) {
+      if (String(rec.year) !== rocYear) return;
+      var m = Number(rec.month);
+      if (m < 1 || m > 12) return;
+      d.partnersByMonth[m].commission += Number(rec.commission_A || 0);
+      d.partnersByMonth[m].self       += Number(rec.self_A       || 0);
+    });
   });
 }
 
@@ -745,13 +757,23 @@ function actualMonth(krCode, m) {
     case 'kr3b_renewal_cases':        return ((d.advisorByMonth[m] || {}).renewal || {}).cases || 0;
     case 'kr3b_renewal_amount':       return (((d.advisorByMonth[m] || {}).renewal || {}).amount || 0) / 10000;
     case 'kr3_total_revenue':         return (((d.advisorByMonth[m] || {}).total || {}).amount || 0) / 10000;
-    case 'kr4_partner_net_revenue':
-    case 'kr4_referred_revenue':
-    case 'kr4_partner_self_revenue':
-    case 'kr4_case_volume': {
-      // 對標營運頁「合署律師」tab 月淨收入；DB 沒有區分轉案/自案，三個 KR 同一個值
+    case 'kr4_partner_net_revenue': {
+      // 合署淨收入：營運頁「合署律師」tab 的 paid - refund（喆律端真實入帳）
       var pr = d.partnerRevenueByMonth[m] || {};
       return ((pr.paid || 0) - (pr.refund || 0)) / 10000;
+    }
+    case 'kr4_referred_revenue': {
+      // 轉案案件總額：partners JSON commission_A（喆律引案，案件規模）
+      return ((d.partnersByMonth[m] || {}).commission || 0) / 10000;
+    }
+    case 'kr4_partner_self_revenue': {
+      // 自案案件總額：partners JSON self_A
+      return ((d.partnersByMonth[m] || {}).self || 0) / 10000;
+    }
+    case 'kr4_case_volume': {
+      // 案件總額 = 轉案 + 自案
+      var p = d.partnersByMonth[m] || {};
+      return ((p.commission || 0) + (p.self || 0)) / 10000;
     }
     case 'kr5_revenue':
     case 'kr5_followers':
@@ -838,9 +860,9 @@ function renderHero() {
   setHero('kr3', actualValue('kr3_total_revenue', fm), targetValue('kr3_total_revenue', fm), '萬');
   // KR5 法0 月營收
   setHero('kr5', actualValue('kr5_revenue', fm), targetValue('kr5_revenue', fm), '萬');
-  // KR4 合署 = 營運頁合署淨收入；目標 = 轉案 280 + 自案 137.5 月目標合計
+  // KR4 合署 = 案件總額（轉案 + 自案，partners JSON）vs 月目標 280+137.5
   var kr4Target = (targetValue('kr4_referred_revenue', fm) || 0) + (targetValue('kr4_partner_self_revenue', fm) || 0);
-  setHero('kr4', actualValue('kr4_partner_net_revenue', fm), kr4Target || null, '萬');
+  setHero('kr4', actualValue('kr4_case_volume', fm), kr4Target || null, '萬');
 }
 function actualValue(krCode, fm) {
   if (fm == null) return actualYTD(krCode);
@@ -1142,11 +1164,12 @@ function renderKR3b() {
 // ═══ KR4 合署 ═══
 function renderKR4() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR4｜合署律師（對標營運頁合署律師 tab 淨收入）', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
+  var card = makeCard({ title:'KR4｜合署律師（轉案 / 自案，來自合署律師頁案件總額）', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
   var d = state.data;
   var pCount = d.partnerCount;
   var pTarget = getTarget('kr4_partner_count', null);
   var row = document.createElement('div'); row.className='kr-metric-row';
+  row.style.gridTemplateColumns = 'repeat(3, 1fr)';
 
   // 在線人數
   var box1 = document.createElement('div'); box1.className='kr-metric';
@@ -1160,35 +1183,48 @@ function renderKR4() {
                 + (pctCount != null ? '<div class="pct ' + pctCountCls + '">' + pctText(pctCount) + '</div>' : '');
   row.appendChild(box1);
 
-  // 月淨收入（不分轉案/自案，對標營運頁合署律師 tab 月淨收入）
-  var monthTarget = (targetValue('kr4_referred_revenue', fm) || 0) + (targetValue('kr4_partner_self_revenue', fm) || 0) || null;
+  // 轉案
   row.appendChild(makeMetricCell({
-    label: (fm==null ? 'YTD' : fm+'月') + ' 合署淨收入',
-    value: actualValue('kr4_partner_net_revenue', fm),
+    label: (fm==null ? 'YTD' : fm+'月') + ' 轉案案件總額',
+    value: actualValue('kr4_referred_revenue', fm),
     unit: '萬',
-    target: monthTarget
+    target: targetValue('kr4_referred_revenue', fm),
+    krCode:'kr4_referred_revenue', targetMonth:fm
+  }));
+  // 自案
+  row.appendChild(makeMetricCell({
+    label: (fm==null ? 'YTD' : fm+'月') + ' 自案案件總額',
+    value: actualValue('kr4_partner_self_revenue', fm),
+    unit: '萬',
+    target: targetValue('kr4_partner_self_revenue', fm),
+    krCode:'kr4_partner_self_revenue', targetMonth:fm
   }));
   card.appendChild(row);
 
-  // 12 個月柱狀圖：合署淨收入 vs 月目標
-  var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
+  // 12 個月堆疊柱狀圖：轉案 + 自案 stacked，疊加月目標折線
+  var cv = document.createElement('div'); cv.className='kr-chart-wrap tall'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
   setTimeout(function() {
-    var labels = [], actuals = [], targets = [];
+    var labels = [], commArr = [], selfArr = [], targetArr = [];
     for (var m=1; m<=12; m++) {
       labels.push(m+'月');
-      actuals.push(actualMonth('kr4_partner_net_revenue', m));
+      commArr.push(actualMonth('kr4_referred_revenue', m));
+      selfArr.push(actualMonth('kr4_partner_self_revenue', m));
       var mt = (getTarget('kr4_referred_revenue', m) || 0) + (getTarget('kr4_partner_self_revenue', m) || 0);
-      targets.push(mt || null);
+      targetArr.push(mt || null);
     }
     var ctx = cvs.getContext('2d');
     charts['kr4_chart'] = new Chart(ctx, {
       type:'bar',
       data:{ labels:labels, datasets:[
-        { label:'合署月淨收入', data:actuals, backgroundColor:colorVar('orange'), borderRadius:3, order:2 },
-        { label:'月目標 (轉案+自案)', data:targets, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
+        { label:'轉案 (commission_A)', data:commArr, backgroundColor:colorVar('orange'), borderRadius:3, order:2, stack:'a' },
+        { label:'自案 (self_A)',       data:selfArr, backgroundColor:colorVar('blue'),   borderRadius:3, order:2, stack:'a' },
+        { label:'月目標合計',          data:targetArr, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
       ]},
       options:{ responsive:true, maintainAspectRatio:false,
-        scales:{ x:{grid:{display:false},ticks:{color:chartTextColor(),font:{size:10}}}, y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),font:{size:10}}} },
+        scales:{
+          x:{grid:{display:false},ticks:{color:chartTextColor(),font:{size:10}}, stacked:true },
+          y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),font:{size:10}}, stacked:true }
+        },
         plugins:{ legend:{position:'top',labels:{color:chartTextColor(),font:{size:11},boxWidth:14}} } }
     });
   }, 0);
