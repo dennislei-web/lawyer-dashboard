@@ -293,7 +293,7 @@
     <!-- HERO -->
     <div class="hero-grid" id="heroGrid">
       <div class="hero-card">
-        <div class="hero-title">📊 諮詢營業額（不含法顧）</div>
+        <div class="hero-title">📊 喆律月營業額（營運頁不含合署 − 法顧）</div>
         <div class="hero-value" id="hero-kr1-val">—</div>
         <div class="hero-target" id="hero-kr1-target">目標 —</div>
         <div class="hero-bar"><div id="hero-kr1-bar" style="width:0"></div></div>
@@ -832,13 +832,14 @@ function setHero(kr, actual, target, unit) {
   var pctEl = document.getElementById('hero-' + kr + '-pct');
   pctEl.textContent = pctText(pct);
   pctEl.classList.remove('good','warn','bad');
-  pctEl.classList.add(pctClass(pct));
+  var cls = pctClass(pct);
+  if (cls) pctEl.classList.add(cls);
 }
 
 function renderAlerts() {
   var alerts = [];
   var checks = [
-    { kr:'kr1_revenue',   label:'諮詢營收' },
+    { kr:'kr1_revenue',   label:'喆律營收（不含法顧/合署）' },
     { kr:'kr1_consult_count', label:'諮詢場次' },
     { kr:'kr1_refund_cap',label:'退款',         lowerBetter:true },
     { kr:'kr2_conversion',label:'諮詢轉化率' },
@@ -987,7 +988,7 @@ function makeMonthlyChart(canvas, krCode, label, color, unit) {
 function renderKR1() {
   var fm = state.focusMonth;
   var meta = getTargetMeta('kr1_revenue');
-  var card = makeCard({ title:'KR1｜諮詢營業額（不含法顧）', owner:'負責：何泓儒', deeplink:{label:'→ 營運頁', route:'revenue'} });
+  var card = makeCard({ title:'KR1｜喆律月營業額（營運頁不含合署 − 法顧）', owner:'負責：何泓儒', deeplink:{label:'→ 營運頁年度追蹤', route:'revenue'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
 
   var revActual = actualValue('kr1_revenue', fm), revTarget = targetValue('kr1_revenue', fm);
