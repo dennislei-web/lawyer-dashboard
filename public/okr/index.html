@@ -443,7 +443,8 @@ var state = {
   editing: false,
   pendingTargets: {},   // key = year|kr|month → value
   pendingActuals: {},   // key = year|kr|month → value
-  pendingMilestones: {} // key = id → {title, target_date, status, owner, sort_order}
+  pendingMilestones: {}, // key = id → {title, target_date, status, owner, sort_order}
+  pendingOwners: {}     // key = kr_code → owner string
 };
 var charts = {};
 
@@ -1005,7 +1006,39 @@ function makeCard(opts) {
   var h3 = document.createElement('h3'); h3.textContent = opts.title;
   head.appendChild(h3);
   var right = document.createElement('div'); right.style.cssText = 'display:flex;gap:8px;align-items:center;';
-  if (opts.owner) { var o = document.createElement('span'); o.className='owner'; o.textContent = opts.owner; right.appendChild(o); }
+
+  // 負責人：editing 模式 + 有 ownerKrCode → 顯示 input；否則純文字
+  if (opts.ownerKrCode || opts.owner) {
+    if (state.editing && opts.ownerKrCode) {
+      var prefix = document.createElement('span'); prefix.style.cssText='font-size:0.75rem;color:var(--text-muted);'; prefix.textContent = '負責：';
+      right.appendChild(prefix);
+      var inp = document.createElement('input');
+      inp.className = 'edit-input';
+      inp.style.cssText = 'width:140px; text-align:left;';
+      var pendingVal = (state.pendingOwners && state.pendingOwners[opts.ownerKrCode] !== undefined)
+        ? state.pendingOwners[opts.ownerKrCode]
+        : (getTargetMeta(opts.ownerKrCode).owner || '');
+      inp.value = pendingVal == null ? '' : pendingVal;
+      inp.placeholder = '負責人';
+      (function(krCode) {
+        inp.addEventListener('input', function() {
+          state.pendingOwners[krCode] = inp.value;
+          updatePendingBadge();
+        });
+      })(opts.ownerKrCode);
+      right.appendChild(inp);
+    } else {
+      var ownerText = opts.owner;
+      if (!ownerText && opts.ownerKrCode) {
+        var meta = getTargetMeta(opts.ownerKrCode);
+        ownerText = meta.owner ? '負責：' + meta.owner : null;
+      }
+      if (ownerText) {
+        var o = document.createElement('span'); o.className='owner'; o.textContent = ownerText; right.appendChild(o);
+      }
+    }
+  }
+
   if (opts.deeplink) {
     var btn = document.createElement('button'); btn.className = 'kr-deeplink'; btn.textContent = opts.deeplink.label;
     btn.addEventListener('click', function() { gotoRoute(opts.deeplink.route); });
@@ -1107,7 +1140,7 @@ function makeMonthlyChart(canvas, krCode, label, color, unit) {
 function renderKR1() {
   var fm = state.focusMonth;
   var meta = getTargetMeta('kr1_revenue');
-  var card = makeCard({ title:'KR1｜喆律月營業額（營運頁不含合署 − 法顧）', owner:'負責：何泓儒', deeplink:{label:'→ 營運頁年度追蹤', route:'revenue'} });
+  var card = makeCard({ title:'KR1｜喆律月營業額（營運頁不含合署 − 法顧）', ownerKrCode:'kr1_revenue', deeplink:{label:'→ 營運頁年度追蹤', route:'revenue'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
 
   var revActual = actualValue('kr1_revenue', fm), revTarget = targetValue('kr1_revenue', fm);
@@ -1126,7 +1159,7 @@ function renderKR1() {
 // ═══ KR2 諮詢轉化率（諮詢效益）═══
 function renderKR2() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR2｜諮詢效益（已收金額 / 諮詢場次）', owner:'負責：雷皓明', deeplink:{label:'→ 諮詢分析', route:'consultation'} });
+  var card = makeCard({ title:'KR2｜諮詢效益（已收金額 / 諮詢場次）', ownerKrCode:'kr2_conversion', deeplink:{label:'→ 諮詢分析', route:'consultation'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
   row.appendChild(makeMetricCell({ label: fm==null?'YTD 諮詢效益':(fm+'月 諮詢效益'), value:actualValue('kr2_conversion', fm), unit:'萬/場', target:targetValue('kr2_conversion', fm), krCode:'kr2_conversion', targetMonth:fm }));
   var c = state.data.consultByMonth[fm] || {};
@@ -1161,7 +1194,7 @@ function renderKR2() {
 // ═══ KR3a 法顧新案 ═══
 function renderKR3() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR3｜法律顧問月營業額（≥ 158 萬/月）', owner:'吳泰儀 / 黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'}, full:true });
+  var card = makeCard({ title:'KR3｜法律顧問月營業額（≥ 158 萬/月）', ownerKrCode:'kr3_total_revenue', deeplink:{label:'→ 法律顧問', route:'advisor'}, full:true });
   var row = document.createElement('div'); row.className='kr-metric-row';
   row.style.gridTemplateColumns = 'repeat(4, 1fr)';
 
@@ -1253,7 +1286,7 @@ function renderKR3() {
 // ═══ KR4 合署 ═══
 function renderKR4() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR4｜合署律師（轉案 / 自案，來自合署律師頁案件總額）', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
+  var card = makeCard({ title:'KR4｜合署律師（轉案 / 自案，來自合署律師頁案件總額）', ownerKrCode:'kr4_partner_count', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
   var d = state.data;
   var pCount = d.partnerCount;
   var pTarget = getTarget('kr4_partner_count', null);
@@ -1357,7 +1390,7 @@ var KR5_METRICS = [
 ];
 
 function renderKR5() {
-  var card = makeCard({ title:'KR5｜法0（法律010）', owner:'負責：雷皓明', full:true });
+  var card = makeCard({ title:'KR5｜法0（法律010）', ownerKrCode:'kr5_revenue', full:true });
   var hint = document.createElement('div'); hint.className='info-hint';
   if (state.editing) {
     hint.innerHTML = '✏️ <b>編輯模式：</b>下方矩陣請對照 Google Sheet「轉案業績查詢」逐月填寫。輸入完按右上角「💾 儲存全部」。';
@@ -1509,7 +1542,7 @@ function buildKR5Matrix() {
 // ═══ KR6 成本（實際 vs 預算）═══
 function renderKR6() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR6｜成本控制（實際 vs 115 年預算）', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃 預算編列', route:'finance'} });
+  var card = makeCard({ title:'KR6｜成本控制（實際 vs 115 年預算）', ownerKrCode:'kr6_monthly_cost_cap', deeplink:{label:'→ 財務規劃 預算編列', route:'finance'} });
   var actual = actualValue('kr6_monthly_cost_cap', fm) || 0;
   var budget = targetValue('kr6_monthly_cost_cap', fm) || 0;
   var diff = budget - actual; // 正 = 低於預算（好）
@@ -1652,11 +1685,11 @@ function toggleEdit() {
   var bar = document.getElementById('editBar');
   var btn = document.getElementById('editToggleBtn');
   if (state.editing) { bar.style.display = 'flex'; btn.textContent = '✕ 退出編輯'; }
-  else { bar.style.display = 'none'; btn.textContent = '✏️ 編輯目標 / 里程碑'; state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; updatePendingBadge(); }
+  else { bar.style.display = 'none'; btn.textContent = '✏️ 編輯目標 / 里程碑'; state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {}; updatePendingBadge(); }
   render();
 }
 function cancelEdits() {
-  state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {};
+  state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {};
   state.editing = false;
   document.getElementById('editBar').style.display = 'none';
   document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
@@ -1664,7 +1697,10 @@ function cancelEdits() {
   render();
 }
 function updatePendingBadge() {
-  var n = Object.keys(state.pendingTargets).length + Object.keys(state.pendingActuals).length + Object.keys(state.pendingMilestones).length;
+  var n = Object.keys(state.pendingTargets).length
+        + Object.keys(state.pendingActuals).length
+        + Object.keys(state.pendingMilestones).length
+        + Object.keys(state.pendingOwners).length;
   document.getElementById('pendingBadge').textContent = '未儲存：' + n;
 }
 async function saveAllEdits() {
@@ -1703,7 +1739,18 @@ async function saveAllEdits() {
       }).eq('id', id);
       if (rm.error) throw rm.error;
     }
-    state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {};
+    // 4. owners — 對該 kr_code 全年所有 row 都更新負責人
+    var ownerUpdates = Object.keys(state.pendingOwners);
+    for (var j=0; j<ownerUpdates.length; j++) {
+      var kr = ownerUpdates[j];
+      var newOwner = state.pendingOwners[kr];
+      var ru = await sb.from('okr_targets').update({
+        owner: (newOwner == null || newOwner === '') ? null : newOwner,
+        updated_by: currentLawyer ? currentLawyer.id : null
+      }).eq('year', state.year).eq('kr_code', kr);
+      if (ru.error) throw ru.error;
+    }
+    state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {};
     state.editing = false;
     document.getElementById('editBar').style.display = 'none';
     document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
