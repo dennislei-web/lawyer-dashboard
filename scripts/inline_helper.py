@@ -43,8 +43,8 @@ def cmd_dump(name, start, count):
     end = min(start + count, len(cases))
     for i in range(start, end):
         c = cases[i]
-        mr = (c.get('meeting_record') or '')[:2800]
-        ts = (c.get('transcript') or '')[:2000]
+        mr = (c.get('meeting_record') or '')[:6000]
+        ts = (c.get('transcript') or '')[:8000]
         print(f'=== CASE {i} ===')
         print(f'id: {c["id"]}')
         print(f'date: {c["case_date"]}')

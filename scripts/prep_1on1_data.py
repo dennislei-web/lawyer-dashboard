@@ -130,14 +130,24 @@ def main():
         for t, d in type_agg.items() if d["n"] >= 5
     }
 
-    # Step 3b: 同所別 case_type 基準（避免合署律師拉高/拉低 baseline）
-    # 建 lawyer_id → office lookup
-    lid_to_office = {l["id"]: (l.get("office") or "(無)") for l in lawyers}
-    target_office = target.get("office") or "(無)"
-    office_case_filter = lambda c: lid_to_office.get(c["lawyer_id"]) == target_office
-    office_cases = [c for c in all_cases if office_case_filter(c)]
-    office_stats = [s for s in all_stats if lid_to_office.get(s["lawyer_id"]) == target_office]
-    office_lawyer_ids = {lid for lid, o in lid_to_office.items() if o == target_office}
+    # Step 3b: 同所別 case_type 基準（優先用 department_members 的分所，fallback 到 lawyers.office）
+    # 抓 department_members 建 lawyer_id → 分所名稱 lookup
+    dept_members = fetch_all("department_members", "lawyer_id,departments(name)")
+    lid_to_dept = {m["lawyer_id"]: (m.get("departments") or {}).get("name") for m in dept_members if m.get("departments")}
+
+    lid_to_office_org = {l["id"]: (l.get("office") or "(無)") for l in lawyers}
+
+    if target["id"] in lid_to_dept:
+        # 律師有分所對應 → 用分所做 baseline
+        target_office = lid_to_dept[target["id"]]
+        office_lawyer_ids = {lid for lid, dept in lid_to_dept.items() if dept == target_office}
+    else:
+        # 律師沒分所對應 → fallback 到 lawyers.office
+        target_office = lid_to_office_org.get(target["id"], "(無)")
+        office_lawyer_ids = {lid for lid, o in lid_to_office_org.items() if o == target_office}
+
+    office_cases = [c for c in all_cases if c["lawyer_id"] in office_lawyer_ids]
+    office_stats = [s for s in all_stats if s["lawyer_id"] in office_lawyer_ids]
 
     office_type_agg = defaultdict(lambda: {"n": 0, "signed": 0, "collected": 0})
     for c in office_cases:
