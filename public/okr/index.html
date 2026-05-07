@@ -1147,7 +1147,6 @@ function renderKR4() {
   var pCount = d.partnerCount;
   var pTarget = getTarget('kr4_partner_count', null);
   var row = document.createElement('div'); row.className='kr-metric-row';
-  row.style.gridTemplateColumns = 'repeat(4, 1fr)';
 
   // 在線人數
   var box1 = document.createElement('div'); box1.className='kr-metric';
@@ -1168,22 +1167,6 @@ function renderKR4() {
     value: actualValue('kr4_partner_net_revenue', fm),
     unit: '萬',
     target: monthTarget
-  }));
-
-  // 月目標拆解顯示
-  var box3 = document.createElement('div'); box3.className='kr-metric';
-  box3.innerHTML = '<div class="label">月目標組成</div>'
-                + '<div class="value" style="font-size:0.95rem;">轉案 ' + fmt(targetValue('kr4_referred_revenue', fm)||0) + ' 萬</div>'
-                + '<div class="value" style="font-size:0.95rem;">+ 自案 ' + fmt(targetValue('kr4_partner_self_revenue', fm)||0) + ' 萬</div>'
-                + '<div class="target-line">合計 ' + fmt(monthTarget||0) + ' 萬／月</div>';
-  row.appendChild(box3);
-
-  // 年累計
-  row.appendChild(makeMetricCell({
-    label: '年案件總額（5000 萬）',
-    value: actualYTD('kr4_partner_net_revenue'),
-    unit: '萬',
-    target: getTarget('kr4_case_volume', null)
   }));
   card.appendChild(row);
 
