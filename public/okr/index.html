@@ -447,7 +447,9 @@ var charts = {};
 
 function initFilters() {
   var ms = document.getElementById('monthSelect'); ms.innerHTML = '';
-  var optYTD = document.createElement('option'); optYTD.value = ''; optYTD.textContent = 'YTD（年累計）'; ms.appendChild(optYTD);
+  var done = monthsElapsed();
+  var ytdLabel = done > 0 ? ('YTD（1–' + done + ' 月，僅完整月份）') : 'YTD（尚無完整月份）';
+  var optYTD = document.createElement('option'); optYTD.value = ''; optYTD.textContent = ytdLabel; ms.appendChild(optYTD);
   for (var i=1; i<=12; i++) {
     var o = document.createElement('option'); o.value = String(i); o.textContent = i + ' 月'; ms.appendChild(o);
   }
@@ -709,8 +711,10 @@ function getManualActual(krCode, month) {
   return found ? Number(found.actual_value) : null;
 }
 function sumYTD(krCode) {
+  // 只加總已過完整月份
+  var done = monthsElapsed();
   var s = 0; var has = false;
-  for (var m=1; m<=12; m++) {
+  for (var m=1; m<=done; m++) {
     var v = getManualActual(krCode, m);
     if (v != null) { s += Number(v); has = true; }
   }
@@ -759,10 +763,12 @@ function actualMonth(krCode, m) {
   }
 }
 function actualYTD(krCode) {
+  // 只加總已過完整月份（5/7 = 1-4 月才完整）
+  var done = monthsElapsed();
   if (krCode === 'kr2_conversion') {
     // 諮詢效益 YTD = SUM(collected) / SUM(count)（萬/場）
     var totalCollected = 0, totalCount = 0;
-    for (var m=1; m<=12; m++) {
+    for (var m=1; m<=done; m++) {
       var c = state.data.consultByMonth[m] || {};
       totalCollected += c.collected || 0;
       totalCount += c.count || 0;
@@ -772,7 +778,7 @@ function actualYTD(krCode) {
   if (krCode === 'kr4_partner_count') return state.data.partnerCount || 0;
   if (krCode.indexOf('kr5_') === 0) return sumYTD(krCode);
   var s = 0;
-  for (var m2=1; m2<=12; m2++) {
+  for (var m2=1; m2<=done; m2++) {
     var v = actualMonth(krCode, m2);
     if (v != null) s += Number(v);
   }
@@ -869,10 +875,11 @@ function targetValue(krCode, fm) {
   return ann2 != null ? ann2 * (done / 12) : null;
 }
 function monthsElapsed() {
+  // 已過完整月份數（不含當月，因為當月還沒結束資料不完整）
   var now = new Date();
   if (now.getFullYear() < state.year) return 0;
   if (now.getFullYear() > state.year) return 12;
-  return now.getMonth() + 1; // 含當月
+  return now.getMonth(); // getMonth() 0-indexed，不 +1 = 不含當月
 }
 function setHero(kr, actual, target, unit) {
   var pct = (target && target > 0) ? (actual / target * 100) : null;
