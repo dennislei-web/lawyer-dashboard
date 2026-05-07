@@ -525,7 +525,7 @@ async function loadAll() {
       sb.from('okr_targets').select('*').eq('year', year),
       sb.from('okr_manual_actuals').select('*').eq('year', year),
       sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
-      fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd).order('month'); }),
+      fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count,collected,revenue,signed_count').gte('month', ymStart).lte('month', ymEnd).order('month'); }),
       fetchByMonth(year, 'case_date', function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue'); }),
       fetchByMonth(year, 'record_date', function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false); }),
       fetchByMonth(year, 'paid_at', function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid'); }),
@@ -582,22 +582,18 @@ async function loadAll() {
 }
 
 function aggregateConsult(monthlyStats, consultCases) {
-  // monthly_stats.month is 'YYYY-MM' text
+  // 對標諮詢分析頁年度追蹤：諮詢效益 = SUM(collected) / SUM(consult_count)
+  // KR2 「諮詢轉化率」 = 諮詢效益（萬/場）
   var byMonth = {};
-  for (var i=1; i<=12; i++) byMonth[i] = { count:0, signedAmount:0, signedCount:0 };
+  for (var i=1; i<=12; i++) byMonth[i] = { count:0, collected:0, revenue:0, signedCount:0 };
   monthlyStats.forEach(function(r) {
     if (!r.month) return;
     var m = parseInt(r.month.slice(5,7), 10);
-    if (m >= 1 && m <= 12) byMonth[m].count += Number(r.consult_count || 0);
-  });
-  consultCases.forEach(function(r) {
-    if (!r.case_date) return;
-    var m = parseInt(String(r.case_date).slice(5,7), 10);
     if (m < 1 || m > 12) return;
-    if (r.is_signed) {
-      byMonth[m].signedCount += 1;
-      byMonth[m].signedAmount += Number(r.revenue || 0);
-    }
+    byMonth[m].count       += Number(r.consult_count || 0);
+    byMonth[m].collected   += Number(r.collected     || 0);
+    byMonth[m].revenue     += Number(r.revenue       || 0);
+    byMonth[m].signedCount += Number(r.signed_count  || 0);
   });
   state.data.consultByMonth = byMonth;
 }
@@ -741,8 +737,9 @@ function actualMonth(krCode, m) {
     case 'kr1_refund_cap':
       return ((d.revenueByMonth[m] || {}).refund || 0) / 10000;
     case 'kr2_conversion': {
+      // 對標諮詢分析頁「諮詢效益」 = 已收金額 / 諮詢場次（萬/場）
       var c = d.consultByMonth[m] || {};
-      return c.count > 0 ? (c.signedAmount / 10000) / c.count : 0;
+      return c.count > 0 ? (c.collected / 10000) / c.count : 0;
     }
     case 'kr3a_active_cases':         return ((d.advisorByMonth[m] || {}).active || {}).cases || 0;
     case 'kr3a_active_revenue':       return (((d.advisorByMonth[m] || {}).active || {}).amount || 0) / 10000;
@@ -770,13 +767,14 @@ function actualMonth(krCode, m) {
 }
 function actualYTD(krCode) {
   if (krCode === 'kr2_conversion') {
-    var totalAmount = 0, totalCount = 0;
+    // 諮詢效益 YTD = SUM(collected) / SUM(count)（萬/場）
+    var totalCollected = 0, totalCount = 0;
     for (var m=1; m<=12; m++) {
       var c = state.data.consultByMonth[m] || {};
-      totalAmount += c.signedAmount || 0;
+      totalCollected += c.collected || 0;
       totalCount += c.count || 0;
     }
-    return totalCount > 0 ? (totalAmount / 10000) / totalCount : 0;
+    return totalCount > 0 ? (totalCollected / 10000) / totalCount : 0;
   }
   if (krCode === 'kr4_partner_count') return state.data.partnerCount || 0;
   if (krCode.indexOf('kr5_') === 0) return sumYTD(krCode);
@@ -1081,22 +1079,22 @@ function renderKR1() {
   return card;
 }
 
-// ═══ KR2 諮詢轉化率 ═══
+// ═══ KR2 諮詢轉化率（諮詢效益）═══
 function renderKR2() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR2｜諮詢轉化率（成案金額/場次）', owner:'負責：雷皓明', deeplink:{label:'→ 諮詢分析', route:'consultation'} });
+  var card = makeCard({ title:'KR2｜諮詢效益（已收金額 / 諮詢場次）', owner:'負責：雷皓明', deeplink:{label:'→ 諮詢分析', route:'consultation'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉化率':(fm+'月 轉化率'), value:actualValue('kr2_conversion', fm), unit:'萬/場', target:targetValue('kr2_conversion', fm), krCode:'kr2_conversion', targetMonth:fm }));
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 諮詢效益':(fm+'月 諮詢效益'), value:actualValue('kr2_conversion', fm), unit:'萬/場', target:targetValue('kr2_conversion', fm), krCode:'kr2_conversion', targetMonth:fm }));
   var c = state.data.consultByMonth[fm] || {};
-  row.appendChild(makeMetricCell({ label:'當月成案金額', value: fm==null?null:(c.signedAmount/10000), unit:'萬' }));
+  row.appendChild(makeMetricCell({ label:'當月已收金額', value: fm==null?null:(c.collected/10000), unit:'萬' }));
   card.appendChild(row);
 
-  // 折線圖：12 個月轉化率 + 目標 3
+  // 折線圖：12 個月諮詢效益 + 目標 3 萬/場
   var labels=[], values=[], target=[];
   for (var m=1; m<=12; m++) {
     var cm = state.data.consultByMonth[m] || {};
     labels.push(m+'月');
-    values.push(cm.count > 0 ? (cm.signedAmount/10000)/cm.count : null);
+    values.push(cm.count > 0 ? (cm.collected/10000)/cm.count : null);
     target.push(getTarget('kr2_conversion', m) || 3);
   }
   var cvWrap = document.createElement('div'); cvWrap.className='kr-chart-wrap'; var canvas = document.createElement('canvas'); cvWrap.appendChild(canvas); card.appendChild(cvWrap);
