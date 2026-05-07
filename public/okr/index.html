@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - OKR 追蹤</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a;
+      --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+      --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+      --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+      --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+      --purple:#a87cff; --purple-dim:rgba(168,124,255,0.15);
+      --header-bg:rgba(10,22,40,0.95);
+      --login-shadow:rgba(0,0,0,0.5);
+      --tab-active-bg:rgba(201,168,76,0.12);
+      --tab-active-border:rgba(201,168,76,0.2);
+      --tab-active-color:var(--gold-light);
+      --ghost-bg:rgba(255,255,255,0.07);
+      --ghost-hover-bg:rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e;
+      --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.1);
+      --green:#15803d; --green-dim:rgba(21,128,61,0.12);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.1);
+      --orange:#d97706; --orange-dim:rgba(217,119,6,0.1);
+      --purple:#7c3aed; --purple-dim:rgba(124,58,237,0.1);
+      --header-bg:rgba(255,255,255,0.95);
+      --login-shadow:rgba(0,0,0,0.12);
+      --tab-active-bg:rgba(37,99,235,0.1);
+      --tab-active-border:rgba(37,99,235,0.25);
+      --tab-active-color:#2563eb;
+      --ghost-bg:rgba(0,0,0,0.04);
+      --ghost-hover-bg:rgba(0,0,0,0.08);
+    }
+    .embed-mode .header { display:none !important; }
+    .embed-mode #loginPage { display:none !important; }
+    .embed-mode #dashboard { display:block !important; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main); color:var(--text); min-height:100vh; font-size:14px;
+    }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background:radial-gradient(ellipse at 20% 50%,rgba(79,142,247,0.08) 0%,transparent 60%),
+                 radial-gradient(ellipse at 80% 20%,rgba(201,168,76,0.06) 0%,transparent 50%),
+                 var(--bg-main);
+    }
+    .login-card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:44px 40px; width:100%; max-width:420px; box-shadow:0 24px 64px var(--login-shadow); }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .firm-name { font-size:1.6rem; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+    .subtitle { margin-top:6px; font-size:0.85rem; color:var(--text-muted); letter-spacing:1px; }
+    .login-divider { height:1px; background:linear-gradient(to right,transparent,var(--border-light),transparent); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+    .form-group input { width:100%; padding:12px 16px; background:var(--bg-row); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:0.95rem; }
+    .form-group input:focus { outline:none; border-color:var(--gold); }
+    .btn-login { width:100%; padding:13px; background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:700; font-size:0.95rem; border:none; border-radius:8px; cursor:pointer; margin-top:8px; }
+    .btn-login:hover { opacity:0.9; }
+    .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+    .login-error { color:var(--red); font-size:0.85rem; margin-top:12px; text-align:center; display:none; }
+
+    /* HEADER */
+    .header { position:sticky; top:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; background:var(--header-bg); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+    .header-left { display:flex; align-items:center; gap:16px; }
+    .header-brand { font-size:1.1rem; font-weight:700; color:var(--gold-light); letter-spacing:1px; }
+    .header-subtitle { font-size:0.78rem; color:var(--text-muted); }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .btn-icon { background:var(--ghost-bg); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); cursor:pointer; padding:6px 10px; font-size:0.85rem; }
+    .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
+    .user-badge { font-size:0.8rem; color:var(--text-muted); padding:4px 10px; background:var(--ghost-bg); border-radius:6px; }
+    #noAccessPage { display:none; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:20px; gap:18px; }
+
+    /* MAIN */
+    .main { padding:20px 24px; max-width:1480px; margin:0 auto; }
+
+    /* FILTER BAR */
+    .filter-bar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:18px; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; }
+    .filter-bar label { font-size:0.8rem; color:var(--text-muted); }
+    .filter-bar select, .filter-bar button {
+      background:var(--bg-row); color:var(--text); border:1px solid var(--border); border-radius:6px;
+      padding:6px 10px; font-size:0.85rem; cursor:pointer;
+    }
+    .filter-bar button.btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600; border:none; }
+    .filter-bar button.btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+    .filter-spacer { flex:1; }
+
+    /* HERO */
+    .hero-grid { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .hero-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; }
+    .hero-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+    .hero-card.kr3::before { background:var(--blue); }
+    .hero-card.kr5::before { background:var(--purple); }
+    .hero-card.kr4::before { background:var(--orange); }
+    .hero-card.kr6::before { background:var(--green); }
+    .hero-title { font-size:0.78rem; color:var(--text-muted); margin-bottom:4px; }
+    .hero-value { font-size:1.55rem; font-weight:700; color:var(--text); }
+    .hero-target { font-size:0.78rem; color:var(--text-muted); margin-top:2px; }
+    .hero-bar { margin-top:8px; height:6px; background:var(--bg-row); border-radius:3px; overflow:hidden; }
+    .hero-bar > div { height:100%; transition:width 0.4s; background:var(--gold); }
+    .hero-card.kr3 .hero-bar > div { background:var(--blue); }
+    .hero-card.kr5 .hero-bar > div { background:var(--purple); }
+    .hero-card.kr4 .hero-bar > div { background:var(--orange); }
+    .hero-card.kr6 .hero-bar > div { background:var(--green); }
+    .hero-pct { font-size:0.78rem; color:var(--text); margin-top:6px; display:flex; justify-content:space-between; }
+    .hero-pct .est { color:var(--text-muted); }
+    .hero-pct .pct.bad { color:var(--red); }
+    .hero-pct .pct.warn { color:var(--orange); }
+    .hero-pct .pct.good { color:var(--green); }
+
+    /* WARNING ALERT */
+    .alert-card { background:var(--red-dim); border:1px solid var(--red); border-radius:10px; padding:12px 16px; margin-bottom:18px; display:none; }
+    .alert-card.show { display:block; }
+    .alert-title { font-size:0.85rem; font-weight:600; color:var(--red); margin-bottom:6px; }
+    .alert-list { font-size:0.82rem; color:var(--text); display:flex; flex-wrap:wrap; gap:6px 14px; }
+    .alert-list span { display:inline-block; }
+
+    /* KR GRID */
+    .kr-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+    .kr-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .kr-card.full { grid-column:1 / -1; }
+    .kr-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+    .kr-head h3 { font-size:0.95rem; color:var(--gold-light); font-weight:600; }
+    .kr-head .owner { font-size:0.75rem; color:var(--text-muted); padding:2px 8px; background:var(--ghost-bg); border-radius:10px; white-space:nowrap; }
+    .kr-deeplink { font-size:0.75rem; color:var(--blue); cursor:pointer; background:none; border:none; padding:0; text-decoration:underline; }
+    .kr-deeplink:hover { color:var(--gold); }
+
+    .kr-metric-row { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:10px; }
+    .kr-metric { background:var(--bg-row); border:1px solid var(--border-light); border-radius:8px; padding:10px 12px; }
+    .kr-metric .label { font-size:0.72rem; color:var(--text-muted); margin-bottom:4px; }
+    .kr-metric .value { font-size:1.15rem; font-weight:700; color:var(--text); }
+    .kr-metric .value .unit { font-size:0.75rem; color:var(--text-muted); margin-left:2px; }
+    .kr-metric .target-line { font-size:0.72rem; color:var(--text-muted); margin-top:2px; }
+    .kr-metric .pct { font-size:0.72rem; margin-top:2px; font-weight:600; }
+    .pct.good { color:var(--green); } .pct.warn { color:var(--orange); } .pct.bad { color:var(--red); }
+
+    .kr-progress { display:flex; align-items:center; gap:10px; margin:6px 0 12px; }
+    .kr-progress .bar { flex:1; height:8px; background:var(--bg-row); border-radius:4px; overflow:hidden; border:1px solid var(--border-light); }
+    .kr-progress .bar > div { height:100%; background:var(--gold); transition:width 0.3s; }
+    .kr-progress .bar > div.bad { background:var(--red); }
+    .kr-progress .bar > div.warn { background:var(--orange); }
+    .kr-progress .bar > div.good { background:var(--green); }
+    .kr-progress .num { font-size:0.78rem; color:var(--text-muted); white-space:nowrap; }
+
+    .kr-chart-wrap { position:relative; height:160px; margin-top:8px; }
+    .kr-chart-wrap.tall { height:200px; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; }
+    .badge.green { background:var(--green-dim); color:var(--green); }
+    .badge.red { background:var(--red-dim); color:var(--red); }
+    .badge.orange { background:var(--orange-dim); color:var(--orange); }
+    .badge.blue { background:var(--blue-dim); color:var(--blue); }
+    .badge.gray { background:var(--ghost-bg); color:var(--text-muted); }
+
+    /* MILESTONE TABLE */
+    .ms-table { width:100%; font-size:0.83rem; margin-top:8px; }
+    .ms-table th { text-align:left; padding:6px 8px; color:var(--text-muted); font-weight:500; font-size:0.75rem; border-bottom:1px solid var(--border); }
+    .ms-table td { padding:6px 8px; border-bottom:1px solid var(--border-light); }
+    .ms-table tr:last-child td { border-bottom:none; }
+    .ms-table .status-cell { width:90px; }
+    .ms-table .date-cell { width:100px; color:var(--text-muted); white-space:nowrap; }
+
+    /* EDIT MODE */
+    .edit-input { background:var(--bg-row); border:1px solid var(--gold); color:var(--text); border-radius:4px; padding:2px 6px; font-size:0.85rem; width:80px; text-align:right; }
+    .edit-input:focus { outline:none; border-color:var(--gold-light); box-shadow:0 0 0 2px rgba(201,168,76,0.2); }
+    .edit-input.text { width:100%; text-align:left; }
+    .edit-input.date { width:120px; }
+    .edit-input.select { width:100px; }
+    .edit-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; margin-top:8px; }
+    .edit-grid .month-input { display:flex; flex-direction:column; gap:2px; }
+    .edit-grid .month-input label { font-size:0.65rem; color:var(--text-muted); text-align:center; }
+    .edit-grid .month-input input { width:100%; }
+    .edit-bar { display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--gold-light); color:#0a0a0a; border-radius:8px; margin-bottom:14px; font-weight:600; font-size:0.85rem; }
+    [data-theme="light"] .edit-bar { background:var(--gold); color:#fff; }
+    .edit-bar button { background:rgba(255,255,255,0.85); border:none; border-radius:5px; padding:5px 12px; font-weight:600; cursor:pointer; color:#0a0a0a; }
+    .edit-bar button:hover { background:#fff; }
+    .edit-bar button.ghost { background:transparent; color:#0a0a0a; border:1px solid rgba(0,0,0,0.3); }
+    .edit-bar button.ghost:hover { background:rgba(0,0,0,0.08); }
+    .edit-bar .pending-badge { background:var(--red); color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; }
+
+    .manual-grid { display:grid; grid-template-columns:repeat(13, 1fr); gap:3px; font-size:0.72rem; }
+    .manual-grid .label-col { font-size:0.72rem; color:var(--text-muted); padding:4px; }
+    .manual-grid input { width:100%; padding:4px; font-size:0.78rem; background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:4px; text-align:right; }
+    .manual-grid input:focus { outline:none; border-color:var(--gold); }
+    .manual-grid .month-h { font-size:0.7rem; text-align:center; color:var(--text-muted); padding:2px 0; }
+
+    /* hint banners */
+    .info-hint { background:var(--blue-dim); border:1px solid var(--blue); border-radius:6px; padding:8px 12px; font-size:0.78rem; color:var(--text); margin:8px 0; }
+    .info-hint b { color:var(--blue); }
+
+    /* RWD */
+    @media (max-width: 1100px) {
+      .hero-grid { grid-template-columns:repeat(3, 1fr); }
+      .kr-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width: 720px) {
+      .hero-grid { grid-template-columns:repeat(2, 1fr); }
+      .main { padding:14px; }
+      .kr-metric-row { grid-template-columns:1fr; }
+      .manual-grid { grid-template-columns:80px repeat(12, 1fr); font-size:0.65rem; }
+    }
+
+    .small-note { font-size:0.72rem; color:var(--text-muted); margin-top:6px; }
+    .loading-text { padding:60px 20px; text-align:center; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">OKR 追蹤儀表板</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage">
+  <div style="text-align:center;">
+    <div style="font-size:1.4rem; color:var(--gold-light); margin-bottom:8px;">OKR 追蹤</div>
+    <div>此頁面僅限 admin 存取</div>
+    <div style="color:var(--text-muted); margin-top:6px;" id="noAccessUser"></div>
+  </div>
+  <button class="btn-icon" id="noAccessLogout">登出</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">OKR 追蹤儀表板</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="filter-bar">
+      <label>年度</label>
+      <select id="yearSelect"><option value="2026">2026</option></select>
+      <label>聚焦月份</label>
+      <select id="monthSelect"></select>
+      <button id="reloadBtn" title="重新整理資料">重整</button>
+      <div class="filter-spacer"></div>
+      <button id="editToggleBtn" class="btn-primary">✏️ 編輯目標 / 里程碑</button>
+    </div>
+
+    <div id="editBar" class="edit-bar" style="display:none;">
+      <span>📝 編輯模式</span>
+      <span class="pending-badge" id="pendingBadge">未儲存：0</span>
+      <div style="flex:1;"></div>
+      <button id="saveEditsBtn">💾 儲存全部</button>
+      <button class="ghost" id="cancelEditsBtn">取消</button>
+    </div>
+
+    <!-- HERO -->
+    <div class="hero-grid" id="heroGrid">
+      <div class="hero-card">
+        <div class="hero-title">📊 諮詢營業額（不含法顧）</div>
+        <div class="hero-value" id="hero-kr1-val">—</div>
+        <div class="hero-target" id="hero-kr1-target">目標 —</div>
+        <div class="hero-bar"><div id="hero-kr1-bar" style="width:0"></div></div>
+        <div class="hero-pct"><span class="pct" id="hero-kr1-pct">—</span><span class="est" id="hero-kr1-est"></span></div>
+      </div>
+      <div class="hero-card kr3">
+        <div class="hero-title">⚖️ 法律顧問</div>
+        <div class="hero-value" id="hero-kr3-val">—</div>
+        <div class="hero-target" id="hero-kr3-target">目標 —</div>
+        <div class="hero-bar"><div id="hero-kr3-bar" style="width:0"></div></div>
+        <div class="hero-pct"><span class="pct" id="hero-kr3-pct">—</span><span class="est" id="hero-kr3-est"></span></div>
+      </div>
+      <div class="hero-card kr5">
+        <div class="hero-title">🚀 法0</div>
+        <div class="hero-value" id="hero-kr5-val">—</div>
+        <div class="hero-target" id="hero-kr5-target">目標 —</div>
+        <div class="hero-bar"><div id="hero-kr5-bar" style="width:0"></div></div>
+        <div class="hero-pct"><span class="pct" id="hero-kr5-pct">—</span><span class="est" id="hero-kr5-est"></span></div>
+      </div>
+      <div class="hero-card kr4">
+        <div class="hero-title">🤝 合署律師</div>
+        <div class="hero-value" id="hero-kr4-val">—</div>
+        <div class="hero-target" id="hero-kr4-target">目標 —</div>
+        <div class="hero-bar"><div id="hero-kr4-bar" style="width:0"></div></div>
+        <div class="hero-pct"><span class="pct" id="hero-kr4-pct">—</span><span class="est" id="hero-kr4-est"></span></div>
+      </div>
+      <div class="hero-card kr6">
+        <div class="hero-title">💰 純利推估</div>
+        <div class="hero-value" id="hero-kr6-val">—</div>
+        <div class="hero-target" id="hero-kr6-target">目標 4000 萬</div>
+        <div class="hero-bar"><div id="hero-kr6-bar" style="width:0"></div></div>
+        <div class="hero-pct"><span class="pct" id="hero-kr6-pct">—</span><span class="est" id="hero-kr6-est"></span></div>
+      </div>
+    </div>
+
+    <!-- ALERT -->
+    <div class="alert-card" id="alertCard">
+      <div class="alert-title">⚠️ 落後 / 警示</div>
+      <div class="alert-list" id="alertList"></div>
+    </div>
+
+    <div id="krContainer">
+      <div class="loading-text">載入中⋯</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══ embed mode ═══
+var isEmbed = new URLSearchParams(location.search).get('embed') === '1';
+if (isEmbed) document.documentElement.classList.add('embed-mode');
+
+// ═══ THEME ═══
+(function() { var t = localStorage.getItem('theme'); if (t === 'light') document.documentElement.setAttribute('data-theme','light'); })();
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    document.documentElement.setAttribute('data-theme', e.data.value === 'light' ? 'light' : '');
+    rerenderCharts();
+  }
+});
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var next = document.documentElement.getAttribute('data-theme') === 'light' ? '' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next === 'light' ? 'light' : 'dark');
+  try { window.parent.postMessage({ type:'theme', value: next === 'light' ? 'light' : 'dark' }, '*'); } catch(e) {}
+  rerenderCharts();
+});
+
+// ═══ AUTH ═══
+function showLogin() {
+  document.getElementById('loginPage').style.display='flex';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+}
+function showNoAccess() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='none';
+  var p = document.getElementById('noAccessPage'); p.style.display='flex';
+  document.getElementById('noAccessUser').textContent = currentLawyer ? currentLawyer.name : '';
+}
+async function showDashboard() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  initFilters();
+  await loadAll();
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) currentLawyer = r.data;
+}
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) {
+    currentUser = s.data.session.user; await loadUserProfile();
+    if (!currentLawyer || currentLawyer.role !== 'admin') return showNoAccess();
+    showDashboard();
+  } else showLogin();
+}
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({
+      email: document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value
+    });
+    if (r.error) throw r.error;
+    currentUser = r.data.user; await loadUserProfile();
+    if (!currentLawyer || currentLawyer.role !== 'admin') return showNoAccess();
+    showDashboard();
+  } catch(ex) {
+    err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼');
+    err.style.display='block';
+  } finally { btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut(); currentUser=null; currentLawyer=null; showLogin();
+});
+document.getElementById('noAccessLogout').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut(); location.reload();
+});
+
+// ═══ STATE ═══
+var state = {
+  year: 2026,
+  focusMonth: null,           // null = YTD; 1-12 = 該月
+  data: {
+    targets: [],
+    manualActuals: [],
+    milestones: [],
+    consultStats: [],         // monthly consult_count + signed metrics aggregated
+    revenueByMonth: [],       // {month, paid, refund, advisor_signed}
+    advisorByCategoryMonth: {}, // {month: {category: {cases, amount}}}
+    financeCostByMonth: [],   // {month, cost}
+    partnersByMonth: {},      // {month: {commission_A, self_A, count}}
+    partnerCount: 0,          // 在線合署律師數
+    partnerCohorts: { judicial:[], senior:[], consult:[] }
+  },
+  editing: false,
+  pendingTargets: {},   // key = year|kr|month → value
+  pendingActuals: {},   // key = year|kr|month → value
+  pendingMilestones: {} // key = id → {title, target_date, status, owner, sort_order}
+};
+var charts = {};
+
+function initFilters() {
+  var ms = document.getElementById('monthSelect'); ms.innerHTML = '';
+  var optYTD = document.createElement('option'); optYTD.value = ''; optYTD.textContent = 'YTD（年累計）'; ms.appendChild(optYTD);
+  for (var i=1; i<=12; i++) {
+    var o = document.createElement('option'); o.value = String(i); o.textContent = i + ' 月'; ms.appendChild(o);
+  }
+  var d = new Date(); var defaultM = (d.getMonth()+1);
+  ms.value = String(defaultM);
+  state.focusMonth = defaultM;
+  ms.addEventListener('change', function() {
+    state.focusMonth = ms.value === '' ? null : parseInt(ms.value, 10);
+    render();
+  });
+  document.getElementById('reloadBtn').addEventListener('click', loadAll);
+  document.getElementById('editToggleBtn').addEventListener('click', toggleEdit);
+  document.getElementById('saveEditsBtn').addEventListener('click', saveAllEdits);
+  document.getElementById('cancelEditsBtn').addEventListener('click', cancelEdits);
+}
+
+// ═══ DATA LOAD ═══
+async function loadAll() {
+  document.getElementById('krContainer').innerHTML = '<div class="loading-text">載入中⋯</div>';
+  var year = state.year;
+  var startISO = year + '-01-01';
+  var endISO = year + '-12-31';
+  var ymStart = year + '-01';
+  var ymEnd = year + '-12';
+
+  try {
+    var results = await Promise.all([
+      sb.from('okr_targets').select('*').eq('year', year),
+      sb.from('okr_manual_actuals').select('*').eq('year', year),
+      sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
+      sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd),
+      sb.from('consultation_cases').select('case_date,is_signed,revenue').gte('case_date', startISO).lte('case_date', endISO),
+      sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void')
+        .eq('is_void', false).gte('record_date', startISO).lte('record_date', endISO),
+      sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid')
+        .gte('paid_at', startISO).lte('paid_at', endISO),
+      sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
+        .eq('fiscal_year', year - 1911).eq('data_type', 'actual').eq('finance_categories.section', 'operating_expense'),
+      fetchPartnersEmbedded()
+    ]);
+
+    var d = state.data;
+    d.targets       = results[0].data || [];
+    d.manualActuals = results[1].data || [];
+    d.milestones    = results[2].data || [];
+    aggregateConsult(results[3].data || [], results[4].data || []);
+    aggregateRevenue(results[5].data || [], results[6].data || []);
+    aggregateAdvisor(results[6].data || []);
+    aggregateFinance(results[7].data || []);
+    aggregatePartners(results[8]);
+
+    // log any errors
+    results.slice(0, 8).forEach(function(r, i) {
+      if (r && r.error) console.warn('OKR load error #' + i, r.error);
+    });
+
+    render();
+  } catch (ex) {
+    console.error(ex);
+    document.getElementById('krContainer').innerHTML = '<div class="loading-text" style="color:var(--red);">載入失敗：' + (ex.message || ex) + '</div>';
+  }
+}
+
+function aggregateConsult(monthlyStats, consultCases) {
+  // monthly_stats.month is 'YYYY-MM' text
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { count:0, signedAmount:0, signedCount:0 };
+  monthlyStats.forEach(function(r) {
+    if (!r.month) return;
+    var m = parseInt(r.month.slice(5,7), 10);
+    if (m >= 1 && m <= 12) byMonth[m].count += Number(r.consult_count || 0);
+  });
+  consultCases.forEach(function(r) {
+    if (!r.case_date) return;
+    var m = parseInt(String(r.case_date).slice(5,7), 10);
+    if (m < 1 || m > 12) return;
+    if (r.is_signed) {
+      byMonth[m].signedCount += 1;
+      byMonth[m].signedAmount += Number(r.revenue || 0);
+    }
+  });
+  state.data.consultByMonth = byMonth;
+}
+
+function aggregateRevenue(records, advisorCases) {
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { paid:0, refund:0, advisorSigned:0 };
+  records.forEach(function(r) {
+    if (!r.record_date) return;
+    var m = parseInt(String(r.record_date).slice(5,7), 10);
+    if (m < 1 || m > 12) return;
+    var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
+    if (isPartner) return; // 合署的另算 KR4
+    var amt = Number(r.amount || 0);
+    if (r.transaction_type === 'PaymentTransaction') byMonth[m].paid += amt;
+    else if (r.transaction_type === 'RefundTransaction') byMonth[m].refund += amt;
+  });
+  advisorCases.forEach(function(c) {
+    if (!c.paid_at) return;
+    var m = parseInt(String(c.paid_at).slice(5,7), 10);
+    if (m >= 1 && m <= 12) byMonth[m].advisorSigned += Number(c.amount_paid || 0);
+  });
+  state.data.revenueByMonth = byMonth;
+}
+
+function aggregateAdvisor(cases) {
+  // 依 case_category 分組
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { active:{cases:0,amount:0}, referral:{cases:0,amount:0}, renewal:{cases:0,amount:0}, derived:{cases:0,amount:0}, consult:{cases:0,amount:0}, total:{cases:0,amount:0} };
+  cases.forEach(function(c) {
+    if (!c.paid_at) return;
+    var m = parseInt(String(c.paid_at).slice(5,7), 10);
+    if (m < 1 || m > 12) return;
+    var amt = Number(c.amount_paid || 0);
+    var cat = c.case_category || '未分類';
+    var bucket = null;
+    if (cat === '自行進線新案') bucket = 'active';
+    else if (cat === '人脈轉介') bucket = 'referral';
+    else if (cat === '續委任') bucket = 'renewal';
+    else if (cat === '舊客衍生') bucket = 'derived';
+    else if (cat === '諮詢轉案') bucket = 'consult';
+    if (bucket) {
+      byMonth[m][bucket].cases += 1;
+      byMonth[m][bucket].amount += amt;
+    }
+    byMonth[m].total.cases += 1;
+    byMonth[m].total.amount += amt;
+  });
+  state.data.advisorByMonth = byMonth;
+}
+
+function aggregateFinance(rows) {
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = 0;
+  rows.forEach(function(r) {
+    var m = Number(r.month);
+    if (m >= 1 && m <= 12) byMonth[m] += Number(r.amount || 0);
+  });
+  state.data.financeCostByMonth = byMonth;
+}
+
+function aggregatePartners(partnersJSON) {
+  var d = state.data;
+  d.partnerCount = 0;
+  d.partnerCohorts = { judicial:[], senior:[], consult:[] };
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { commission:0, self:0, total:0 };
+
+  if (!partnersJSON || !partnersJSON.cohorts) {
+    d.partnersByMonth = byMonth;
+    return;
+  }
+  var cohorts = partnersJSON.cohorts;
+  Object.keys(cohorts).forEach(function(key) {
+    var c = cohorts[key];
+    if (!c) return;
+    if (c.lawyers) {
+      d.partnerCohorts[key] = c.lawyers.slice();
+      d.partnerCount += c.lawyers.length;
+    }
+    (c.monthly || []).forEach(function(rec) {
+      // year is 民國
+      var rocYear = String(rec.year || '');
+      if (rocYear !== String(state.year - 1911)) return;
+      var m = Number(rec.month);
+      if (m < 1 || m > 12) return;
+      byMonth[m].commission += Number(rec.commission_A || 0);
+      byMonth[m].self += Number(rec.self_A || 0);
+      byMonth[m].total += Number(rec.commission_A || 0) + Number(rec.self_A || 0);
+    });
+  });
+  d.partnersByMonth = byMonth;
+}
+
+async function fetchPartnersEmbedded() {
+  try {
+    var url = (location.pathname.replace(/\/okr\/?$/, '/partners/').replace(/\/okr\/index\.html$/, '/partners/')) + '?embed=1';
+    if (!url || url.indexOf('/partners/') === -1) url = '/lawyer-dashboard/partners/?embed=1';
+    var r = await fetch(url, { credentials:'same-origin' });
+    if (!r.ok) return null;
+    var html = await r.text();
+    var m = html.match(/<script id="embedded-data"[^>]*>([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    return JSON.parse(m[1]);
+  } catch (e) {
+    console.warn('fetch partners embedded failed', e);
+    return null;
+  }
+}
+
+// ═══ TARGET LOOKUP ═══
+function getTarget(krCode, month) {
+  // override: pendingEdits 優先
+  var key = state.year + '|' + krCode + '|' + (month == null ? 'NULL' : month);
+  if (state.pendingTargets[key] !== undefined) return state.pendingTargets[key];
+  var found = state.data.targets.find(function(t) {
+    return t.kr_code === krCode && (month == null ? t.month == null : t.month === month);
+  });
+  return found ? Number(found.target_value) : null;
+}
+function getTargetMeta(krCode) {
+  var found = state.data.targets.find(function(t) { return t.kr_code === krCode; });
+  return found ? { unit: found.unit || '', owner: found.owner || '' } : { unit:'', owner:'' };
+}
+function getManualActual(krCode, month) {
+  var key = state.year + '|' + krCode + '|' + month;
+  if (state.pendingActuals[key] !== undefined) return state.pendingActuals[key];
+  var found = state.data.manualActuals.find(function(a) {
+    return a.kr_code === krCode && a.month === month;
+  });
+  return found ? Number(found.actual_value) : null;
+}
+function sumYTD(krCode) {
+  var s = 0; var has = false;
+  for (var m=1; m<=12; m++) {
+    var v = getManualActual(krCode, m);
+    if (v != null) { s += Number(v); has = true; }
+  }
+  return has ? s : null;
+}
+
+// ═══ COMPUTE ACTUALS ═══
+function actualMonth(krCode, m) {
+  var d = state.data;
+  switch (krCode) {
+    case 'kr1_revenue': {
+      var r = d.revenueByMonth[m] || {};
+      return ((r.paid || 0) - (r.refund || 0) - (r.advisorSigned || 0)) / 10000;
+    }
+    case 'kr1_consult_count':
+      return (d.consultByMonth[m] || {}).count || 0;
+    case 'kr1_refund_cap':
+      return ((d.revenueByMonth[m] || {}).refund || 0) / 10000;
+    case 'kr2_conversion': {
+      var c = d.consultByMonth[m] || {};
+      return c.count > 0 ? (c.signedAmount / 10000) / c.count : 0;
+    }
+    case 'kr3a_active_cases':         return ((d.advisorByMonth[m] || {}).active || {}).cases || 0;
+    case 'kr3a_active_revenue':       return (((d.advisorByMonth[m] || {}).active || {}).amount || 0) / 10000;
+    case 'kr3a_referral_cases':       return ((d.advisorByMonth[m] || {}).referral || {}).cases || 0;
+    case 'kr3a_referral_revenue':     return (((d.advisorByMonth[m] || {}).referral || {}).amount || 0) / 10000;
+    case 'kr3b_renewal_cases':        return ((d.advisorByMonth[m] || {}).renewal || {}).cases || 0;
+    case 'kr3b_renewal_amount':       return (((d.advisorByMonth[m] || {}).renewal || {}).amount || 0) / 10000;
+    case 'kr3_total_revenue':         return (((d.advisorByMonth[m] || {}).total || {}).amount || 0) / 10000;
+    case 'kr4_referred_revenue':     return ((d.partnersByMonth[m] || {}).commission || 0) / 10000;
+    case 'kr4_partner_self_revenue': return ((d.partnersByMonth[m] || {}).self || 0) / 10000;
+    case 'kr4_case_volume':          return ((d.partnersByMonth[m] || {}).total || 0) / 10000;
+    case 'kr5_revenue':
+    case 'kr5_followers':
+    case 'kr5_referrals':
+    case 'kr5_avg_signed':
+      return getManualActual(krCode, m);
+    case 'kr6_monthly_cost_cap':     return (d.financeCostByMonth[m] || 0) / 10000;
+    default: return null;
+  }
+}
+function actualYTD(krCode) {
+  if (krCode === 'kr2_conversion') {
+    var totalAmount = 0, totalCount = 0;
+    for (var m=1; m<=12; m++) {
+      var c = state.data.consultByMonth[m] || {};
+      totalAmount += c.signedAmount || 0;
+      totalCount += c.count || 0;
+    }
+    return totalCount > 0 ? (totalAmount / 10000) / totalCount : 0;
+  }
+  if (krCode === 'kr4_partner_count') return state.data.partnerCount || 0;
+  if (krCode.indexOf('kr5_') === 0) return sumYTD(krCode);
+  var s = 0;
+  for (var m2=1; m2<=12; m2++) {
+    var v = actualMonth(krCode, m2);
+    if (v != null) s += Number(v);
+  }
+  return s;
+}
+
+// ═══ FORMAT HELPERS ═══
+function fmt(n, dp) {
+  if (n == null || isNaN(n)) return '—';
+  var num = Number(n);
+  var d = (dp != null) ? dp : (Math.abs(num) >= 100 ? 0 : (Math.abs(num) >= 10 ? 1 : 2));
+  return num.toLocaleString('zh-TW', { minimumFractionDigits:d, maximumFractionDigits:d });
+}
+function fmtMoney(amount) { // amount in 萬
+  if (amount == null || isNaN(amount)) return '—';
+  return fmt(amount) + ' 萬';
+}
+function pctClass(pct, isLowerBetter) {
+  if (pct == null || isNaN(pct)) return '';
+  if (isLowerBetter) {
+    if (pct <= 100) return 'good';
+    if (pct <= 120) return 'warn';
+    return 'bad';
+  }
+  if (pct >= 100) return 'good';
+  if (pct >= 80)  return 'warn';
+  return 'bad';
+}
+function pctText(pct) {
+  if (pct == null || isNaN(pct)) return '—';
+  return fmt(pct, 1) + ' %';
+}
+
+// ═══ RENDER ═══
+function clearCharts() {
+  Object.keys(charts).forEach(function(k) { try { charts[k].destroy(); } catch(e){} });
+  charts = {};
+}
+function rerenderCharts() { if (state.data.targets.length) render(); }
+
+function chartTextColor()  { return getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#888'; }
+function chartGridColor()  { return getComputedStyle(document.documentElement).getPropertyValue('--border-light').trim() || '#222'; }
+function colorVar(name) { return getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim(); }
+
+function render() {
+  clearCharts();
+  renderHero();
+  renderAlerts();
+  renderKRs();
+}
+
+function renderHero() {
+  var fm = state.focusMonth;
+  // KR1 諮詢營收: 月或 YTD（依 fm）
+  setHero('kr1', actualValue('kr1_revenue', fm), targetValue('kr1_revenue', fm), '萬');
+  // KR3 法顧 = total revenue
+  setHero('kr3', actualValue('kr3_total_revenue', fm), targetValue('kr3_total_revenue', fm), '萬');
+  // KR5 法0 月營收
+  setHero('kr5', actualValue('kr5_revenue', fm), targetValue('kr5_revenue', fm), '萬');
+  // KR4 合署 = 案件總額 (commission + self)
+  setHero('kr4', actualValue('kr4_case_volume', fm), targetValue('kr4_case_volume', fm), '萬');
+  // KR6 純利推估: 推算 = 營收估 - 成本估
+  // 簡化版：YTD 已收 - YTD 成本，用 fm == null 的 YTD 算；或 fm 月：當月毛利
+  var revenue = (actualValue('kr1_revenue', fm) || 0) + (actualValue('kr3_total_revenue', fm) || 0)
+              + (actualValue('kr5_revenue', fm) || 0) + (actualValue('kr4_case_volume', fm) || 0);
+  var cost = actualValue('kr6_monthly_cost_cap', fm) || 0;
+  var profit = revenue - cost;
+  // 年度純利目標 4000 萬。fm null = YTD 對到 (4000 * (m_done / 12))
+  var profitTarget;
+  if (fm != null) profitTarget = 4000 / 12;
+  else {
+    var doneM = monthsElapsed();
+    profitTarget = 4000 * doneM / 12;
+  }
+  setHero('kr6', profit, profitTarget, '萬');
+}
+function actualValue(krCode, fm) {
+  if (fm == null) return actualYTD(krCode);
+  return actualMonth(krCode, fm);
+}
+function targetValue(krCode, fm) {
+  if (fm == null) {
+    // YTD 目標 = 累積目前 YTD 涉及月份
+    var done = monthsElapsed();
+    var t = 0; var has = false;
+    for (var m=1; m<=done; m++) {
+      var v = getTarget(krCode, m);
+      if (v != null) { t += v; has = true; }
+    }
+    if (has) return t;
+    var ann = getTarget(krCode, null);
+    return ann != null ? ann * (done / 12) : null;
+  }
+  return getTarget(krCode, fm);
+}
+function monthsElapsed() {
+  var now = new Date();
+  if (now.getFullYear() < state.year) return 0;
+  if (now.getFullYear() > state.year) return 12;
+  return now.getMonth() + 1; // 含當月
+}
+function setHero(kr, actual, target, unit) {
+  var pct = (target && target > 0) ? (actual / target * 100) : null;
+  document.getElementById('hero-' + kr + '-val').textContent = unit === '萬' ? fmtMoney(actual) : fmt(actual);
+  document.getElementById('hero-' + kr + '-target').textContent = '目標 ' + (target != null ? fmt(target) + (unit ? ' '+unit : '') : '—');
+  var bar = document.getElementById('hero-' + kr + '-bar');
+  bar.style.width = (pct != null ? Math.max(0, Math.min(100, pct)) : 0) + '%';
+  var pctEl = document.getElementById('hero-' + kr + '-pct');
+  pctEl.textContent = pctText(pct);
+  pctEl.classList.remove('good','warn','bad');
+  pctEl.classList.add(pctClass(pct));
+}
+
+function renderAlerts() {
+  var alerts = [];
+  var checks = [
+    { kr:'kr1_revenue',   label:'諮詢營收' },
+    { kr:'kr1_consult_count', label:'諮詢場次' },
+    { kr:'kr1_refund_cap',label:'退款',         lowerBetter:true },
+    { kr:'kr2_conversion',label:'諮詢轉化率' },
+    { kr:'kr3a_active_cases',     label:'法顧主動進線' },
+    { kr:'kr3a_referral_cases',   label:'法顧介紹' },
+    { kr:'kr3b_renewal_cases',    label:'法顧續委任' },
+    { kr:'kr4_partner_count',     label:'合署人數' },
+    { kr:'kr4_referred_revenue',  label:'合署轉案' },
+    { kr:'kr5_revenue',           label:'法0' },
+    { kr:'kr6_monthly_cost_cap',  label:'月成本',  lowerBetter:true }
+  ];
+  var fm = state.focusMonth;
+  checks.forEach(function(c) {
+    var actual = actualValue(c.kr, fm);
+    var target = targetValue(c.kr, fm);
+    if (actual == null || target == null || target == 0) return;
+    var pct = actual / target * 100;
+    if (c.lowerBetter) {
+      if (pct > 100) alerts.push({ label:c.label, msg:'超出 ' + fmt(pct - 100, 1) + '%', actual:actual, target:target });
+    } else {
+      if (pct < 80) alerts.push({ label:c.label, msg:'達成 ' + fmt(pct, 1) + '%', actual:actual, target:target });
+    }
+  });
+  var box = document.getElementById('alertCard');
+  var list = document.getElementById('alertList');
+  if (alerts.length === 0) { box.classList.remove('show'); list.innerHTML = ''; return; }
+  box.classList.add('show');
+  list.innerHTML = alerts.map(function(a) {
+    return '<span><b>' + a.label + '：</b>' + a.msg + '</span>';
+  }).join('');
+}
+
+function renderKRs() {
+  var c = document.getElementById('krContainer');
+  c.innerHTML = '';
+  var grid = document.createElement('div'); grid.className = 'kr-grid';
+  c.appendChild(grid);
+  grid.appendChild(renderKR1());
+  grid.appendChild(renderKR2());
+  grid.appendChild(renderKR3a());
+  grid.appendChild(renderKR3b());
+  grid.appendChild(renderKR4());
+  grid.appendChild(renderKR5());
+  grid.appendChild(renderKR6());
+  grid.appendChild(renderKR7());
+}
+
+function makeCard(opts) {
+  var el = document.createElement('div'); el.className = 'kr-card' + (opts.full ? ' full' : '');
+  var head = document.createElement('div'); head.className = 'kr-head';
+  var h3 = document.createElement('h3'); h3.textContent = opts.title;
+  head.appendChild(h3);
+  var right = document.createElement('div'); right.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  if (opts.owner) { var o = document.createElement('span'); o.className='owner'; o.textContent = opts.owner; right.appendChild(o); }
+  if (opts.deeplink) {
+    var btn = document.createElement('button'); btn.className = 'kr-deeplink'; btn.textContent = opts.deeplink.label;
+    btn.addEventListener('click', function() { gotoRoute(opts.deeplink.route); });
+    right.appendChild(btn);
+  }
+  head.appendChild(right);
+  el.appendChild(head);
+  return el;
+}
+
+function gotoRoute(route) {
+  if (isEmbed) {
+    try { window.parent.postMessage({ type:'switchRoute', route: route }, '*'); } catch(e) {}
+  } else {
+    window.top.location.href = '../#/' + route;
+  }
+}
+
+function makeMetricCell(opts) {
+  // opts: { label, value, unit, target, lowerBetter, krCode (for edit) }
+  var box = document.createElement('div'); box.className = 'kr-metric';
+  var lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = opts.label; box.appendChild(lbl);
+  var val = document.createElement('div'); val.className='value';
+  val.innerHTML = (opts.value == null ? '—' : fmt(opts.value)) + (opts.unit ? '<span class="unit">' + opts.unit + '</span>' : '');
+  box.appendChild(val);
+  if (opts.target != null) {
+    var t = document.createElement('div'); t.className='target-line';
+    if (state.editing && opts.krCode) {
+      var inp = makeTargetInput(opts.krCode, opts.targetMonth);
+      t.innerHTML = '目標 '; t.appendChild(inp);
+      if (opts.unit) t.appendChild(document.createTextNode(' ' + opts.unit));
+    } else {
+      t.textContent = '目標 ' + fmt(opts.target) + (opts.unit ? ' ' + opts.unit : '');
+    }
+    box.appendChild(t);
+    if (opts.value != null) {
+      var pct = opts.target > 0 ? (opts.value / opts.target * 100) : null;
+      var p = document.createElement('div'); p.className='pct ' + pctClass(pct, opts.lowerBetter); p.textContent = pctText(pct);
+      box.appendChild(p);
+    }
+  }
+  return box;
+}
+
+function makeTargetInput(krCode, month) {
+  var current = getTarget(krCode, month);
+  var inp = document.createElement('input');
+  inp.className='edit-input'; inp.type='number'; inp.step='any';
+  inp.value = current == null ? '' : current;
+  inp.addEventListener('input', function() {
+    var k = state.year + '|' + krCode + '|' + (month == null ? 'NULL' : month);
+    var v = inp.value === '' ? null : Number(inp.value);
+    state.pendingTargets[k] = v;
+    updatePendingBadge();
+  });
+  return inp;
+}
+
+// 12 個月對標柱狀圖（actual vs target）
+function makeMonthlyChart(canvas, krCode, label, color, unit) {
+  var labels=[], actuals=[], targets=[];
+  for (var m=1; m<=12; m++) {
+    labels.push(m + '月');
+    actuals.push(actualMonth(krCode, m));
+    targets.push(getTarget(krCode, m));
+  }
+  var ctx = canvas.getContext('2d');
+  charts[krCode + '_chart'] = new Chart(ctx, {
+    type:'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label:'實績', data:actuals, backgroundColor:colorVar(color), borderRadius:3, order:2 },
+        { label:'月目標', data:targets, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      scales: {
+        x: { grid:{display:false}, ticks:{color:chartTextColor(), font:{size:10}} },
+        y: { grid:{color:chartGridColor()}, ticks:{color:chartTextColor(), font:{size:10}} }
+      },
+      plugins: {
+        legend:{ position:'top', labels:{color:chartTextColor(), font:{size:11}, boxWidth:14} },
+        tooltip:{ callbacks:{ label: function(ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y) + (unit?' '+unit:''); } } }
+      }
+    }
+  });
+}
+
+// ═══ KR1 諮詢營業額 ═══
+function renderKR1() {
+  var fm = state.focusMonth;
+  var meta = getTargetMeta('kr1_revenue');
+  var card = makeCard({ title:'KR1｜諮詢營業額（不含法顧）', owner:'負責：何泓儒', deeplink:{label:'→ 營運頁', route:'revenue'} });
+  var row = document.createElement('div'); row.className='kr-metric-row';
+
+  var revActual = actualValue('kr1_revenue', fm), revTarget = targetValue('kr1_revenue', fm);
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 營業額':(fm+'月 營業額'), value:revActual, unit:'萬', target:revTarget, krCode:'kr1_revenue', targetMonth:fm }));
+  var cntActual = actualValue('kr1_consult_count', fm), cntTarget = targetValue('kr1_consult_count', fm);
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 諮詢場次':(fm+'月 諮詢場次'), value:cntActual, unit:'場', target:cntTarget, krCode:'kr1_consult_count', targetMonth:fm }));
+  card.appendChild(row);
+
+  var refActual = actualValue('kr1_refund_cap', fm);
+  var refTarget = targetValue('kr1_refund_cap', fm);
+  var refRow = document.createElement('div'); refRow.className='kr-metric-row';
+  refRow.appendChild(makeMetricCell({ label: fm==null?'YTD 退款':(fm+'月 退款'), value:refActual, unit:'萬', target:refTarget, lowerBetter:true, krCode:'kr1_refund_cap', targetMonth:fm }));
+  // YTD 進度（年累計 vs 年目標）
+  var ytdAct = actualYTD('kr1_revenue'), ytdTar = targetValue('kr1_revenue', null);
+  refRow.appendChild(makeMetricCell({ label:'YTD 達成（年累計）', value:ytdAct, unit:'萬', target:ytdTar, krCode:null }));
+  card.appendChild(refRow);
+
+  var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
+  setTimeout(function() { makeMonthlyChart(cvs, 'kr1_revenue', '營業額', 'gold', '萬'); }, 0);
+  return card;
+}
+
+// ═══ KR2 諮詢轉化率 ═══
+function renderKR2() {
+  var fm = state.focusMonth;
+  var card = makeCard({ title:'KR2｜諮詢轉化率（成案金額/場次）', owner:'負責：雷皓明', deeplink:{label:'→ 諮詢分析', route:'consultation'} });
+  var row = document.createElement('div'); row.className='kr-metric-row';
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉化率':(fm+'月 轉化率'), value:actualValue('kr2_conversion', fm), unit:'萬/場', target:targetValue('kr2_conversion', fm), krCode:'kr2_conversion', targetMonth:fm }));
+  var c = state.data.consultByMonth[fm] || {};
+  row.appendChild(makeMetricCell({ label:'當月成案金額', value: fm==null?null:(c.signedAmount/10000), unit:'萬' }));
+  card.appendChild(row);
+
+  // 折線圖：12 個月轉化率 + 目標 3
+  var labels=[], values=[], target=[];
+  for (var m=1; m<=12; m++) {
+    var cm = state.data.consultByMonth[m] || {};
+    labels.push(m+'月');
+    values.push(cm.count > 0 ? (cm.signedAmount/10000)/cm.count : null);
+    target.push(getTarget('kr2_conversion', m) || 3);
+  }
+  var cvWrap = document.createElement('div'); cvWrap.className='kr-chart-wrap'; var canvas = document.createElement('canvas'); cvWrap.appendChild(canvas); card.appendChild(cvWrap);
+  setTimeout(function() {
+    var ctx = canvas.getContext('2d');
+    charts['kr2_chart'] = new Chart(ctx, {
+      type:'line',
+      data:{ labels:labels, datasets:[
+        { label:'轉化率', data:values, borderColor:colorVar('gold'), backgroundColor:'rgba(201,168,76,0.15)', tension:0.25, pointRadius:3, fill:true },
+        { label:'目標', data:target, borderColor:colorVar('text-muted'), borderDash:[4,4], pointRadius:0, fill:false }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        scales:{ x:{grid:{display:false},ticks:{color:chartTextColor(),font:{size:10}}}, y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),font:{size:10}}} },
+        plugins:{ legend:{position:'top',labels:{color:chartTextColor(),font:{size:11},boxWidth:14}} } }
+    });
+  }, 0);
+  return card;
+}
+
+// ═══ KR3a 法顧新案 ═══
+function renderKR3a() {
+  var fm = state.focusMonth;
+  var card = makeCard({ title:'KR3a｜法顧新案（主動進線 / 介紹）', owner:'吳泰儀 / 黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'} });
+  var row1 = document.createElement('div'); row1.className='kr-metric-row';
+  row1.appendChild(makeMetricCell({ label:'主動進線 件數', value:actualValue('kr3a_active_cases', fm), unit:'件', target:targetValue('kr3a_active_cases', fm), krCode:'kr3a_active_cases', targetMonth:fm }));
+  row1.appendChild(makeMetricCell({ label:'主動進線 金額', value:actualValue('kr3a_active_revenue', fm), unit:'萬', target:targetValue('kr3a_active_revenue', fm), krCode:'kr3a_active_revenue', targetMonth:fm }));
+  card.appendChild(row1);
+  var row2 = document.createElement('div'); row2.className='kr-metric-row';
+  row2.appendChild(makeMetricCell({ label:'介紹 件數', value:actualValue('kr3a_referral_cases', fm), unit:'件', target:targetValue('kr3a_referral_cases', fm), krCode:'kr3a_referral_cases', targetMonth:fm }));
+  row2.appendChild(makeMetricCell({ label:'介紹 金額', value:actualValue('kr3a_referral_revenue', fm), unit:'萬', target:targetValue('kr3a_referral_revenue', fm), krCode:'kr3a_referral_revenue', targetMonth:fm }));
+  card.appendChild(row2);
+  return card;
+}
+
+// ═══ KR3b 法顧續委任 ═══
+function renderKR3b() {
+  var fm = state.focusMonth;
+  var card = makeCard({ title:'KR3b｜法顧續委任', owner:'負責：黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'} });
+  var row = document.createElement('div'); row.className='kr-metric-row';
+  row.appendChild(makeMetricCell({ label:'續委任 件數', value:actualValue('kr3b_renewal_cases', fm), unit:'件', target:targetValue('kr3b_renewal_cases', fm), krCode:'kr3b_renewal_cases', targetMonth:fm }));
+  row.appendChild(makeMetricCell({ label:'續委任 金額', value:actualValue('kr3b_renewal_amount', fm), unit:'萬', target:targetValue('kr3b_renewal_amount', fm), krCode:'kr3b_renewal_amount', targetMonth:fm }));
+  card.appendChild(row);
+  var row2 = document.createElement('div'); row2.className='kr-metric-row';
+  row2.appendChild(makeMetricCell({ label:'法顧 月營收（含全部）', value:actualValue('kr3_total_revenue', fm), unit:'萬', target:targetValue('kr3_total_revenue', fm), krCode:'kr3_total_revenue', targetMonth:fm }));
+  row2.appendChild(makeMetricCell({ label:'YTD 續委任達成', value:actualYTD('kr3b_renewal_amount'), unit:'萬', target:targetValue('kr3b_renewal_amount', null) }));
+  card.appendChild(row2);
+  return card;
+}
+
+// ═══ KR4 合署 ═══
+function renderKR4() {
+  var fm = state.focusMonth;
+  var card = makeCard({ title:'KR4｜合署律師', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
+  var d = state.data;
+  var pCount = d.partnerCount;
+  var pTarget = getTarget('kr4_partner_count', null);
+  var row = document.createElement('div'); row.className='kr-metric-row';
+  row.style.gridTemplateColumns = 'repeat(4, 1fr)';
+  // 在線人數
+  var box1 = document.createElement('div'); box1.className='kr-metric';
+  box1.innerHTML = '<div class="label">合署在線人數</div><div class="value">' + pCount + '<span class="unit">/ ' + (pTarget||'—') + ' 人</span></div>'
+                + '<div class="target-line">司法官 ' + d.partnerCohorts.judicial.length
+                + '・資深 ' + d.partnerCohorts.senior.length
+                + '・諮詢律師 ' + d.partnerCohorts.consult.length + '</div>';
+  row.appendChild(box1);
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉案':(fm+'月 轉案'), value:actualValue('kr4_referred_revenue', fm), unit:'萬', target:targetValue('kr4_referred_revenue', fm), krCode:'kr4_referred_revenue', targetMonth:fm }));
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 自案':(fm+'月 自案'), value:actualValue('kr4_partner_self_revenue', fm), unit:'萬', target:targetValue('kr4_partner_self_revenue', fm), krCode:'kr4_partner_self_revenue', targetMonth:fm }));
+  row.appendChild(makeMetricCell({ label:'年案件總額', value:actualYTD('kr4_case_volume'), unit:'萬', target:getTarget('kr4_case_volume', null), krCode:'kr4_case_volume', targetMonth:null }));
+  card.appendChild(row);
+
+  // Timeline
+  var msHead = document.createElement('div'); msHead.style.cssText='font-size:0.85rem;color:var(--text-muted);margin:14px 0 6px;'; msHead.textContent = '合署到位 timeline';
+  card.appendChild(msHead);
+  var msTable = renderMilestonesTable('kr4_partner_count');
+  card.appendChild(msTable);
+
+  return card;
+}
+
+// ═══ KR5 法0 ═══
+function renderKR5() {
+  var card = makeCard({ title:'KR5｜法0（法律010）', owner:'負責：雷皓明', full:true });
+  var hint = document.createElement('div'); hint.className='info-hint';
+  hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。請 admin 在下方逐月填入「加入好友數 / 轉諮場次 / 平均成案金額 / 月營收」。';
+  card.appendChild(hint);
+
+  var fm = state.focusMonth;
+  var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(4, 1fr)';
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 法0 月營收':(fm+'月 法0 營收'), value:actualValue('kr5_revenue', fm), unit:'萬', target:targetValue('kr5_revenue', fm), krCode:'kr5_revenue', targetMonth:fm }));
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 加入好友數':(fm+'月 好友數'), value:actualValue('kr5_followers', fm), unit:'人' }));
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉諮場次':(fm+'月 轉諮場次'), value:actualValue('kr5_referrals', fm), unit:'場' }));
+  row.appendChild(makeMetricCell({ label:'平均成案金額（最後填寫月）', value: actualMonth('kr5_avg_signed', fm || 12), unit:'萬' }));
+  card.appendChild(row);
+
+  // 手動實績編輯區（admin + edit mode）
+  if (state.editing) {
+    ['kr5_revenue','kr5_followers','kr5_referrals','kr5_avg_signed'].forEach(function(kr) {
+      card.appendChild(buildManualGrid(kr));
+    });
+  } else {
+    var summary = document.createElement('div'); summary.className='small-note';
+    summary.innerHTML = '12 月實績預覽：<br>' +
+      ['kr5_revenue','kr5_followers','kr5_referrals','kr5_avg_signed'].map(function(kr) {
+        var label = ({'kr5_revenue':'月營收','kr5_followers':'好友','kr5_referrals':'轉諮','kr5_avg_signed':'均單'})[kr];
+        var arr = [];
+        for (var m=1; m<=12; m++) { var v = getManualActual(kr, m); arr.push(v == null ? '–' : fmt(v, 0)); }
+        return '<b>' + label + '</b>：' + arr.join(' / ');
+      }).join('<br>');
+    card.appendChild(summary);
+  }
+  return card;
+}
+
+function buildManualGrid(krCode) {
+  var label = ({'kr5_revenue':'月營收 (萬)','kr5_followers':'加入好友','kr5_referrals':'轉諮場次','kr5_avg_signed':'均單 (萬)'})[krCode] || krCode;
+  var wrap = document.createElement('div'); wrap.style.marginTop = '10px';
+  var title = document.createElement('div'); title.className='small-note'; title.style.fontWeight='600'; title.textContent = label; wrap.appendChild(title);
+  var grid = document.createElement('div'); grid.className = 'manual-grid';
+  var head = document.createElement('div'); head.className='label-col'; head.textContent='月份'; grid.appendChild(head);
+  for (var m=1; m<=12; m++) { var h = document.createElement('div'); h.className='month-h'; h.textContent = m+'月'; grid.appendChild(h); }
+  var lblc = document.createElement('div'); lblc.className='label-col'; lblc.textContent='實績'; grid.appendChild(lblc);
+  for (var m2=1; m2<=12; m2++) {
+    var inp = document.createElement('input'); inp.type='number'; inp.step='any';
+    var v = getManualActual(krCode, m2);
+    if (v != null) inp.value = v;
+    (function(monthN) {
+      inp.addEventListener('input', function() {
+        var key = state.year + '|' + krCode + '|' + monthN;
+        state.pendingActuals[key] = inp.value === '' ? null : Number(inp.value);
+        updatePendingBadge();
+      });
+    })(m2);
+    grid.appendChild(inp);
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+// ═══ KR6 成本 ═══
+function renderKR6() {
+  var fm = state.focusMonth;
+  var card = makeCard({ title:'KR6｜成本控制', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃', route:'finance'} });
+  var row = document.createElement('div'); row.className='kr-metric-row';
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 總成本':(fm+'月 成本'), value:actualValue('kr6_monthly_cost_cap', fm), unit:'萬', target:targetValue('kr6_monthly_cost_cap', fm), lowerBetter:true, krCode:'kr6_monthly_cost_cap', targetMonth:fm }));
+  // 純利推估
+  var revActual = actualValue('kr1_revenue', fm) || 0;
+  var advisorActual = actualValue('kr3_total_revenue', fm) || 0;
+  var partnerActual = actualValue('kr4_case_volume', fm) || 0;
+  var law0Actual = actualValue('kr5_revenue', fm) || 0;
+  var costActual = actualValue('kr6_monthly_cost_cap', fm) || 0;
+  var profit = revActual + advisorActual + partnerActual + law0Actual - costActual;
+  row.appendChild(makeMetricCell({ label: fm==null?'YTD 推估純利':(fm+'月 推估純利'), value:profit, unit:'萬' }));
+  card.appendChild(row);
+
+  var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
+  setTimeout(function() { makeMonthlyChart(cvs, 'kr6_monthly_cost_cap', '月成本', 'green', '萬'); }, 0);
+  return card;
+}
+
+// ═══ KR7 AI 提效 ═══
+function renderKR7() {
+  var card = makeCard({ title:'KR7｜AI 協助提升效率', owner:'負責：雷皓明' });
+  card.appendChild(renderMilestonesTable('kr7_ai'));
+  return card;
+}
+
+function renderMilestonesTable(krCode) {
+  var ms = state.data.milestones.filter(function(m) { return m.kr_code === krCode; });
+  ms.sort(function(a, b) { return (a.sort_order||0) - (b.sort_order||0); });
+  var table = document.createElement('table'); table.className = 'ms-table';
+  var thead = '<thead><tr><th class="status-cell">狀態</th><th>項目</th><th class="date-cell">目標日期</th><th>負責</th></tr></thead>';
+  var bodyRows = ms.map(function(m) {
+    var statusVal = (state.pendingMilestones[m.id] && state.pendingMilestones[m.id].status) || m.status;
+    var titleVal = (state.pendingMilestones[m.id] && state.pendingMilestones[m.id].title) || m.title;
+    var dateVal = (state.pendingMilestones[m.id] && state.pendingMilestones[m.id].target_date) || m.target_date || '';
+    var ownerVal = (state.pendingMilestones[m.id] && state.pendingMilestones[m.id].owner) || m.owner || '';
+    var statusLabel = ({pending:'⏳ 未開始', in_progress:'🔄 進行中', done:'✅ 完成', blocked:'⛔ 卡住'})[statusVal] || statusVal;
+    var statusBadge = ({pending:'gray', in_progress:'orange', done:'green', blocked:'red'})[statusVal] || 'gray';
+
+    if (state.editing) {
+      var statusOpts = ['pending','in_progress','done','blocked'].map(function(s) {
+        return '<option value="'+s+'"' + (s===statusVal?' selected':'') + '>' + ({pending:'未開始', in_progress:'進行中', done:'完成', blocked:'卡住'})[s] + '</option>';
+      }).join('');
+      return '<tr data-id="'+m.id+'">'
+        + '<td><select class="edit-input select" data-field="status">'+statusOpts+'</select></td>'
+        + '<td><input class="edit-input text" data-field="title" value="' + (titleVal||'').replace(/"/g,'&quot;') + '"></td>'
+        + '<td><input class="edit-input date" type="date" data-field="target_date" value="' + (dateVal ? String(dateVal).slice(0,10) : '') + '"></td>'
+        + '<td><input class="edit-input" style="width:90px;" data-field="owner" value="' + (ownerVal||'').replace(/"/g,'&quot;') + '"></td>'
+        + '</tr>';
+    }
+    return '<tr><td><span class="badge ' + statusBadge + '">' + statusLabel + '</span></td>'
+         + '<td>' + (titleVal || '') + '</td>'
+         + '<td>' + (dateVal ? String(dateVal).slice(0,10) : '—') + '</td>'
+         + '<td>' + (ownerVal || '—') + '</td></tr>';
+  }).join('');
+  table.innerHTML = thead + '<tbody>' + bodyRows + '</tbody>';
+
+  if (state.editing) {
+    table.querySelectorAll('tr[data-id]').forEach(function(tr) {
+      var id = tr.getAttribute('data-id');
+      tr.querySelectorAll('[data-field]').forEach(function(inp) {
+        inp.addEventListener('input', function() { handleMilestoneEdit(id, inp.getAttribute('data-field'), inp.value); });
+        inp.addEventListener('change', function() { handleMilestoneEdit(id, inp.getAttribute('data-field'), inp.value); });
+      });
+    });
+  }
+  return table;
+}
+
+function handleMilestoneEdit(id, field, value) {
+  if (!state.pendingMilestones[id]) {
+    var orig = state.data.milestones.find(function(m) { return m.id === id; });
+    state.pendingMilestones[id] = orig ? { title:orig.title, target_date:orig.target_date, status:orig.status, owner:orig.owner, sort_order:orig.sort_order } : {};
+  }
+  state.pendingMilestones[id][field] = (value === '') ? null : value;
+  updatePendingBadge();
+}
+
+// ═══ EDIT MODE ═══
+function toggleEdit() {
+  state.editing = !state.editing;
+  var bar = document.getElementById('editBar');
+  var btn = document.getElementById('editToggleBtn');
+  if (state.editing) { bar.style.display = 'flex'; btn.textContent = '✕ 退出編輯'; }
+  else { bar.style.display = 'none'; btn.textContent = '✏️ 編輯目標 / 里程碑'; state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; updatePendingBadge(); }
+  render();
+}
+function cancelEdits() {
+  state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {};
+  state.editing = false;
+  document.getElementById('editBar').style.display = 'none';
+  document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
+  updatePendingBadge();
+  render();
+}
+function updatePendingBadge() {
+  var n = Object.keys(state.pendingTargets).length + Object.keys(state.pendingActuals).length + Object.keys(state.pendingMilestones).length;
+  document.getElementById('pendingBadge').textContent = '未儲存：' + n;
+}
+async function saveAllEdits() {
+  var btn = document.getElementById('saveEditsBtn'); btn.disabled = true; btn.textContent = '儲存中⋯';
+  try {
+    // 1. targets
+    var targetUpserts = [];
+    Object.keys(state.pendingTargets).forEach(function(k) {
+      var parts = k.split('|'); var year = Number(parts[0]); var kr = parts[1]; var month = parts[2] === 'NULL' ? null : Number(parts[2]);
+      var v = state.pendingTargets[k];
+      if (v == null) return; // skip null（之後可改成支援刪除）
+      targetUpserts.push({ year:year, kr_code:kr, month:month, target_value:v, updated_by: currentLawyer ? currentLawyer.id : null });
+    });
+    if (targetUpserts.length) {
+      var rt = await sb.from('okr_targets').upsert(targetUpserts, { onConflict:'year,kr_code,month' });
+      if (rt.error) throw rt.error;
+    }
+    // 2. manual actuals
+    var actUpserts = [];
+    Object.keys(state.pendingActuals).forEach(function(k) {
+      var parts = k.split('|'); var year = Number(parts[0]); var kr = parts[1]; var month = Number(parts[2]);
+      var v = state.pendingActuals[k];
+      actUpserts.push({ year:year, kr_code:kr, month:month, actual_value:v, updated_by: currentLawyer ? currentLawyer.id : null });
+    });
+    if (actUpserts.length) {
+      var ra = await sb.from('okr_manual_actuals').upsert(actUpserts, { onConflict:'year,kr_code,month' });
+      if (ra.error) throw ra.error;
+    }
+    // 3. milestones
+    var msUpdates = Object.keys(state.pendingMilestones);
+    for (var i=0; i<msUpdates.length; i++) {
+      var id = msUpdates[i]; var p = state.pendingMilestones[id];
+      var rm = await sb.from('okr_milestones').update({
+        title: p.title, target_date: p.target_date || null, status: p.status, owner: p.owner, sort_order: p.sort_order,
+        updated_by: currentLawyer ? currentLawyer.id : null
+      }).eq('id', id);
+      if (rm.error) throw rm.error;
+    }
+    state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {};
+    state.editing = false;
+    document.getElementById('editBar').style.display = 'none';
+    document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
+    await loadAll();
+    alert('已儲存');
+  } catch (ex) {
+    alert('儲存失敗：' + (ex.message || ex));
+    console.error(ex);
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 儲存全部';
+  }
+}
+
+// ═══ INIT ═══
+checkSession();
+</script>
+</body>
+</html>

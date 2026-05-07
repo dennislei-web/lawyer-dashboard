@@ -232,6 +232,7 @@
         <a class="nav-link" data-route="advisor" data-restricted="1" href="#/advisor" onclick="switchRoute('advisor');return false;">法律顧問</a>
         <a class="nav-link" data-route="partners" data-restricted="1" href="#/partners" onclick="switchRoute('partners');return false;">合署律師</a>
         <a class="nav-link" data-route="funnel" data-restricted="1" href="#/funnel" onclick="switchRoute('funnel');return false;">委前漏斗</a>
+        <a id="navOkr" class="nav-link" data-route="okr" data-admin-only="1" href="#/okr" onclick="switchRoute('okr');return false;" style="display:none">📊 OKR 追蹤</a>
         <a id="navAdmin" class="nav-link" data-route="admin" data-admin-only="1" href="#/admin" onclick="switchRoute('admin');return false;" style="display:none">🔑 帳號管理</a>
       </div>
     </div>
@@ -249,6 +250,7 @@
     <iframe class="route-frame" data-route="advisor"      src="" title="advisor"></iframe>
     <iframe class="route-frame" data-route="partners"     src="" title="partners"></iframe>
     <iframe class="route-frame" data-route="funnel"       src="" title="funnel"></iframe>
+    <iframe class="route-frame" data-route="okr"          src="" title="okr"></iframe>
     <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
   </div>
 </div>
@@ -293,6 +295,7 @@ var ROUTES = {
   advisor:      BASE + '/advisor/?embed=1',
   partners:     BASE + '/partners/?embed=1',
   funnel:       BASE + '/funnel/?embed=1',
+  okr:          BASE + '/okr/?embed=1',
   admin:        BASE + '/admin/?embed=1',
 };
 
@@ -348,7 +351,7 @@ function switchRoute(route) {
 function canAccessRoute(route) {
   if (!currentLawyer) return false;
   var role = currentLawyer.role;
-  if (route === 'admin') return role === 'admin';
+  if (route === 'admin' || route === 'okr') return role === 'admin';
   if (role === 'admin') return true;
   if (route === 'consultation' && role === 'lawyer') return true;
   if (role === 'manager') {
@@ -373,6 +376,8 @@ function updateNavVisibility() {
   });
   var navAdmin = document.getElementById('navAdmin');
   if (navAdmin) navAdmin.style.display = isAdmin ? '' : 'none';
+  var navOkr = document.getElementById('navOkr');
+  if (navOkr) navOkr.style.display = isAdmin ? '' : 'none';
 }
 
 // ═══ AUTH ═══
@@ -544,9 +549,13 @@ window.addEventListener('storage', function(e) {
   if (e.key === 'theme' && e.newValue) _applyTheme(e.newValue);
 });
 window.addEventListener('message', function(e) {
-  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+  if (!e || !e.data) return;
+  if (e.data.type === 'theme' && e.data.value) {
     _applyTheme(e.data.value);
     localStorage.setItem('theme', e.data.value);
+  } else if (e.data.type === 'switchRoute' && e.data.route) {
+    // OKR 卡上的「→ 進入 X 頁」deep-link
+    switchRoute(e.data.route);
   }
 });
 
