@@ -1367,19 +1367,72 @@ function renderKR5() {
   });
   card.appendChild(row);
 
-  // 編輯模式：4 列 × 12 月矩陣
+  // 編輯模式：4 列 × 12 月矩陣 / YTD 模式：3 個迷你趨勢圖 / 月份模式：不額外顯示
   if (state.editing) {
     card.appendChild(buildKR5Matrix());
-  } else {
-    var summary = document.createElement('div'); summary.className='small-note'; summary.style.marginTop='10px';
-    summary.innerHTML = '<b>12 月實績預覽：</b><br>' + KR5_METRICS.map(function(spec) {
-      var arr = [];
-      for (var m=1; m<=12; m++) { var v = getManualActual(spec.code, m); arr.push(v == null ? '–' : fmt(v, 0)); }
-      return '<b>' + spec.label + '</b>：' + arr.join(' / ');
-    }).join('<br>');
-    card.appendChild(summary);
+  } else if (fm == null) {
+    card.appendChild(buildKR5MiniCharts());
   }
   return card;
+}
+
+function buildKR5MiniCharts() {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin-top:14px;';
+  KR5_METRICS.forEach(function(spec, idx) {
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg-row); border:1px solid var(--border-light); border-radius:8px; padding:10px;';
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:0.8rem; color:var(--text); font-weight:600; margin-bottom:6px;';
+    title.textContent = spec.label + '（12 月趨勢）';
+    box.appendChild(title);
+    var canvasWrap = document.createElement('div'); canvasWrap.style.cssText = 'position:relative; height:140px;';
+    var canvas = document.createElement('canvas'); canvasWrap.appendChild(canvas); box.appendChild(canvasWrap);
+    wrap.appendChild(box);
+
+    var color = ['purple', 'blue', 'gold'][idx] || 'purple';
+    setTimeout(function() {
+      var labels = [], values = [], targets = [];
+      for (var m=1; m<=12; m++) {
+        labels.push(m+'月');
+        values.push(getManualActual(spec.code, m));
+        targets.push(spec.hasTarget ? getTarget(spec.code, m) : null);
+      }
+      var datasets = [
+        { label:'實績', data:values, backgroundColor:colorVar(color), borderRadius:3, order:2 }
+      ];
+      if (spec.hasTarget) {
+        datasets.push({
+          label:'月目標', data:targets, type:'line',
+          borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4],
+          pointRadius:0, fill:false, order:1, tension:0.2
+        });
+      }
+      var ctx = canvas.getContext('2d');
+      charts['kr5_mini_'+idx] = new Chart(ctx, {
+        type:'bar',
+        data:{ labels:labels, datasets:datasets },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          scales:{
+            x:{ grid:{display:false}, ticks:{color:chartTextColor(), font:{size:9}} },
+            y:{ grid:{color:chartGridColor()}, ticks:{color:chartTextColor(), font:{size:9}} }
+          },
+          plugins:{
+            legend:{ display: spec.hasTarget, position:'top', labels:{color:chartTextColor(), font:{size:10}, boxWidth:12} },
+            tooltip:{
+              callbacks:{
+                label: function(ctx) {
+                  return ctx.dataset.label + ': ' + (ctx.parsed.y == null ? '—' : fmt(ctx.parsed.y)) + ' ' + spec.unit;
+                }
+              }
+            }
+          }
+        }
+      });
+    }, 0);
+  });
+  return wrap;
 }
 
 function buildKR5Matrix() {
