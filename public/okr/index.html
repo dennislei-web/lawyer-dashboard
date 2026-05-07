@@ -782,7 +782,6 @@ function actualMonth(krCode, m) {
       return ((p.commission || 0) + (p.self || 0)) / 10000;
     }
     case 'kr5_revenue':
-    case 'kr5_followers':
     case 'kr5_referrals':
     case 'kr5_avg_signed':
       return getManualActual(krCode, m);
@@ -1325,9 +1324,8 @@ function renderKR4() {
 // KR5 用的指標清單（順序＝展示順序＝編輯矩陣的列順序）
 var KR5_METRICS = [
   { code:'kr5_revenue',   label:'月營收',   unit:'萬', hasTarget:true },
-  { code:'kr5_referrals', label:'轉諮場次', unit:'場', hasTarget:false },
-  { code:'kr5_avg_signed',label:'均單',     unit:'萬', hasTarget:false },
-  { code:'kr5_followers', label:'加入好友', unit:'人', hasTarget:false }
+  { code:'kr5_referrals', label:'轉諮場次（已轉案件數）', unit:'場', hasTarget:false },
+  { code:'kr5_avg_signed',label:'均單',     unit:'萬', hasTarget:false }
 ];
 
 function renderKR5() {
@@ -1341,8 +1339,8 @@ function renderKR5() {
   card.appendChild(hint);
 
   var fm = state.focusMonth;
-  // 上方四欄當月（或 YTD）總覽
-  var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(4, 1fr)';
+  // 上方三欄當月（或 YTD）總覽
+  var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(3, 1fr)';
   KR5_METRICS.forEach(function(spec) {
     var label = (fm==null ? 'YTD' : fm+'月') + ' ' + spec.label;
     // 均單 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
