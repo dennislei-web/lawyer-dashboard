@@ -969,12 +969,19 @@ function gotoRoute(route) {
   }
 }
 
+// 件數類單位用整數顯示，金額/比例用既有自動小數
+var INTEGER_UNITS = ['件', '場', '人'];
+function fmtByUnit(value, unit) {
+  if (value == null) return '—';
+  var dp = INTEGER_UNITS.indexOf(unit) > -1 ? 0 : undefined;
+  return fmt(value, dp);
+}
 function makeMetricCell(opts) {
   // opts: { label, value, unit, target, lowerBetter, krCode (for edit) }
   var box = document.createElement('div'); box.className = 'kr-metric';
   var lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = opts.label; box.appendChild(lbl);
   var val = document.createElement('div'); val.className='value';
-  val.innerHTML = (opts.value == null ? '—' : fmt(opts.value)) + (opts.unit ? '<span class="unit">' + opts.unit + '</span>' : '');
+  val.innerHTML = fmtByUnit(opts.value, opts.unit) + (opts.unit ? '<span class="unit">' + opts.unit + '</span>' : '');
   box.appendChild(val);
   if (opts.target != null) {
     var t = document.createElement('div'); t.className='target-line';
@@ -983,7 +990,7 @@ function makeMetricCell(opts) {
       t.innerHTML = '目標 '; t.appendChild(inp);
       if (opts.unit) t.appendChild(document.createTextNode(' ' + opts.unit));
     } else {
-      t.textContent = '目標 ' + fmt(opts.target) + (opts.unit ? ' ' + opts.unit : '');
+      t.textContent = '目標 ' + fmtByUnit(opts.target, opts.unit) + (opts.unit ? ' ' + opts.unit : '');
     }
     box.appendChild(t);
     if (opts.value != null) {
