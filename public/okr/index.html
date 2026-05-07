@@ -525,7 +525,7 @@ async function loadAll() {
       fetchByMonth(year, 'record_date', function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false); }),
       fetchByMonth(year, 'paid_at', function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid'); }),
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
-        .eq('fiscal_year', year - 1911).eq('data_type', 'actual').eq('finance_categories.section', 'operating_expense'),
+        .eq('fiscal_year', year - 1911).in('data_type', ['actual', 'budget']).eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded()
     ]);
 
@@ -646,13 +646,17 @@ function aggregateAdvisor(cases) {
 }
 
 function aggregateFinance(rows) {
-  var byMonth = {};
-  for (var i=1; i<=12; i++) byMonth[i] = 0;
+  // 拆 actual / budget 兩組（皆為 operating_expense 類別加總）
+  var actual = {}, budget = {};
+  for (var i=1; i<=12; i++) { actual[i] = 0; budget[i] = 0; }
   rows.forEach(function(r) {
     var m = Number(r.month);
-    if (m >= 1 && m <= 12) byMonth[m] += Number(r.amount || 0);
+    if (m < 1 || m > 12) return;
+    if (r.data_type === 'actual')      actual[m] += Number(r.amount || 0);
+    else if (r.data_type === 'budget') budget[m] += Number(r.amount || 0);
   });
-  state.data.financeCostByMonth = byMonth;
+  state.data.financeCostByMonth   = actual;
+  state.data.financeBudgetByMonth = budget;
 }
 
 function aggregatePartners(partnersJSON) {
@@ -875,9 +879,18 @@ function actualValue(krCode, fm) {
 }
 // 比例類目標（YTD 直接用月目標）：轉化率不該每月累加
 var YEARLY_FIXED_KRS = ['kr2_conversion', 'kr4_partner_count'];
-// 上限類（YTD = 月上限 × 已過月數）：退款 / 月成本
-var CAP_KRS = ['kr1_refund_cap', 'kr6_monthly_cost_cap'];
+// 上限類（YTD = 月上限 × 已過月數）：退款
+var CAP_KRS = ['kr1_refund_cap'];
 function targetValue(krCode, fm) {
+  // KR6 月成本：對標 finance_data data_type='budget'（取代固定 1450 上限）
+  if (krCode === 'kr6_monthly_cost_cap') {
+    var d = state.data;
+    if (fm != null) return (d.financeBudgetByMonth[fm] || 0) / 10000 || null;
+    var done0 = monthsElapsed();
+    var sum = 0;
+    for (var mm=1; mm<=done0; mm++) sum += (d.financeBudgetByMonth[mm] || 0);
+    return sum > 0 ? sum / 10000 : null;
+  }
   if (fm != null) return getTarget(krCode, fm);
   // YTD
   if (YEARLY_FIXED_KRS.indexOf(krCode) > -1) {
@@ -934,7 +947,7 @@ function renderAlerts() {
     { kr:'kr4_partner_count',     label:'合署人數' },
     { kr:'kr4_referred_revenue',  label:'合署轉案' },
     { kr:'kr5_revenue',           label:'法0' },
-    { kr:'kr6_monthly_cost_cap',  label:'月成本',  lowerBetter:true }
+    { kr:'kr6_monthly_cost_cap',  label:'成本（vs 預算）', lowerBetter:true }
   ];
   var fm = state.focusMonth;
   checks.forEach(function(c) {
@@ -1478,31 +1491,70 @@ function buildKR5Matrix() {
   return wrap;
 }
 
-// ═══ KR6 成本 ═══
+// ═══ KR6 成本（實際 vs 預算）═══
 function renderKR6() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR6｜月成本控制（≤ 1450 萬/月）', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃', route:'finance'} });
+  var card = makeCard({ title:'KR6｜成本控制（實際 vs 115 年預算）', owner:'負責：吳泰儀', deeplink:{label:'→ 財務規劃 預算編列', route:'finance'} });
+  var actual = actualValue('kr6_monthly_cost_cap', fm) || 0;
+  var budget = targetValue('kr6_monthly_cost_cap', fm) || 0;
+  var diff = budget - actual; // 正 = 低於預算（好）
+
   var row = document.createElement('div'); row.className='kr-metric-row';
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 總成本':(fm+'月 成本'), value:actualValue('kr6_monthly_cost_cap', fm), unit:'萬', target:targetValue('kr6_monthly_cost_cap', fm), lowerBetter:true, krCode:'kr6_monthly_cost_cap', targetMonth:fm }));
-  if (fm == null) {
-    // YTD 模式：對比年度成本上限
-    row.appendChild(makeMetricCell({ label:'YTD 累計上限', value: getTarget('kr6_monthly_cost_cap', 1) ? getTarget('kr6_monthly_cost_cap', 1) * monthsElapsed() : null, unit:'萬' }));
-  } else {
-    // 月度模式：顯示與上限差距
-    var actual = actualValue('kr6_monthly_cost_cap', fm) || 0;
-    var cap = targetValue('kr6_monthly_cost_cap', fm) || 0;
-    var diff = cap - actual;
-    var box = document.createElement('div'); box.className='kr-metric';
-    box.innerHTML = '<div class="label">與上限差距</div>'
-      + '<div class="value" style="color:' + (diff >= 0 ? 'var(--green)' : 'var(--red)') + ';">'
-      + (diff >= 0 ? '+' : '') + fmt(diff) + '<span class="unit"> 萬</span></div>'
-      + '<div class="target-line">' + (diff >= 0 ? '低於上限 ✓' : '超出上限 ✗') + '</div>';
-    row.appendChild(box);
-  }
+  row.style.gridTemplateColumns = 'repeat(3, 1fr)';
+
+  // 實際
+  var box1 = document.createElement('div'); box1.className='kr-metric';
+  box1.innerHTML = '<div class="label">' + (fm==null ? 'YTD' : fm+'月') + ' 實際支出</div>'
+    + '<div class="value">' + fmt(actual) + '<span class="unit"> 萬</span></div>';
+  row.appendChild(box1);
+
+  // 預算
+  var box2 = document.createElement('div'); box2.className='kr-metric';
+  box2.innerHTML = '<div class="label">' + (fm==null ? 'YTD' : fm+'月') + ' 預算</div>'
+    + '<div class="value">' + fmt(budget) + '<span class="unit"> 萬</span></div>';
+  row.appendChild(box2);
+
+  // 差距 + 執行率
+  var execRate = budget > 0 ? actual / budget * 100 : null;
+  var box3 = document.createElement('div'); box3.className='kr-metric';
+  box3.innerHTML = '<div class="label">差距（預算 − 實際）</div>'
+    + '<div class="value" style="color:' + (diff >= 0 ? 'var(--green)' : 'var(--red)') + ';">'
+    + (diff >= 0 ? '+' : '') + fmt(diff) + '<span class="unit"> 萬</span></div>'
+    + '<div class="target-line">' + (diff >= 0 ? '低於預算 ✓' : '超出預算 ✗') + '</div>'
+    + (execRate != null ? '<div class="pct ' + (execRate <= 100 ? 'good' : 'bad') + '">執行率 ' + fmt(execRate, 1) + ' %</div>' : '');
+  row.appendChild(box3);
   card.appendChild(row);
 
+  // 12 個月圖：實際 bar + 預算 line
   var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
-  setTimeout(function() { makeMonthlyChart(cvs, 'kr6_monthly_cost_cap', '月成本', 'green', '萬'); }, 0);
+  setTimeout(function() {
+    var d = state.data;
+    var labels=[], actualArr=[], budgetArr=[];
+    for (var m=1; m<=12; m++) {
+      labels.push(m+'月');
+      var aval = (d.financeCostByMonth[m] || 0) / 10000;
+      var bval = (d.financeBudgetByMonth[m] || 0) / 10000;
+      actualArr.push(aval > 0 ? aval : null);
+      budgetArr.push(bval > 0 ? bval : null);
+    }
+    var ctx = cvs.getContext('2d');
+    charts['kr6_chart'] = new Chart(ctx, {
+      type:'bar',
+      data:{ labels:labels, datasets:[
+        { label:'實際支出', data:actualArr, backgroundColor:colorVar('green'), borderRadius:3, order:2 },
+        { label:'預算',     data:budgetArr, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        scales:{
+          x:{grid:{display:false}, ticks:{color:chartTextColor(), font:{size:10}}},
+          y:{grid:{color:chartGridColor()}, ticks:{color:chartTextColor(), font:{size:10}}}
+        },
+        plugins:{
+          legend:{position:'top', labels:{color:chartTextColor(), font:{size:11}, boxWidth:14}},
+          tooltip:{ callbacks:{ label: function(ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y) + ' 萬'; } } }
+        } }
+    });
+  }, 0);
   return card;
 }
 
