@@ -921,10 +921,11 @@ function renderAlerts() {
   var checks = [
     { kr:'kr1_revenue',   label:'喆律營收（不含法顧/合署）' },
     { kr:'kr1_consult_count', label:'諮詢場次' },
-    { kr:'kr2_conversion',label:'諮詢轉化率' },
-    { kr:'kr3a_active_cases',     label:'法顧主動進線' },
-    { kr:'kr3a_referral_cases',   label:'法顧介紹' },
-    { kr:'kr3b_renewal_cases',    label:'法顧續委任' },
+    { kr:'kr2_conversion',label:'諮詢效益' },
+    { kr:'kr3a_active_revenue',   label:'法顧主動進線' },
+    { kr:'kr3a_referral_revenue', label:'法顧介紹' },
+    { kr:'kr3b_renewal_amount',   label:'法顧續委任' },
+    { kr:'kr3_total_revenue',     label:'法顧月營業額' },
     { kr:'kr4_partner_count',     label:'合署人數' },
     { kr:'kr4_referred_revenue',  label:'合署轉案' },
     { kr:'kr5_revenue',           label:'法0' },
@@ -958,8 +959,7 @@ function renderKRs() {
   c.appendChild(grid);
   grid.appendChild(renderKR1());
   grid.appendChild(renderKR2());
-  grid.appendChild(renderKR3a());
-  grid.appendChild(renderKR3b());
+  grid.appendChild(renderKR3());
   grid.appendChild(renderKR4());
   grid.appendChild(renderKR5());
   grid.appendChild(renderKR6());
@@ -1132,32 +1132,94 @@ function renderKR2() {
 }
 
 // ═══ KR3a 法顧新案 ═══
-function renderKR3a() {
+function renderKR3() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR3a｜法顧新案（主動進線 / 介紹）', owner:'吳泰儀 / 黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'} });
-  var row1 = document.createElement('div'); row1.className='kr-metric-row';
-  row1.appendChild(makeMetricCell({ label:'主動進線 件數', value:actualValue('kr3a_active_cases', fm), unit:'件', target:targetValue('kr3a_active_cases', fm), krCode:'kr3a_active_cases', targetMonth:fm }));
-  row1.appendChild(makeMetricCell({ label:'主動進線 金額', value:actualValue('kr3a_active_revenue', fm), unit:'萬', target:targetValue('kr3a_active_revenue', fm), krCode:'kr3a_active_revenue', targetMonth:fm }));
-  card.appendChild(row1);
-  var row2 = document.createElement('div'); row2.className='kr-metric-row';
-  row2.appendChild(makeMetricCell({ label:'介紹 件數', value:actualValue('kr3a_referral_cases', fm), unit:'件', target:targetValue('kr3a_referral_cases', fm), krCode:'kr3a_referral_cases', targetMonth:fm }));
-  row2.appendChild(makeMetricCell({ label:'介紹 金額', value:actualValue('kr3a_referral_revenue', fm), unit:'萬', target:targetValue('kr3a_referral_revenue', fm), krCode:'kr3a_referral_revenue', targetMonth:fm }));
-  card.appendChild(row2);
-  return card;
-}
-
-// ═══ KR3b 法顧續委任 ═══
-function renderKR3b() {
-  var fm = state.focusMonth;
-  var card = makeCard({ title:'KR3b｜法顧續委任', owner:'負責：黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'} });
+  var card = makeCard({ title:'KR3｜法律顧問月營業額（≥ 158 萬/月）', owner:'吳泰儀 / 黃杰', deeplink:{label:'→ 法律顧問', route:'advisor'}, full:true });
   var row = document.createElement('div'); row.className='kr-metric-row';
-  row.appendChild(makeMetricCell({ label:'續委任 件數', value:actualValue('kr3b_renewal_cases', fm), unit:'件', target:targetValue('kr3b_renewal_cases', fm), krCode:'kr3b_renewal_cases', targetMonth:fm }));
-  row.appendChild(makeMetricCell({ label:'續委任 金額', value:actualValue('kr3b_renewal_amount', fm), unit:'萬', target:targetValue('kr3b_renewal_amount', fm), krCode:'kr3b_renewal_amount', targetMonth:fm }));
+  row.style.gridTemplateColumns = 'repeat(4, 1fr)';
+
+  // 主動進線
+  var activeCases = actualValue('kr3a_active_cases', fm);
+  var activeAmount = actualValue('kr3a_active_revenue', fm);
+  var activeBox = document.createElement('div'); activeBox.className = 'kr-metric';
+  var activePct = targetValue('kr3a_active_revenue', fm) > 0 ? activeAmount / targetValue('kr3a_active_revenue', fm) * 100 : null;
+  var activePctCls = pctClass(activePct);
+  activeBox.innerHTML = '<div class="label">主動進線</div>'
+    + '<div class="value">' + fmt(activeAmount || 0) + '<span class="unit"> 萬</span></div>'
+    + '<div class="target-line">' + fmtByUnit(activeCases||0, '件') + ' 件 · 目標 '
+    + fmtByUnit(targetValue('kr3a_active_cases', fm)||0, '件') + ' 件 / '
+    + fmt(targetValue('kr3a_active_revenue', fm)||0) + ' 萬</div>'
+    + (activePct != null ? '<div class="pct ' + activePctCls + '">' + pctText(activePct) + '</div>' : '');
+  row.appendChild(activeBox);
+
+  // 介紹
+  var refCases = actualValue('kr3a_referral_cases', fm);
+  var refAmount = actualValue('kr3a_referral_revenue', fm);
+  var refBox = document.createElement('div'); refBox.className = 'kr-metric';
+  var refPct = targetValue('kr3a_referral_revenue', fm) > 0 ? refAmount / targetValue('kr3a_referral_revenue', fm) * 100 : null;
+  var refPctCls = pctClass(refPct);
+  refBox.innerHTML = '<div class="label">介紹</div>'
+    + '<div class="value">' + fmt(refAmount || 0) + '<span class="unit"> 萬</span></div>'
+    + '<div class="target-line">' + fmtByUnit(refCases||0, '件') + ' 件 · 目標 '
+    + fmtByUnit(targetValue('kr3a_referral_cases', fm)||0, '件') + ' 件 / '
+    + fmt(targetValue('kr3a_referral_revenue', fm)||0) + ' 萬</div>'
+    + (refPct != null ? '<div class="pct ' + refPctCls + '">' + pctText(refPct) + '</div>' : '');
+  row.appendChild(refBox);
+
+  // 續委任
+  var renewalCases = actualValue('kr3b_renewal_cases', fm);
+  var renewalAmount = actualValue('kr3b_renewal_amount', fm);
+  var renewalBox = document.createElement('div'); renewalBox.className = 'kr-metric';
+  var renewalPct = targetValue('kr3b_renewal_amount', fm) > 0 ? renewalAmount / targetValue('kr3b_renewal_amount', fm) * 100 : null;
+  var renewalPctCls = pctClass(renewalPct);
+  renewalBox.innerHTML = '<div class="label">續委任</div>'
+    + '<div class="value">' + fmt(renewalAmount || 0) + '<span class="unit"> 萬</span></div>'
+    + '<div class="target-line">' + fmtByUnit(renewalCases||0, '件') + ' 件 · 目標 '
+    + fmtByUnit(targetValue('kr3b_renewal_cases', fm)||0, '件') + ' 件 / '
+    + fmt(targetValue('kr3b_renewal_amount', fm)||0) + ' 萬</div>'
+    + (renewalPct != null ? '<div class="pct ' + renewalPctCls + '">' + pctText(renewalPct) + '</div>' : '');
+  row.appendChild(renewalBox);
+
+  // 月營業額合計（advisor_cases 全部分類加總，對標 158 萬月目標）
+  row.appendChild(makeMetricCell({
+    label: (fm==null ? 'YTD' : fm+'月') + ' 法顧月營業額（含全部）',
+    value: actualValue('kr3_total_revenue', fm),
+    unit: '萬',
+    target: targetValue('kr3_total_revenue', fm),
+    krCode: 'kr3_total_revenue',
+    targetMonth: fm
+  }));
   card.appendChild(row);
-  var row2 = document.createElement('div'); row2.className='kr-metric-row';
-  row2.appendChild(makeMetricCell({ label:'法顧 月營收（含全部）', value:actualValue('kr3_total_revenue', fm), unit:'萬', target:targetValue('kr3_total_revenue', fm), krCode:'kr3_total_revenue', targetMonth:fm }));
-  row2.appendChild(makeMetricCell({ label:'YTD 續委任達成', value:actualYTD('kr3b_renewal_amount'), unit:'萬', target:targetValue('kr3b_renewal_amount', null) }));
-  card.appendChild(row2);
+
+  // 12 個月堆疊柱狀圖：主動 + 介紹 + 續委任 + 月目標折線
+  var cv = document.createElement('div'); cv.className='kr-chart-wrap tall'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
+  setTimeout(function() {
+    var labels=[], aArr=[], rArr=[], renArr=[], targetArr=[];
+    for (var m=1; m<=12; m++) {
+      labels.push(m+'月');
+      aArr.push(actualMonth('kr3a_active_revenue', m));
+      rArr.push(actualMonth('kr3a_referral_revenue', m));
+      renArr.push(actualMonth('kr3b_renewal_amount', m));
+      targetArr.push(getTarget('kr3_total_revenue', m) || null);
+    }
+    var ctx = cvs.getContext('2d');
+    charts['kr3_chart'] = new Chart(ctx, {
+      type:'bar',
+      data:{ labels:labels, datasets:[
+        { label:'主動進線', data:aArr,   backgroundColor:colorVar('blue'),   borderRadius:3, order:2, stack:'a' },
+        { label:'介紹',     data:rArr,   backgroundColor:colorVar('orange'), borderRadius:3, order:2, stack:'a' },
+        { label:'續委任',   data:renArr, backgroundColor:colorVar('green'),  borderRadius:3, order:2, stack:'a' },
+        { label:'月目標 (158 萬)', data:targetArr, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        scales:{
+          x:{grid:{display:false},ticks:{color:chartTextColor(),font:{size:10}}, stacked:true },
+          y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),font:{size:10}}, stacked:true }
+        },
+        plugins:{ legend:{position:'top',labels:{color:chartTextColor(),font:{size:11},boxWidth:14}} } }
+    });
+  }, 0);
+
   return card;
 }
 
