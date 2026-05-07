@@ -99,8 +99,10 @@
 
 ### 改 Sheet 欄位之後
 
-`advisor_sync.gs` 開頭的 `COL_CASES` / `COL_FUNNEL` / `COL_OUTBOUND` 物件記載每個欄位對應的「欄號」（A=1, B=2...）。
-如果在 Sheet 中插入或調動欄位，要同步修改這些常數，再 **儲存** Apps Script 就會生效。
+- **`1. 業績成案清單` / `電話陌開促成拜訪進度`**：由 `COL_CASES` / `COL_OUTBOUND` 物件用「欄號」（A=1, B=2…）對應。插欄/移欄後要去 `advisor_sync.gs` 開頭同步修改這些常數，再 **儲存**。
+- **`2. 克威柏凱輪值表`**：改成 header-driven。`PENDING_HEADERS` 列了每個欄位允許的 header 名稱（例如 `備註`/`律師備註`），會在執行時依第 1 列 header 自動找欄位。**只要 header 名稱沒改、且還列在 `PENDING_HEADERS` 的別名內，插欄/移欄都不用改程式碼**。
+  - 如果新增了 header，但 `PENDING_HEADERS` 沒列到該別名 → 該欄位會被當成「找不到」、寫入 null。在 `PENDING_HEADERS` 加上新名稱即可。
+  - 必要欄位（`當事人 / 業務 / 交辦日`）找不到 → 整個 syncPending 會 abort 並把缺的 header 名稱寫進 `advisor_sync_log.error_message`。
 
 ### 看同步歷史 / 排錯
 

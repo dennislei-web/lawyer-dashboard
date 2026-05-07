@@ -43,25 +43,30 @@ const COL_OUTBOUND = {
 };
 
 // 克威柏凱輪值表（跟進中案件）欄位對應
-const COL_PENDING = {
-  monthly_seq: 1,        // A
-  salesperson: 2,        // B
-  assigned_at: 3,        // C
-  client_name: 4,        // D
-  is_paid: 5,            // E
-  channel: 6,            // F
-  consultation_lawyer: 7,// G
-  last_contact_text: 8,  // H
-  case_summary: 9,       // I
-  first_contact_at: 10,  // J
-  cm_meeting_at: 11,     // K
-  lawyer_meeting_at: 12, // L
-  proposal_at: 13,       // M
-  follow_up_1_at: 14,    // N
-  follow_up_2_at: 15,    // O
-  lawyer_notes: 16,      // P
-  is_signed: 17,         // Q
-  payment_status: 18     // R
+//
+// 走 header-driven mapping：依第 1 列 header 文字找欄位，避免 Sheet 插欄/移欄就壞掉。
+// 每個欄位列出 Sheet 上可能用過的 header 名稱（normalize 後比對：拿掉空白/全形括號）。
+// 找不到的欄位 → 該欄位寫入 null（不影響其他欄位）。
+const PENDING_HEADERS = {
+  monthly_seq:         ['月序', '當月編號', '編號', '序', 'No', 'No.', '序號'],
+  salesperson:         ['業務', '業務窗口', '負責同仁', '負責業務'],
+  assigned_at:         ['交辦日', '交辦日期', '派案日', '派案日期', '指派日'],
+  followup_status:     ['後續追蹤', '後續追蹤狀態', '跟進狀態', '追蹤狀態', '狀態'],
+  client_name:         ['當事人', '客戶', '客戶名稱', '案主', '當事人姓名'],
+  is_paid:             ['已付', '已付款', '是否已付', '付款'],
+  channel:             ['來源', '案源', '渠道', '管道', '客戶來源', '案件來源'],
+  consultation_lawyer: ['諮詢律師', '接洽律師', '律師諮詢', '律師'],
+  last_contact_text:   ['最近聯繫', '最後聯繫', '最後聯繫時間', '最近一次聯繫', '聯繫'],
+  case_summary:        ['案件摘要', '案情', '案件描述', '案件簡述', '簡述', '摘要'],
+  first_contact_at:    ['初次接觸', '初次接觸日', '首次接觸', '首次接觸日', '初次聯繫日'],
+  cm_meeting_at:       ['CM會議', 'CM 會議', '客戶經理會議', '客經會議', 'CM會議日'],
+  lawyer_meeting_at:   ['律師會議', '律師會', '律師會議日', '律師會議日期'],
+  proposal_at:         ['提報方案', '提報日', '提案日', '提案', '方案提報'],
+  follow_up_1_at:      ['提報追蹤', '第一次追蹤', '追蹤一', '追蹤1', '追蹤(一)', '追蹤1日', '一次追蹤'],
+  follow_up_2_at:      ['第二次追蹤', '追蹤二', '追蹤2', '追蹤(二)', '追蹤2日', '二次追蹤'],
+  lawyer_notes:        ['備註', '律師備註', '備註欄', '律師協助', '律師協助/特殊情形'],
+  is_signed:           ['已成案', '是否成案', '簽約', '已簽約', '成案'],
+  payment_status:      ['付款狀態', '收款狀態', '繳費狀態']
 };
 
 // ============================================================
@@ -212,25 +217,43 @@ function syncPending(ss) {
   if (!sheet) { logSync(TAB_PENDING, 0, 0, 0, '找不到分頁: ' + TAB_PENDING, startedAt); return; }
 
   const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
   if (lastRow < 2) { logSync(TAB_PENDING, 0, 0, 0, '無資料列', startedAt); return; }
 
-  const range = sheet.getRange(2, 1, lastRow - 1, 18).getValues();
+  // 第 1 列拿來建 header → column index 對照（讀全部欄位，不再寫死 18）
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const colMap = buildPendingColMap(header);
+  const missing = ['client_name', 'salesperson', 'assigned_at']
+    .filter(k => colMap[k] == null);
+  if (missing.length) {
+    const msg = '找不到必要欄位 header: ' + missing.join(', ') +
+                ' (現有 header: ' + header.map(h => String(h || '').trim()).filter(Boolean).join(' | ') + ')';
+    Logger.log('[syncPending] ' + msg);
+    logSync(TAB_PENDING, 0, 0, 0, msg, startedAt);
+    return;
+  }
+  Logger.log('[syncPending] header map: ' + JSON.stringify(colMap));
+
+  const range = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
   const today = new Date();
   const rows = [];
 
+  // 取值小工具：欄位沒對到 → 回 undefined（讓下游 helper 變 null/false）
+  const cell = (r, key) => colMap[key] == null ? undefined : r[colMap[key]];
+
   range.forEach((r, i) => {
-    const clientName = String(r[COL_PENDING.client_name - 1] || '').trim();
+    const clientName = String(cell(r, 'client_name') || '').trim();
     if (!clientName) return;  // 空白列跳過
 
-    const assignedAt   = parseDate(r[COL_PENDING.assigned_at - 1]);
-    const firstContact = parseDate(r[COL_PENDING.first_contact_at - 1]);
-    const cmMeeting    = parseDate(r[COL_PENDING.cm_meeting_at - 1]);
-    const lawyerMeeting= parseDate(r[COL_PENDING.lawyer_meeting_at - 1]);
-    const proposal     = parseDate(r[COL_PENDING.proposal_at - 1]);
-    const followUp1    = parseDate(r[COL_PENDING.follow_up_1_at - 1]);
-    const followUp2    = parseDate(r[COL_PENDING.follow_up_2_at - 1]);
+    const assignedAt   = parseDate(cell(r, 'assigned_at'));
+    const firstContact = parseDate(cell(r, 'first_contact_at'));
+    const cmMeeting    = parseDate(cell(r, 'cm_meeting_at'));
+    const lawyerMeeting= parseDate(cell(r, 'lawyer_meeting_at'));
+    const proposal     = parseDate(cell(r, 'proposal_at'));
+    const followUp1    = parseDate(cell(r, 'follow_up_1_at'));
+    const followUp2    = parseDate(cell(r, 'follow_up_2_at'));
 
-    const isSigned = toBool(r[COL_PENDING.is_signed - 1]);
+    const isSigned = toBool(cell(r, 'is_signed'));
 
     // current_stage：從最晚階段往前推
     let stage = '尚未啟動';
@@ -250,29 +273,29 @@ function syncPending(ss) {
     const daysSinceLastAction = lastActionDate ? Math.floor((today - lastActionDate) / 86400000) : null;
 
     rows.push({
-      monthly_seq:         toIntOrNull(r[COL_PENDING.monthly_seq - 1]),
-      salesperson:         nullIfEmpty(r[COL_PENDING.salesperson - 1]),
+      monthly_seq:         toIntOrNull(cell(r, 'monthly_seq')),
+      salesperson:         nullIfEmpty(cell(r, 'salesperson')),
       assigned_at:         dateToStr(assignedAt),
       client_name:         clientName,
-      is_paid:             toBool(r[COL_PENDING.is_paid - 1]),
-      channel:             nullIfEmpty(r[COL_PENDING.channel - 1]),
-      consultation_lawyer: nullIfEmpty(r[COL_PENDING.consultation_lawyer - 1]),
-      last_contact_text:   nullIfEmpty(r[COL_PENDING.last_contact_text - 1]),
-      case_summary:        nullIfEmpty(r[COL_PENDING.case_summary - 1]),
+      is_paid:             toBool(cell(r, 'is_paid')),
+      channel:             nullIfEmpty(cell(r, 'channel')),
+      consultation_lawyer: nullIfEmpty(cell(r, 'consultation_lawyer')),
+      last_contact_text:   nullIfEmpty(cell(r, 'last_contact_text')),
+      case_summary:        nullIfEmpty(cell(r, 'case_summary')),
       first_contact_at:    dateToStr(firstContact),
       cm_meeting_at:       dateToStr(cmMeeting),
       lawyer_meeting_at:   isPlaceholder(lawyerMeeting) ? null : dateToStr(lawyerMeeting),
       proposal_at:         dateToStr(proposal),
       follow_up_1_at:      dateToStr(followUp1),
       follow_up_2_at:      dateToStr(followUp2),
-      lawyer_notes:        nullIfEmpty(r[COL_PENDING.lawyer_notes - 1]),
+      lawyer_notes:        nullIfEmpty(cell(r, 'lawyer_notes')),
       is_signed:           isSigned,
-      payment_status:      nullIfEmpty(r[COL_PENDING.payment_status - 1]),
+      payment_status:      nullIfEmpty(cell(r, 'payment_status')),
       current_stage:       stage,
       days_since_assigned: daysSinceAssigned,
       days_since_last_action: daysSinceLastAction,
       sheet_row_index:     i + 2,
-      row_hash:            hashRow([clientName, r[COL_PENDING.assigned_at - 1], stage, daysSinceLastAction])
+      row_hash:            hashRow([clientName, cell(r, 'assigned_at'), stage, daysSinceLastAction])
     });
   });
 
@@ -280,6 +303,28 @@ function syncPending(ss) {
   const ins = batchInsert('/rest/v1/advisor_pending_cases', rows);
 
   logSync(TAB_PENDING, rows.length, 0, 0, ins.error || del.error || null, startedAt);
+}
+
+// 把第 1 列 header 文字對到 PENDING_HEADERS 定義的欄位 → 回傳 {field: zeroBasedColIdx}
+function buildPendingColMap(headerRow) {
+  const norm = s => String(s == null ? '' : s)
+    .replace(/[\s　]+/g, '')                   // 拿掉空白
+    .replace(/[（）()]/g, '')                       // 拿掉括號
+    .toLowerCase();
+  // 建 normalized header → 0-based index（同名只記第一個）
+  const headerIdx = {};
+  headerRow.forEach((h, i) => {
+    const k = norm(h);
+    if (k && headerIdx[k] == null) headerIdx[k] = i;
+  });
+  const map = {};
+  Object.keys(PENDING_HEADERS).forEach(field => {
+    for (const alias of PENDING_HEADERS[field]) {
+      const idx = headerIdx[norm(alias)];
+      if (idx != null) { map[field] = idx; break; }
+    }
+  });
+  return map;
 }
 
 function isPlaceholder(d) {
