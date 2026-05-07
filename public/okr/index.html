@@ -278,9 +278,12 @@
       <label>聚焦月份</label>
       <select id="monthSelect"></select>
       <button id="reloadBtn" title="重新整理資料">重整</button>
+      <button id="diagToggleBtn" title="顯示診斷資訊">🔍 診斷</button>
       <div class="filter-spacer"></div>
       <button id="editToggleBtn" class="btn-primary">✏️ 編輯目標 / 里程碑</button>
     </div>
+
+    <div id="diagBar" style="display:none; padding:8px 12px; background:var(--bg-card); border:1px dashed var(--border-light); border-radius:8px; margin-bottom:12px; font-size:0.75rem; color:var(--text-muted); font-family:monospace; line-height:1.5;"></div>
 
     <div id="editBar" class="edit-bar" style="display:none;">
       <span>📝 編輯模式</span>
@@ -463,6 +466,7 @@ function initFilters() {
     render();
   });
   document.getElementById('reloadBtn').addEventListener('click', loadAll);
+  document.getElementById('diagToggleBtn').addEventListener('click', toggleDiag);
   document.getElementById('editToggleBtn').addEventListener('click', toggleEdit);
   document.getElementById('saveEditsBtn').addEventListener('click', saveAllEdits);
   document.getElementById('cancelEditsBtn').addEventListener('click', cancelEdits);
@@ -499,10 +503,10 @@ async function loadAll() {
       sb.from('okr_targets').select('*').eq('year', year),
       sb.from('okr_manual_actuals').select('*').eq('year', year),
       sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
-      fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd); }),
-      fetchAll(function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue').gte('case_date', startISO).lte('case_date', endISO); }),
-      fetchAll(function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false).gte('record_date', startISO).lte('record_date', endISO); }),
-      fetchAll(function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid').gte('paid_at', startISO).lte('paid_at', endISO); }),
+      fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd).order('month'); }),
+      fetchAll(function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue').gte('case_date', startISO).lte('case_date', endISO).order('case_date'); }),
+      fetchAll(function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false).gte('record_date', startISO).lte('record_date', endISO).order('record_date', { ascending: false }); }),
+      fetchAll(function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid').gte('paid_at', startISO).lte('paid_at', endISO).order('paid_at'); }),
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
         .eq('fiscal_year', year - 1911).eq('data_type', 'actual').eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded()
@@ -527,14 +531,26 @@ async function loadAll() {
     [results[0], results[1], results[2], results[7]].forEach(function(r, i) {
       if (r && r.error) console.warn('OKR load error #' + i, r.error);
     });
-    console.log('OKR loaded:', {
+    // 月份分佈（debug 用）
+    var monthCounts = { paid:[0,0,0,0,0,0,0,0,0,0,0,0,0], refund:[0,0,0,0,0,0,0,0,0,0,0,0,0], partner:[0,0,0,0,0,0,0,0,0,0,0,0,0] };
+    revenueRecords.forEach(function(r) {
+      var m = parseInt(String(r.record_date||'').slice(5,7), 10);
+      if (m < 1 || m > 12) return;
+      var isP = r.group_name && r.group_name.indexOf('合署') !== -1;
+      if (isP) monthCounts.partner[m]++;
+      else if (r.transaction_type === 'PaymentTransaction') monthCounts.paid[m]++;
+      else if (r.transaction_type === 'RefundTransaction') monthCounts.refund[m]++;
+    });
+    state.diagnostics = {
       targets: d.targets.length,
       revenueRows: revenueRecords.length,
       consultCases: consultCases.length,
       monthlyStats: monthlyStats.length,
       advisorCases: advisorCases.length,
-      financeRows: financeData.length
-    });
+      financeRows: financeData.length,
+      monthCounts: monthCounts
+    };
+    console.log('OKR loaded:', state.diagnostics);
 
     render();
   } catch (ex) {
@@ -1329,6 +1345,27 @@ function handleMilestoneEdit(id, field, value) {
   }
   state.pendingMilestones[id][field] = (value === '') ? null : value;
   updatePendingBadge();
+}
+
+// ═══ DIAGNOSTICS ═══
+function toggleDiag() {
+  var bar = document.getElementById('diagBar');
+  if (bar.style.display === 'none' || !bar.style.display) {
+    var d = state.diagnostics; if (!d) { bar.innerHTML = '尚未載入'; bar.style.display='block'; return; }
+    var html = '🔍 <b>資料診斷</b>　';
+    html += 'targets=' + d.targets + '　revenueRows=' + d.revenueRows
+         + '　consultCases=' + d.consultCases + '　monthlyStats=' + d.monthlyStats
+         + '　advisorCases=' + d.advisorCases + '　financeRows=' + d.financeRows;
+    html += '<br>　<b>revenue_records 月份分佈</b>:';
+    for (var m=1; m<=12; m++) {
+      var p = d.monthCounts.paid[m], r = d.monthCounts.refund[m], pa = d.monthCounts.partner[m];
+      if (p+r+pa > 0) html += '　' + m + '月: 付' + p + '/退' + r + '/合署' + pa;
+    }
+    if (d.revenueRows >= 1000) html += '<br>⚠️ 已達 1000 筆，若 PostgREST max-rows 限制可能漏資料 — 請檢查 5 個月加總是否合理';
+    bar.innerHTML = html; bar.style.display='block';
+  } else {
+    bar.style.display='none';
+  }
 }
 
 // ═══ EDIT MODE ═══
