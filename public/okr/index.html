@@ -469,6 +469,23 @@ function initFilters() {
 }
 
 // ═══ DATA LOAD ═══
+// Supabase 預設一次最多 1000 筆，要分頁。每次都重新建 builder 因為 builder 是 mutable 的。
+async function fetchAll(buildQuery) {
+  var pageSize = 1000;
+  var from = 0; var all = [];
+  while (true) {
+    var q = buildQuery().range(from, from + pageSize - 1);
+    var r = await q;
+    if (r.error) throw r.error;
+    var d = r.data || [];
+    all = all.concat(d);
+    if (d.length < pageSize) break;
+    from += pageSize;
+    if (from > 50000) break; // safety
+  }
+  return all;
+}
+
 async function loadAll() {
   document.getElementById('krContainer').innerHTML = '<div class="loading-text">載入中⋯</div>';
   var year = state.year;
@@ -482,12 +499,10 @@ async function loadAll() {
       sb.from('okr_targets').select('*').eq('year', year),
       sb.from('okr_manual_actuals').select('*').eq('year', year),
       sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
-      sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd),
-      sb.from('consultation_cases').select('case_date,is_signed,revenue').gte('case_date', startISO).lte('case_date', endISO),
-      sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void')
-        .eq('is_void', false).gte('record_date', startISO).lte('record_date', endISO),
-      sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid')
-        .gte('paid_at', startISO).lte('paid_at', endISO),
+      fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count').gte('month', ymStart).lte('month', ymEnd); }),
+      fetchAll(function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue').gte('case_date', startISO).lte('case_date', endISO); }),
+      fetchAll(function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false).gte('record_date', startISO).lte('record_date', endISO); }),
+      fetchAll(function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid').gte('paid_at', startISO).lte('paid_at', endISO); }),
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
         .eq('fiscal_year', year - 1911).eq('data_type', 'actual').eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded()
@@ -497,15 +512,28 @@ async function loadAll() {
     d.targets       = results[0].data || [];
     d.manualActuals = results[1].data || [];
     d.milestones    = results[2].data || [];
-    aggregateConsult(results[3].data || [], results[4].data || []);
-    aggregateRevenue(results[5].data || [], results[6].data || []);
-    aggregateAdvisor(results[6].data || []);
-    aggregateFinance(results[7].data || []);
+    var monthlyStats = results[3] || [];
+    var consultCases = results[4] || [];
+    var revenueRecords = results[5] || [];
+    var advisorCases = results[6] || [];
+    var financeData = (results[7] && results[7].data) || [];
+    aggregateConsult(monthlyStats, consultCases);
+    aggregateRevenue(revenueRecords, advisorCases);
+    aggregateAdvisor(advisorCases);
+    aggregateFinance(financeData);
     aggregatePartners(results[8]);
 
     // log any errors
-    results.slice(0, 8).forEach(function(r, i) {
+    [results[0], results[1], results[2], results[7]].forEach(function(r, i) {
       if (r && r.error) console.warn('OKR load error #' + i, r.error);
+    });
+    console.log('OKR loaded:', {
+      targets: d.targets.length,
+      revenueRows: revenueRecords.length,
+      consultCases: consultCases.length,
+      monthlyStats: monthlyStats.length,
+      advisorCases: advisorCases.length,
+      financeRows: financeData.length
     });
 
     render();
@@ -537,17 +565,21 @@ function aggregateConsult(monthlyStats, consultCases) {
 }
 
 function aggregateRevenue(records, advisorCases) {
-  var byMonth = {};
-  for (var i=1; i<=12; i++) byMonth[i] = { paid:0, refund:0, advisorSigned:0 };
+  // 拆兩組：byMonth（非合署，扣法顧 → KR1）/ partnerByMonth（合署 → KR4，對標營運頁「合署律師」tab）
+  var byMonth = {}, partnerByMonth = {};
+  for (var i=1; i<=12; i++) {
+    byMonth[i] = { paid:0, refund:0, advisorSigned:0 };
+    partnerByMonth[i] = { paid:0, refund:0 };
+  }
   records.forEach(function(r) {
     if (!r.record_date) return;
     var m = parseInt(String(r.record_date).slice(5,7), 10);
     if (m < 1 || m > 12) return;
-    var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
-    if (isPartner) return; // 合署的另算 KR4
     var amt = Number(r.amount || 0);
-    if (r.transaction_type === 'PaymentTransaction') byMonth[m].paid += amt;
-    else if (r.transaction_type === 'RefundTransaction') byMonth[m].refund += amt;
+    var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
+    var bucket = isPartner ? partnerByMonth[m] : byMonth[m];
+    if (r.transaction_type === 'PaymentTransaction') bucket.paid += amt;
+    else if (r.transaction_type === 'RefundTransaction') bucket.refund += amt;
   });
   advisorCases.forEach(function(c) {
     if (!c.paid_at) return;
@@ -555,6 +587,7 @@ function aggregateRevenue(records, advisorCases) {
     if (m >= 1 && m <= 12) byMonth[m].advisorSigned += Number(c.amount_paid || 0);
   });
   state.data.revenueByMonth = byMonth;
+  state.data.partnerRevenueByMonth = partnerByMonth;
 }
 
 function aggregateAdvisor(cases) {
@@ -594,36 +627,20 @@ function aggregateFinance(rows) {
 }
 
 function aggregatePartners(partnersJSON) {
+  // 合署人數：只算 senior + judicial（consult cohort 是諮詢律師，不計入合署人數目標 15 位）
   var d = state.data;
   d.partnerCount = 0;
   d.partnerCohorts = { judicial:[], senior:[], consult:[] };
-  var byMonth = {};
-  for (var i=1; i<=12; i++) byMonth[i] = { commission:0, self:0, total:0 };
-
-  if (!partnersJSON || !partnersJSON.cohorts) {
-    d.partnersByMonth = byMonth;
-    return;
-  }
+  if (!partnersJSON || !partnersJSON.cohorts) return;
   var cohorts = partnersJSON.cohorts;
   Object.keys(cohorts).forEach(function(key) {
     var c = cohorts[key];
-    if (!c) return;
-    if (c.lawyers) {
-      d.partnerCohorts[key] = c.lawyers.slice();
+    if (!c || !c.lawyers) return;
+    d.partnerCohorts[key] = c.lawyers.slice();
+    if (key === 'judicial' || key === 'senior') {
       d.partnerCount += c.lawyers.length;
     }
-    (c.monthly || []).forEach(function(rec) {
-      // year is 民國
-      var rocYear = String(rec.year || '');
-      if (rocYear !== String(state.year - 1911)) return;
-      var m = Number(rec.month);
-      if (m < 1 || m > 12) return;
-      byMonth[m].commission += Number(rec.commission_A || 0);
-      byMonth[m].self += Number(rec.self_A || 0);
-      byMonth[m].total += Number(rec.commission_A || 0) + Number(rec.self_A || 0);
-    });
   });
-  d.partnersByMonth = byMonth;
 }
 
 async function fetchPartnersEmbedded() {
@@ -696,9 +713,14 @@ function actualMonth(krCode, m) {
     case 'kr3b_renewal_cases':        return ((d.advisorByMonth[m] || {}).renewal || {}).cases || 0;
     case 'kr3b_renewal_amount':       return (((d.advisorByMonth[m] || {}).renewal || {}).amount || 0) / 10000;
     case 'kr3_total_revenue':         return (((d.advisorByMonth[m] || {}).total || {}).amount || 0) / 10000;
-    case 'kr4_referred_revenue':     return ((d.partnersByMonth[m] || {}).commission || 0) / 10000;
-    case 'kr4_partner_self_revenue': return ((d.partnersByMonth[m] || {}).self || 0) / 10000;
-    case 'kr4_case_volume':          return ((d.partnersByMonth[m] || {}).total || 0) / 10000;
+    case 'kr4_partner_net_revenue':
+    case 'kr4_referred_revenue':
+    case 'kr4_partner_self_revenue':
+    case 'kr4_case_volume': {
+      // 對標營運頁「合署律師」tab 月淨收入；DB 沒有區分轉案/自案，三個 KR 同一個值
+      var pr = d.partnerRevenueByMonth[m] || {};
+      return ((pr.paid || 0) - (pr.refund || 0)) / 10000;
+    }
     case 'kr5_revenue':
     case 'kr5_followers':
     case 'kr5_referrals':
@@ -781,12 +803,13 @@ function renderHero() {
   setHero('kr3', actualValue('kr3_total_revenue', fm), targetValue('kr3_total_revenue', fm), '萬');
   // KR5 法0 月營收
   setHero('kr5', actualValue('kr5_revenue', fm), targetValue('kr5_revenue', fm), '萬');
-  // KR4 合署 = 案件總額 (commission + self)
-  setHero('kr4', actualValue('kr4_case_volume', fm), targetValue('kr4_case_volume', fm), '萬');
+  // KR4 合署 = 營運頁合署淨收入；目標 = 轉案 280 + 自案 137.5 月目標合計
+  var kr4Target = (targetValue('kr4_referred_revenue', fm) || 0) + (targetValue('kr4_partner_self_revenue', fm) || 0);
+  setHero('kr4', actualValue('kr4_partner_net_revenue', fm), kr4Target || null, '萬');
   // KR6 純利推估: 推算 = 營收估 - 成本估
-  // 簡化版：YTD 已收 - YTD 成本，用 fm == null 的 YTD 算；或 fm 月：當月毛利
+  // 簡化版：YTD 營收 - YTD 成本，營收 = 喆律(KR1) + 法顧(KR3) + 法0(KR5) + 合署淨收入(KR4)
   var revenue = (actualValue('kr1_revenue', fm) || 0) + (actualValue('kr3_total_revenue', fm) || 0)
-              + (actualValue('kr5_revenue', fm) || 0) + (actualValue('kr4_case_volume', fm) || 0);
+              + (actualValue('kr5_revenue', fm) || 0) + (actualValue('kr4_partner_net_revenue', fm) || 0);
   var cost = actualValue('kr6_monthly_cost_cap', fm) || 0;
   var profit = revenue - cost;
   // 年度純利目標 4000 萬。fm null = YTD 對到 (4000 * (m_done / 12))
@@ -802,20 +825,33 @@ function actualValue(krCode, fm) {
   if (fm == null) return actualYTD(krCode);
   return actualMonth(krCode, fm);
 }
+// 比例類目標（YTD 直接用月目標）：轉化率不該每月累加
+var YEARLY_FIXED_KRS = ['kr2_conversion', 'kr4_partner_count'];
+// 上限類（YTD = 月上限 × 已過月數）：退款 / 月成本
+var CAP_KRS = ['kr1_refund_cap', 'kr6_monthly_cost_cap'];
 function targetValue(krCode, fm) {
-  if (fm == null) {
-    // YTD 目標 = 累積目前 YTD 涉及月份
-    var done = monthsElapsed();
-    var t = 0; var has = false;
-    for (var m=1; m<=done; m++) {
-      var v = getTarget(krCode, m);
-      if (v != null) { t += v; has = true; }
-    }
-    if (has) return t;
+  if (fm != null) return getTarget(krCode, fm);
+  // YTD
+  if (YEARLY_FIXED_KRS.indexOf(krCode) > -1) {
     var ann = getTarget(krCode, null);
-    return ann != null ? ann * (done / 12) : null;
+    if (ann != null) return ann;
+    return getTarget(krCode, 1);
   }
-  return getTarget(krCode, fm);
+  if (CAP_KRS.indexOf(krCode) > -1) {
+    var monthly = getTarget(krCode, 1);
+    if (monthly != null) return monthly * monthsElapsed();
+    return getTarget(krCode, null);
+  }
+  // 累加類（金額/件數）
+  var done = monthsElapsed();
+  var t = 0; var has = false;
+  for (var m=1; m<=done; m++) {
+    var v = getTarget(krCode, m);
+    if (v != null) { t += v; has = true; }
+  }
+  if (has) return t;
+  var ann2 = getTarget(krCode, null);
+  return ann2 != null ? ann2 * (done / 12) : null;
 }
 function monthsElapsed() {
   var now = new Date();
@@ -1079,23 +1115,73 @@ function renderKR3b() {
 // ═══ KR4 合署 ═══
 function renderKR4() {
   var fm = state.focusMonth;
-  var card = makeCard({ title:'KR4｜合署律師', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
+  var card = makeCard({ title:'KR4｜合署律師（對標營運頁合署律師 tab 淨收入）', owner:'負責：雷皓明', deeplink:{label:'→ 合署律師', route:'partners'}, full:true });
   var d = state.data;
   var pCount = d.partnerCount;
   var pTarget = getTarget('kr4_partner_count', null);
   var row = document.createElement('div'); row.className='kr-metric-row';
   row.style.gridTemplateColumns = 'repeat(4, 1fr)';
+
   // 在線人數
   var box1 = document.createElement('div'); box1.className='kr-metric';
-  box1.innerHTML = '<div class="label">合署在線人數</div><div class="value">' + pCount + '<span class="unit">/ ' + (pTarget||'—') + ' 人</span></div>'
+  var pctCount = pTarget > 0 ? (pCount / pTarget * 100) : null;
+  var pctCountCls = pctClass(pctCount);
+  box1.innerHTML = '<div class="label">合署在線人數</div>'
+                + '<div class="value">' + pCount + '<span class="unit"> / ' + (pTarget||'—') + ' 人</span></div>'
                 + '<div class="target-line">司法官 ' + d.partnerCohorts.judicial.length
                 + '・資深 ' + d.partnerCohorts.senior.length
-                + '・諮詢律師 ' + d.partnerCohorts.consult.length + '</div>';
+                + '（諮詢律師 ' + d.partnerCohorts.consult.length + ' 不計）</div>'
+                + (pctCount != null ? '<div class="pct ' + pctCountCls + '">' + pctText(pctCount) + '</div>' : '');
   row.appendChild(box1);
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 轉案':(fm+'月 轉案'), value:actualValue('kr4_referred_revenue', fm), unit:'萬', target:targetValue('kr4_referred_revenue', fm), krCode:'kr4_referred_revenue', targetMonth:fm }));
-  row.appendChild(makeMetricCell({ label: fm==null?'YTD 自案':(fm+'月 自案'), value:actualValue('kr4_partner_self_revenue', fm), unit:'萬', target:targetValue('kr4_partner_self_revenue', fm), krCode:'kr4_partner_self_revenue', targetMonth:fm }));
-  row.appendChild(makeMetricCell({ label:'年案件總額', value:actualYTD('kr4_case_volume'), unit:'萬', target:getTarget('kr4_case_volume', null), krCode:'kr4_case_volume', targetMonth:null }));
+
+  // 月淨收入（不分轉案/自案，對標營運頁合署律師 tab 月淨收入）
+  var monthTarget = (targetValue('kr4_referred_revenue', fm) || 0) + (targetValue('kr4_partner_self_revenue', fm) || 0) || null;
+  row.appendChild(makeMetricCell({
+    label: (fm==null ? 'YTD' : fm+'月') + ' 合署淨收入',
+    value: actualValue('kr4_partner_net_revenue', fm),
+    unit: '萬',
+    target: monthTarget
+  }));
+
+  // 月目標拆解顯示
+  var box3 = document.createElement('div'); box3.className='kr-metric';
+  box3.innerHTML = '<div class="label">月目標組成</div>'
+                + '<div class="value" style="font-size:0.95rem;">轉案 ' + fmt(targetValue('kr4_referred_revenue', fm)||0) + ' 萬</div>'
+                + '<div class="value" style="font-size:0.95rem;">+ 自案 ' + fmt(targetValue('kr4_partner_self_revenue', fm)||0) + ' 萬</div>'
+                + '<div class="target-line">合計 ' + fmt(monthTarget||0) + ' 萬／月</div>';
+  row.appendChild(box3);
+
+  // 年累計
+  row.appendChild(makeMetricCell({
+    label: '年案件總額（5000 萬）',
+    value: actualYTD('kr4_partner_net_revenue'),
+    unit: '萬',
+    target: getTarget('kr4_case_volume', null)
+  }));
   card.appendChild(row);
+
+  // 12 個月柱狀圖：合署淨收入 vs 月目標
+  var cv = document.createElement('div'); cv.className='kr-chart-wrap'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
+  setTimeout(function() {
+    var labels = [], actuals = [], targets = [];
+    for (var m=1; m<=12; m++) {
+      labels.push(m+'月');
+      actuals.push(actualMonth('kr4_partner_net_revenue', m));
+      var mt = (getTarget('kr4_referred_revenue', m) || 0) + (getTarget('kr4_partner_self_revenue', m) || 0);
+      targets.push(mt || null);
+    }
+    var ctx = cvs.getContext('2d');
+    charts['kr4_chart'] = new Chart(ctx, {
+      type:'bar',
+      data:{ labels:labels, datasets:[
+        { label:'合署月淨收入', data:actuals, backgroundColor:colorVar('orange'), borderRadius:3, order:2 },
+        { label:'月目標 (轉案+自案)', data:targets, type:'line', borderColor:colorVar('text-muted'), borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false, order:1, tension:0.2 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        scales:{ x:{grid:{display:false},ticks:{color:chartTextColor(),font:{size:10}}}, y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),font:{size:10}}} },
+        plugins:{ legend:{position:'top',labels:{color:chartTextColor(),font:{size:11},boxWidth:14}} } }
+    });
+  }, 0);
 
   // Timeline
   var msHead = document.createElement('div'); msHead.style.cssText='font-size:0.85rem;color:var(--text-muted);margin:14px 0 6px;'; msHead.textContent = '合署到位 timeline';
