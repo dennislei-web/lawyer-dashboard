@@ -1597,6 +1597,7 @@
             <tr>
               <th style="width:44px">#</th>
               <th class="sortable" data-col="name">律師</th>
+              <th class="sortable" data-col="dept">所別</th>
               <th class="sortable num" data-col="consult_eff">諮詢效益</th>
               <th class="sortable num" data-col="consult_count">諮詢數</th>
               <th class="sortable num" data-col="signed_count">簽約數</th>
@@ -1606,7 +1607,7 @@
             </tr>
           </thead>
           <tbody id="rankingTableBody">
-            <tr><td colspan="8" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+            <tr><td colspan="9" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1652,6 +1653,7 @@
             <tr>
               <th rowspan="2" style="width:44px;vertical-align:middle;">#</th>
               <th rowspan="2" style="vertical-align:middle;">律師</th>
+              <th rowspan="2" style="vertical-align:middle;">所別</th>
               <th colspan="2" class="num" style="border-bottom:1px solid var(--border);">諮詢場次</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">委任率</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">個案收費</th>
@@ -1692,6 +1694,7 @@
               <tr>
                 <th style="width:44px">#</th>
                 <th>律師</th>
+                <th>所別</th>
                 <th class="num">諮詢效益</th>
                 <th class="num">諮詢數</th>
                 <th class="num">簽約數</th>
@@ -2950,6 +2953,7 @@ function buildLawyerRows(stats) {
     return {
       id,
       name:         lawyer.name,
+      dept:         LAWYER_DEPARTMENTS[id] || '',
       consult_count: d.consult_count,
       signed_count:  d.signed_count,
       sign_rate:    d.consult_count > 0 ? d.signed_count / d.consult_count * 100 : 0,
@@ -2977,6 +2981,7 @@ function buildLawyerYoyRows(currStats, prevStats) {
     if (c.consult_count === 0 && p.consult_count === 0) return;
 
     const name = (c.name || p.name || (allLawyersMap[id] && allLawyersMap[id].name) || '(未知)');
+    const dept = LAWYER_DEPARTMENTS[id] || '';
 
     // Δ for 委任率 is percentage points; Δ for money metrics is relative %.
     const signRateDelta = c.sign_rate - p.sign_rate;
@@ -2984,7 +2989,7 @@ function buildLawyerYoyRows(currStats, prevStats) {
     const consultEffDelta = p.consult_eff > 0 ? (c.consult_eff - p.consult_eff) / p.consult_eff * 100 : (c.consult_eff > 0 ? 100 : 0);
 
     rows.push({
-      id, name,
+      id, name, dept,
       consult_count_curr: c.consult_count, consult_count_prev: p.consult_count,
       sign_rate_curr: c.sign_rate, sign_rate_prev: p.sign_rate, sign_rate_delta: signRateDelta,
       avg_collected_curr: c.avg_collected, avg_collected_prev: p.avg_collected, avg_collected_delta: avgCollectedDelta,
@@ -3098,7 +3103,7 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
 
   const tbody = document.getElementById('lawyerYoyTableBody');
   if (orderedRows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暫無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
 
@@ -3119,6 +3124,7 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
     return `<tr class="${trCls}" onclick="showDetailPage('${r.id}')">
       <td>${i + 1}</td>
       <td>${pinBtn}<strong>${escHtml(r.name)}</strong></td>
+      <td>${escHtml(r.dept || '')}</td>
       <td class="num">${currConsultTxt}</td>
       <td class="num">${prevConsultTxt}</td>
       <td class="num ${rateClassCurr}">${r.sign_rate_curr.toFixed(1)}%</td>
@@ -3159,7 +3165,7 @@ function renderRankingTable(stats) {
 
   const tbody = document.getElementById('rankingTableBody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
 
@@ -3170,6 +3176,7 @@ function renderRankingTable(stats) {
     return `<tr onclick="showDetailPage('${r.id}')">
       <td><span class="rank-badge ${rClass}">${rank}</span></td>
       <td><strong>${escHtml(r.name)}</strong></td>
+      <td>${escHtml(r.dept || '')}</td>
       <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
       <td class="num">${r.consult_count.toLocaleString()}</td>
       <td class="num">${r.signed_count.toLocaleString()}</td>
@@ -3185,7 +3192,7 @@ function renderSelfTable(stats) {
   const rows = buildLawyerRows(stats);
   const tbody = document.getElementById('rankingTableBody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
   const r = rows[0];
@@ -3193,6 +3200,7 @@ function renderSelfTable(stats) {
   tbody.innerHTML = `<tr onclick="showDetailPage('${r.id}')">
     <td><span class="rank-badge rank-1">1</span></td>
     <td><strong>${escHtml(r.name)}</strong></td>
+    <td>${escHtml(r.dept || '')}</td>
     <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
     <td class="num">${r.consult_count.toLocaleString()}</td>
     <td class="num">${r.signed_count.toLocaleString()}</td>
@@ -3239,7 +3247,7 @@ function renderResignedSection(stats) {
 
   const tbody = document.getElementById('resignedTableBody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暫無資料（需先匯入離職律師的歷史數據）</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暫無資料（需先匯入離職律師的歷史數據）</div></td></tr>';
     return;
   }
 
@@ -3249,6 +3257,7 @@ function renderResignedSection(stats) {
     return `<tr onclick="showDetailPage('${r.id}')" style="opacity:0.75;">
       <td><span class="rank-badge rank-other">${rank}</span></td>
       <td><strong>${escHtml(r.name)}</strong> <span style="font-size:11px;color:var(--text-muted);">（離職）</span></td>
+      <td>${escHtml(r.dept || '')}</td>
       <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
       <td class="num">${r.consult_count.toLocaleString()}</td>
       <td class="num">${r.signed_count.toLocaleString()}</td>
@@ -3856,6 +3865,7 @@ function renderMonthCards(stats, year, partialMonthMM) {
           <thead>
             <tr>
               <th>律師</th>
+              <th>所別</th>
               <th class="sortable num" data-col="consult_eff" data-month="${key}">諮詢效益</th>
               <th class="sortable num" data-col="consult_count" data-month="${key}">諮詢數</th>
               <th class="sortable num" data-col="signed_count" data-month="${key}">簽約數</th>
@@ -3902,6 +3912,7 @@ function renderMonthBodyRows(lawyerRows, sortCol, sortDir) {
     const rc = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
     return `<tr>
       <td>${i + 1}. ${escHtml(r.name)}</td>
+      <td>${escHtml(r.dept || '')}</td>
       <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
       <td class="num">${r.consult_count}</td>
       <td class="num">${r.signed_count}</td>
