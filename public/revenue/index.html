@@ -2755,7 +2755,7 @@ window.addEventListener('message', function(e) {
   }
 });
 
-function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return n.toLocaleString('zh-TW'); }
+function formatMoney(n) { n=Number(n||0); if(Math.abs(n)>=10000) return (n/10000).toFixed(1)+' 萬'; return Math.round(n).toLocaleString('zh-TW'); }
 
 // ═══ 手動同步 (CRM 對帳) ═══
 var TRIGGER_SYNC_FN_URL = SUPABASE_URL + '/functions/v1/trigger_sync';
