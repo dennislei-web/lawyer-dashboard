@@ -763,7 +763,7 @@
         </div>
 
         <!-- 來源明細表（部門範圍內，含 YoY） -->
-        <div class="table-card">
+        <div class="table-card" style="margin-bottom:24px">
           <div class="table-header">
             <span class="table-title" id="drillSrcTableTitle">來源管道明細</span>
             <span class="table-sub">每列為該部門在該來源的數據與 YoY 變化</span>
@@ -782,6 +782,20 @@
                 </tr>
               </thead>
               <tbody id="drillSrcTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 歷年比較表 -->
+        <div class="table-card">
+          <div class="table-header">
+            <span class="table-title" id="drillHistTitle">歷年比較</span>
+            <span class="table-sub" id="drillHistSub">最近 4 年關鍵指標，最後一欄為 YoY 變化</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="drillHistHead"></thead>
+              <tbody id="drillHistBody"></tbody>
             </table>
           </div>
         </div>
@@ -1966,8 +1980,8 @@ async function loadDeptDrillPage() {
     return '<td class="text-right '+cls+'">'+rawStr+' ('+(pct>0?'+':'')+pct.toFixed(1)+'%)</td>';
   }
   var tbody = document.getElementById('drillSrcTableBody');
-  if (!srcs.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>'; return; }
-  tbody.innerHTML = srcs.map(function(s){
+  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
+  else tbody.innerHTML = srcs.map(function(s){
     var d = srcCur[s] || { cases:0, pay:0 };
     var p = srcPrev[s] || { cases:0, pay:0 };
     var casePct = totalCases>0 ? (d.cases/totalCases*100).toFixed(1)+'%' : '0%';
@@ -1980,6 +1994,85 @@ async function loadDeptDrillPage() {
       diffCell(d.cases, p.cases, false) +
       diffCell(d.pay, p.pay, true) +
       '</tr>';
+  }).join('');
+
+  // === P3: 歷年比較表（4 年度同期對齊）===
+  var histMaxM;
+  if (mode === 'full') histMaxM = 12;
+  else { histMaxM = now.getMonth(); if (histMaxM === 0) histMaxM = 12; }
+  var histLabel = histMaxM === 12 ? '全年' : ('1-'+histMaxM+' 月');
+
+  var histYears = [drillSelectedYear-3, drillSelectedYear-2, drillSelectedYear-1, drillSelectedYear];
+  var perYearMetrics = {};
+  // 平行抓 4 年資料；fetchAllByYear / fetchConsultCasesByYear 都有 cache
+  await Promise.all(histYears.map(function(y) {
+    return Promise.all([loadRecords({year:y}), fetchConsultCasesByYear(y)]).then(function(ret) {
+      var revRecs = excludePartner(ret[0]);
+      var caseRecs = ret[1];
+      var rev = aggRevenueByOffice(revRecs, office, histMaxM);
+      var cons = aggConsultByDept(caseRecs, deptName, histMaxM);
+      perYearMetrics[y] = {
+        consult: cons.consult,
+        signed: cons.signed,
+        signRate: cons.consult>0 ? (cons.signed/cons.consult*100) : 0,
+        eff: cons.consult>0 ? (cons.collected/cons.consult) : 0,
+        pay: rev.pay,
+        ref: rev.ref,
+        net: rev.net,
+        refRate: rev.pay>0 ? (rev.ref/rev.pay*100) : 0
+      };
+    });
+  }));
+
+  document.getElementById('drillHistTitle').textContent = office + ' 歷年比較 · ' + histLabel + (histMaxM===12?'':' 同期對齊');
+  document.getElementById('drillHistSub').textContent = '指標包含諮詢、營運與績效；最後一欄為 ' + histYears[3] + ' vs ' + histYears[2] + ' 的變化';
+
+  var metrics = [
+    { key:'consult',  name:'諮詢數',     kind:'count' },
+    { key:'signed',   name:'成案數',     kind:'count' },
+    { key:'signRate', name:'簽約率',     kind:'pct' },
+    { key:'eff',      name:'諮詢效益值', kind:'money' },
+    { key:'pay',      name:'付款金額',   kind:'money' },
+    { key:'ref',      name:'退款',       kind:'money' },
+    { key:'net',      name:'淨收入',     kind:'money' },
+    { key:'refRate',  name:'退款率',     kind:'pct', invert:true }
+  ];
+
+  function fmtCell(v, kind) {
+    if (kind==='money') return '<span class="text-gold">'+formatMoney(v)+'</span>';
+    if (kind==='pct')   return v.toFixed(1)+'%';
+    return v.toLocaleString();
+  }
+  function histDiffCell(curr, prev, kind, invert) {
+    if (kind==='pct') {
+      // percentage point diff
+      var diff = curr - prev;
+      // 預設「上升=好」(綠)；若 invert（如退款率）則「下降=好」
+      var good = invert ? diff < 0 : diff > 0;
+      var bad  = invert ? diff > 0 : diff < 0;
+      var cls = good?'text-green':(bad?'text-red':'text-muted');
+      var sign = diff>0?'+':'';
+      return '<td class="text-right '+cls+'">'+sign+diff.toFixed(1)+'pp</td>';
+    }
+    if (!prev && !curr) return '<td class="text-right text-muted">-</td>';
+    if (!prev) return '<td class="text-right text-green">新增</td>';
+    var pct = (curr-prev)/prev*100;
+    var good = invert ? pct < 0 : pct > 0;
+    var bad  = invert ? pct > 0 : pct < 0;
+    var cls = good?'text-green':(bad?'text-red':'text-muted');
+    var raw = curr-prev;
+    var rawStr = (raw>=0?'+':'') + (kind==='money' ? formatMoney(raw) : raw.toLocaleString());
+    return '<td class="text-right '+cls+'">'+rawStr+' ('+(pct>0?'+':'')+pct.toFixed(1)+'%)</td>';
+  }
+
+  var headHtml = '<tr><th>指標</th>' + histYears.map(function(y){return '<th class="text-right">'+y+'</th>';}).join('') + '<th class="text-right">'+histYears[3]+' vs '+histYears[2]+'</th></tr>';
+  document.getElementById('drillHistHead').innerHTML = headHtml;
+
+  document.getElementById('drillHistBody').innerHTML = metrics.map(function(m) {
+    var row = '<tr><td>'+m.name+'</td>';
+    histYears.forEach(function(y) { row += '<td class="text-right">'+fmtCell(perYearMetrics[y][m.key], m.kind)+'</td>'; });
+    row += histDiffCell(perYearMetrics[histYears[3]][m.key], perYearMetrics[histYears[2]][m.key], m.kind, m.invert);
+    return row + '</tr>';
   }).join('');
 }
 
