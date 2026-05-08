@@ -2052,6 +2052,7 @@ async function loadDeptDrillPage() {
         signed: cons.signed,
         signRate: cons.consult>0 ? (cons.signed/cons.consult*100) : 0,
         eff: cons.consult>0 ? (cons.collected/cons.consult) : 0,
+        avgSigned: cons.signed>0 ? (cons.collected/cons.signed) : 0,
         pay: rev.pay,
         ref: rev.ref,
         net: rev.net,
@@ -2064,14 +2065,15 @@ async function loadDeptDrillPage() {
   document.getElementById('drillHistSub').textContent = '指標包含諮詢、營運與績效；最後一欄為 ' + histYears[3] + ' vs ' + histYears[2] + ' 的變化';
 
   var metrics = [
-    { key:'consult',  name:'諮詢數',     kind:'count' },
-    { key:'signed',   name:'成案數',     kind:'count' },
-    { key:'signRate', name:'簽約率',     kind:'pct' },
-    { key:'eff',      name:'諮詢效益值', kind:'money' },
-    { key:'pay',      name:'付款金額',   kind:'money' },
-    { key:'ref',      name:'退款',       kind:'money' },
-    { key:'net',      name:'淨收入',     kind:'money' },
-    { key:'refRate',  name:'退款率',     kind:'pct', invert:true }
+    { key:'consult',   name:'諮詢數',       kind:'count' },
+    { key:'signed',    name:'成案數',       kind:'count' },
+    { key:'signRate',  name:'簽約率',       kind:'pct' },
+    { key:'eff',       name:'諮詢效益值',   kind:'money' },
+    { key:'avgSigned', name:'平均簽約收款', kind:'money' },
+    { key:'pay',       name:'付款金額',     kind:'money' },
+    { key:'ref',       name:'退款',         kind:'money' },
+    { key:'net',       name:'淨收入',       kind:'money' },
+    { key:'refRate',   name:'退款率',       kind:'pct', invert:true }
   ];
 
   function fmtCell(v, kind) {
