@@ -1578,9 +1578,14 @@ function renderDrill() {
     : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
+  // consult cohort：月固定費由喆律每月付給律師，已從 zhelu_total 扣除，需在顯示中顯式呈現
+  const monthlyFee = (selectedCohort === 'consult') ? (lMiscBreak['月固定費'] || 0) : 0;
+  const feeNote = monthlyFee > 0 ? ` − <span style="color:var(--orange)">月固定費 $${fmt(monthlyFee)}</span>` : '';
   const zMiscHtml = ztMisc > 0
-    ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">非主辦 $${fmt(ztMisc)}</span>${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非主辦明細：${zMiscBreakStr}</span>` : ''}`
-    : `全部來自主案分潤`;
+    ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">非主辦 $${fmt(ztMisc)}</span>${feeNote}${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非主辦明細：${zMiscBreakStr}</span>` : ''}`
+    : (monthlyFee > 0
+      ? `主案 $${fmt(ztOwn)}${feeNote}`
+      : `全部來自主案分潤`);
   const lMiscHtml = ltMisc > 0
     ? `主案 $${fmt(ltOwn)} + <span style="color:var(--orange)">非主辦 $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非主辦明細：${lMiscBreakStr}</span>` : ''}`
     : `全部來自主案分潤`;
