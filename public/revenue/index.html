@@ -656,6 +656,11 @@
       <!-- 年度比較總覽 -->
       <div class="src-subpage active" id="src-sub-compare">
         <div class="filter-bar">
+          <div class="filter-label">比較區間：</div>
+          <div class="year-btns" id="srcCmpModeBtns">
+            <button class="year-btn active" data-mode="ytd">至目前月份</button>
+            <button class="year-btn" data-mode="full">全年</button>
+          </div>
           <div class="filter-group" style="margin-left:auto">
             <div class="filter-label">接案所：</div>
             <select class="filter-select" id="srcCmpOfficeFilter"><option value="">全部</option></select>
@@ -1424,10 +1429,16 @@ async function loadSourceComparePage() {
   var cy = now.getFullYear();
   var years = [cy-3, cy-2, cy-1, cy];
 
-  // YTD 對齊：當年只算「已完整結束的月份」（例：5 月 → 1-4 月）
-  // 為了讓 YoY apples-to-apples，全部年度都套用同一個月份窗口
-  var maxCompleteM = now.getMonth(); // 0-index 上個月 = 1-index 已完整月數
-  if (maxCompleteM === 0) maxCompleteM = 12; // 1 月初時 fallback 到全年（避免空表）
+  // 比較區間：依使用者選擇 (ytd = 全部年度對齊到當年已完整月份；full = 全年)
+  var modeBtn = document.querySelector('#srcCmpModeBtns .year-btn.active');
+  var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
+  var maxCompleteM;
+  if (mode === 'full') {
+    maxCompleteM = 12;
+  } else {
+    maxCompleteM = now.getMonth(); // 0-index 上個月 = 1-index 已完整月數
+    if (maxCompleteM === 0) maxCompleteM = 12; // 1 月初時 fallback 到全年（避免空表）
+  }
   var monthLabel = maxCompleteM === 12 ? '全年' : ('1-'+maxCompleteM+' 月');
 
   function filterToWindow(recs) {
@@ -1533,12 +1544,14 @@ async function loadSourceComparePage() {
   }
 
   // 標題說明：把月份窗口放進表格 / 圖表 title 醒目處
-  var winSuffix = ' · ' + monthLabel + (maxCompleteM === 12 ? '' : ' 同期對齊');
+  var winSuffix = mode === 'full'
+    ? ' · 全年（' + cy + ' 年至目前為止）'
+    : ' · ' + monthLabel + ' 同期對齊';
   document.getElementById('srcCmpCaseTitle').textContent = '案件數年度比較' + winSuffix;
   document.getElementById('srcCmpRevTitle').textContent = '營收年度比較' + winSuffix;
   document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「件數（佔當年度比）」';
   document.getElementById('srcCmpRevCaption').textContent = '每格顯示「營收（佔當年度比）」';
-  var chartSub = '（'+monthLabel+'）';
+  var chartSub = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
   document.getElementById('srcCmpCaseChartSub').textContent = chartSub;
   document.getElementById('srcCmpRevChartSub').textContent = chartSub;
 
@@ -1951,6 +1964,11 @@ document.getElementById('overviewOfficeFilter').addEventListener('change', loadO
 document.getElementById('deptOfficeFilter').addEventListener('change', loadDeptPage);
 document.getElementById('srcOfficeFilter').addEventListener('change', loadSourcePage);
 document.getElementById('srcCmpOfficeFilter').addEventListener('change', loadSourceComparePage);
+document.getElementById('srcCmpModeBtns').addEventListener('click', function(e) {
+  if (!e.target.classList.contains('year-btn')) return;
+  this.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active', b===e.target);});
+  loadSourceComparePage();
+});
 
 function initMonthBtns() {
   initMonthButtons('ytMonthBtns', function(){return ytSelectedMonth}, function(m){ytSelectedMonth=m}, loadYearlyPage);
