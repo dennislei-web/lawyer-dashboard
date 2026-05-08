@@ -1970,15 +1970,19 @@ async function loadDeptDrillPage() {
       scales:{x:{ticks:{color:'#8899aa',callback:function(v){return formatMoney(v)}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
   });
 
-  // 表格
+  // 表格：YoY 顯示 prev 同期實際值 + 變化量（讓使用者可直接驗證）
   function diffCell(curr, prev, isMoney) {
     if (!prev && !curr) return '<td class="text-right text-muted">-</td>';
-    if (!prev) return '<td class="text-right text-green">新增</td>';
+    if (!prev) return '<td class="text-right"><div class="text-green">新增</div><div class="text-muted" style="font-size:0.72rem">'+prevYear+' 同期 0</div></td>';
     var pct = (curr-prev)/prev*100;
     var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
     var raw = curr-prev;
     var rawStr = isMoney ? (raw>=0?'+':'')+formatMoney(raw) : (raw>=0?'+':'')+raw;
-    return '<td class="text-right '+cls+'">'+rawStr+' ('+(pct>0?'+':'')+pct.toFixed(1)+'%)</td>';
+    var prevStr = isMoney ? formatMoney(prev) : prev.toLocaleString();
+    return '<td class="text-right">' +
+      '<div class="'+cls+'">'+rawStr+' ('+(pct>0?'+':'')+pct.toFixed(1)+'%)</div>' +
+      '<div class="text-muted" style="font-size:0.72rem">'+prevYear+' 同期 '+prevStr+'</div>' +
+      '</td>';
   }
   var tbody = document.getElementById('drillSrcTableBody');
   if (!srcs.length) tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
