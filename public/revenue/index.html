@@ -741,6 +741,15 @@
           <div class="kpi-card green"><div class="kpi-label">淨收入</div><div class="kpi-value green" id="drillKpiNet">-</div><div class="kpi-sub" id="drillKpiNetSub"></div></div>
         </div>
 
+        <!-- 月度趨勢（部門範圍內，全 12 個月）-->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-title">
+            <span id="drillTrendTitle">月度趨勢</span>
+            <span class="table-sub" id="drillTrendSub">諮詢數 / 成案數（左軸）· 營收（右軸，含退款）</span>
+          </div>
+          <div class="chart-container" style="height:340px"><canvas id="drillTrendChart"></canvas></div>
+        </div>
+
         <!-- 來源管道圖（部門範圍內）-->
         <div class="chart-row">
           <div class="chart-card">
@@ -1827,6 +1836,86 @@ async function loadDeptDrillPage() {
   document.getElementById('drillKpiRefSub').innerHTML = curR.pay>0 ? '退款率 '+(curR.ref/curR.pay*100).toFixed(1)+'%' : '';
   document.getElementById('drillKpiNet').textContent = formatMoney(curR.net);
   document.getElementById('drillKpiNetSub').innerHTML = yoyHtml(curR.net, prevR.net, true);
+
+  // === 月度趨勢（全 12 個月；超過已完整月份的部分以虛線/灰色提示）===
+  var monthly = [];
+  for (var m=1;m<=12;m++) monthly.push({ consult:0, signed:0, pay:0, ref:0 });
+  curCases.forEach(function(c) {
+    if ((typeof LAWYER_DEPARTMENTS === 'undefined') || LAWYER_DEPARTMENTS[c.lawyer_id] !== deptName) return;
+    var mm = parseInt((c.case_date||'').substring(5,7), 10);
+    if (mm<1 || mm>12) return;
+    monthly[mm-1].consult++;
+    if (c.is_signed) monthly[mm-1].signed++;
+  });
+  curRev.forEach(function(r) {
+    if (r.office !== office) return;
+    var mm = parseInt((r.record_date||'').substring(5,7), 10);
+    if (mm<1 || mm>12) return;
+    if (r.transaction_type === 'PaymentTransaction') monthly[mm-1].pay += Number(r.amount||0);
+    else monthly[mm-1].ref += Number(r.amount||0);
+  });
+  var monthLabels = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  var consultData = monthly.map(function(m){return m.consult});
+  var signedData = monthly.map(function(m){return m.signed});
+  var netData = monthly.map(function(m){return m.pay - m.ref});
+  // 標出尚未完整結束的月份（純視覺輔助）
+  var isCurrentYear = (drillSelectedYear === now.getFullYear());
+  var lastCompleteIdx = isCurrentYear ? (now.getMonth() - 1) : 11; // 0-based 上個月
+  function fadeFn(arr, fadeFromIdx) {
+    return arr.map(function(v, i) { return (i > fadeFromIdx) ? null : v; });
+  }
+  // 不淡化：full mode 或非當年；淡化：YTD mode 且當年的 partial month 之後
+  var solidConsult = (mode==='full' || !isCurrentYear) ? consultData : fadeFn(consultData, lastCompleteIdx);
+  var solidSigned  = (mode==='full' || !isCurrentYear) ? signedData : fadeFn(signedData, lastCompleteIdx);
+  var solidNet     = (mode==='full' || !isCurrentYear) ? netData : fadeFn(netData, lastCompleteIdx);
+
+  document.getElementById('drillTrendTitle').textContent = office + ' ' + drillSelectedYear + ' 月度趨勢';
+  document.getElementById('drillTrendSub').textContent =
+    '諮詢數 / 成案數（左軸）· 淨收入（右軸）'
+    + (isCurrentYear && mode==='ytd' && lastCompleteIdx>=0 ? '　·　虛線標出未結束月份（' + (lastCompleteIdx+2) + '月起）' : '');
+
+  if (charts.drillTrend) charts.drillTrend.destroy();
+  charts.drillTrend = new Chart(document.getElementById('drillTrendChart'), {
+    type:'line',
+    data:{
+      labels: monthLabels,
+      datasets: [
+        { label:'諮詢數', data: solidConsult, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.15)', yAxisID:'yCount', tension:0.3, spanGaps:false, pointRadius:3, borderWidth:2 },
+        { label:'成案數', data: solidSigned,  borderColor:'#4caf82', backgroundColor:'rgba(76,175,130,0.15)', yAxisID:'yCount', tension:0.3, spanGaps:false, pointRadius:3, borderWidth:2 },
+        { label:'淨收入', data: solidNet,     borderColor:'#c9a84c', backgroundColor:'rgba(201,168,76,0.15)', yAxisID:'yMoney', tension:0.3, spanGaps:false, pointRadius:3, borderWidth:2 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{
+          label:function(ctx){
+            var v = ctx.raw;
+            if (v == null) return ctx.dataset.label + '：—';
+            if (ctx.dataset.label === '淨收入') return ctx.dataset.label + '：' + formatMoney(v);
+            return ctx.dataset.label + '：' + v;
+          },
+          afterBody: function(items) {
+            if (!items.length) return '';
+            var idx = items[0].dataIndex;
+            var m = monthly[idx];
+            var lines = [];
+            if (m.consult > 0) lines.push('簽約率 ' + (m.signed/m.consult*100).toFixed(1) + '%');
+            if (m.consult > 0) lines.push('諮詢效益值 ' + formatMoney(m.pay/m.consult || 0));
+            if (m.pay > 0) lines.push('退款 ' + formatMoney(m.ref) + '（' + (m.ref/m.pay*100).toFixed(1) + '%）');
+            return lines;
+          }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        yCount:{ type:'linear', position:'left', title:{display:true, text:'件數', color:'#8899aa'}, ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'}, beginAtZero:true },
+        yMoney:{ type:'linear', position:'right', title:{display:true, text:'淨收入', color:'#8899aa'}, ticks:{color:'#8899aa', callback:function(v){return formatMoney(v)}}, grid:{drawOnChartArea:false}, beginAtZero:true }
+      }
+    }
+  });
 
   // === 來源 ===
   var srcCur = aggSourcesByOffice(curRev, office, maxCompleteM);
