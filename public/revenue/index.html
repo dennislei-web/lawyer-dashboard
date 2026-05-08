@@ -241,23 +241,23 @@
     .year-btn:hover { background: var(--ghost-hover-bg); }
     .year-btn.active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
 
-    /* ===================== SUB TABS (來源分析) ===================== */
-    .src-subtabs {
+    /* ===================== SUB TABS (頁內子分頁) ===================== */
+    .subtabs {
       display: flex; gap: 6px; margin-bottom: 16px;
       border-bottom: 1px solid var(--border); padding-bottom: 8px;
     }
-    .src-subtab-btn {
+    .subtab-btn {
       padding: 6px 14px; font-size: 0.82rem; font-weight: 500;
       color: var(--text-muted); background: transparent; border: 1px solid transparent;
       border-radius: 6px; cursor: pointer; transition: all 0.15s;
     }
-    .src-subtab-btn:hover { background: var(--ghost-bg); color: var(--text); }
-    .src-subtab-btn.active {
+    .subtab-btn:hover { background: var(--ghost-bg); color: var(--text); }
+    .subtab-btn.active {
       background: var(--tab-active-bg); border-color: var(--tab-active-border);
       color: var(--tab-active-color); font-weight: 600;
     }
-    .src-subpage { display: none; }
-    .src-subpage.active { display: block; }
+    .subpage { display: none; }
+    .subpage.active { display: block; }
     .table-sub { font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; font-weight: normal; }
 
     /* ===================== TABLE ===================== */
@@ -622,25 +622,86 @@
 
     <!-- ========== 部門分析 ========== -->
     <div class="page" id="page-departments">
-      <div class="filter-bar">
-        <div class="filter-label">年度：</div>
-        <div class="year-btns" id="deptYearBtns"></div>
-        <div class="filter-group" style="margin-left:auto">
-          <div class="filter-label">接案所：</div>
-          <select class="filter-select" id="deptOfficeFilter"><option value="">全部</option></select>
+      <!-- Sub-tabs -->
+      <div class="subtabs" data-subtab-group="dept">
+        <button class="subtab-btn active" data-subtab="compare">年度比較總覽</button>
+        <button class="subtab-btn" data-subtab="single">單年度明細</button>
+      </div>
+
+      <!-- 年度比較總覽 -->
+      <div class="subpage active" id="dept-sub-compare">
+        <div class="filter-bar">
+          <div class="filter-label">比較區間：</div>
+          <div class="year-btns" id="deptCmpModeBtns">
+            <button class="year-btn active" data-mode="ytd">至目前月份</button>
+            <button class="year-btn" data-mode="full">全年</button>
+          </div>
+          <div class="filter-group" style="margin-left:auto">
+            <div class="filter-label">接案所：</div>
+            <select class="filter-select" id="deptCmpOfficeFilter"><option value="">全部</option></select>
+          </div>
+        </div>
+
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">各年度部門 - 案件數 <span id="deptCmpCaseChartSub" class="table-sub"></span></div>
+            <div class="chart-container"><canvas id="deptCmpCaseChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">各年度部門 - 營收 <span id="deptCmpRevChartSub" class="table-sub"></span></div>
+            <div class="chart-container"><canvas id="deptCmpRevChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:24px">
+          <div class="table-header">
+            <span class="table-title" id="deptCmpCaseTitle">案件數年度比較</span>
+            <span class="table-sub" id="deptCmpCaseCaption">每格顯示「件數（佔當年度比）」</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="deptCmpCaseHead"></thead>
+              <tbody id="deptCmpCaseBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <span class="table-title" id="deptCmpRevTitle">營收年度比較</span>
+            <span class="table-sub" id="deptCmpRevCaption">每格顯示「營收（佔當年度比）」</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="deptCmpRevHead"></thead>
+              <tbody id="deptCmpRevBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div class="dept-grid" id="deptGrid"></div>
-
-      <div class="chart-row">
-        <div class="chart-card">
-          <div class="chart-title">部門營收比較</div>
-          <div class="chart-container"><canvas id="deptBarChart"></canvas></div>
+      <!-- 單年度明細 -->
+      <div class="subpage" id="dept-sub-single">
+        <div class="filter-bar">
+          <div class="filter-label">年度：</div>
+          <div class="year-btns" id="deptYearBtns"></div>
+          <div class="filter-group" style="margin-left:auto">
+            <div class="filter-label">接案所：</div>
+            <select class="filter-select" id="deptOfficeFilter"><option value="">全部</option></select>
+          </div>
         </div>
-        <div class="chart-card">
-          <div class="chart-title">退款率比較</div>
-          <div class="chart-container"><canvas id="refundRateChart"></canvas></div>
+
+        <div class="dept-grid" id="deptGrid"></div>
+
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">部門營收比較</div>
+            <div class="chart-container"><canvas id="deptBarChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">退款率比較</div>
+            <div class="chart-container"><canvas id="refundRateChart"></canvas></div>
+          </div>
         </div>
       </div>
     </div>
@@ -648,13 +709,13 @@
     <!-- ========== 來源分析 ========== -->
     <div class="page" id="page-sources">
       <!-- Sub-tabs -->
-      <div class="src-subtabs">
-        <button class="src-subtab-btn active" data-subtab="compare">年度比較總覽</button>
-        <button class="src-subtab-btn" data-subtab="single">單年度明細</button>
+      <div class="subtabs" data-subtab-group="src">
+        <button class="subtab-btn active" data-subtab="compare">年度比較總覽</button>
+        <button class="subtab-btn" data-subtab="single">單年度明細</button>
       </div>
 
       <!-- 年度比較總覽 -->
-      <div class="src-subpage active" id="src-sub-compare">
+      <div class="subpage active" id="src-sub-compare">
         <div class="filter-bar">
           <div class="filter-label">比較區間：</div>
           <div class="year-btns" id="srcCmpModeBtns">
@@ -706,7 +767,7 @@
       </div>
 
       <!-- 單年度明細 -->
-      <div class="src-subpage" id="src-sub-single">
+      <div class="subpage" id="src-sub-single">
         <div class="filter-bar">
           <div class="filter-label">年度：</div>
           <div class="year-btns" id="srcYearBtns"></div>
@@ -1054,7 +1115,7 @@ if (_nal) _nal.addEventListener('click', async function() { if(sb) await sb.auth
 
 // ═══ DATA ═══
 function populateOfficeFilters() {
-  ['overviewOfficeFilter','deptOfficeFilter','srcOfficeFilter','srcCmpOfficeFilter','partnerOfficeFilter'].forEach(function(id) {
+  ['overviewOfficeFilter','deptOfficeFilter','deptCmpOfficeFilter','srcOfficeFilter','srcCmpOfficeFilter','partnerOfficeFilter'].forEach(function(id) {
     var el = document.getElementById(id); if(!el) return;
     el.innerHTML = '<option value="">全部</option>';
     OFFICES.forEach(function(o) { el.innerHTML += '<option value="'+o+'">'+o+'</option>'; });
@@ -1385,6 +1446,176 @@ async function loadDeptPage() {
     type:'bar', data:{labels:names,datasets:[{label:'退款率%',data:rates,backgroundColor:rates.map(function(r){return r>10?'rgba(224,92,92,0.7)':'rgba(76,175,130,0.7)'})}]},
     options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
   });
+}
+
+// ═══ DEPT COMPARE PAGE (年度比較總覽) ═══
+async function loadDeptComparePage() {
+  var office = document.getElementById('deptCmpOfficeFilter').value;
+  var now = new Date();
+  var cy = now.getFullYear();
+  var years = [cy-3, cy-2, cy-1, cy];
+
+  var modeBtn = document.querySelector('#deptCmpModeBtns .year-btn.active');
+  var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
+  var maxCompleteM;
+  if (mode === 'full') maxCompleteM = 12;
+  else { maxCompleteM = now.getMonth(); if (maxCompleteM === 0) maxCompleteM = 12; }
+  var monthLabel = maxCompleteM === 12 ? '全年' : ('1-'+maxCompleteM+' 月');
+
+  function filterToWindow(recs) {
+    if (maxCompleteM >= 12) return recs;
+    return recs.filter(function(r) {
+      var mm = parseInt((r.record_date||'').substring(5,7), 10);
+      return mm >= 1 && mm <= maxCompleteM;
+    });
+  }
+
+  // 抓 4 年資料、套月份窗口、按 office 彙總（payN = 案件數，pay = 營收，ref = 退款）
+  var perYear = {};
+  for (var i=0;i<years.length;i++) {
+    var y = years[i];
+    var recs = excludePartner(filterToWindow(await loadRecords({ year: y, office: office||undefined })));
+    var map = {};
+    recs.forEach(function(r) {
+      var o = r.office || '未分配';
+      if (!map[o]) map[o] = { payN:0, pay:0, ref:0 };
+      if (r.transaction_type === 'PaymentTransaction') {
+        map[o].payN++; map[o].pay += Number(r.amount||0);
+      } else {
+        map[o].ref += Number(r.amount||0);
+      }
+    });
+    perYear[y] = map;
+  }
+
+  // 部門清單（聯集），依最近一年營收排
+  var deptSet = {};
+  years.forEach(function(y){ Object.keys(perYear[y]).forEach(function(d){ deptSet[d]=true; }); });
+  var depts = Object.keys(deptSet);
+  depts.sort(function(a,b){
+    var av=0,bv=0;
+    for (var i=years.length-1;i>=0;i--) { av += (perYear[years[i]][a]||{}).pay||0; bv += (perYear[years[i]][b]||{}).pay||0; if(av||bv) break; }
+    return bv-av;
+  });
+
+  // 各年度合計
+  var totals = {};
+  years.forEach(function(y){
+    var t={payN:0,pay:0};
+    Object.values(perYear[y]).forEach(function(d){ t.payN+=d.payN; t.pay+=d.pay; });
+    totals[y]=t;
+  });
+
+  var yearColors = ['rgba(155,89,182,0.7)','rgba(79,142,247,0.7)','rgba(76,175,130,0.7)','rgba(201,168,76,0.85)'];
+
+  // === Charts ===
+  var caseDatasets = years.map(function(y, idx){
+    return { label: y+'', data: depts.map(function(d){ return (perYear[y][d]||{}).payN||0; }), backgroundColor: yearColors[idx] };
+  });
+  var revDatasets = years.map(function(y, idx){
+    return { label: y+'', data: depts.map(function(d){ return (perYear[y][d]||{}).pay||0; }), backgroundColor: yearColors[idx] };
+  });
+
+  if (charts.deptCmpCase) charts.deptCmpCase.destroy();
+  charts.deptCmpCase = new Chart(document.getElementById('deptCmpCaseChart'), {
+    type:'bar', data:{ labels: depts, datasets: caseDatasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var y=ctx.dataset.label, v=ctx.raw||0; var t=(totals[y]||{}).payN||0;
+          return y+'：'+v+' 件 ('+(t>0?(v/t*100).toFixed(1):'0')+'%)';
+        }}}
+      },
+      scales:{ x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        y:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} } } }
+  });
+  if (charts.deptCmpRev) charts.deptCmpRev.destroy();
+  charts.deptCmpRev = new Chart(document.getElementById('deptCmpRevChart'), {
+    type:'bar', data:{ labels: depts, datasets: revDatasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var y=ctx.dataset.label, v=ctx.raw||0; var t=(totals[y]||{}).pay||0;
+          return y+'：'+formatMoney(v)+' ('+(t>0?(v/t*100).toFixed(1):'0')+'%)';
+        }}}
+      },
+      scales:{ x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        y:{ ticks:{color:'#8899aa', callback:function(v){return formatMoney(v)}}, grid:{color:'rgba(30,48,80,0.3)'} } } }
+  });
+
+  // === Tables ===
+  function buildHead() {
+    var h='<tr><th>接案所</th>';
+    years.forEach(function(y){ h+='<th class="text-right">'+y+'</th>'; });
+    h+='<th class="text-right">'+years[years.length-1]+' vs '+years[years.length-2]+'</th></tr>';
+    return h;
+  }
+  function pctText(v, total) { return total ? (v/total*100).toFixed(1)+'%' : '0.0%'; }
+  function diffCell(curr, prev, isMoney) {
+    if (!prev && !curr) return '<td class="text-right text-muted">-</td>';
+    if (!prev) return '<td class="text-right text-green">新增</td>';
+    var pct = (curr-prev)/prev*100;
+    var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
+    var sign = pct>0?'+':'';
+    var raw = curr-prev;
+    var rawStr = isMoney ? (raw>=0?'+':'')+formatMoney(raw) : (raw>=0?'+':'')+raw;
+    return '<td class="text-right '+cls+'">'+rawStr+' ('+sign+pct.toFixed(1)+'%)</td>';
+  }
+
+  // 標題
+  var winSuffix = mode === 'full' ? ' · 全年（' + cy + ' 年至目前為止）' : ' · ' + monthLabel + ' 同期對齊';
+  document.getElementById('deptCmpCaseTitle').textContent = '案件數年度比較' + winSuffix;
+  document.getElementById('deptCmpRevTitle').textContent = '營收年度比較' + winSuffix;
+  var chartSub = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
+  document.getElementById('deptCmpCaseChartSub').textContent = chartSub;
+  document.getElementById('deptCmpRevChartSub').textContent = chartSub;
+
+  // 案件數表
+  document.getElementById('deptCmpCaseHead').innerHTML = buildHead();
+  var caseHtml = depts.map(function(d){
+    var row='<tr><td><span class="badge badge-blue">'+d+'</span></td>';
+    years.forEach(function(y){
+      var c=(perYear[y][d]||{}).payN||0;
+      var t=(totals[y]||{}).payN||0;
+      row+='<td class="text-right"><div style="font-weight:600">'+c+'</div><div class="text-muted" style="font-size:0.75rem">'+pctText(c,t)+'</div></td>';
+    });
+    var last=(perYear[years[years.length-1]][d]||{}).payN||0;
+    var prev=(perYear[years[years.length-2]][d]||{}).payN||0;
+    row+=diffCell(last, prev, false);
+    return row+'</tr>';
+  }).join('');
+  var caseTotalRow='<tr style="background:var(--ghost-bg);font-weight:600"><td>合計</td>';
+  years.forEach(function(y){ caseTotalRow+='<td class="text-right">'+((totals[y]||{}).payN||0)+'</td>'; });
+  caseTotalRow+=diffCell((totals[years[years.length-1]]||{}).payN||0, (totals[years[years.length-2]]||{}).payN||0, false);
+  caseTotalRow+='</tr>';
+  document.getElementById('deptCmpCaseBody').innerHTML = (depts.length?caseHtml:'<tr><td colspan="'+(years.length+2)+'" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>') + (depts.length?caseTotalRow:'');
+
+  // 營收表
+  document.getElementById('deptCmpRevHead').innerHTML = buildHead();
+  var revHtml = depts.map(function(d){
+    var row='<tr><td><span class="badge badge-blue">'+d+'</span></td>';
+    years.forEach(function(y){
+      var p=(perYear[y][d]||{}).pay||0;
+      var t=(totals[y]||{}).pay||0;
+      row+='<td class="text-right"><div class="text-gold" style="font-weight:600">'+formatMoney(p)+'</div><div class="text-muted" style="font-size:0.75rem">'+pctText(p,t)+'</div></td>';
+    });
+    var last=(perYear[years[years.length-1]][d]||{}).pay||0;
+    var prev=(perYear[years[years.length-2]][d]||{}).pay||0;
+    row+=diffCell(last, prev, true);
+    return row+'</tr>';
+  }).join('');
+  var revTotalRow='<tr style="background:var(--ghost-bg);font-weight:600"><td>合計</td>';
+  years.forEach(function(y){ revTotalRow+='<td class="text-right text-gold">'+formatMoney((totals[y]||{}).pay||0)+'</td>'; });
+  revTotalRow+=diffCell((totals[years[years.length-1]]||{}).pay||0, (totals[years[years.length-2]]||{}).pay||0, true);
+  revTotalRow+='</tr>';
+  document.getElementById('deptCmpRevBody').innerHTML = (depts.length?revHtml:'<tr><td colspan="'+(years.length+2)+'" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>') + (depts.length?revTotalRow:'');
+}
+
+function loadDeptPageRouter() {
+  var active = document.querySelector('#page-departments .subtab-btn.active');
+  var sub = active ? active.dataset.subtab : 'compare';
+  if (sub==='compare') loadDeptComparePage();
+  else loadDeptPage();
 }
 
 // ═══ SOURCE PAGE ═══
@@ -1928,21 +2159,25 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     document.getElementById('page-'+tab).classList.add('active');
     if (tab==='overview') loadOverviewData();
     else if (tab==='yearly') loadYearlyPage();
-    else if (tab==='departments') loadDeptPage();
+    else if (tab==='departments') loadDeptPageRouter();
     else if (tab==='sources') loadSourcePageRouter();
     else if (tab==='partner') loadPartnerPage();
     else if (tab==='partnerYearly') loadPartnerYearlyPage();
   });
 });
 
-// Sub-tab handler for 來源分析
-document.querySelectorAll('.src-subtab-btn').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('.src-subtab-btn').forEach(function(b){b.classList.remove('active')});
-    document.querySelectorAll('.src-subpage').forEach(function(p){p.classList.remove('active')});
-    btn.classList.add('active');
-    document.getElementById('src-sub-'+btn.dataset.subtab).classList.add('active');
-    loadSourcePageRouter();
+// Sub-tab handler — 通用：依 data-subtab-group 區分各分頁，子分頁 id 格式為 {group}-sub-{subtab}
+document.querySelectorAll('.subtabs').forEach(function(group) {
+  var groupKey = group.dataset.subtabGroup;
+  group.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('subtab-btn')) return;
+    group.querySelectorAll('.subtab-btn').forEach(function(b){b.classList.toggle('active', b===e.target);});
+    var sub = e.target.dataset.subtab;
+    // 切換同 group 下的 subpage
+    Array.from(document.querySelectorAll('.subpage')).filter(function(p){return p.id.indexOf(groupKey+'-sub-')===0;})
+      .forEach(function(p){p.classList.toggle('active', p.id===groupKey+'-sub-'+sub);});
+    if (groupKey === 'src') loadSourcePageRouter();
+    else if (groupKey === 'dept') loadDeptPageRouter();
   });
 });
 function initYearButtons() {
@@ -1956,7 +2191,7 @@ function initYearButtons() {
       selectedYear=Number(e.target.dataset.year);
       document.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active',Number(b.dataset.year)===selectedYear)});
       var ap=document.querySelector('.tab-btn.active');
-      if(ap){var t=ap.dataset.tab; if(t==='overview')loadOverviewData();else if(t==='yearly')loadYearlyPage();else if(t==='departments')loadDeptPage();else if(t==='sources')loadSourcePageRouter();else if(t==='partner')loadPartnerPage();else if(t==='partnerYearly')loadPartnerYearlyPage();}
+      if(ap){var t=ap.dataset.tab; if(t==='overview')loadOverviewData();else if(t==='yearly')loadYearlyPage();else if(t==='departments')loadDeptPageRouter();else if(t==='sources')loadSourcePageRouter();else if(t==='partner')loadPartnerPage();else if(t==='partnerYearly')loadPartnerYearlyPage();}
     });
   });
 }
@@ -1968,6 +2203,12 @@ document.getElementById('srcCmpModeBtns').addEventListener('click', function(e) 
   if (!e.target.classList.contains('year-btn')) return;
   this.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active', b===e.target);});
   loadSourceComparePage();
+});
+document.getElementById('deptCmpOfficeFilter').addEventListener('change', loadDeptComparePage);
+document.getElementById('deptCmpModeBtns').addEventListener('click', function(e) {
+  if (!e.target.classList.contains('year-btn')) return;
+  this.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active', b===e.target);});
+  loadDeptComparePage();
 });
 
 function initMonthBtns() {
