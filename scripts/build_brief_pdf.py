@@ -332,8 +332,9 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
         return rule_based_actions
 
     # 每筆案件摘要：個人化判斷所需的最精華資訊
+    # 放寬截斷讓 LLM 看到「案件指紋」而非只有 7-bucket label，避免產出收斂
     case_summaries = []
-    for c in llm[:25]:
+    for c in llm[:35]:
         client_name, case_number = extra_fn(c["case_id"])
         a = c.get("analysis") or {}
         case_summaries.append({
@@ -344,12 +345,12 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
             "signed": "簽" if c.get("is_signed") else "未簽",
             "collected": c.get("collected") or 0,
             "failure_reason": a.get("failure_reason") or "",
-            "reason_specific": (a.get("reason_specific") or "")[:120],
-            "reason_evidence": (a.get("reason_evidence") or "")[:220],
+            "reason_specific": (a.get("reason_specific") or "")[:300],
+            "reason_evidence": (a.get("reason_evidence") or "")[:500],
             "missed_opportunities": (a.get("missed_opportunities") or [])[:5],
             "strengths": (a.get("strengths") or [])[:3],
-            "improvement_for_lawyer": (a.get("improvement_for_lawyer") or "")[:450],
-            "transferable_pattern": (a.get("transferable_pattern") or "")[:220],
+            "improvement_for_lawyer": (a.get("improvement_for_lawyer") or "")[:900],
+            "transferable_pattern": (a.get("transferable_pattern") or "")[:500],
         })
 
     def _pack_trend(s):
@@ -367,19 +368,68 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
         }
 
     def _pack_item(x):
+        def _i(v):
+            return int(v) if v else None
         return {
             "type": x["case_type"],
             "my_unit": int(x.get("my_avg_collected") or 0),
             "firm_base": int(x.get("baseline_avg_collected") or 0),
             "firm_gap_pct": round(x.get("unit_gap_pct") or 0, 1),
+            # 全所分位（律師 per-type 平均的 P25/P50/P75，分母是合格律師數）
+            "firm_p25": _i(x.get("firm_unit_p25")),
+            "firm_p50": _i(x.get("firm_unit_p50")),
+            "firm_p75": _i(x.get("firm_unit_p75")),
+            "firm_peer_lawyer_n": x.get("firm_peer_lawyer_n"),
+            "firm_position": x.get("firm_peer_position"),
             "office_base": int(x["office_baseline_avg_collected"]) if x.get("office_baseline_avg_collected") else None,
             "office_gap_pct": round(x["office_unit_gap_pct"], 1) if x.get("office_unit_gap_pct") is not None else None,
             "office_base_n": x.get("office_baseline_n"),
+            # 同所別分位（律師 per-type 平均；同所律師 < 5 位達門檻時為 None）
+            "office_p25": _i(x.get("office_unit_p25")),
+            "office_p50": _i(x.get("office_unit_p50")),
+            "office_p75": _i(x.get("office_unit_p75")),
+            "office_peer_lawyer_n": x.get("office_peer_lawyer_n"),
+            "office_position": x.get("office_peer_position"),
             "signed": x.get("my_signed"),
             "trend": _pack_trend(x),
+            # 同年度比較（隔離事務所漲價 confounder）
+            "yearly_compare": [
+                {
+                    "year": y["year"],
+                    "my_n": y.get("my_signed"),
+                    "my_avg": _i(y.get("my_avg_collected")),
+                    "firm_n": y.get("firm_signed_n"),
+                    "firm_avg": _i(y.get("firm_avg_collected")),
+                    "ratio_pct": int(y["ratio_pct"]) if y.get("ratio_pct") is not None else None,
+                }
+                for y in (x.get("yearly_compare") or [])
+            ],
         }
     strengths_summary = [_pack_item(s) for s in strengths_types[:3]]
     weaknesses_summary = [_pack_item(w) for w in weaknesses_types[:3]]
+
+    def _pack_method(cm):
+        def _i(v):
+            return int(v) if v else None
+        return {
+            "method": cm["method"],
+            "n": cm["n"],
+            "signed": cm.get("my_signed"),
+            "my_sign_rate_pct": round(cm.get("my_sign_rate") or 0, 1),
+            "my_unit": _i(cm.get("my_avg_collected")),
+            "my_eff": _i(cm.get("my_consult_eff")),
+            "firm_sign_rate_pct": round(cm.get("baseline_sign_rate") or 0, 1) if cm.get("baseline_sign_rate") is not None else None,
+            "firm_eff": _i(cm.get("baseline_consult_eff")),
+            "firm_unit_p25": _i(cm.get("firm_unit_p25")),
+            "firm_unit_p50": _i(cm.get("firm_unit_p50")),
+            "firm_unit_p75": _i(cm.get("firm_unit_p75")),
+            "firm_eff_p25": _i(cm.get("firm_eff_p25")),
+            "firm_eff_p50": _i(cm.get("firm_eff_p50")),
+            "firm_eff_p75": _i(cm.get("firm_eff_p75")),
+            "firm_unit_position": cm.get("firm_unit_position"),
+            "firm_eff_position": cm.get("firm_eff_position"),
+        }
+    consult_method_summary = [_pack_method(cm) for cm in (prep.get("consult_method_stats") or [])]
 
     context = {
         "lawyer": lw["name"],
@@ -417,6 +467,7 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
         },
         "strengths_case_types": strengths_summary,
         "weaknesses_case_types": weaknesses_summary,
+        "consult_method_stats": consult_method_summary,
         "unsigned_count": len(unsigned),
         "signed_count": len(signed),
         "cases": case_summaries,
@@ -442,18 +493,36 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
    - 若強項案型表現好 → 一個 action 講 cross-sell / 深耕
    - Top 失敗原因各別處理，不要合併（例如「決策延遲」和「個人因素」應拆兩個 action）
    - 行為斷點引用具體案件的 reason_evidence 或 missed_opportunities 原文
-3. **善用「同所別 baseline」** — 每個 case_type 有 `firm_base/firm_gap_pct`（全所）與 `office_base/office_gap_pct`（同所別、扣除合署/司法官合署等結構不同）。**比較時優先引用同所別**（更公平），但也要提全所以呈現相對位置。例：「離婚協議書客單價 22,971，同所別基準 30,363（-24%）、全所基準 29,824（-23%）」
+3. **善用雙 baseline + 分位 + 同年度比較**（每個 case_type 都有 `firm_base/firm_p25/p50/p75/firm_position` 與 `office_*` + **`yearly_compare`** 兩年同年度比較）：
+   - **比較時優先引用同所別**（更公平），但也要提全所以呈現相對位置
+   - **`firm_position == "<P25"` 是嚴重訊號** — 律師在全所同案型律師中落在最低 25%；action 的 why 必須明講「全所 N 位律師中你客單價最低段，P50 是 X、P75 是 Y」
+   - 例：「離婚協議書客單 22,971（同所別基準 30,363、-24%；全所 41 位律師中你 <P25，P50=29K、P75=39K）」
+   - 不要只寫「低於基準 -24%」這種抽象 gap %，**要寫分位 + 倒回 P50/P75 的具體金額**，律師才有畫面
+   - **`yearly_compare` 是隔離「事務所漲價」confounder 的關鍵欄位** — 看 `ratio_pct`（律師 / 全所同年 × 100）：
+     - 若上年 + 本年 ratio_pct **都低於 80**，代表「年資/歷史價」解釋不成立、是律師個人客單偏低
+     - 若 ratio_pct **逐年下降**（例：上年 70 → 本年 55），代表「事務所漲了但律師沒跟上」— 比「客單慣性偏低」更具行動性，metric 應改用「跟上 firm_avg 同年度」而非「回到 P50」
+     - 若 ratio_pct **逐年上升**，代表律師正在追漲、延續做對的事
+     - **永遠優先引同年度數字**：「2026 年律師函全所平均 40K、你 0 件 / 上年 14.8K vs 全所同年 31K」比「歷史平均 18.8K vs P50 30K」更有說服力
 4. **必須善用「近一季 vs 更早」的趨勢資料**（`strengths_case_types[*].trend`、`weaknesses_case_types[*].trend`）：
    - **`small_sample=true` 時要謹慎**（近或早 < 3 筆，單筆波動可能是雜訊）。可以提但 why 要明講「樣本小（n=X）需要更多觀察」
    - **「變差」的強項**（樣本不小）→ 這是最緊急的 action（強項正在流失、警訊）。action 的 why 要明講「從 X 元/件掉到 Y 元/件」
    - **「變好」的弱項** → 正面訊號，action 講「延續近期做對的事 + 案件舉例」（可從律師近期案件的 LLM 分析找到做得好的地方）
    - **「近一季無已簽」的強項** → 警訊「案源消失」；「近一季無已簽」的弱項 → 可能是刻意放棄，帶過即可
    - **「變好」的強項**（樣本不小）→ 擴大戰果 action（用什麼做法，怎麼複製到其他案型）
-5. **嚴禁通用 SOP 模板**。不要寫「三問 SOP」「48 小時回訪 SOP」這類跨律師都適用的空話，**除非**你能用這位律師 2-3 筆案件的真實記錄證明他就是需要這個
-6. **how 至少 3 條具體做法**，每條都要能下次諮詢就開始做；寫具體話術或工具，不寫抽象原則
-7. **metric 必須可量化**（%、次數、金額），含目前基線與目標值；**優先用趨勢倒回為目標**（例：「支付命令客單價回到 44K（近一季 15K，半年前 44K）」）
-8. **避免重複**：3-4 個 action 要涵蓋不同面向（不要 4 個都是「尾聲話術」）
-9. 優先考慮**效益值**與**客單價**，成案率次要（若是因為接高價案使成案率下滑，那是正確策略選擇）
+5. **嚴禁通用 SOP 模板** — 跨律師都會適用的空話直接拒絕：
+   - **禁用詞清單**（除非該律師至少 2 筆案件的 `reason_specific` / `missed_opportunities` 原文真的提到）：
+     「結尾三問」「三問 SOP」「48 小時回訪」「48hr 回訪 SOP」「強化委任價值」「探問預算 SOP」「當場報價」這類「跨律師通用模板名」
+   - 寫之前先掃 `cases[*].reason_specific` 和 `missed_opportunities`：若 ≥ 2 筆獨立案件提到該行為缺失，**才能**用該方向，且 why 必須引這 2-3 筆原文片段
+   - 若 < 2 筆證據，改用該律師 reason_specific 中**重複出現的個案關鍵詞**當題（例：多次出現「對造已給 blank check」、「客戶帶家人來找 second opinion」、「親權技術細節講太久」就拿這個當題目，比通用 SOP 有畫面 100 倍）
+6. **至少有 1 個 action 必須以「同所別 / 全所分位差」作為立論主軸** — 標題或 why 要直接點名分位（例：「現場諮詢客單回到全所 P50（你 41K、P50 58K，差 41%）」）。如果該律師全部 case_type 都在 P50 以上，可以改用「現有案型 P50→P75 升級」作為主軸
+7. **how 至少 3 條具體做法**，每條都要能下次諮詢就開始做；寫具體話術或工具，不寫抽象原則
+8. **metric 必須可量化**（%、次數、金額），含目前基線與目標值；**目標值的優先順序**：
+   - 優先：`跟上 firm_avg 當年度`（用 yearly_compare[本年].firm_avg）— 這是最 actionable 的目標
+   - 其次：`回到 firm P50`（用 firm_p50）— 拉律師到全所中位數
+   - 再次：`自身趨勢倒回`（例：「現場諮詢效益回到近 6 月平均 24K」）
+   - 例：「2026 年律師函客單跟上全所同年度 40K（目前歷史平均 18K、2025 為 14.8K）」
+9. **避免重複**：3-4 個 action 要涵蓋不同面向（不要 4 個都是「尾聲話術」）；**任何兩個 action 的 title 不可使用同一個動詞模板**
+10. 優先考慮**效益值**與**客單價**，成案率次要（若是因為接高價案使成案率下滑，那是正確策略選擇）
 
 ## 輸出（純 JSON，無 markdown 包裝、無前後說明文字）
 

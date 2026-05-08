@@ -8,6 +8,7 @@ Wave 2 Step 1：抽取律師 1-on-1 會議所需資料
 import os, io, sys, re, json, argparse
 from pathlib import Path
 from collections import defaultdict
+from statistics import quantiles
 import httpx
 from dotenv import load_dotenv
 
@@ -84,6 +85,89 @@ def clean_case_type(t):
     return extract_case_content(t)
 
 
+def _percentiles(values):
+    """給定 numeric list，回 (p25, p50, p75)；< 5 個樣本回 (None, None, None)。
+    用 statistics.quantiles(n=4) → 三個切點 [P25, P50, P75]。"""
+    vals = [v for v in values if v is not None and v > 0]
+    if len(vals) < 5:
+        return None, None, None
+    qs = quantiles(vals, n=4)
+    return qs[0], qs[1], qs[2]
+
+
+def _lawyer_unit_dist_by_type(cases, lawyer_id_set, exclude_lid=None, min_signed=5):
+    """對每個 case_type，求「合格律師（已簽 ≥ min_signed）的個人平均已成案客單價」的分位。
+    回 {case_type: {"p25", "p50", "p75", "lawyer_n", "values": [...]}}.
+    """
+    # (lawyer_id, case_type) → {signed, collected}
+    pairs = defaultdict(lambda: {"signed": 0, "collected": 0})
+    for c in cases:
+        if c.get("lawyer_id") not in lawyer_id_set:
+            continue
+        if exclude_lid and c.get("lawyer_id") == exclude_lid:
+            continue
+        if not c.get("is_signed"):
+            continue
+        t = clean_case_type(c.get("case_type"))
+        pairs[(c["lawyer_id"], t)]["signed"] += 1
+        pairs[(c["lawyer_id"], t)]["collected"] += (c.get("collected") or 0)
+
+    by_type = defaultdict(list)  # case_type → [per-lawyer avg unit]
+    for (lid, t), d in pairs.items():
+        if d["signed"] >= min_signed:
+            by_type[t].append(d["collected"] / d["signed"])
+
+    out = {}
+    for t, vals in by_type.items():
+        p25, p50, p75 = _percentiles(vals)
+        if p50 is None:
+            continue  # 樣本 < 5 律師，分位無意義就不放
+        out[t] = {
+            "p25": p25, "p50": p50, "p75": p75,
+            "lawyer_n": len(vals),
+        }
+    return out
+
+
+def _lawyer_unit_dist_by_method(cases, lawyer_id_set, exclude_lid=None, min_n=10):
+    """對每個諮詢型態（現場/視訊/電話），求「合格律師（該型態 n ≥ min_n）的個人客單價 + 諮詢效益」的分位。
+    回 {method: {"unit_p25/p50/p75", "eff_p25/p50/p75", "lawyer_n"}}.
+    """
+    pairs = defaultdict(lambda: {"n": 0, "signed": 0, "collected": 0})
+    for c in cases:
+        if c.get("lawyer_id") not in lawyer_id_set:
+            continue
+        if exclude_lid and c.get("lawyer_id") == exclude_lid:
+            continue
+        m = extract_consult_method(c.get("case_type"))
+        pairs[(c["lawyer_id"], m)]["n"] += 1
+        if c.get("is_signed"):
+            pairs[(c["lawyer_id"], m)]["signed"] += 1
+        pairs[(c["lawyer_id"], m)]["collected"] += (c.get("collected") or 0)
+
+    units_by_method = defaultdict(list)
+    effs_by_method = defaultdict(list)
+    for (lid, m), d in pairs.items():
+        if d["n"] >= min_n:
+            if d["signed"] >= 5:
+                units_by_method[m].append(d["collected"] / d["signed"])
+            effs_by_method[m].append(d["collected"] / d["n"])
+
+    out = {}
+    for m in set(list(units_by_method.keys()) + list(effs_by_method.keys())):
+        u25, u50, u75 = _percentiles(units_by_method.get(m, []))
+        e25, e50, e75 = _percentiles(effs_by_method.get(m, []))
+        if u50 is None and e50 is None:
+            continue
+        out[m] = {
+            "unit_p25": u25, "unit_p50": u50, "unit_p75": u75,
+            "eff_p25": e25, "eff_p50": e50, "eff_p75": e75,
+            "unit_lawyer_n": len(units_by_method.get(m, [])),
+            "eff_lawyer_n": len(effs_by_method.get(m, [])),
+        }
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True, help="律師姓名（例：洪琬琪）")
@@ -120,12 +204,21 @@ def main():
         if c.get("is_signed"):
             type_agg[t]["signed"] += 1
         type_agg[t]["collected"] += (c.get("collected") or 0)
+    # 全所「律師個人平均客單價」分位（不含本人；樣本是律師 per-type 平均，不是案件）
+    firm_lawyer_ids = {l["id"] for l in lawyers}
+    firm_type_pcts = _lawyer_unit_dist_by_type(all_cases, firm_lawyer_ids, exclude_lid=target["id"])
+
     type_baseline = {
         t: {
             "n": d["n"],
             "sign_rate": d["signed"] / d["n"] * 100 if d["n"] else 0,
             "avg_collected": d["collected"] / d["signed"] if d["signed"] else 0,
             "consult_eff": d["collected"] / d["n"] if d["n"] else 0,
+            # peer-distribution percentiles（律師個人平均客單價的分位，不是案件級）
+            "unit_p25": (firm_type_pcts.get(t) or {}).get("p25"),
+            "unit_p50": (firm_type_pcts.get(t) or {}).get("p50"),
+            "unit_p75": (firm_type_pcts.get(t) or {}).get("p75"),
+            "peer_lawyer_n": (firm_type_pcts.get(t) or {}).get("lawyer_n"),
         }
         for t, d in type_agg.items() if d["n"] >= 5
     }
@@ -156,12 +249,19 @@ def main():
         if c.get("is_signed"):
             office_type_agg[t]["signed"] += 1
         office_type_agg[t]["collected"] += (c.get("collected") or 0)
+    # 同所別「律師個人平均客單價」分位（不含本人）
+    office_type_pcts = _lawyer_unit_dist_by_type(all_cases, office_lawyer_ids, exclude_lid=target["id"])
+
     office_type_baseline = {
         t: {
             "n": d["n"],
             "sign_rate": d["signed"] / d["n"] * 100 if d["n"] else 0,
             "avg_collected": d["collected"] / d["signed"] if d["signed"] else 0,
             "consult_eff": d["collected"] / d["n"] if d["n"] else 0,
+            "unit_p25": (office_type_pcts.get(t) or {}).get("p25"),
+            "unit_p50": (office_type_pcts.get(t) or {}).get("p50"),
+            "unit_p75": (office_type_pcts.get(t) or {}).get("p75"),
+            "peer_lawyer_n": (office_type_pcts.get(t) or {}).get("lawyer_n"),
         }
         for t, d in office_type_agg.items() if d["n"] >= 5
     }
@@ -272,6 +372,52 @@ def main():
             bucket[t]["signed"] += 1
         bucket[t]["collected"] += (c.get("collected") or 0)
 
+    # Step 5b: 同年度比較 — 隔離「事務所漲價」confounder
+    # 預聚合：(year, type) → {my, firm} (signed only, collected sum)
+    all_dates = [c.get("case_date") for c in all_cases if c.get("case_date")]
+    max_year = int(max(all_dates)[:4]) if all_dates else None
+    target_years = [max_year - 1, max_year] if max_year else []
+
+    yearly_my = defaultdict(lambda: {"n": 0, "collected": 0})       # (year, type)
+    yearly_firm = defaultdict(lambda: {"n": 0, "collected": 0})     # (year, type) 不含本人
+    for c in all_cases:
+        if not c.get("is_signed"):
+            continue
+        d = c.get("case_date") or ""
+        if len(d) < 4 or not d[:4].isdigit():
+            continue
+        yr = int(d[:4])
+        if yr not in target_years:
+            continue
+        t = clean_case_type(c.get("case_type"))
+        if c["lawyer_id"] == lid:
+            yearly_my[(yr, t)]["n"] += 1
+            yearly_my[(yr, t)]["collected"] += (c.get("collected") or 0)
+        else:
+            yearly_firm[(yr, t)]["n"] += 1
+            yearly_firm[(yr, t)]["collected"] += (c.get("collected") or 0)
+
+    def _yearly_compare(t):
+        """每個 case_type，列「上一個完整年」與「當前年」的『我 vs 全所同年度』比較。
+        用意：隔離事務所整體漲價的 confounder — 若每年都低，就不是『歷史拖累』；
+        若我每年穩定但全所漲了，就是『沒跟上漲價節奏』。"""
+        out = []
+        for yr in target_years:
+            my = yearly_my.get((yr, t), {"n": 0, "collected": 0})
+            fm = yearly_firm.get((yr, t), {"n": 0, "collected": 0})
+            my_avg = (my["collected"] / my["n"]) if my["n"] else None
+            firm_avg = (fm["collected"] / fm["n"]) if fm["n"] else None
+            ratio = round(my_avg / firm_avg * 100, 0) if (my_avg and firm_avg) else None
+            out.append({
+                "year": yr,
+                "my_signed": my["n"],
+                "my_avg_collected": my_avg,
+                "firm_signed_n": fm["n"],
+                "firm_avg_collected": firm_avg,
+                "ratio_pct": ratio,  # 100 = 同水準；50 = 我只有全所一半
+            })
+        return out
+
     def _trend_for_type(t):
         """給定 case_type，回傳近一季 vs 更早的比較資料 + 趨勢標籤。
         注意小樣本：r_signed < 3 或 e_signed < 3 時標「樣本小」，讓讀者知道 delta 可能是雜訊。"""
@@ -340,6 +486,23 @@ def main():
             office_unit_gap_pct = None
             office_n = off_base.get("n", 0)  # 可能為 0 或小於 5
 
+        # peer-distribution 分位（律師 per-type 平均客單價的分位）
+        firm_pcts = type_baseline[t]
+        office_pcts = office_type_baseline.get(t, {})
+
+        # 律師落在哪個分位區間（口語標籤，給 LLM 用）
+        def _pos_label(my_unit, p25, p50, p75):
+            if not all([p25, p50, p75]):
+                return None
+            if my_unit < p25:
+                return "<P25"
+            elif my_unit < p50:
+                return "P25-P50"
+            elif my_unit < p75:
+                return "P50-P75"
+            else:
+                return "≥P75"
+
         gaps.append({
             "case_type": t,
             "n": d["n"],                    # 登錄為此類別的總件數（幾乎等於已簽）
@@ -349,16 +512,32 @@ def main():
             "baseline_avg_collected": base_unit,
             "unit_gap": unit_gap,
             "unit_gap_pct": unit_gap_pct,
+            # 全所分位（律師 per-type 平均的 P25/P50/P75）
+            "firm_unit_p25": firm_pcts.get("unit_p25"),
+            "firm_unit_p50": firm_pcts.get("unit_p50"),
+            "firm_unit_p75": firm_pcts.get("unit_p75"),
+            "firm_peer_lawyer_n": firm_pcts.get("peer_lawyer_n"),
+            "firm_peer_position": _pos_label(my_unit, firm_pcts.get("unit_p25"),
+                                             firm_pcts.get("unit_p50"), firm_pcts.get("unit_p75")),
             # 同所別 baseline（不含合署/司法官合署等不同類型所）
             "office_baseline_avg_collected": off_base_unit if off_base_unit > 0 else None,
             "office_baseline_n": office_n,
             "office_unit_gap": office_unit_gap,
             "office_unit_gap_pct": office_unit_gap_pct,
+            # 同所別分位
+            "office_unit_p25": office_pcts.get("unit_p25"),
+            "office_unit_p50": office_pcts.get("unit_p50"),
+            "office_unit_p75": office_pcts.get("unit_p75"),
+            "office_peer_lawyer_n": office_pcts.get("peer_lawyer_n"),
+            "office_peer_position": _pos_label(my_unit, office_pcts.get("unit_p25"),
+                                               office_pcts.get("unit_p50"), office_pcts.get("unit_p75")),
             # 保留供參考（但不用排序，因為是 artifact）
             "my_sign_rate": d["signed"] / d["n"] * 100 if d["n"] else 0,
             "baseline_sign_rate": type_baseline[t]["sign_rate"],
             # 近一季 vs 更早 的趨勢資料
             "trend": _trend_for_type(t),
+            # 同年度比較（上年 + 本年），隔離事務所漲價 confounder
+            "yearly_compare": _yearly_compare(t),
         })
 
     strengths = sorted([g for g in gaps if g["unit_gap_pct"] > 0], key=lambda x: -x["unit_gap_pct"])[:5]
@@ -373,11 +552,18 @@ def main():
         if c.get("is_signed"):
             method_all_agg[m]["signed"] += 1
         method_all_agg[m]["collected"] += (c.get("collected") or 0)
+    # 全所「律師 per-method 平均」分位（律師個人客單價、諮詢效益的分位）
+    firm_method_pcts = _lawyer_unit_dist_by_method(all_cases, firm_lawyer_ids, exclude_lid=target["id"])
     method_baseline = {
         m: {
             "n": d["n"],
             "sign_rate": d["signed"] / d["n"] * 100 if d["n"] else 0,
             "consult_eff": d["collected"] / d["n"] if d["n"] else 0,
+            # 分位：律師 per-method 客單價 / 效益值
+            **{k: (firm_method_pcts.get(m) or {}).get(k)
+               for k in ("unit_p25", "unit_p50", "unit_p75",
+                         "eff_p25", "eff_p50", "eff_p75",
+                         "unit_lawyer_n", "eff_lawyer_n")},
         }
         for m, d in method_all_agg.items()
     }
@@ -395,17 +581,43 @@ def main():
             continue
         my_rate = d["signed"] / d["n"] * 100
         my_eff = d["collected"] / d["n"] if d["n"] else 0
+        my_unit = d["collected"] / d["signed"] if d["signed"] else None
         base = method_baseline.get(m, {})
+
+        def _pos(my_v, p25, p50, p75):
+            if my_v is None or not all([p25, p50, p75]):
+                return None
+            if my_v < p25:
+                return "<P25"
+            elif my_v < p50:
+                return "P25-P50"
+            elif my_v < p75:
+                return "P50-P75"
+            else:
+                return "≥P75"
+
         consult_method_stats.append({
             "method": m,
             "n": d["n"],
             "my_signed": d["signed"],
             "my_sign_rate": my_rate,
             "my_consult_eff": my_eff,
+            "my_avg_collected": my_unit,
             "baseline_sign_rate": base.get("sign_rate"),
             "baseline_consult_eff": base.get("consult_eff"),
             "sign_rate_gap": (my_rate - base["sign_rate"]) if base.get("sign_rate") is not None else None,
             "eff_gap": (my_eff - base["consult_eff"]) if base.get("consult_eff") is not None else None,
+            # 分位（律師 per-method 平均）
+            "firm_unit_p25": base.get("unit_p25"),
+            "firm_unit_p50": base.get("unit_p50"),
+            "firm_unit_p75": base.get("unit_p75"),
+            "firm_eff_p25": base.get("eff_p25"),
+            "firm_eff_p50": base.get("eff_p50"),
+            "firm_eff_p75": base.get("eff_p75"),
+            "firm_peer_unit_n": base.get("unit_lawyer_n"),
+            "firm_peer_eff_n": base.get("eff_lawyer_n"),
+            "firm_unit_position": _pos(my_unit, base.get("unit_p25"), base.get("unit_p50"), base.get("unit_p75")),
+            "firm_eff_position": _pos(my_eff, base.get("eff_p25"), base.get("eff_p50"), base.get("eff_p75")),
         })
 
     # Step 6: 近 3 個月所有 case（按是否有 meeting_record 標註）
