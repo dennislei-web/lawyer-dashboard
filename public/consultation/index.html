@@ -1790,10 +1790,11 @@
                 <th class="num">簽約率</th>
                 <th class="num">已收金額</th>
                 <th class="num">平均簽約收款</th>
+                <th class="num">諮詢效益</th>
               </tr>
             </thead>
             <tbody id="detailTableBody">
-              <tr><td colspan="6" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+              <tr><td colspan="7" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -3563,7 +3564,7 @@ function renderDetailTable(stats) {
   const tbody  = document.getElementById('detailTableBody');
 
   if (months.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暫無資料</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">暫無資料</div></td></tr>';
     return;
   }
 
@@ -3578,6 +3579,7 @@ function renderDetailTable(stats) {
 
     const rate = t.consult_count > 0 ? (t.signed_count / t.consult_count * 100) : 0;
     const avg  = t.signed_count > 0  ? (t.collected / t.signed_count)            : 0;
+    const eff  = t.consult_count > 0 ? (t.collected / t.consult_count)           : 0;
     const rateClass = rate >= 45 ? 'sign-rate-green' : rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
 
     return `<tr>
@@ -3587,6 +3589,7 @@ function renderDetailTable(stats) {
       <td class="num ${rateClass}">${rate.toFixed(1)}%</td>
       <td class="num">$${Math.round(t.collected).toLocaleString()}</td>
       <td class="num">$${Math.round(avg).toLocaleString()}</td>
+      <td class="num">$${Math.round(eff).toLocaleString()}</td>
     </tr>`;
   }).join('');
 }
