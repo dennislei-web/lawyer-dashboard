@@ -664,11 +664,11 @@
 
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title">各年度案件來源 - 案件數</div>
+            <div class="chart-title">各年度案件來源 - 案件數 <span id="srcCmpCaseChartSub" class="table-sub"></span></div>
             <div class="chart-container"><canvas id="srcCmpCaseChart"></canvas></div>
           </div>
           <div class="chart-card">
-            <div class="chart-title">各年度案件來源 - 營收</div>
+            <div class="chart-title">各年度案件來源 - 營收 <span id="srcCmpRevChartSub" class="table-sub"></span></div>
             <div class="chart-container"><canvas id="srcCmpRevenueChart"></canvas></div>
           </div>
         </div>
@@ -1417,15 +1417,30 @@ async function loadSourcePage() {
 // ═══ SOURCE COMPARE PAGE (年度比較總覽) ═══
 async function loadSourceComparePage() {
   var office = document.getElementById('srcCmpOfficeFilter').value;
-  var cy = new Date().getFullYear();
+  var now = new Date();
+  var cy = now.getFullYear();
   var years = [cy-3, cy-2, cy-1, cy];
 
-  // 抓 4 年資料並各自彙總
+  // YTD 對齊：當年只算「已完整結束的月份」（例：5 月 → 1-4 月）
+  // 為了讓 YoY apples-to-apples，全部年度都套用同一個月份窗口
+  var maxCompleteM = now.getMonth(); // 0-index 上個月 = 1-index 已完整月數
+  if (maxCompleteM === 0) maxCompleteM = 12; // 1 月初時 fallback 到全年（避免空表）
+  var monthLabel = maxCompleteM === 12 ? '全年' : ('1-'+maxCompleteM+' 月');
+
+  function filterToWindow(recs) {
+    if (maxCompleteM >= 12) return recs;
+    return recs.filter(function(r) {
+      var mm = parseInt((r.record_date||'').substring(5,7), 10);
+      return mm >= 1 && mm <= maxCompleteM;
+    });
+  }
+
+  // 抓 4 年資料、套同期月份窗口、各自彙總
   var perYear = {};
   for (var i=0;i<years.length;i++) {
     var y = years[i];
     var recs = excludePartner(await loadRecords({ year: y, office: office||undefined }));
-    perYear[y] = aggregateSources(recs);
+    perYear[y] = aggregateSources(filterToWindow(recs));
   }
 
   // 收集所有出現過的來源（聯集），依「最近一年營收」由大到小排
@@ -1513,6 +1528,14 @@ async function loadSourceComparePage() {
     var rawStr = isMoney ? (raw>=0?'+':'')+formatMoney(raw) : (raw>=0?'+':'')+raw;
     return '<td class="text-right '+cls+'">'+rawStr+' ('+sign+pct.toFixed(1)+'%)</td>';
   }
+
+  // 標題說明：標出 YTD 月份窗口
+  var winNote = '（資料區間：' + monthLabel + '，各年度同期對齊）';
+  document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「件數（佔當年度比）」' + winNote;
+  document.getElementById('srcCmpRevCaption').textContent = '每格顯示「營收（佔當年度比）」' + winNote;
+  var chartSub = '（'+monthLabel+'）';
+  document.getElementById('srcCmpCaseChartSub').textContent = chartSub;
+  document.getElementById('srcCmpRevChartSub').textContent = chartSub;
 
   // 案件數表
   document.getElementById('srcCmpCaseHead').innerHTML = buildHead('案件數');
