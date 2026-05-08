@@ -3874,13 +3874,13 @@ function renderMonthCards(stats, year, partialMonthMM) {
         <table class="month-body-table">
           <thead>
             <tr>
-              <th>律師</th>
-              <th>所別</th>
+              <th class="sortable" data-col="name" data-month="${key}">律師</th>
+              <th class="sortable" data-col="dept" data-month="${key}">所別</th>
               <th class="sortable num" data-col="consult_eff" data-month="${key}">諮詢效益</th>
               <th class="sortable num" data-col="consult_count" data-month="${key}">諮詢數</th>
               <th class="sortable num" data-col="signed_count" data-month="${key}">簽約數</th>
               <th class="sortable num" data-col="sign_rate" data-month="${key}">簽約率</th>
-              <th class="sortable num" data-col="collected" data-month="${key}">已收金額</th>
+              <th class="sortable num sort-desc" data-col="collected" data-month="${key}">已收金額</th>
               <th class="sortable num" data-col="avg_collected" data-month="${key}">平均簽約收款</th>
             </tr>
           </thead>
