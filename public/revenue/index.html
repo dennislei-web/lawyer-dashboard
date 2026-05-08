@@ -646,7 +646,7 @@
 
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title">各年度部門 - 案件數 <span id="deptCmpCaseChartSub" class="table-sub"></span></div>
+            <div class="chart-title">各年度部門 - 收款筆數 <span id="deptCmpCaseChartSub" class="table-sub"></span></div>
             <div class="chart-container"><canvas id="deptCmpCaseChart"></canvas></div>
           </div>
           <div class="chart-card">
@@ -657,8 +657,8 @@
 
         <div class="table-card" style="margin-bottom:24px">
           <div class="table-header">
-            <span class="table-title" id="deptCmpCaseTitle">案件數年度比較</span>
-            <span class="table-sub" id="deptCmpCaseCaption">每格顯示「件數（佔當年度比）」</span>
+            <span class="table-title" id="deptCmpCaseTitle">收款筆數年度比較</span>
+            <span class="table-sub" id="deptCmpCaseCaption">每格顯示「收款筆數（佔當年度比）」</span>
           </div>
           <div style="overflow-x:auto">
             <table>
@@ -753,7 +753,7 @@
         <!-- 來源管道圖（部門範圍內）-->
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title"><span id="drillSrcCaseTitle">來源管道 - 案件數</span> <span id="drillSrcCaseChartSub" class="table-sub"></span></div>
+            <div class="chart-title"><span id="drillSrcCaseTitle">來源管道 - 收款筆數</span> <span id="drillSrcCaseChartSub" class="table-sub"></span></div>
             <div class="chart-container"><canvas id="drillSrcCaseChart"></canvas></div>
           </div>
           <div class="chart-card">
@@ -773,11 +773,11 @@
               <thead>
                 <tr>
                   <th>來源管道</th>
-                  <th class="text-right">案件數</th>
-                  <th class="text-right">案件佔部門比</th>
+                  <th class="text-right">收款筆數</th>
+                  <th class="text-right">收款佔部門比</th>
                   <th class="text-right">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
-                  <th class="text-right">YoY 案件數</th>
+                  <th class="text-right">YoY 收款筆數</th>
                   <th class="text-right">YoY 營收</th>
                 </tr>
               </thead>
@@ -826,7 +826,7 @@
 
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title">各年度案件來源 - 案件數 <span id="srcCmpCaseChartSub" class="table-sub"></span></div>
+            <div class="chart-title">各年度案件來源 - 收款筆數 <span id="srcCmpCaseChartSub" class="table-sub"></span></div>
             <div class="chart-container"><canvas id="srcCmpCaseChart"></canvas></div>
           </div>
           <div class="chart-card">
@@ -837,8 +837,8 @@
 
         <div class="table-card" style="margin-bottom:24px">
           <div class="table-header">
-            <span class="table-title" id="srcCmpCaseTitle">案件數年度比較</span>
-            <span class="table-sub" id="srcCmpCaseCaption">每格顯示「件數（佔當年度比）」</span>
+            <span class="table-title" id="srcCmpCaseTitle">收款筆數年度比較</span>
+            <span class="table-sub" id="srcCmpCaseCaption">每格顯示「收款筆數（佔當年度比）」</span>
           </div>
           <div style="overflow-x:auto">
             <table>
@@ -875,7 +875,7 @@
 
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title">來源管道 - 案件數</div>
+            <div class="chart-title">來源管道 - 收款筆數</div>
             <div class="chart-container"><canvas id="srcCaseChart"></canvas></div>
           </div>
           <div class="chart-card">
@@ -892,8 +892,8 @@
             <thead>
               <tr>
                 <th>來源管道</th>
-                <th class="text-right">案件數</th>
-                <th class="text-right">案件佔比</th>
+                <th class="text-right">收款筆數</th>
+                <th class="text-right">收款佔比</th>
                 <th class="text-right">應收金額</th>
                 <th class="text-right">營收佔比</th>
               </tr>
@@ -1597,7 +1597,7 @@ async function loadDeptComparePage() {
     });
   }
 
-  // 抓 4 年資料、套月份窗口、按 office 彙總（payN = 案件數，pay = 營收，ref = 退款）
+  // 抓 4 年資料、套月份窗口、按 office 彙總（payN = 收款筆數，pay = 營收，ref = 退款）
   var perYear = {};
   for (var i=0;i<years.length;i++) {
     var y = years[i];
@@ -1691,13 +1691,13 @@ async function loadDeptComparePage() {
 
   // 標題
   var winSuffix = mode === 'full' ? ' · 全年（' + cy + ' 年至目前為止）' : ' · ' + monthLabel + ' 同期對齊';
-  document.getElementById('deptCmpCaseTitle').textContent = '案件數年度比較' + winSuffix;
+  document.getElementById('deptCmpCaseTitle').textContent = '收款筆數年度比較' + winSuffix;
   document.getElementById('deptCmpRevTitle').textContent = '營收年度比較' + winSuffix;
   var chartSub = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
   document.getElementById('deptCmpCaseChartSub').textContent = chartSub;
   document.getElementById('deptCmpRevChartSub').textContent = chartSub;
 
-  // 案件數表
+  // 收款筆數表
   document.getElementById('deptCmpCaseHead').innerHTML = buildHead();
   var caseHtml = depts.map(function(d){
     var row='<tr><td><span class="badge badge-blue">'+d+'</span></td>';
@@ -1976,7 +1976,7 @@ async function loadDeptDrillPage() {
 
   // 標題
   var winSuffix = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
-  document.getElementById('drillSrcCaseTitle').textContent = office + ' 來源管道 - 案件數';
+  document.getElementById('drillSrcCaseTitle').textContent = office + ' 來源管道 - 收款筆數';
   document.getElementById('drillSrcRevTitle').textContent = office + ' 來源管道 - 營收';
   document.getElementById('drillSrcCaseChartSub').textContent = winSuffix;
   document.getElementById('drillSrcRevChartSub').textContent = winSuffix;
@@ -1988,7 +1988,7 @@ async function loadDeptDrillPage() {
 
   if (charts.drillSrcCase) charts.drillSrcCase.destroy();
   charts.drillSrcCase = new Chart(document.getElementById('drillSrcCaseChart'), {
-    type:'bar', data:{labels:srcs, datasets:[{label:'案件數', data:caseData, backgroundColor: colors.slice(0,srcs.length)}]},
+    type:'bar', data:{labels:srcs, datasets:[{label:'收款筆數', data:caseData, backgroundColor: colors.slice(0,srcs.length)}]},
     options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:function(ctx){var v=ctx.raw; return ctx.label+'：'+v+' ('+(totalCases>0?(v/totalCases*100).toFixed(1):'0')+'%)';}}}},
       scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
@@ -2062,18 +2062,28 @@ async function loadDeptDrillPage() {
   }));
 
   document.getElementById('drillHistTitle').textContent = office + ' 歷年比較 · ' + histLabel + (histMaxM===12?'':' 同期對齊');
-  document.getElementById('drillHistSub').textContent = '指標包含諮詢、營運與績效；最後一欄為 ' + histYears[3] + ' vs ' + histYears[2] + ' 的變化';
+  document.getElementById('drillHistSub').textContent = '上半=諮詢端（依 case_date 計，僅當期諮詢案件）；下半=營運端（依 record_date 計，含舊案 / 法顧 / 顧問等收款）';
 
-  var metrics = [
-    { key:'consult',   name:'諮詢數',       kind:'count' },
-    { key:'signed',    name:'成案數',       kind:'count' },
-    { key:'signRate',  name:'簽約率',       kind:'pct' },
-    { key:'eff',       name:'諮詢效益值',   kind:'money' },
-    { key:'avgSigned', name:'平均簽約收款', kind:'money' },
-    { key:'pay',       name:'付款金額',     kind:'money' },
-    { key:'ref',       name:'退款',         kind:'money' },
-    { key:'net',       name:'淨收入',       kind:'money' },
-    { key:'refRate',   name:'退款率',       kind:'pct', invert:true }
+  var metricGroups = [
+    {
+      title: '諮詢端（當期諮詢的案件）',
+      items: [
+        { key:'consult',   name:'諮詢數',       kind:'count' },
+        { key:'signed',    name:'成案數',       kind:'count' },
+        { key:'signRate',  name:'簽約率',       kind:'pct' },
+        { key:'eff',       name:'諮詢效益值',   kind:'money' },
+        { key:'avgSigned', name:'平均簽約收款', kind:'money' }
+      ]
+    },
+    {
+      title: '營運端（當期收款，含新舊案 / 法顧 / 顧問費）',
+      items: [
+        { key:'pay',       name:'付款金額',     kind:'money' },
+        { key:'ref',       name:'退款',         kind:'money' },
+        { key:'net',       name:'淨收入',       kind:'money' },
+        { key:'refRate',   name:'退款率',       kind:'pct', invert:true }
+      ]
+    }
   ];
 
   function fmtCell(v, kind) {
@@ -2106,11 +2116,16 @@ async function loadDeptDrillPage() {
   var headHtml = '<tr><th>指標</th>' + histYears.map(function(y){return '<th class="text-right">'+y+'</th>';}).join('') + '<th class="text-right">'+histYears[3]+' vs '+histYears[2]+'</th></tr>';
   document.getElementById('drillHistHead').innerHTML = headHtml;
 
-  document.getElementById('drillHistBody').innerHTML = metrics.map(function(m) {
-    var row = '<tr><td>'+m.name+'</td>';
-    histYears.forEach(function(y) { row += '<td class="text-right">'+fmtCell(perYearMetrics[y][m.key], m.kind)+'</td>'; });
-    row += histDiffCell(perYearMetrics[histYears[3]][m.key], perYearMetrics[histYears[2]][m.key], m.kind, m.invert);
-    return row + '</tr>';
+  var totalCols = histYears.length + 2;
+  document.getElementById('drillHistBody').innerHTML = metricGroups.map(function(g) {
+    var sectionRow = '<tr><td colspan="'+totalCols+'" style="font-weight:600;color:var(--gold);background:rgba(201,168,76,0.08);padding:8px 12px">'+g.title+'</td></tr>';
+    var rows = g.items.map(function(m) {
+      var row = '<tr><td>'+m.name+'</td>';
+      histYears.forEach(function(y) { row += '<td class="text-right">'+fmtCell(perYearMetrics[y][m.key], m.kind)+'</td>'; });
+      row += histDiffCell(perYearMetrics[histYears[3]][m.key], perYearMetrics[histYears[2]][m.key], m.kind, m.invert);
+      return row + '</tr>';
+    }).join('');
+    return sectionRow + rows;
   }).join('');
 }
 
@@ -2128,7 +2143,7 @@ async function loadSourcePage() {
   var payPctCb={callbacks:{label:function(ctx){var v=ctx.raw;return ctx.label+': '+formatMoney(v)+' ('+(totalPay>0?(v/totalPay*100).toFixed(1):'0')+'%)';}}};
   if (charts.srcCase) charts.srcCase.destroy();
   charts.srcCase = new Chart(document.getElementById('srcCaseChart'), {
-    type:'bar', data:{labels:labels,datasets:[{label:'案件數',data:caseData,backgroundColor:colors.slice(0,labels.length)}]},
+    type:'bar', data:{labels:labels,datasets:[{label:'收款筆數',data:caseData,backgroundColor:colors.slice(0,labels.length)}]},
     options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:casePctCb},scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
   });
   if (charts.srcRevenue) charts.srcRevenue.destroy();
@@ -2274,16 +2289,16 @@ async function loadSourceComparePage() {
   var winSuffix = mode === 'full'
     ? ' · 全年（' + cy + ' 年至目前為止）'
     : ' · ' + monthLabel + ' 同期對齊';
-  document.getElementById('srcCmpCaseTitle').textContent = '案件數年度比較' + winSuffix;
+  document.getElementById('srcCmpCaseTitle').textContent = '收款筆數年度比較' + winSuffix;
   document.getElementById('srcCmpRevTitle').textContent = '營收年度比較' + winSuffix;
-  document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「件數（佔當年度比）」';
+  document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「收款筆數（佔當年度比）」';
   document.getElementById('srcCmpRevCaption').textContent = '每格顯示「營收（佔當年度比）」';
   var chartSub = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
   document.getElementById('srcCmpCaseChartSub').textContent = chartSub;
   document.getElementById('srcCmpRevChartSub').textContent = chartSub;
 
-  // 案件數表
-  document.getElementById('srcCmpCaseHead').innerHTML = buildHead('案件數');
+  // 收款筆數表
+  document.getElementById('srcCmpCaseHead').innerHTML = buildHead('收款筆數');
   var caseHtml = sources.map(function(s){
     var row='<tr><td><span class="badge badge-blue">'+s+'</span></td>';
     years.forEach(function(y){
