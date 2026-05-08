@@ -1793,8 +1793,9 @@ async function loadDeptDrillPage() {
   var modeBtn = document.querySelector('#drillModeBtns .year-btn.active');
   var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
   var now = new Date();
+  // YTD 模式：所有年度都對齊到當年已完整結束的月份窗口（為了讓選任一年度都能跟 2026 同期比較）
   var maxCompleteM;
-  if (mode === 'full' || drillSelectedYear < now.getFullYear()) {
+  if (mode === 'full') {
     maxCompleteM = 12;
   } else {
     maxCompleteM = now.getMonth();
@@ -1802,9 +1803,9 @@ async function loadDeptDrillPage() {
   }
   var monthLabel = maxCompleteM === 12 ? '全年' : ('1-'+maxCompleteM+' 月');
 
-  // 平行抓本年 + 去年資料
+  // 平行抓本年 + 去年資料；YoY 也要 apples-to-apples，所以 prevMaxM 同步
   var prevYear = drillSelectedYear - 1;
-  var prevMaxM = (mode === 'full' || prevYear < now.getFullYear()) ? 12 : Math.max(maxCompleteM, 1);
+  var prevMaxM = maxCompleteM;
   var [curRev, prevRev, curCases, prevCases] = await Promise.all([
     loadRecords({ year: drillSelectedYear }),
     loadRecords({ year: prevYear }),
