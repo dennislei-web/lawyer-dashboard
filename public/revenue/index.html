@@ -731,10 +731,9 @@
               <tr>
                 <th>來源管道</th>
                 <th class="text-right">案件數</th>
+                <th class="text-right">案件佔比</th>
                 <th class="text-right">應收金額</th>
-                <th class="text-right">已收金額</th>
-                <th class="text-right">退款</th>
-                <th class="text-right">佔比</th>
+                <th class="text-right">營收佔比</th>
               </tr>
             </thead>
             <tbody id="srcTableBody"></tbody>
@@ -1407,11 +1406,15 @@ async function loadSourcePage() {
   });
   var sorted=Object.entries(sources).sort(function(a,b){return b[1].pay-a[1].pay});
   var tbody=document.getElementById('srcTableBody');
-  tbody.innerHTML=sorted.map(function(e){var n=e[0],d=e[1]; return '<tr><td><span class="badge badge-blue">'+n+'</span></td>' +
-    '<td class="text-right">'+d.cases+'</td><td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
-    '<td class="text-right">-</td><td class="text-right">-</td>' +
-    '<td class="text-right">'+(total>0?(d.cases/total*100).toFixed(1)+'%':'0%')+'</td></tr>';}).join('');
-  if (!sorted.length) tbody.innerHTML='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
+  tbody.innerHTML=sorted.map(function(e){var n=e[0],d=e[1];
+    var casePct = total>0 ? (d.cases/total*100).toFixed(1)+'%' : '0%';
+    var payPct = totalPay>0 ? (d.pay/totalPay*100).toFixed(1)+'%' : '0%';
+    return '<tr><td><span class="badge badge-blue">'+n+'</span></td>' +
+      '<td class="text-right">'+d.cases+'</td>' +
+      '<td class="text-right text-muted">'+casePct+'</td>' +
+      '<td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
+      '<td class="text-right text-muted">'+payPct+'</td></tr>';}).join('');
+  if (!sorted.length) tbody.innerHTML='<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
 }
 
 // ═══ SOURCE COMPARE PAGE (年度比較總覽) ═══
