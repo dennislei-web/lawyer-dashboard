@@ -273,8 +273,8 @@
               <th rowspan="2">額外功能</th>
             </tr>
             <tr>
-              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">主</th>
-              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">合署</th>
+              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">全部</th>
+              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">部門</th>
             </tr>
           </thead>
           <tbody>
@@ -344,8 +344,8 @@
               <th rowspan="2" style="text-align:center;">密碼</th>
             </tr>
             <tr>
-              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">主</th>
-              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">合署</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">全部</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">部門</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
@@ -533,9 +533,9 @@ async function loadLawyers() {
 //   - manager → dashboard_access[] 決定可見儀表板、can_upload 決定上傳權限（顯示 checkbox）
 //   - lawyer  → 只能看諮詢分析（✓ 全部）；其他 ✗；無上傳
 //   - 無 auth 帳號：登不進任何儀表板（—）
-// 'revenue' = 主營運（總覽/年度追蹤/部門分析/來源分析）
-// 'revenue_partner' = 營運頁的合署 tabs（合署律師/合署年度追蹤）
-var DASHBOARDS = ['consultation','revenue','revenue_partner','finance','advisor','partners','funnel'];
+// 'revenue' = 營運頁全部 tabs
+// 'revenue_dept' = 營運頁僅「部門分析」tab
+var DASHBOARDS = ['consultation','revenue','revenue_dept','finance','advisor','partners','funnel'];
 
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
@@ -667,7 +667,7 @@ function renderAdminPage() {
       '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'consultation') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'revenue') + '</td>' +
-      '<td style="text-align:center;">' + accessCell(l, 'revenue_partner') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'revenue_dept') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'advisor') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +

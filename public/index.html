@@ -357,9 +357,9 @@ function canAccessRoute(route) {
   if (route === 'consultation' && role === 'lawyer') return true;
   if (role === 'manager') {
     var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
-    // 營運頁可由「revenue」(主) 或「revenue_partner」(合署) 任一權限進入
+    // 營運頁可由「revenue」(全部) 或「revenue_dept」(僅部門分析) 任一權限進入
     if (route === 'revenue') {
-      return allowed.indexOf('revenue') > -1 || allowed.indexOf('revenue_partner') > -1;
+      return allowed.indexOf('revenue') > -1 || allowed.indexOf('revenue_dept') > -1;
     }
     return allowed.indexOf(route) > -1;
   }
@@ -378,7 +378,7 @@ function updateNavVisibility() {
     if (isAdmin) visible = true;
     else if (role === 'manager') {
       if (route === 'revenue') {
-        visible = allowed.indexOf('revenue') > -1 || allowed.indexOf('revenue_partner') > -1;
+        visible = allowed.indexOf('revenue') > -1 || allowed.indexOf('revenue_dept') > -1;
       } else {
         visible = allowed.indexOf(route) > -1;
       }
