@@ -1880,7 +1880,7 @@ async function loadDeptDrillPage() {
   var prevRate = prevC.consult>0 ? (prevC.signed/prevC.consult*100) : 0;
   document.getElementById('drillKpiSignRate').textContent = curRate.toFixed(1)+'%';
   document.getElementById('drillKpiSignRateSub').innerHTML = (prevC.consult>0)
-    ? '<span class="'+pctClass(curRate-prevRate)+'">vs '+prevYear+' '+prevRate.toFixed(1)+'% · '+fmtPct(curRate-prevRate).replace('%','pp')+'</span>'
+    ? '<span class="'+pctClass(curRate-prevRate)+'">vs '+prevYear+' '+prevRate.toFixed(1)+'% · '+fmtPct(curRate-prevRate).replace('%','％')+'</span>'
     : '';
   var curEff = curC.consult>0 ? (curC.collected/curC.consult) : 0;
   var prevEff = prevC.consult>0 ? (prevC.collected/prevC.consult) : 0;
@@ -2099,7 +2099,7 @@ async function loadDeptDrillPage() {
       var bad  = invert ? diff > 0 : diff < 0;
       var cls = good?'text-green':(bad?'text-red':'text-muted');
       var sign = diff>0?'+':'';
-      return '<td class="text-right '+cls+'">'+sign+diff.toFixed(1)+'pp</td>';
+      return '<td class="text-right '+cls+'">'+sign+diff.toFixed(1)+'％</td>';
     }
     if (!prev && !curr) return '<td class="text-right text-muted">-</td>';
     if (!prev) return '<td class="text-right text-green">新增</td>';
