@@ -1138,12 +1138,24 @@ var _cache = {}; // key: 'year-office' → records array
 try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
 
 // ═══ AUTH ═══
+function _allowedDashboards() {
+  return Array.isArray(currentLawyer && currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+}
+function canSeeRevenueMain() {
+  if (!currentLawyer) return false;
+  if (currentLawyer.role === 'admin') return true;
+  return _allowedDashboards().indexOf('revenue') > -1;
+}
+function canSeeRevenuePartner() {
+  if (!currentLawyer) return false;
+  if (currentLawyer.role === 'admin') return true;
+  return _allowedDashboards().indexOf('revenue_partner') > -1;
+}
 function hasAccess() {
   if (!currentLawyer) return false;
   if (currentLawyer.role === 'admin') return true;
   if (currentLawyer.role === 'manager') {
-    var allowed = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
-    return allowed.indexOf('revenue') > -1;
+    return canSeeRevenueMain() || canSeeRevenuePartner();
   }
   return false;
 }
@@ -1190,7 +1202,37 @@ async function showDashboard() {
     if (el) el.style.display = canTrigger ? '' : 'none';
   });
   renderRevenueSyncStatus();
-  populateOfficeFilters(); initYearButtons(); initMonthBtns(); await loadOverviewData();
+  populateOfficeFilters(); initYearButtons(); initMonthBtns();
+
+  // ═══ 依權限隱藏 tabs ═══
+  // revenue → 主營運 (overview/yearly/departments/sources)
+  // revenue_partner → 合署 (partner/partnerYearly)
+  var mainTabs = ['overview','yearly','departments','sources'];
+  var partnerTabs = ['partner','partnerYearly'];
+  if (!canSeeRevenueMain()) {
+    mainTabs.forEach(function(t){
+      var b = document.querySelector('.tab-btn[data-tab="'+t+'"]');
+      if (b) b.style.display = 'none';
+    });
+  }
+  if (!canSeeRevenuePartner()) {
+    partnerTabs.forEach(function(t){
+      var b = document.querySelector('.tab-btn[data-tab="'+t+'"]');
+      if (b) b.style.display = 'none';
+    });
+  }
+  // 若沒有主營運權限但有合署 → 預設顯示合署律師 tab
+  if (!canSeeRevenueMain() && canSeeRevenuePartner()) {
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+    var defaultBtn = document.querySelector('.tab-btn[data-tab="partner"]');
+    var defaultPage = document.getElementById('page-partner');
+    if (defaultBtn) defaultBtn.classList.add('active');
+    if (defaultPage) defaultPage.classList.add('active');
+    await loadPartnerPage();
+  } else {
+    await loadOverviewData();
+  }
 }
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();

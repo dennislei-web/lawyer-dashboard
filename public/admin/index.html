@@ -263,19 +263,24 @@
         <table>
           <thead>
             <tr>
-              <th>角色</th>
-              <th style="text-align:center;">諮詢分析</th>
-              <th style="text-align:center;">營運</th>
-              <th style="text-align:center;">財務規劃</th>
-              <th style="text-align:center;">法律顧問</th>
-              <th style="text-align:center;">合署律師</th>
-              <th style="text-align:center;">委前漏斗</th>
-              <th>額外功能</th>
+              <th rowspan="2">角色</th>
+              <th rowspan="2" style="text-align:center;">諮詢分析</th>
+              <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border-light);">營運</th>
+              <th rowspan="2" style="text-align:center;">財務規劃</th>
+              <th rowspan="2" style="text-align:center;">法律顧問</th>
+              <th rowspan="2" style="text-align:center;">合署律師</th>
+              <th rowspan="2" style="text-align:center;">委前漏斗</th>
+              <th rowspan="2">額外功能</th>
+            </tr>
+            <tr>
+              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">主</th>
+              <th style="text-align:center;font-size:0.7rem;font-weight:500;color:var(--text-muted);">合署</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
@@ -292,11 +297,13 @@
               <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料（可勾選）</td>
             </tr>
             <tr>
               <td>🔒 律師 (lawyer)</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
@@ -323,22 +330,26 @@
         <table>
           <thead>
             <tr>
-              <th class="sortable" data-sort="name" style="cursor:pointer;user-select:none;">律師 <span class="sort-ind" data-for="name"></span></th>
-              <th class="sortable" data-sort="email" style="cursor:pointer;user-select:none;">Email <span class="sort-ind" data-for="email"></span></th>
-              <th class="sortable" data-sort="role" style="cursor:pointer;user-select:none;text-align:center;">角色 <span class="sort-ind" data-for="role">▼</span></th>
-              <th style="text-align:center;font-size:0.72rem;">諮詢分析</th>
-              <th style="text-align:center;font-size:0.72rem;">營運</th>
-              <th style="text-align:center;font-size:0.72rem;">財務規劃</th>
-              <th style="text-align:center;font-size:0.72rem;">法律顧問</th>
-              <th style="text-align:center;font-size:0.72rem;">合署律師</th>
-              <th style="text-align:center;font-size:0.72rem;">委前漏斗</th>
-              <th style="text-align:center;font-size:0.72rem;">資料上傳</th>
-              <th class="sortable" data-sort="status" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
-              <th style="text-align:center;">密碼</th>
+              <th class="sortable" data-sort="name" rowspan="2" style="cursor:pointer;user-select:none;">律師 <span class="sort-ind" data-for="name"></span></th>
+              <th class="sortable" data-sort="email" rowspan="2" style="cursor:pointer;user-select:none;">Email <span class="sort-ind" data-for="email"></span></th>
+              <th class="sortable" data-sort="role" rowspan="2" style="cursor:pointer;user-select:none;text-align:center;">角色 <span class="sort-ind" data-for="role">▼</span></th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">諮詢分析</th>
+              <th colspan="2" style="text-align:center;font-size:0.72rem;border-bottom:1px solid var(--border-light);">營運</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">財務規劃</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">法律顧問</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">合署律師</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">委前漏斗</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">資料上傳</th>
+              <th class="sortable" data-sort="status" rowspan="2" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
+              <th rowspan="2" style="text-align:center;">密碼</th>
+            </tr>
+            <tr>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">主</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">合署</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
-            <tr><td colspan="12"><div class="loading"><span class="spinner"></span></div></td></tr>
+            <tr><td colspan="13"><div class="loading"><span class="spinner"></span></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -522,7 +533,9 @@ async function loadLawyers() {
 //   - manager → dashboard_access[] 決定可見儀表板、can_upload 決定上傳權限（顯示 checkbox）
 //   - lawyer  → 只能看諮詢分析（✓ 全部）；其他 ✗；無上傳
 //   - 無 auth 帳號：登不進任何儀表板（—）
-var DASHBOARDS = ['consultation','revenue','finance','advisor','partners','funnel'];
+// 'revenue' = 主營運（總覽/年度追蹤/部門分析/來源分析）
+// 'revenue_partner' = 營運頁的合署 tabs（合署律師/合署年度追蹤）
+var DASHBOARDS = ['consultation','revenue','revenue_partner','finance','advisor','partners','funnel'];
 
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
@@ -654,6 +667,7 @@ function renderAdminPage() {
       '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'consultation') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'revenue') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'revenue_partner') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'finance') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'advisor') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
