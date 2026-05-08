@@ -675,7 +675,7 @@
 
         <div class="table-card" style="margin-bottom:24px">
           <div class="table-header">
-            <span class="table-title">案件數年度比較</span>
+            <span class="table-title" id="srcCmpCaseTitle">案件數年度比較</span>
             <span class="table-sub" id="srcCmpCaseCaption">每格顯示「件數（佔當年度比）」</span>
           </div>
           <div style="overflow-x:auto">
@@ -688,7 +688,7 @@
 
         <div class="table-card">
           <div class="table-header">
-            <span class="table-title">營收年度比較</span>
+            <span class="table-title" id="srcCmpRevTitle">營收年度比較</span>
             <span class="table-sub" id="srcCmpRevCaption">每格顯示「營收（佔當年度比）」</span>
           </div>
           <div style="overflow-x:auto">
@@ -1532,10 +1532,12 @@ async function loadSourceComparePage() {
     return '<td class="text-right '+cls+'">'+rawStr+' ('+sign+pct.toFixed(1)+'%)</td>';
   }
 
-  // 標題說明：標出 YTD 月份窗口
-  var winNote = '（資料區間：' + monthLabel + '，各年度同期對齊）';
-  document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「件數（佔當年度比）」' + winNote;
-  document.getElementById('srcCmpRevCaption').textContent = '每格顯示「營收（佔當年度比）」' + winNote;
+  // 標題說明：把月份窗口放進表格 / 圖表 title 醒目處
+  var winSuffix = ' · ' + monthLabel + (maxCompleteM === 12 ? '' : ' 同期對齊');
+  document.getElementById('srcCmpCaseTitle').textContent = '案件數年度比較' + winSuffix;
+  document.getElementById('srcCmpRevTitle').textContent = '營收年度比較' + winSuffix;
+  document.getElementById('srcCmpCaseCaption').textContent = '每格顯示「件數（佔當年度比）」';
+  document.getElementById('srcCmpRevCaption').textContent = '每格顯示「營收（佔當年度比）」';
   var chartSub = '（'+monthLabel+'）';
   document.getElementById('srcCmpCaseChartSub').textContent = chartSub;
   document.getElementById('srcCmpRevChartSub').textContent = chartSub;
