@@ -2295,6 +2295,7 @@ let currentLawyer = null;
 let allStats      = [];      // all monthly_stats rows visible to this user
 let allLawyersMap = {};      // id -> lawyer record (active)
 let resignedLawyersMap = {}; // id -> lawyer record (resigned)
+let legalStaffIds = new Set(); // ids of role=legal_staff lawyers — excluded from consultation analytics
 let detailLawyerId = null;
 let detailChart   = null;
 let detailBackTarget = 'overview';
@@ -2520,9 +2521,16 @@ async function loadDashboard(user) {
     lawyersResult.data.forEach(l => {
       if (l.is_active === false) resignedLawyersMap[l.id] = l;
       else allLawyersMap[l.id] = l;
+      if (l.role === 'legal_staff') legalStaffIds.add(l.id);
     });
   } else if (!canViewAll()) {
     allLawyersMap[currentLawyer.id] = currentLawyer;
+    if (currentLawyer.role === 'legal_staff') legalStaffIds.add(currentLawyer.id);
+  }
+
+  // 法務（legal_staff）不是諮詢律師,從諮詢分析資料中排除
+  if (legalStaffIds.size > 0) {
+    allStats = allStats.filter(s => !legalStaffIds.has(s.lawyer_id));
   }
 
   // Step 2: Show dashboard immediately (before cases load)
@@ -2539,9 +2547,11 @@ async function loadDashboard(user) {
       casesLoadError = result.error;
       console.error('[loadDashboard] consultation_cases fetch failed:', result.error);
     } else {
-      allCases = result.data;
+      allCases = legalStaffIds.size > 0
+        ? result.data.filter(c => !legalStaffIds.has(c.lawyer_id))
+        : result.data;
       casesLoadState = 'loaded';
-      console.log('[DEBUG] cases loaded:', result.data.length);
+      console.log('[DEBUG] cases loaded:', allCases.length);
     }
     reRenderActivePage();
   }).catch(e => {
@@ -5594,7 +5604,9 @@ async function reloadCases() {
     if (resp.data.length < pageSize) break;
     from += pageSize;
   }
-  allCases = casesFetched;
+  allCases = legalStaffIds.size > 0
+    ? casesFetched.filter(c => !legalStaffIds.has(c.lawyer_id))
+    : casesFetched;
 }
 
 // ===================== LOGOUT =====================
@@ -5620,6 +5632,7 @@ function showLoginPage() {
   allCases = [];
   allLawyersMap = {};
   resignedLawyersMap = {};
+  legalStaffIds = new Set();
 }
 
 // ===================== PASSWORD CHANGE =====================
