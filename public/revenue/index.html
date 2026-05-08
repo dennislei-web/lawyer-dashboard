@@ -241,6 +241,25 @@
     .year-btn:hover { background: var(--ghost-hover-bg); }
     .year-btn.active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
 
+    /* ===================== SUB TABS (來源分析) ===================== */
+    .src-subtabs {
+      display: flex; gap: 6px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border); padding-bottom: 8px;
+    }
+    .src-subtab-btn {
+      padding: 6px 14px; font-size: 0.82rem; font-weight: 500;
+      color: var(--text-muted); background: transparent; border: 1px solid transparent;
+      border-radius: 6px; cursor: pointer; transition: all 0.15s;
+    }
+    .src-subtab-btn:hover { background: var(--ghost-bg); color: var(--text); }
+    .src-subtab-btn.active {
+      background: var(--tab-active-bg); border-color: var(--tab-active-border);
+      color: var(--tab-active-color); font-weight: 600;
+    }
+    .src-subpage { display: none; }
+    .src-subpage.active { display: block; }
+    .table-sub { font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; font-weight: normal; }
+
     /* ===================== TABLE ===================== */
     .table-card {
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
@@ -628,43 +647,99 @@
 
     <!-- ========== 來源分析 ========== -->
     <div class="page" id="page-sources">
-      <div class="filter-bar">
-        <div class="filter-label">年度：</div>
-        <div class="year-btns" id="srcYearBtns"></div>
-        <div class="filter-group" style="margin-left:auto">
-          <div class="filter-label">接案所：</div>
-          <select class="filter-select" id="srcOfficeFilter"><option value="">全部</option></select>
+      <!-- Sub-tabs -->
+      <div class="src-subtabs">
+        <button class="src-subtab-btn active" data-subtab="compare">年度比較總覽</button>
+        <button class="src-subtab-btn" data-subtab="single">單年度明細</button>
+      </div>
+
+      <!-- 年度比較總覽 -->
+      <div class="src-subpage active" id="src-sub-compare">
+        <div class="filter-bar">
+          <div class="filter-group" style="margin-left:auto">
+            <div class="filter-label">接案所：</div>
+            <select class="filter-select" id="srcCmpOfficeFilter"><option value="">全部</option></select>
+          </div>
+        </div>
+
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">各年度案件來源 - 案件數</div>
+            <div class="chart-container"><canvas id="srcCmpCaseChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">各年度案件來源 - 營收</div>
+            <div class="chart-container"><canvas id="srcCmpRevenueChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:24px">
+          <div class="table-header">
+            <span class="table-title">案件數年度比較</span>
+            <span class="table-sub" id="srcCmpCaseCaption">每格顯示「件數（佔當年度比）」</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="srcCmpCaseHead"></thead>
+              <tbody id="srcCmpCaseBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <span class="table-title">營收年度比較</span>
+            <span class="table-sub" id="srcCmpRevCaption">每格顯示「營收（佔當年度比）」</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="srcCmpRevHead"></thead>
+              <tbody id="srcCmpRevBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div class="chart-row">
-        <div class="chart-card">
-          <div class="chart-title">來源管道 - 案件數</div>
-          <div class="chart-container"><canvas id="srcCaseChart"></canvas></div>
+      <!-- 單年度明細 -->
+      <div class="src-subpage" id="src-sub-single">
+        <div class="filter-bar">
+          <div class="filter-label">年度：</div>
+          <div class="year-btns" id="srcYearBtns"></div>
+          <div class="filter-group" style="margin-left:auto">
+            <div class="filter-label">接案所：</div>
+            <select class="filter-select" id="srcOfficeFilter"><option value="">全部</option></select>
+          </div>
         </div>
-        <div class="chart-card">
-          <div class="chart-title">來源管道 - 營收</div>
-          <div class="chart-container"><canvas id="srcRevenueChart"></canvas></div>
-        </div>
-      </div>
 
-      <div class="table-card">
-        <div class="table-header">
-          <span class="table-title">來源管道明細</span>
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">來源管道 - 案件數</div>
+            <div class="chart-container"><canvas id="srcCaseChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">來源管道 - 營收</div>
+            <div class="chart-container"><canvas id="srcRevenueChart"></canvas></div>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>來源管道</th>
-              <th class="text-right">案件數</th>
-              <th class="text-right">應收金額</th>
-              <th class="text-right">已收金額</th>
-              <th class="text-right">退款</th>
-              <th class="text-right">佔比</th>
-            </tr>
-          </thead>
-          <tbody id="srcTableBody"></tbody>
-        </table>
+
+        <div class="table-card">
+          <div class="table-header">
+            <span class="table-title">來源管道明細</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>來源管道</th>
+                <th class="text-right">案件數</th>
+                <th class="text-right">應收金額</th>
+                <th class="text-right">已收金額</th>
+                <th class="text-right">退款</th>
+                <th class="text-right">佔比</th>
+              </tr>
+            </thead>
+            <tbody id="srcTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -975,7 +1050,7 @@ if (_nal) _nal.addEventListener('click', async function() { if(sb) await sb.auth
 
 // ═══ DATA ═══
 function populateOfficeFilters() {
-  ['overviewOfficeFilter','deptOfficeFilter','srcOfficeFilter','partnerOfficeFilter'].forEach(function(id) {
+  ['overviewOfficeFilter','deptOfficeFilter','srcOfficeFilter','srcCmpOfficeFilter','partnerOfficeFilter'].forEach(function(id) {
     var el = document.getElementById(id); if(!el) return;
     el.innerHTML = '<option value="">全部</option>';
     OFFICES.forEach(function(o) { el.innerHTML += '<option value="'+o+'">'+o+'</option>'; });
@@ -1339,6 +1414,160 @@ async function loadSourcePage() {
   if (!sorted.length) tbody.innerHTML='<tr><td colspan="6" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>';
 }
 
+// ═══ SOURCE COMPARE PAGE (年度比較總覽) ═══
+async function loadSourceComparePage() {
+  var office = document.getElementById('srcCmpOfficeFilter').value;
+  var cy = new Date().getFullYear();
+  var years = [cy-3, cy-2, cy-1, cy];
+
+  // 抓 4 年資料並各自彙總
+  var perYear = {};
+  for (var i=0;i<years.length;i++) {
+    var y = years[i];
+    var recs = excludePartner(await loadRecords({ year: y, office: office||undefined }));
+    perYear[y] = aggregateSources(recs);
+  }
+
+  // 收集所有出現過的來源（聯集），依「最近一年營收」由大到小排
+  var srcSet = {};
+  years.forEach(function(y){ Object.keys(perYear[y]).forEach(function(s){ srcSet[s]=true; }); });
+  var sources = Object.keys(srcSet);
+  sources.sort(function(a,b){
+    var av=0,bv=0;
+    for (var i=years.length-1;i>=0;i--) { av += (perYear[years[i]][a]||{}).pay||0; bv += (perYear[years[i]][b]||{}).pay||0; if(av||bv) break; }
+    return bv-av;
+  });
+
+  // 各年度合計
+  var totals = {};
+  years.forEach(function(y){
+    var t={cases:0,pay:0};
+    Object.values(perYear[y]).forEach(function(d){ t.cases+=d.cases; t.pay+=d.pay; });
+    totals[y]=t;
+  });
+
+  // 顏色 - 各年度
+  var yearColors = ['rgba(155,89,182,0.7)','rgba(79,142,247,0.7)','rgba(76,175,130,0.7)','rgba(201,168,76,0.85)'];
+
+  // === Charts ===
+  var caseDatasets = years.map(function(y, idx){
+    return {
+      label: y+'',
+      data: sources.map(function(s){ return (perYear[y][s]||{}).cases||0; }),
+      backgroundColor: yearColors[idx]
+    };
+  });
+  var revDatasets = years.map(function(y, idx){
+    return {
+      label: y+'',
+      data: sources.map(function(s){ return (perYear[y][s]||{}).pay||0; }),
+      backgroundColor: yearColors[idx]
+    };
+  });
+
+  if (charts.srcCmpCase) charts.srcCmpCase.destroy();
+  charts.srcCmpCase = new Chart(document.getElementById('srcCmpCaseChart'), {
+    type:'bar', data:{ labels: sources, datasets: caseDatasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var y=ctx.dataset.label, v=ctx.raw||0; var t=(totals[y]||{}).cases||0;
+          return y+'：'+v+' 件 ('+(t>0?(v/t*100).toFixed(1):'0')+'%)';
+        }}}
+      },
+      scales:{ x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        y:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} } } }
+  });
+  if (charts.srcCmpRev) charts.srcCmpRev.destroy();
+  charts.srcCmpRev = new Chart(document.getElementById('srcCmpRevenueChart'), {
+    type:'bar', data:{ labels: sources, datasets: revDatasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var y=ctx.dataset.label, v=ctx.raw||0; var t=(totals[y]||{}).pay||0;
+          return y+'：'+formatMoney(v)+' ('+(t>0?(v/t*100).toFixed(1):'0')+'%)';
+        }}}
+      },
+      scales:{ x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        y:{ ticks:{color:'#8899aa', callback:function(v){return formatMoney(v)}}, grid:{color:'rgba(30,48,80,0.3)'} } } }
+  });
+
+  // === Tables ===
+  function buildHead(metricLabel) {
+    var h='<tr><th>來源管道</th>';
+    years.forEach(function(y){ h+='<th class="text-right">'+y+'</th>'; });
+    h+='<th class="text-right">'+years[years.length-1]+' vs '+years[years.length-2]+'</th></tr>';
+    return h;
+  }
+  function pctText(v, total) {
+    if (!total) return '0.0%';
+    return (v/total*100).toFixed(1)+'%';
+  }
+  function diffCell(curr, prev, isMoney) {
+    if (!prev && !curr) return '<td class="text-right text-muted">-</td>';
+    if (!prev) return '<td class="text-right text-green">新增</td>';
+    var pct = (curr-prev)/prev*100;
+    var cls = pct>0?'text-green':(pct<0?'text-red':'text-muted');
+    var sign = pct>0?'+':'';
+    var raw = curr-prev;
+    var rawStr = isMoney ? (raw>=0?'+':'')+formatMoney(raw) : (raw>=0?'+':'')+raw;
+    return '<td class="text-right '+cls+'">'+rawStr+' ('+sign+pct.toFixed(1)+'%)</td>';
+  }
+
+  // 案件數表
+  document.getElementById('srcCmpCaseHead').innerHTML = buildHead('案件數');
+  var caseHtml = sources.map(function(s){
+    var row='<tr><td><span class="badge badge-blue">'+s+'</span></td>';
+    years.forEach(function(y){
+      var c=(perYear[y][s]||{}).cases||0;
+      var t=(totals[y]||{}).cases||0;
+      var pct=pctText(c,t);
+      row+='<td class="text-right"><div style="font-weight:600">'+c+'</div><div class="text-muted" style="font-size:0.75rem">'+pct+'</div></td>';
+    });
+    var last=(perYear[years[years.length-1]][s]||{}).cases||0;
+    var prev=(perYear[years[years.length-2]][s]||{}).cases||0;
+    row+=diffCell(last, prev, false);
+    row+='</tr>';
+    return row;
+  }).join('');
+  // 合計列
+  var caseTotalRow='<tr style="background:var(--ghost-bg);font-weight:600"><td>合計</td>';
+  years.forEach(function(y){ caseTotalRow+='<td class="text-right">'+((totals[y]||{}).cases||0)+'</td>'; });
+  caseTotalRow+=diffCell((totals[years[years.length-1]]||{}).cases||0, (totals[years[years.length-2]]||{}).cases||0, false);
+  caseTotalRow+='</tr>';
+  document.getElementById('srcCmpCaseBody').innerHTML = (sources.length?caseHtml:'<tr><td colspan="'+(years.length+2)+'" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>') + (sources.length?caseTotalRow:'');
+
+  // 營收表
+  document.getElementById('srcCmpRevHead').innerHTML = buildHead('營收');
+  var revHtml = sources.map(function(s){
+    var row='<tr><td><span class="badge badge-blue">'+s+'</span></td>';
+    years.forEach(function(y){
+      var p=(perYear[y][s]||{}).pay||0;
+      var t=(totals[y]||{}).pay||0;
+      var pct=pctText(p,t);
+      row+='<td class="text-right"><div class="text-gold" style="font-weight:600">'+formatMoney(p)+'</div><div class="text-muted" style="font-size:0.75rem">'+pct+'</div></td>';
+    });
+    var last=(perYear[years[years.length-1]][s]||{}).pay||0;
+    var prev=(perYear[years[years.length-2]][s]||{}).pay||0;
+    row+=diffCell(last, prev, true);
+    row+='</tr>';
+    return row;
+  }).join('');
+  var revTotalRow='<tr style="background:var(--ghost-bg);font-weight:600"><td>合計</td>';
+  years.forEach(function(y){ revTotalRow+='<td class="text-right text-gold">'+formatMoney((totals[y]||{}).pay||0)+'</td>'; });
+  revTotalRow+=diffCell((totals[years[years.length-1]]||{}).pay||0, (totals[years[years.length-2]]||{}).pay||0, true);
+  revTotalRow+='</tr>';
+  document.getElementById('srcCmpRevBody').innerHTML = (sources.length?revHtml:'<tr><td colspan="'+(years.length+2)+'" class="text-muted" style="text-align:center;padding:30px">暫無資料</td></tr>') + (sources.length?revTotalRow:'');
+}
+
+// 來源分析的 router：依目前選的 sub-tab 載入對應資料
+function loadSourcePageRouter() {
+  var active = document.querySelector('.src-subtab-btn.active');
+  var sub = active ? active.dataset.subtab : 'compare';
+  if (sub==='compare') loadSourceComparePage();
+  else loadSourcePage();
+}
+
 // ═══ PARTNER PAGE ═══
 var partnerGroups = [];
 async function loadPartnerPage() {
@@ -1659,9 +1888,20 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (tab==='overview') loadOverviewData();
     else if (tab==='yearly') loadYearlyPage();
     else if (tab==='departments') loadDeptPage();
-    else if (tab==='sources') loadSourcePage();
+    else if (tab==='sources') loadSourcePageRouter();
     else if (tab==='partner') loadPartnerPage();
     else if (tab==='partnerYearly') loadPartnerYearlyPage();
+  });
+});
+
+// Sub-tab handler for 來源分析
+document.querySelectorAll('.src-subtab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.src-subtab-btn').forEach(function(b){b.classList.remove('active')});
+    document.querySelectorAll('.src-subpage').forEach(function(p){p.classList.remove('active')});
+    btn.classList.add('active');
+    document.getElementById('src-sub-'+btn.dataset.subtab).classList.add('active');
+    loadSourcePageRouter();
   });
 });
 function initYearButtons() {
@@ -1675,13 +1915,14 @@ function initYearButtons() {
       selectedYear=Number(e.target.dataset.year);
       document.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active',Number(b.dataset.year)===selectedYear)});
       var ap=document.querySelector('.tab-btn.active');
-      if(ap){var t=ap.dataset.tab; if(t==='overview')loadOverviewData();else if(t==='yearly')loadYearlyPage();else if(t==='departments')loadDeptPage();else if(t==='sources')loadSourcePage();else if(t==='partner')loadPartnerPage();else if(t==='partnerYearly')loadPartnerYearlyPage();}
+      if(ap){var t=ap.dataset.tab; if(t==='overview')loadOverviewData();else if(t==='yearly')loadYearlyPage();else if(t==='departments')loadDeptPage();else if(t==='sources')loadSourcePageRouter();else if(t==='partner')loadPartnerPage();else if(t==='partnerYearly')loadPartnerYearlyPage();}
     });
   });
 }
 document.getElementById('overviewOfficeFilter').addEventListener('change', loadOverviewData);
 document.getElementById('deptOfficeFilter').addEventListener('change', loadDeptPage);
 document.getElementById('srcOfficeFilter').addEventListener('change', loadSourcePage);
+document.getElementById('srcCmpOfficeFilter').addEventListener('change', loadSourceComparePage);
 
 function initMonthBtns() {
   initMonthButtons('ytMonthBtns', function(){return ytSelectedMonth}, function(m){ytSelectedMonth=m}, loadYearlyPage);
