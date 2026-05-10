@@ -790,6 +790,7 @@ function actualMonth(krCode, m) {
     }
     case 'kr5_revenue':
     case 'kr5_referrals':
+    case 'kr5_avg_referral':
     case 'kr5_avg_signed':
       return getManualActual(krCode, m);
     case 'kr6_monthly_cost_cap':     return (d.financeCostByMonth[m] || 0) / 10000;
@@ -1384,9 +1385,10 @@ function renderKR4() {
 // ═══ KR5 法0 ═══
 // KR5 用的指標清單（順序＝展示順序＝編輯矩陣的列順序）
 var KR5_METRICS = [
-  { code:'kr5_revenue',   label:'月營收',   unit:'萬', hasTarget:true },
-  { code:'kr5_referrals', label:'轉諮場次（已轉案件數）', unit:'場', hasTarget:false },
-  { code:'kr5_avg_signed',label:'均單',     unit:'萬', hasTarget:false }
+  { code:'kr5_revenue',      label:'月營收',                   unit:'萬', hasTarget:true },
+  { code:'kr5_referrals',    label:'轉諮場次（已轉案件數）',       unit:'場', hasTarget:false },
+  { code:'kr5_avg_referral', label:'轉案均單',                 unit:'萬', hasTarget:false, nonAggregable:true },
+  { code:'kr5_avg_signed',   label:'委任均單',                 unit:'萬', hasTarget:false, nonAggregable:true }
 ];
 
 function renderKR5() {
@@ -1395,24 +1397,24 @@ function renderKR5() {
   if (state.editing) {
     hint.innerHTML = '✏️ <b>編輯模式：</b>下方矩陣請對照 Google Sheet「轉案業績查詢」逐月填寫。輸入完按右上角「💾 儲存全部」。';
   } else {
-    hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。點右上「✏️ 編輯目標 / 里程碑」進入編輯模式，再依 Google Sheet「轉案業績查詢」逐月填寫月營收 / 轉諮場次 / 均單。';
+    hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。點右上「✏️ 編輯目標 / 里程碑」進入編輯模式，再依 Google Sheet「轉案業績查詢」逐月填寫月營收 / 轉諮場次 / 轉案均單 / 委任均單。';
   }
   card.appendChild(hint);
 
   var fm = state.focusMonth;
-  // 上方三欄當月（或 YTD）總覽
-  var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(3, 1fr)';
+  // 上方四欄當月（或 YTD）總覽
+  var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(4, 1fr)';
   KR5_METRICS.forEach(function(spec) {
     var label = (fm==null ? 'YTD' : fm+'月') + ' ' + spec.label;
-    // 均單 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
-    if (spec.code === 'kr5_avg_signed' && fm == null) {
+    // 均單類 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
+    if (spec.nonAggregable && fm == null) {
       var lastFilled = null;
       for (var mm=12; mm>=1; mm--) {
-        if (getManualActual('kr5_avg_signed', mm) != null) { lastFilled = mm; break; }
+        if (getManualActual(spec.code, mm) != null) { lastFilled = mm; break; }
       }
       row.appendChild(makeMetricCell({
-        label: lastFilled ? ('最近 ' + lastFilled + ' 月 均單') : '均單',
-        value: lastFilled ? getManualActual('kr5_avg_signed', lastFilled) : null,
+        label: lastFilled ? ('最近 ' + lastFilled + ' 月 ' + spec.label) : spec.label,
+        value: lastFilled ? getManualActual(spec.code, lastFilled) : null,
         unit: spec.unit
       }));
       return;
@@ -1439,7 +1441,7 @@ function renderKR5() {
 
 function buildKR5MiniCharts() {
   var wrap = document.createElement('div');
-  wrap.style.cssText = 'display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin-top:14px;';
+  wrap.style.cssText = 'display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-top:14px;';
   KR5_METRICS.forEach(function(spec, idx) {
     var box = document.createElement('div');
     box.style.cssText = 'background:var(--bg-row); border:1px solid var(--border-light); border-radius:8px; padding:10px;';
@@ -1451,7 +1453,7 @@ function buildKR5MiniCharts() {
     var canvas = document.createElement('canvas'); canvasWrap.appendChild(canvas); box.appendChild(canvasWrap);
     wrap.appendChild(box);
 
-    var color = ['purple', 'blue', 'gold'][idx] || 'purple';
+    var color = ['purple', 'blue', 'orange', 'gold'][idx] || 'purple';
     setTimeout(function() {
       var labels = [], values = [], targets = [];
       for (var m=1; m<=12; m++) {
