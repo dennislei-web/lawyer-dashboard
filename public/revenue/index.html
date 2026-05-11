@@ -337,6 +337,11 @@
       border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap;
     }
     thead th:hover { color: var(--text); }
+    /* 表格分組（筆數視角 / 金額視角） */
+    thead .group-header { text-align: center; font-size: 0.72rem; padding: 6px 14px 4px; cursor: default; }
+    thead .group-header.group-count { color: var(--blue); }
+    thead .group-header.group-money { color: var(--gold-light); }
+    .col-divider { border-left: 2px solid var(--border); }
     tbody td {
       padding: 10px 14px; font-size: 0.85rem; border-bottom: 1px solid var(--border);
     }
@@ -847,8 +852,15 @@
             <table>
               <thead>
                 <tr>
-                  <th>來源管道</th>
-                  <th class="text-right">應收金額</th>
+                  <th rowspan="2">來源管道</th>
+                  <th colspan="3" class="group-header group-count">案件結構（筆數視角）</th>
+                  <th colspan="4" class="group-header group-money col-divider">業務貢獻（金額視角）</th>
+                </tr>
+                <tr>
+                  <th class="text-right">收款筆數</th>
+                  <th class="text-right">筆數佔部門比</th>
+                  <th class="text-right">YoY 筆數</th>
+                  <th class="text-right col-divider">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
                   <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比">營收占比 YoY</th>
                   <th class="text-right">YoY 營收</th>
@@ -2167,16 +2179,23 @@ async function loadDeptDrillPage() {
       '</td>';
   }
   var tbody = document.getElementById('drillSrcTableBody');
-  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
+  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
   else tbody.innerHTML = srcs.map(function(s){
     var d = srcCur[s] || { cases:0, pay:0 };
     var p = srcPrev[s] || { cases:0, pay:0 };
+    var casePct = totalCases>0 ? (d.cases/totalCases*100).toFixed(1)+'%' : '0%';
     var payPct = totalPay>0 ? (d.pay/totalPay*100).toFixed(1)+'%' : '0%';
+    // 改寫 diffCell 為帶 class 版本（這列只有應收金額需要 divider）
+    var caseYoy = diffCell(d.cases, p.cases, false);
+    var payYoy = diffCell(d.pay, p.pay, true);
     return '<tr><td><span class="badge badge-blue">'+s+'</span></td>' +
-      '<td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
+      '<td class="text-right">'+d.cases+'</td>' +
+      '<td class="text-right text-muted">'+casePct+'</td>' +
+      caseYoy +
+      '<td class="text-right text-gold col-divider">'+formatMoney(d.pay)+'</td>' +
       '<td class="text-right text-muted">'+payPct+'</td>' +
       shareYoYCell(d.pay, totalPay, p.pay, totalPayPrev) +
-      diffCell(d.pay, p.pay, true) +
+      payYoy +
       '</tr>';
   }).join('');
 
