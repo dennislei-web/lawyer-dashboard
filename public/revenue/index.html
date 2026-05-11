@@ -832,15 +832,9 @@
         </div>
 
         <!-- 來源管道圖（部門範圍內）-->
-        <div class="chart-row">
-          <div class="chart-card">
-            <div class="chart-title"><span id="drillSrcCaseTitle">來源管道 - 收款筆數</span> <span id="drillSrcCaseChartSub" class="table-sub"></span></div>
-            <div class="chart-container"><canvas id="drillSrcCaseChart"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title"><span id="drillSrcRevTitle">來源管道 - 營收</span> <span id="drillSrcRevChartSub" class="table-sub"></span></div>
-            <div class="chart-container"><canvas id="drillSrcRevChart"></canvas></div>
-          </div>
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-title"><span id="drillSrcRevTitle">來源管道 - 營收</span> <span id="drillSrcRevChartSub" class="table-sub"></span></div>
+          <div class="chart-container"><canvas id="drillSrcRevChart"></canvas></div>
         </div>
 
         <!-- 來源明細表（部門範圍內，含 YoY） -->
@@ -854,12 +848,9 @@
               <thead>
                 <tr>
                   <th>來源管道</th>
-                  <th class="text-right">收款筆數</th>
-                  <th class="text-right">收款佔部門比</th>
                   <th class="text-right">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
                   <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比">營收占比 YoY</th>
-                  <th class="text-right">YoY 收款筆數</th>
                   <th class="text-right">YoY 營收</th>
                 </tr>
               </thead>
@@ -1959,7 +1950,7 @@ async function loadDeptDrillPage() {
   document.getElementById('drillKpiEffSub').innerHTML = yoyHtml(curEff, prevEff, true);
 
   document.getElementById('drillKpiPay').textContent = formatMoney(curR.pay);
-  document.getElementById('drillKpiPaySub').innerHTML = '付款 '+curR.payN+' 筆 · ' + yoyHtml(curR.pay, prevR.pay, true);
+  document.getElementById('drillKpiPaySub').innerHTML = yoyHtml(curR.pay, prevR.pay, true);
   document.getElementById('drillKpiRef').textContent = formatMoney(curR.ref);
   document.getElementById('drillKpiRefSub').innerHTML = curR.pay>0 ? '退款率 '+(curR.ref/curR.pay*100).toFixed(1)+'%' : '';
   document.getElementById('drillKpiNet').textContent = formatMoney(curR.net);
@@ -2135,21 +2126,12 @@ async function loadDeptDrillPage() {
   var winSuffix = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
   document.getElementById('drillSrcCaseTitle').textContent = office + ' 來源管道 - 收款筆數';
   document.getElementById('drillSrcRevTitle').textContent = office + ' 來源管道 - 營收';
-  document.getElementById('drillSrcCaseChartSub').textContent = winSuffix;
   document.getElementById('drillSrcRevChartSub').textContent = winSuffix;
   document.getElementById('drillSrcTableTitle').textContent = office + ' 來源管道明細 ' + winSuffix;
 
   var colors = ['#c9a84c','#4f8ef7','#4caf82','#e05c5c','#e0954a','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71'];
-  var caseData = srcs.map(function(s){return (srcCur[s]||{}).cases||0;});
   var payData = srcs.map(function(s){return (srcCur[s]||{}).pay||0;});
 
-  if (charts.drillSrcCase) charts.drillSrcCase.destroy();
-  charts.drillSrcCase = new Chart(document.getElementById('drillSrcCaseChart'), {
-    type:'bar', data:{labels:srcs, datasets:[{label:'收款筆數', data:caseData, backgroundColor: colors.slice(0,srcs.length)}]},
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:function(ctx){var v=ctx.raw; return ctx.label+'：'+v+' ('+(totalCases>0?(v/totalCases*100).toFixed(1):'0')+'%)';}}}},
-      scales:{x:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}},y:{ticks:{color:'#8899aa'},grid:{color:'rgba(30,48,80,0.3)'}}}}
-  });
   if (charts.drillSrcRev) charts.drillSrcRev.destroy();
   charts.drillSrcRev = new Chart(document.getElementById('drillSrcRevChart'), {
     type:'bar', data:{labels:srcs, datasets:[{label:'營收', data:payData, backgroundColor: colors.slice(0,srcs.length)}]},
@@ -2185,19 +2167,15 @@ async function loadDeptDrillPage() {
       '</td>';
   }
   var tbody = document.getElementById('drillSrcTableBody');
-  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
+  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
   else tbody.innerHTML = srcs.map(function(s){
     var d = srcCur[s] || { cases:0, pay:0 };
     var p = srcPrev[s] || { cases:0, pay:0 };
-    var casePct = totalCases>0 ? (d.cases/totalCases*100).toFixed(1)+'%' : '0%';
     var payPct = totalPay>0 ? (d.pay/totalPay*100).toFixed(1)+'%' : '0%';
     return '<tr><td><span class="badge badge-blue">'+s+'</span></td>' +
-      '<td class="text-right">'+d.cases+'</td>' +
-      '<td class="text-right text-muted">'+casePct+'</td>' +
       '<td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
       '<td class="text-right text-muted">'+payPct+'</td>' +
       shareYoYCell(d.pay, totalPay, p.pay, totalPayPrev) +
-      diffCell(d.cases, p.cases, false) +
       diffCell(d.pay, p.pay, true) +
       '</tr>';
   }).join('');
