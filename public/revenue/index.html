@@ -858,7 +858,7 @@
                   <th class="text-right">收款佔部門比</th>
                   <th class="text-right">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
-                  <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比，pp = 百分點">營收占比 YoY</th>
+                  <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比">營收占比 YoY</th>
                   <th class="text-right">YoY 收款筆數</th>
                   <th class="text-right">YoY 營收</th>
                 </tr>
@@ -2106,7 +2106,7 @@ async function loadDeptDrillPage() {
             var curR = rateOrNull(cm), prevR = rateOrNull(pm);
             if (curR != null && prevR != null) {
               var diff = curR - prevR;
-              lines.push('YoY ' + (diff>=0?'+':'') + diff.toFixed(1) + ' pp');
+              lines.push('YoY ' + (diff>=0?'+':'') + diff.toFixed(1) + '%');
             }
             return lines;
           }
@@ -2180,7 +2180,7 @@ async function loadDeptDrillPage() {
     var cls = diff>0.05 ? 'text-green' : (diff<-0.05 ? 'text-red' : 'text-muted');
     var arrow = diff>0.05 ? '↑' : (diff<-0.05 ? '↓' : '→');
     return '<td class="text-right">' +
-      '<div class="'+cls+'">'+arrow+' '+(diff>=0?'+':'')+diff.toFixed(1)+' pp</div>' +
+      '<div class="'+cls+'">'+arrow+' '+(diff>=0?'+':'')+diff.toFixed(1)+'%</div>' +
       '<div class="text-muted" style="font-size:0.72rem">'+prevShare.toFixed(1)+'% → '+curShare.toFixed(1)+'%</div>' +
       '</td>';
   }
