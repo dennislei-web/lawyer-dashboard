@@ -211,6 +211,56 @@
     .kpi-value.orange { color: var(--orange); }
     .kpi-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 
+    /* Hero KPI（簽約率主指標） */
+    .kpi-hero {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 24px 28px; position: relative; overflow: hidden;
+      margin-bottom: 20px;
+      display: grid; grid-template-columns: 1fr 1.2fr; gap: 32px; align-items: center;
+    }
+    .kpi-hero::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--orange);
+    }
+    .kpi-hero.orange::before { background: var(--orange); }
+    .kpi-hero .kpi-label { font-size: 0.85rem; margin-bottom: 12px; }
+    .kpi-value-hero {
+      font-size: 3rem; font-weight: 800; line-height: 1; margin-bottom: 8px;
+    }
+    .kpi-value-hero.orange { color: var(--orange); }
+    .kpi-hero .kpi-sub { font-size: 0.85rem; }
+    .kpi-hero-right { border-left: 1px solid var(--border); padding-left: 24px; }
+    .kpi-hero-formula { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+    .kpi-hero-formula strong { color: var(--text); font-size: 0.9rem; }
+    @media (max-width: 768px) {
+      .kpi-hero { grid-template-columns: 1fr; gap: 16px; padding: 18px 20px; }
+      .kpi-hero-right { border-left: none; border-top: 1px solid var(--border); padding-left: 0; padding-top: 16px; }
+      .kpi-value-hero { font-size: 2.2rem; }
+    }
+
+    /* Section divider（漏斗分區標題） */
+    .section-divider {
+      font-size: 0.85rem; color: var(--text-muted); font-weight: 600;
+      letter-spacing: 0.5px; margin: 8px 0 12px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+    }
+    .section-divider .section-icon { font-size: 1rem; }
+    .section-divider .section-note { color: var(--text-muted); font-weight: 400; font-size: 0.75rem; }
+
+    /* Tooltip on KPI label */
+    .kpi-label-tip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; }
+    .kpi-label-tip .tip-icon { font-size: 0.85rem; opacity: 0.6; }
+    .kpi-label-tip:hover .tip-icon { opacity: 1; }
+    .kpi-label-tip:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; left: 0; top: calc(100% + 6px); z-index: 100;
+      background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+      padding: 10px 14px; border-radius: 8px; font-size: 0.75rem;
+      text-transform: none; letter-spacing: normal; line-height: 1.6;
+      width: 280px; white-space: pre-line;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      font-weight: 400;
+    }
+
     /* ===================== CHARTS ===================== */
     .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart-card {
@@ -728,13 +778,35 @@
           </div>
         </div>
 
-        <!-- KPI 卡片 -->
-        <div class="kpi-row" id="drillKpiRow" style="grid-template-columns:repeat(4,1fr)">
+        <!-- 主指標：簽約率 (Hero) -->
+        <div class="kpi-hero orange">
+          <div class="kpi-hero-left">
+            <div class="kpi-label">簽約率（諮詢轉成案，領先指標）</div>
+            <div class="kpi-value-hero orange" id="drillKpiSignRate">-</div>
+            <div class="kpi-sub" id="drillKpiSignRateSub"></div>
+          </div>
+          <div class="kpi-hero-right">
+            <div class="kpi-hero-formula">
+              <strong>= 成案數 ÷ 諮詢數</strong>
+              <div style="margin-top:6px">這是最早能反映業務體質變化的指標。<br>諮詢成不成案，發生在收款之前。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ▼ 諮詢漏斗 -->
+        <div class="section-divider"><span class="section-icon">📋</span>諮詢漏斗 <span class="section-note">（由律師回填 consultation_cases）</span></div>
+        <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi-card blue"><div class="kpi-label">諮詢數</div><div class="kpi-value blue" id="drillKpiConsult">-</div><div class="kpi-sub" id="drillKpiConsultSub"></div></div>
           <div class="kpi-card green"><div class="kpi-label">成案數</div><div class="kpi-value green" id="drillKpiSigned">-</div><div class="kpi-sub" id="drillKpiSignedSub"></div></div>
-          <div class="kpi-card orange"><div class="kpi-label">簽約率</div><div class="kpi-value orange" id="drillKpiSignRate">-</div><div class="kpi-sub" id="drillKpiSignRateSub"></div></div>
-          <div class="kpi-card gold"><div class="kpi-label">諮詢效益值</div><div class="kpi-value gold" id="drillKpiEff">-</div><div class="kpi-sub" id="drillKpiEffSub"></div></div>
+          <div class="kpi-card gold">
+            <div class="kpi-label kpi-label-tip" data-tooltip="諮詢效益值 = 諮詢成案『已收』金額 ÷ 諮詢數&#10;= 每接一通諮詢平均能帶來多少實際收進來的錢&#10;&#10;注意：分子來自諮詢漏斗（consultation_cases），與下方『CRM 付款金額』口徑不同，不要直接相減。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
+            <div class="kpi-value gold" id="drillKpiEff">-</div>
+            <div class="kpi-sub" id="drillKpiEffSub"></div>
+          </div>
         </div>
+
+        <!-- ▼ CRM 收款 -->
+        <div class="section-divider"><span class="section-icon">💰</span>CRM 收款 <span class="section-note">（即時記帳 revenue_records，含舊案分期、追加費）</span></div>
         <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi-card gold"><div class="kpi-label">付款金額（CRM）</div><div class="kpi-value gold" id="drillKpiPay">-</div><div class="kpi-sub" id="drillKpiPaySub"></div></div>
           <div class="kpi-card red"><div class="kpi-label">退款</div><div class="kpi-value red" id="drillKpiRef">-</div><div class="kpi-sub" id="drillKpiRefSub"></div></div>
@@ -748,6 +820,15 @@
             <span class="table-sub" id="drillTrendSub">諮詢數 / 成案數（左軸）· 營收（右軸，含退款）</span>
           </div>
           <div class="chart-container" style="height:340px"><canvas id="drillTrendChart"></canvas></div>
+        </div>
+
+        <!-- 月度成案率走勢（領先指標，跨年對比）-->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-title">
+            <span id="drillSignRateTitle">月度成案率走勢（vs 去年同月）</span>
+            <span class="table-sub" id="drillSignRateSub">每月成案率 = 該月成案數 ÷ 該月諮詢數。成案率是收款的領先指標</span>
+          </div>
+          <div class="chart-container" style="height:280px"><canvas id="drillSignRateChart"></canvas></div>
         </div>
 
         <!-- 來源管道圖（部門範圍內）-->
@@ -777,6 +858,7 @@
                   <th class="text-right">收款佔部門比</th>
                   <th class="text-right">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
+                  <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比，pp = 百分點">營收占比 YoY</th>
                   <th class="text-right">YoY 收款筆數</th>
                   <th class="text-right">YoY 營收</th>
                 </tr>
@@ -1963,6 +2045,80 @@ async function loadDeptDrillPage() {
     }
   });
 
+  // === 月度成案率走勢（領先指標，當年 vs 去年同月對比）===
+  var prevMonthly = [];
+  for (var m=1;m<=12;m++) prevMonthly.push({ consult:0, signed:0 });
+  prevCases.forEach(function(c) {
+    if ((typeof LAWYER_DEPARTMENTS === 'undefined') || LAWYER_DEPARTMENTS[c.lawyer_id] !== deptName) return;
+    var mm = parseInt((c.case_date||'').substring(5,7), 10);
+    if (mm<1 || mm>12) return;
+    prevMonthly[mm-1].consult++;
+    if (c.is_signed) prevMonthly[mm-1].signed++;
+  });
+
+  function rateOrNull(m) { return m.consult > 0 ? +(m.signed/m.consult*100).toFixed(1) : null; }
+  var curRateData  = monthly.map(rateOrNull);
+  var prevRateData = prevMonthly.map(rateOrNull);
+  // 同樣淡化未結束月份（當年）
+  var solidCurRate = (mode==='full' || !isCurrentYear) ? curRateData : fadeFn(curRateData, lastCompleteIdx);
+
+  document.getElementById('drillSignRateTitle').textContent =
+    office + ' ' + drillSelectedYear + ' 月度成案率（vs ' + prevYear + ' 同月）';
+
+  if (charts.drillSignRate) charts.drillSignRate.destroy();
+  charts.drillSignRate = new Chart(document.getElementById('drillSignRateChart'), {
+    type:'line',
+    data:{
+      labels: monthLabels,
+      datasets: [
+        {
+          label: drillSelectedYear + ' 成案率',
+          data: solidCurRate,
+          borderColor:'#e0954a', backgroundColor:'rgba(224,149,74,0.18)',
+          tension:0.3, spanGaps:false, pointRadius:4, borderWidth:2.5, fill:true
+        },
+        {
+          label: prevYear + ' 成案率',
+          data: prevRateData,
+          borderColor:'#7a8a9a', backgroundColor:'rgba(122,138,154,0.08)',
+          borderDash:[6,4], tension:0.3, spanGaps:false, pointRadius:3, borderWidth:1.5, fill:false
+        }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ labels:{ color:'#8899aa' } },
+        tooltip:{ callbacks:{
+          label:function(ctx){
+            var v = ctx.raw;
+            if (v == null) return ctx.dataset.label + '：—';
+            return ctx.dataset.label + '：' + v.toFixed(1) + '%';
+          },
+          afterBody: function(items) {
+            if (!items.length) return '';
+            var idx = items[0].dataIndex;
+            var cm = monthly[idx], pm = prevMonthly[idx];
+            var lines = [];
+            if (cm.consult > 0) lines.push(drillSelectedYear + '：諮詢 ' + cm.consult + ' / 成案 ' + cm.signed);
+            if (pm.consult > 0) lines.push(prevYear + '：諮詢 ' + pm.consult + ' / 成案 ' + pm.signed);
+            var curR = rateOrNull(cm), prevR = rateOrNull(pm);
+            if (curR != null && prevR != null) {
+              var diff = curR - prevR;
+              lines.push('YoY ' + (diff>=0?'+':'') + diff.toFixed(1) + ' pp');
+            }
+            return lines;
+          }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa'}, grid:{color:'rgba(30,48,80,0.3)'} },
+        y:{ ticks:{color:'#8899aa', callback:function(v){return v+'%'}}, grid:{color:'rgba(30,48,80,0.3)'}, beginAtZero:true, suggestedMax:60 }
+      }
+    }
+  });
+
   // === 來源 ===
   var srcCur = aggSourcesByOffice(curRev, office, maxCompleteM);
   var srcPrev = aggSourcesByOffice(prevRev, office, prevMaxM);
@@ -1973,6 +2129,7 @@ async function loadDeptDrillPage() {
 
   var totalCases = Object.values(srcCur).reduce(function(s,d){return s+d.cases},0);
   var totalPay = Object.values(srcCur).reduce(function(s,d){return s+d.pay},0);
+  var totalPayPrev = Object.values(srcPrev).reduce(function(s,d){return s+d.pay},0);
 
   // 標題
   var winSuffix = mode === 'full' ? '（全年）' : ('（'+monthLabel+'）');
@@ -2015,8 +2172,20 @@ async function loadDeptDrillPage() {
       '<div class="text-muted" style="font-size:0.72rem">'+prevYear+' 同期 '+prevStr+'</div>' +
       '</td>';
   }
+  function shareYoYCell(curr, total, prev, totalPrev) {
+    var curShare = total>0 ? (curr/total*100) : 0;
+    var prevShare = totalPrev>0 ? (prev/totalPrev*100) : 0;
+    if (totalPrev === 0 && total === 0) return '<td class="text-right text-muted">-</td>';
+    var diff = curShare - prevShare;
+    var cls = diff>0.05 ? 'text-green' : (diff<-0.05 ? 'text-red' : 'text-muted');
+    var arrow = diff>0.05 ? '↑' : (diff<-0.05 ? '↓' : '→');
+    return '<td class="text-right">' +
+      '<div class="'+cls+'">'+arrow+' '+(diff>=0?'+':'')+diff.toFixed(1)+' pp</div>' +
+      '<div class="text-muted" style="font-size:0.72rem">'+prevShare.toFixed(1)+'% → '+curShare.toFixed(1)+'%</div>' +
+      '</td>';
+  }
   var tbody = document.getElementById('drillSrcTableBody');
-  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
+  if (!srcs.length) tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:30px">該部門此區間尚無資料</td></tr>';
   else tbody.innerHTML = srcs.map(function(s){
     var d = srcCur[s] || { cases:0, pay:0 };
     var p = srcPrev[s] || { cases:0, pay:0 };
@@ -2027,6 +2196,7 @@ async function loadDeptDrillPage() {
       '<td class="text-right text-muted">'+casePct+'</td>' +
       '<td class="text-right text-gold">'+formatMoney(d.pay)+'</td>' +
       '<td class="text-right text-muted">'+payPct+'</td>' +
+      shareYoYCell(d.pay, totalPay, p.pay, totalPayPrev) +
       diffCell(d.cases, p.cases, false) +
       diffCell(d.pay, p.pay, true) +
       '</tr>';
