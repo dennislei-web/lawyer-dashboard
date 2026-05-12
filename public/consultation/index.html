@@ -405,6 +405,15 @@
 
     /* 非主管不顯示已收金額相關資訊 */
     body.no-collected .collected-only { display: none !important; }
+    /* 隱藏已收金額欄後，把剩餘數字欄收成內容寬度，避免欄間出現大空白 */
+    body.no-collected .table-wrap table th.num,
+    body.no-collected .table-wrap table td.num,
+    body.no-collected .month-body-table th.num,
+    body.no-collected .month-body-table td.num {
+      width: 1%;
+      white-space: nowrap;
+      padding-left: 24px;
+    }
 
     /* ===================== SECTION CARD ===================== */
     .section {
