@@ -1520,9 +1520,11 @@ function renderDrill() {
   const isJudicial = selectedCohort === 'judicial';
 
   // 拆分承辦 vs 附屬收入
-  //   承辦 tier = 委任 B/C/E + 自案 + (senior) 諮詢成案/喆律轉案/法律010轉案
+  //   喆律端「承辦」= 喆律帶進的案件分潤（委任 B/E + 諮詢成案 + 喆律轉案 + 010轉案 + 顯皓）
+  //     注意：自案(喆律) 是律師自帶案件、喆律僅抽 10% 平台費，不算喆律承辦 → 列為非承辦
+  //   律師端「承辦」= 律師主辦案件的律師分潤（委任 C/E + 自案 + 諮詢成案 + 喆律轉案 + 010轉案 + 顯皓）
   //   附屬 tier = 諮詢費、介紹、追溯、受僱、續委、轉案、合作、其他、其他-自案、成案獎金
-  const OWN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)','自案(喆律)',
+  const OWN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)',
                        '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)',
                        '顯皓承辦(喆律)','顯皓自案(喆律)'];
   const OWN_L_TIERS = ['委任-咨詢(律師)','委任-利潤(律師)','自案(律師)',
@@ -1558,7 +1560,8 @@ function renderDrill() {
     '轉案': '律師之間或與喆律之間的案件轉介分潤（非承辦轉案）',
     '合作': '多律師合作案的分潤',
     '其他': '解析時未對上標準比例（左表非 0.7/0.6/1.0）的特殊案件',
-    '其他-自案': '右表特殊比例案件（全庫僅 5 筆：4 筆 40% 含法扶舊案/退款等、1 筆 60% 特殊協議）'
+    '其他-自案': '右表特殊比例案件（全庫僅 5 筆：4 筆 40% 含法扶舊案/退款等、1 筆 60% 特殊協議）',
+    '自案': '律師自帶案件，喆律僅抽 10% 平台費（不算喆律承辦；律師端 90% 算律師承辦）'
   };
   // per-lawyer 特殊 tier 的細緻說明（覆蓋 global TIER_TIP）
   const perLawyerTips = (DATA.special_tier_tips && DATA.special_tier_tips[drillLawyer]) || {};
@@ -1631,9 +1634,14 @@ function renderDrill() {
       </div>`
     : '';
 
+  // 自案(喆律) 不算喆律承辦，但仍是承辦案件金額的一部分（律師自帶案，喆律抽 10%）；單獨顯示
+  const ownSelfZ = monthly.reduce((s, m) => s + (m.tier['自案(喆律)'] || 0), 0);
+  const selfZPart = ownSelfZ > 0
+    ? ` + <span style="color:var(--orange); text-decoration:underline dotted; cursor:help" title="律師自帶案件，喆律抽 10% 平台費（不算喆律承辦）">喆律自案分潤 $${fmt(ownSelfZ)}</span>`
+    : '';
   const formulaLine = isJudicial
-    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="承辦案件金額 = 處理費 D + 喆律承辦分潤 + 律師承辦分潤">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`
-    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`;
+    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="承辦案件金額 = 處理費 D + 喆律承辦 + 律師承辦 + 喆律自案 10% 平台費">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`
+    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`;
   const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
