@@ -139,18 +139,42 @@ def download_partners_files(dest_dir: Path, verbose: bool = True) -> list[Path]:
         if verbose:
             print(f"    {len(files)} files (incl subfolders)")
 
+        # 先過濾 + dedup：同(律師, 年份) 若同時有 gsheet 跟 xlsx，gsheet 優先
+        # 原因：律師若直接在 Google Sheets 線上編輯，Drive 上的 .xlsx 可能是
+        # 舊副本（沒最新月份），gsheet export 才能拿到最新版
+        candidates: dict[tuple[str, str], dict] = {}
         for f in files:
             name = f["name"]
             stem = re.sub(r"\.(xlsx|gsheet)$", "", name, flags=re.IGNORECASE)
-            if not FILENAME_RE.search(stem):
+            m = FILENAME_RE.search(stem)
+            if not m:
                 skipped += 1
                 continue
-            # 跳過自動 Converted 副本（同檔內容兩份會讓 parser 混淆）
             if "(Converted -" in name or "Converted -" in name or "的副本" in name:
                 if verbose:
                     print(f"    ⤳ skip (Converted/副本): {name}")
                 skipped += 1
                 continue
+            key = (m.group(1), m.group(2))  # (年份, 律師名)
+            # priority: gsheet (0) > xlsx (1) > 其他 (2)；數字越小越優先
+            if f["mimeType"] == MIME_GSHEET:
+                priority = 0
+            elif name.lower().endswith(".xlsx"):
+                priority = 1
+            else:
+                priority = 2
+            cur = candidates.get(key)
+            if cur is None or priority < cur["priority"]:
+                if cur is not None and verbose:
+                    print(f"    ⤳ {key[0]}/{key[1]} prefer {('gsheet' if priority==0 else 'xlsx' if priority==1 else 'other')}, skip {cur['name']}")
+                candidates[key] = {"file": f, "name": name, "priority": priority}
+            elif priority > cur["priority"]:
+                if verbose:
+                    print(f"    ⤳ skip stale {('gsheet' if priority==0 else 'xlsx' if priority==1 else 'other')}: {name}")
+
+        for entry in candidates.values():
+            f = entry["file"]
+            name = entry["name"]
 
             # 統一存成 .xlsx
             local_name = re.sub(r"\.gsheet$", ".xlsx", name, flags=re.IGNORECASE)
