@@ -1702,9 +1702,14 @@ function renderDrill() {
     : (monthlyFee > 0
       ? `${TERM.own} $${fmt(ztOwn)}${feeNote}${zOwnDetail}`
       : `${TERM.all_from_own}${zOwnDetail}`);
-  const lMiscHtml = ltMisc > 0
-    ? `${TERM.own} $${fmt(ltOwn)} + <span style="color:var(--orange)">${TERM.misc} $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">${TERM.misc_detail}：${lMiscBreakStr}</span>` : ''}`
+  // 「律師主案案源」放在 (承辦/非承辦 總額) 跟 (非承辦明細) 之間
+  const lOwnLine = ltMisc > 0
+    ? `${TERM.own} $${fmt(ltOwn)} + <span style="color:var(--orange)">${TERM.misc} $${fmt(ltMisc)}</span>`
     : `${TERM.all_from_own}`;
+  const lMiscDetailLine = (ltMisc > 0 && lMiscBreakStr)
+    ? `<br><span style="color:var(--text-muted);font-size:0.72rem">${TERM.misc_detail}：${lMiscBreakStr}</span>`
+    : '';
+  const lMiscHtml = lOwnLine + ltOwnBreakStr + lMiscDetailLine;
 
   document.getElementById('drill-kpi').innerHTML = `
     <div class="kpi">
@@ -1720,7 +1725,7 @@ function renderDrill() {
     <div class="kpi">
       <div class="label">律師收入（全部 tier）</div>
       <div class="value" style="color:${COLORS[drillLawyer]||'#fff'}">$${fmt(lt)}</div>
-      <div class="sub">${lMiscHtml}${ltOwnBreakStr}</div>
+      <div class="sub">${lMiscHtml}</div>
     </div>
     <div class="kpi">
       <div class="label">喆律佔比</div>
