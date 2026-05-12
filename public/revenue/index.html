@@ -814,19 +814,22 @@
           <div class="year-btns" id="drillModeBtns">
             <button class="year-btn active" data-mode="ytd">至目前月份</button>
             <button class="year-btn" data-mode="full">全年</button>
-            <button class="year-btn" data-mode="m1">1月</button>
-            <button class="year-btn" data-mode="m2">2月</button>
-            <button class="year-btn" data-mode="m3">3月</button>
-            <button class="year-btn" data-mode="m4">4月</button>
-            <button class="year-btn" data-mode="m5">5月</button>
-            <button class="year-btn" data-mode="m6">6月</button>
-            <button class="year-btn" data-mode="m7">7月</button>
-            <button class="year-btn" data-mode="m8">8月</button>
-            <button class="year-btn" data-mode="m9">9月</button>
-            <button class="year-btn" data-mode="m10">10月</button>
-            <button class="year-btn" data-mode="m11">11月</button>
-            <button class="year-btn" data-mode="m12">12月</button>
           </div>
+          <select class="filter-select" id="drillMonthSelect" style="margin-left:4px">
+            <option value="">單月…</option>
+            <option value="1">1 月</option>
+            <option value="2">2 月</option>
+            <option value="3">3 月</option>
+            <option value="4">4 月</option>
+            <option value="5">5 月</option>
+            <option value="6">6 月</option>
+            <option value="7">7 月</option>
+            <option value="8">8 月</option>
+            <option value="9">9 月</option>
+            <option value="10">10 月</option>
+            <option value="11">11 月</option>
+            <option value="12">12 月</option>
+          </select>
         </div>
 
         <!-- 主指標：簽約率 (Hero) -->
@@ -2075,18 +2078,21 @@ function closeCrossReferralModal() {
   document.getElementById('crossReferralModal').classList.remove('active');
 }
 
-// 部門細看「區間」按鈕 → 月份窗口（用於 KPI / 來源 / 歷年比較）
+// 部門細看「區間」按鈕 + 單月下拉 → 月份窗口（用於 KPI / 來源 / 歷年比較）
 // trend 圖固定 12 個月，不受此影響
 function getDrillRange() {
+  var monthSel = document.getElementById('drillMonthSelect');
+  var monthVal = monthSel ? monthSel.value : '';
+  if (monthVal) {
+    var n = parseInt(monthVal, 10);
+    return { mode: 'm'+n, minM: n, maxM: n, label: n + '月' };
+  }
   var modeBtn = document.querySelector('#drillModeBtns .year-btn.active');
   var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
   var now = new Date();
   var minM, maxM, label;
   if (mode === 'full') {
     minM = 1; maxM = 12; label = '全年';
-  } else if (mode.charAt(0) === 'm') {
-    var n = parseInt(mode.substring(1), 10);
-    minM = n; maxM = n; label = n + '月';
   } else { // ytd
     minM = 1;
     maxM = now.getMonth();
@@ -3154,6 +3160,19 @@ document.getElementById('drillDeptSelect').addEventListener('change', loadDeptDr
 document.getElementById('drillModeBtns').addEventListener('click', function(e) {
   if (!e.target.classList.contains('year-btn')) return;
   this.querySelectorAll('.year-btn').forEach(function(b){b.classList.toggle('active', b===e.target);});
+  // 點按鈕（至目前月份 / 全年）時清掉單月下拉
+  var ms = document.getElementById('drillMonthSelect');
+  if (ms) ms.value = '';
+  loadDeptDrillPage();
+});
+document.getElementById('drillMonthSelect').addEventListener('change', function() {
+  // 選了單月：清掉兩個 mode 按鈕的 active；清空回 placeholder 時則恢復「至目前月份」
+  var btns = document.querySelectorAll('#drillModeBtns .year-btn');
+  if (this.value) {
+    btns.forEach(function(b){ b.classList.remove('active'); });
+  } else {
+    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.mode === 'ytd'); });
+  }
   loadDeptDrillPage();
 });
 document.getElementById('drillYearBtns').addEventListener('click', function(e) {
