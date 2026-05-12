@@ -1857,12 +1857,13 @@ async function fetchConsultCasesByYear(year) {
 }
 
 function aggConsultByDept(cases, deptName, maxCompleteM) {
-  // 過濾月份窗口 + 律師屬於 deptName
+  // 過濾月份窗口 + 律師當時屬於 deptName（用 getDeptForLawyer 處理轉所歷史）
   var consult = 0, signed = 0, collected = 0;
   cases.forEach(function(c) {
     var mm = parseInt((c.case_date||'').substring(5,7), 10);
     if (mm < 1 || mm > maxCompleteM) return;
-    if ((typeof LAWYER_DEPARTMENTS === 'undefined') || LAWYER_DEPARTMENTS[c.lawyer_id] !== deptName) return;
+    if (typeof getDeptForLawyer === 'undefined') return;
+    if (getDeptForLawyer(c.lawyer_id, c.case_date) !== deptName) return;
     consult++;
     if (c.is_signed) signed++;
     collected += Number(c.collected || 0);
@@ -1972,7 +1973,8 @@ async function loadDeptDrillPage() {
   var monthly = [];
   for (var m=1;m<=12;m++) monthly.push({ consult:0, signed:0, pay:0, ref:0 });
   curCases.forEach(function(c) {
-    if ((typeof LAWYER_DEPARTMENTS === 'undefined') || LAWYER_DEPARTMENTS[c.lawyer_id] !== deptName) return;
+    if (typeof getDeptForLawyer === 'undefined') return;
+    if (getDeptForLawyer(c.lawyer_id, c.case_date) !== deptName) return;
     var mm = parseInt((c.case_date||'').substring(5,7), 10);
     if (mm<1 || mm>12) return;
     monthly[mm-1].consult++;
@@ -2052,7 +2054,8 @@ async function loadDeptDrillPage() {
   var prevMonthly = [];
   for (var m=1;m<=12;m++) prevMonthly.push({ consult:0, signed:0 });
   prevCases.forEach(function(c) {
-    if ((typeof LAWYER_DEPARTMENTS === 'undefined') || LAWYER_DEPARTMENTS[c.lawyer_id] !== deptName) return;
+    if (typeof getDeptForLawyer === 'undefined') return;
+    if (getDeptForLawyer(c.lawyer_id, c.case_date) !== deptName) return;
     var mm = parseInt((c.case_date||'').substring(5,7), 10);
     if (mm<1 || mm>12) return;
     prevMonthly[mm-1].consult++;

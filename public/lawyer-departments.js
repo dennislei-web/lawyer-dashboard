@@ -73,3 +73,28 @@ var LAWYER_DEPARTMENTS = {
 };
 
 var DEPARTMENT_ORDER = ['台北','桃園','新竹','台中','台南','高雄','合署','合署(司法官)'];
+
+// ──────────────────────────────────────────────────────────────────────────
+// 律師部門異動歷史：在指定日期之前，律師歸屬到不同部門
+// 用 getDeptForLawyer(lawyer_id, dateStr) 替代直接讀 LAWYER_DEPARTMENTS[id]，
+// 才能讓「轉所之前」的歷史案件正確歸到原所別。
+// 現職部門仍由 LAWYER_DEPARTMENTS 決定。
+// ──────────────────────────────────────────────────────────────────────────
+var LAWYER_DEPT_HISTORY = {
+  // 李昭萱：2025-01 前是中所所長，之後轉合署
+  "21e50125-59e7-4ac8-8729-470b7eea40f0": [
+    { before: '2025-01-01', dept: '台中' },
+  ],
+};
+
+function getDeptForLawyer(lawyerId, dateOrMonth) {
+  var hist = LAWYER_DEPT_HISTORY[lawyerId];
+  if (hist && dateOrMonth) {
+    // 支援 YYYY-MM 或 YYYY-MM-DD；前者補齊為月初
+    var d = dateOrMonth.length === 7 ? dateOrMonth + '-01' : dateOrMonth;
+    for (var i = 0; i < hist.length; i++) {
+      if (d < hist[i].before) return hist[i].dept;
+    }
+  }
+  return (typeof LAWYER_DEPARTMENTS !== 'undefined') ? LAWYER_DEPARTMENTS[lawyerId] : undefined;
+}
