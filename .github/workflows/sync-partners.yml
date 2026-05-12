@@ -27,7 +27,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install openpyxl google-api-python-client google-auth
+          pip install openpyxl google-api-python-client google-auth requests python-dotenv certifi
 
       - name: Configure git
         run: |
@@ -37,5 +37,7 @@ jobs:
       - name: Run sync from Drive
         env:
           GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          python scripts/partners/sync_runner.py --from-drive --commit
+          python scripts/partners/sync_runner.py --from-drive --upload-cross-referral --commit
