@@ -1574,9 +1574,48 @@ function renderDrill() {
     }).join('、');
   }
 
-  const dSubHtml = isJudicial
+  // 律師主案再依案源拆分（諮詢成案=律師自諮詢、喆律轉案=喆律諮詢轉、010轉案、自案、委任、顯皓）
+  const ltSourceBreak = {};
+  for (const m of monthly) {
+    for (const [k, v] of Object.entries(m.tier || {})) {
+      if (OWN_L_TIERS.indexOf(k) === -1) continue;
+      const base = k.replace('(律師)', '');
+      ltSourceBreak[base] = (ltSourceBreak[base] || 0) + v;
+    }
+  }
+  const SOURCE_LABEL = {
+    '諮詢成案': '律師自諮詢',
+    '喆律轉案': '喆律轉案',
+    '法律010轉案': '法律010轉案',
+    '自案': '律師自案',
+    '委任-咨詢': '委任-咨詢',
+    '委任-利潤': '委任-利潤',
+    '顯皓承辦': '顯皓承辦',
+    '顯皓自案': '顯皓自案',
+  };
+  const SOURCE_TIP = {
+    '律師自諮詢': '律師自己接諮詢、自己成案的委任案（諮詢成案 tier）',
+    '喆律轉案': '喆律端諮詢成案後轉給此律師承辦（喆律轉案 tier）',
+    '法律010轉案': '從法律010平台導入後轉給此律師承辦（法律010轉案 tier）',
+    '律師自案': '律師自己帶進來的舊客戶或自有案源（自案 tier）',
+  };
+  const ltSourceEntries = Object.entries(ltSourceBreak)
+    .filter(([,v]) => Math.abs(v) > 0.5)
+    .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const ltOwnBreakStr = ltSourceEntries.length > 1
+    ? `<br><span style="color:var(--text-muted);font-size:0.72rem">　律師主案案源：${ltSourceEntries.map(([k,v]) => {
+        const lbl = SOURCE_LABEL[k] || k;
+        const tip = SOURCE_TIP[lbl] || '';
+        return tip
+          ? `<span style="text-decoration:underline dotted; cursor:help" title="${tip}">${lbl}</span> $${fmt(v)}`
+          : `${lbl} $${fmt(v)}`;
+      }).join('、')}</span>`
+    : '';
+
+  const formulaLine = isJudicial
     ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律主案分潤 + 律師主案分潤">＝ D $${fmt(procD)} + 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`
     : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`;
+  const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
   // consult cohort：月固定費由喆律每月付給律師，已從 zhelu_total 扣除，需在顯示中顯式呈現
