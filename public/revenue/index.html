@@ -2073,10 +2073,6 @@ async function openCrossReferralDetails() {
 
   var rows = await fetchCrossReferralByYear(drillSelectedYear);
   var filtered = filterCrossReferralByDept(rows, deptName, maxCompleteM);
-  filtered.sort(function(a,b){
-    if (a.month !== b.month) return parseInt(a.month,10) - parseInt(b.month,10);
-    return (b.firm_amount || 0) - (a.firm_amount || 0);
-  });
 
   var unmatched = rows.filter(function(r){
     var mm = parseInt(r.month,10);
@@ -2084,20 +2080,28 @@ async function openCrossReferralDetails() {
     return !r.referring_lawyer_id;
   });
 
+  var display = filtered.concat(unmatched);
+  display.sort(function(a,b){
+    if (a.month !== b.month) return parseInt(a.month,10) - parseInt(b.month,10);
+    return (b.firm_amount || 0) - (a.firm_amount || 0);
+  });
+
   document.getElementById('crossReferralModalTitle').textContent =
     office + ' ' + drillSelectedYear + ' 諮詢轉合署明細';
-  var sumCase = filtered.reduce(function(s,r){return s+(Number(r.case_amount)||0)},0);
-  var sumFirm = filtered.reduce(function(s,r){return s+(Number(r.firm_amount)||0)},0);
+  var sumCase = display.reduce(function(s,r){return s+(Number(r.case_amount)||0)},0);
+  var sumFirm = display.reduce(function(s,r){return s+(Number(r.firm_amount)||0)},0);
   document.getElementById('crossReferralModalSummary').innerHTML =
-    '共 <b>' + filtered.length + '</b> 件、轉出總金額 <b>' + formatMoney(sumCase) + '</b>（其中喆律端入帳 ' + formatMoney(sumFirm) + '）。' +
-    (unmatched.length ? '另有 <b>' + unmatched.length + '</b> 筆無法對應到任何諮詢律師的轉案（不在本明細，諮詢可能漏填或客戶名不一致）。' : '');
+    '共 <b>' + display.length + '</b> 件、轉出總金額 <b>' + formatMoney(sumCase) + '</b>（其中喆律端入帳 ' + formatMoney(sumFirm) + '）。' +
+    (unmatched.length ? '其中 <b>' + unmatched.length + '</b> 筆無法對應到諮詢律師（諮詢可能漏填或客戶名不一致）。' : '');
 
   var tbody = document.getElementById('crossReferralModalBody');
-  if (filtered.length === 0) {
+  if (display.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;opacity:.6">此區間無資料</td></tr>';
   } else {
-    tbody.innerHTML = filtered.map(function(r) {
-      var refName = (r.referring_lawyer && r.referring_lawyer.name) || '(找不到)';
+    tbody.innerHTML = display.map(function(r) {
+      var refName = r.referring_lawyer_id
+        ? ((r.referring_lawyer && r.referring_lawyer.name) || '(找不到)')
+        : '';
       var qBadge = '<span class="modal-badge ' + (r.join_quality || 'none') + '">' + (r.join_quality || 'none') + '</span>';
       return '<tr>' +
         '<td>' + r.month + '月</td>' +
