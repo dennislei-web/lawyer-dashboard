@@ -1519,23 +1519,32 @@ function renderDrill() {
   const share = (zt + lt) > 0 ? zt / (zt + lt) * 100 : 0;
   const isJudicial = selectedCohort === 'judicial';
 
-  // 拆分承辦 vs 附屬收入
-  //   喆律端「承辦」= 喆律帶進的案件分潤（委任 B/E + 諮詢成案 + 喆律轉案 + 010轉案 + 顯皓）
-  //     注意：自案(喆律) 是律師自帶案件、喆律僅抽 10% 平台費，不算喆律承辦 → 列為非承辦
-  //   律師端「承辦」= 律師主辦案件的律師分潤（委任 C/E + 自案 + 諮詢成案 + 喆律轉案 + 010轉案 + 顯皓）
-  //   附屬 tier = 諮詢費、介紹、追溯、受僱、續委、轉案、合作、其他、其他-自案、成案獎金
-  const OWN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)',
-                       '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)',
-                       '顯皓承辦(喆律)','顯皓自案(喆律)'];
+  // 兩個概念分開：
+  //  (a) MAIN_Z/L_TIERS — 本律師主辦案件的 tier，formula 用：承辦案件金額 = ztMain + ltOwn + 自案喆律分
+  //  (b) OWN_Z/L_TIERS  — KPI sub「承辦 vs 非承辦」的 bucket：
+  //        喆律 OWN = MAIN + 成案獎金（諮詢律師諮詢、由喆律端他人承辦，喆律算實際承辦人）
+  //        律師 OWN = MAIN（自案 律師 90% 算律師承辦；成案獎金的 5% 是獎金、不算承辦）
+  //        自案(喆律) 不在任何一邊：律師自帶案、喆律抽 10% 平台費，formula 中單獨列為 selfZPart
+  const MAIN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)',
+                        '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)',
+                        '顯皓承辦(喆律)','顯皓自案(喆律)'];
+  const OWN_Z_TIERS = [...MAIN_Z_TIERS, '成案獎金(喆律)'];
   const OWN_L_TIERS = ['委任-咨詢(律師)','委任-利潤(律師)','自案(律師)',
                        '諮詢成案(律師)','喆律轉案(律師)','法律010轉案(律師)',
                        '顯皓承辦(律師)','顯皓自案(律師)'];
-  let ztOwn = 0, ltOwn = 0, ztMisc = 0, ltMisc = 0;
+  const MAIN_Z_SET = new Set(MAIN_Z_TIERS);
+  let ztOwn = 0, ltOwn = 0, ztMisc = 0, ltMisc = 0, ztMain = 0;
   const zMiscBreak = {};  // tier base name → amount
   const lMiscBreak = {};
+  const zOwnBreak = {};  // 承辦明細（含成案獎金分項）
   for (const m of monthly) {
     for (const [k, v] of Object.entries(m.tier || {})) {
-      if (OWN_Z_TIERS.indexOf(k) !== -1) ztOwn += v;
+      if (OWN_Z_TIERS.indexOf(k) !== -1) {
+        ztOwn += v;
+        if (MAIN_Z_SET.has(k)) ztMain += v;
+        const base = k.replace('(喆律)', '');
+        zOwnBreak[base] = (zOwnBreak[base] || 0) + v;
+      }
       else if (OWN_L_TIERS.indexOf(k) !== -1) ltOwn += v;
       else if (k.endsWith('(喆律)')) {
         ztMisc += v;
@@ -1552,7 +1561,7 @@ function renderDrill() {
   // 附屬 tier 的 hover 解釋
   const TIER_TIP = {
     '諮詢': '諮詢費（100% 歸律師），通常 $2,000/場',
-    '成案獎金': '諮詢律師諮詢成案、由他人承辦：諮詢律師抽 5% 獎金、剩餘 95% 歸喆律',
+    '成案獎金': '諮詢律師諮詢成案、由他人承辦：諮詢律師抽 5% 獎金；剩餘 95% 歸喆律（喆律端算承辦——案件由喆律體系實際處理）',
     '介紹': '律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金',
     '追溯': '過去介紹費事後補/扣的修正',
     '受僱': '律師替他人承辦的案件分潤',
@@ -1639,20 +1648,26 @@ function renderDrill() {
   const selfZPart = ownSelfZ > 0
     ? ` + <span style="color:var(--orange); text-decoration:underline dotted; cursor:help" title="律師自帶案件，喆律抽 10% 平台費（不算喆律承辦）">喆律自案分潤 $${fmt(ownSelfZ)}</span>`
     : '';
+  // formula 用 ztMain（本律師主辦案件）— 不含成案獎金，否則加總會超過承辦案件金額
+  const ztMainTip = '本律師主辦案件中, 喆律端的分潤（不含 諮詢律師諮詢、由他人承辦 那類成案獎金）';
   const formulaLine = isJudicial
-    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="承辦案件金額 = 處理費 D + 喆律承辦 + 律師承辦 + 喆律自案 10% 平台費">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`
-    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`;
+    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="承辦案件金額 = 處理費 D + 喆律承辦 + 律師承辦 + 喆律自案 10% 平台費">＝ D $${fmt(procD)} + <span style="text-decoration:underline dotted; cursor:help" title="${ztMainTip}">喆律承辦</span> $${fmt(ztMain)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`
+    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ <span style="text-decoration:underline dotted; cursor:help" title="${ztMainTip}">喆律承辦</span> $${fmt(ztMain)} + 律師承辦 $${fmt(ltOwn)}${selfZPart}</span>`;
   const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
+  const zOwnBreakStr = fmtBreak(zOwnBreak);
+  const zOwnDetail = (Object.keys(zOwnBreak).length > 1 && zOwnBreakStr)
+    ? `<br><span style="color:var(--text-muted);font-size:0.72rem">承辦明細：${zOwnBreakStr}</span>`
+    : '';
   // consult cohort：月固定費由喆律每月付給律師，已從 zhelu_total 扣除，需在顯示中顯式呈現
   const monthlyFee = (selectedCohort === 'consult') ? (lMiscBreak['月固定費'] || 0) : 0;
   const feeNote = monthlyFee > 0 ? ` − <span style="color:var(--orange)">月固定費 $${fmt(monthlyFee)}</span>` : '';
   const zMiscHtml = ztMisc > 0
-    ? `承辦 $${fmt(ztOwn)} + <span style="color:var(--orange)">非承辦 $${fmt(ztMisc)}</span>${feeNote}${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非承辦明細：${zMiscBreakStr}</span>` : ''}`
+    ? `承辦 $${fmt(ztOwn)} + <span style="color:var(--orange)">非承辦 $${fmt(ztMisc)}</span>${feeNote}${zOwnDetail}${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非承辦明細：${zMiscBreakStr}</span>` : ''}`
     : (monthlyFee > 0
-      ? `承辦 $${fmt(ztOwn)}${feeNote}`
-      : `全部來自承辦分潤`);
+      ? `承辦 $${fmt(ztOwn)}${feeNote}${zOwnDetail}`
+      : `全部來自承辦分潤${zOwnDetail}`);
   const lMiscHtml = ltMisc > 0
     ? `承辦 $${fmt(ltOwn)} + <span style="color:var(--orange)">非承辦 $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非承辦明細：${lMiscBreakStr}</span>` : ''}`
     : `全部來自承辦分潤`;
