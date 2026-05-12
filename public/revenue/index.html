@@ -853,7 +853,7 @@
             <div class="kpi-sub" id="drillKpiCrossOutSub"></div>
           </div>
           <div class="kpi-card gold clickable" onclick="openCrossReferralDetails()">
-            <div class="kpi-label kpi-label-tip" data-tooltip="合署端進帳（諮詢轉出） = 本部門諮詢律師諮詢、由合署律師承辦的案件中，「喆律端應入帳」金額加總。&#10;&#10;這筆錢實際進喆律口袋，但因為 group_name 含「合署」，會被部門分析的 CRM 收款 excludePartner() 過濾掉。此 KPI 把這部分還原。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。">合署端進帳金額（諮詢轉出）<span class="tip-icon">ⓘ</span></div>
+            <div class="kpi-label kpi-label-tip" data-tooltip="諮詢轉出總金額 = 本部門諮詢律師諮詢、由合署律師承辦的案件「總委任費」加總（不是只算喆律端入帳）。&#10;&#10;這代表諮詢律師為事務所貢獻、但因 group_name 含「合署」被部門分析 CRM 收款 excludePartner() 過濾掉的案件規模。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。&#10;&#10;點此查看明細。">諮詢轉出總金額<span class="tip-icon">ⓘ</span></div>
             <div class="kpi-value gold" id="drillKpiCrossFirm">-</div>
             <div class="kpi-sub" id="drillKpiCrossFirmSub"></div>
           </div>
@@ -2015,7 +2015,7 @@ function filterCrossReferralByDept(rows, deptName, maxCompleteM) {
 function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
   // direction='out': 用 referring_lawyer_id 反推當時部門
   // year 為民國年；用 (year+1911)-MM-01 作為部門歷史查詢日期
-  var count = 0, firm = 0, joined = 0, unjoined = 0;
+  var count = 0, caseAmt = 0, joined = 0, unjoined = 0;
   rows.forEach(function(r) {
     var mm = parseInt(r.month, 10);
     if (mm < 1 || mm > maxCompleteM) return;
@@ -2024,10 +2024,10 @@ function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
     var dateStr = (r.year + 1911) + '-' + (mm < 10 ? '0'+mm : mm) + '-01';
     if (getDeptForLawyer(r.referring_lawyer_id, dateStr) !== deptName) return;
     count++;
-    firm += Number(r.firm_amount || 0);
+    caseAmt += Number(r.case_amount || 0);
     joined++;
   });
-  return { count: count, firm: firm, joined: joined, unjoined: unjoined };
+  return { count: count, caseAmt: caseAmt, joined: joined, unjoined: unjoined };
 }
 
 function aggRevenueByOffice(recs, office, maxCompleteM) {
@@ -2086,8 +2086,10 @@ async function openCrossReferralDetails() {
 
   document.getElementById('crossReferralModalTitle').textContent =
     office + ' ' + drillSelectedYear + ' 諮詢轉合署明細';
+  var sumCase = filtered.reduce(function(s,r){return s+(Number(r.case_amount)||0)},0);
+  var sumFirm = filtered.reduce(function(s,r){return s+(Number(r.firm_amount)||0)},0);
   document.getElementById('crossReferralModalSummary').innerHTML =
-    '共 <b>' + filtered.length + '</b> 件、喆律端進帳 <b>' + formatMoney(filtered.reduce(function(s,r){return s+(Number(r.firm_amount)||0)},0)) + '</b>。' +
+    '共 <b>' + filtered.length + '</b> 件、轉出總金額 <b>' + formatMoney(sumCase) + '</b>（其中喆律端入帳 ' + formatMoney(sumFirm) + '）。' +
     (unmatched.length ? '另有 <b>' + unmatched.length + '</b> 筆無法對應到任何諮詢律師的轉案（不在本明細，諮詢可能漏填或客戶名不一致）。' : '');
 
   var tbody = document.getElementById('crossReferralModalBody');
@@ -2185,8 +2187,8 @@ async function loadDeptDrillPage() {
     crossOutSub += (crossOutSub ? ' · ' : '') + '<span class="text-muted">' + curX.unjoined + ' 筆未匹配諮詢</span>';
   }
   document.getElementById('drillKpiCrossOutSub').innerHTML = crossOutSub;
-  document.getElementById('drillKpiCrossFirm').textContent = formatMoney(curX.firm);
-  document.getElementById('drillKpiCrossFirmSub').innerHTML = yoyHtml(curX.firm, prevX.firm, true);
+  document.getElementById('drillKpiCrossFirm').textContent = formatMoney(curX.caseAmt);
+  document.getElementById('drillKpiCrossFirmSub').innerHTML = yoyHtml(curX.caseAmt, prevX.caseAmt, true);
 
   document.getElementById('drillKpiPay').textContent = formatMoney(curR.pay);
   document.getElementById('drillKpiPaySub').innerHTML = yoyHtml(curR.pay, prevR.pay, true);
