@@ -46,10 +46,11 @@ CREATE TABLE IF NOT EXISTS public.partner_cross_referral (
 );
 
 -- 避免重複 upsert（同合署律師、同月、同 client、同金額、同 tier 視為同一筆）
+-- 注意：PostgREST on_conflict 不支援 expression index，故 case_amount 直接用欄位
+-- （CSV 來源每筆都有金額，case_amount NULL 機率極低）
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_partner_cross_referral
   ON public.partner_cross_referral(
-    partner_lawyer_name, year, month, client_name, raw_tier,
-    COALESCE(case_amount, 0)
+    partner_lawyer_name, year, month, client_name, raw_tier, case_amount
   );
 
 CREATE INDEX IF NOT EXISTS idx_pcr_referring_lawyer

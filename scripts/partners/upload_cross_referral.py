@@ -34,6 +34,21 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+# 某些 Python 環境（如新版 3.14 / 企業 proxy）沒設好 SSL CA bundle，導致
+# Supabase 連線出 SSLCertVerificationError。優先用 certifi 的 cert path；
+# 若仍失敗，可設 env INSECURE_SSL=1 暫時關閉 verify（僅本機 ETL 用）。
+if os.environ.get("INSECURE_SSL", "").lower() in ("1", "true", "yes"):
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    _VERIFY = False
+    print("⚠️  INSECURE_SSL=1: SSL verify is DISABLED", file=sys.stderr)
+else:
+    try:
+        import certifi
+        _VERIFY = certifi.where()
+    except ImportError:
+        _VERIFY = True
+
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
@@ -73,19 +88,24 @@ def minguo_to_western(y: int) -> int:
     return int(y) + 1911
 
 
-def fetch_lawyers_map() -> dict[str, str]:
-    """name → uuid map (active lawyers only)."""
+def fetch_lawyers_map() -> tuple[dict[str, str], set[str]]:
+    """回傳 (name→uuid map, set of partner lawyer ids)。
+    partner_terms IS NOT NULL 的視為合署律師（資深 + 司法官 cohort）。"""
     resp = requests.get(
         f"{SUPABASE_URL}/rest/v1/lawyers",
-        params={"select": "id,name"},
+        params={"select": "id,name,partner_terms"},
         headers=H,
         timeout=30,
+        verify=_VERIFY,
     )
     resp.raise_for_status()
-    out = {}
+    name_map = {}
+    partner_ids = set()
     for r in resp.json():
-        out[r["name"]] = r["id"]
-    return out
+        name_map[r["name"]] = r["id"]
+        if r.get("partner_terms") is not None:
+            partner_ids.add(r["id"])
+    return name_map, partner_ids
 
 
 def fetch_consult_cases_by_client(client_name: str) -> list[dict]:
@@ -100,17 +120,25 @@ def fetch_consult_cases_by_client(client_name: str) -> list[dict]:
         },
         headers=H,
         timeout=30,
+        verify=_VERIFY,
     )
     resp.raise_for_status()
     return resp.json()
 
 
-def pick_referring_case(cases: list[dict], target_year: int, target_month: int):
+def pick_referring_case(cases: list[dict], target_year: int, target_month: int, exclude_lawyer_ids: set[str] | None = None):
     """從 candidate cases 中挑最接近 (year, month) 的一筆。
-    優先 is_signed=true，其次 case_date <= target 月底且最新。"""
+    優先 is_signed=true，其次 case_date <= target 月底且最新。
+    exclude_lawyer_ids：排除這些律師的 case（業務上：所有合署律師都不能當 referring，
+    因為「跨轉」定義是諮詢律師→合署承辦，合署律師自己對到的諮詢記錄不算）"""
     if not cases:
         return None, "none"
     target = date(target_year, target_month, 1)
+
+    if exclude_lawyer_ids:
+        cases = [c for c in cases if c.get("lawyer_id") not in exclude_lawyer_ids]
+        if not cases:
+            return None, "none"
 
     # 偏好 is_signed=true 的
     signed = [c for c in cases if c.get("is_signed")]
@@ -125,7 +153,7 @@ def pick_referring_case(cases: list[dict], target_year: int, target_month: int):
     return pool[0], "nearest"
 
 
-def build_rows(csv_path: Path, lawyers_map: dict[str, str], verbose: bool = False) -> tuple[list[dict], dict]:
+def build_rows(csv_path: Path, lawyers_map: dict[str, str], partner_ids: set[str], verbose: bool = False) -> tuple[list[dict], dict]:
     """回傳 (rows_to_upsert, stats)。"""
     if not csv_path.exists():
         raise SystemExit(f"CSV not found: {csv_path}")
@@ -175,7 +203,12 @@ def build_rows(csv_path: Path, lawyers_map: dict[str, str], verbose: bool = Fals
                 client_cache[client] = []
 
         cases = client_cache[client]
-        picked, quality = pick_referring_case(cases, y_western, m)
+        # 只排除「同一位 partner 本人」（避免自諮詢自承辦的記錄被選）；
+        # 其他合署律師的諮詢記錄保留，由前端 LAWYER_DEPT_HISTORY 處理：
+        # 例如李昭萱 114 年諮詢會被歸到中所（轉合署前），許煜婕會被歸到合署部門
+        # （不在 OFFICE_TO_DEPT 範圍，自然不會算進任何分所 KPI）
+        exclude_set = {partner_id} if partner_id else None
+        picked, quality = pick_referring_case(cases, y_western, m, exclude_lawyer_ids=exclude_set)
 
         if picked:
             stats[f"join_{quality}"] += 1
@@ -204,6 +237,23 @@ def build_rows(csv_path: Path, lawyers_map: dict[str, str], verbose: bool = Fals
             tag = f"{quality:8s}" + (f" (signed={picked.get('is_signed')})" if picked else "")
             print(f"  {partner_name} {y_minguo}/{m:02d} {client:8s} ${row['case_amount']:>10.0f} → {tag}")
 
+    # 聚合：同 (partner_name, year, month, client, raw_tier, case_amount) 的多筆合併
+    # （CSV 可能同月分次收款出現多筆完全相同金額；upsert unique 衝突需先 dedupe）
+    dedup_map: dict[tuple, dict] = {}
+    for r in out_rows:
+        key = (
+            r["partner_lawyer_name"], r["year"], r["month"],
+            r["client_name"], r["raw_tier"], r["case_amount"],
+        )
+        if key in dedup_map:
+            cur = dedup_map[key]
+            cur["firm_amount"] = (cur.get("firm_amount") or 0) + (r.get("firm_amount") or 0)
+            cur["lawyer_amount"] = (cur.get("lawyer_amount") or 0) + (r.get("lawyer_amount") or 0)
+            stats["deduped_merged"] += 1
+        else:
+            dedup_map[key] = r
+    out_rows = list(dedup_map.values())
+
     return out_rows, dict(stats)
 
 
@@ -221,6 +271,7 @@ def upsert(rows: list[dict], batch_size: int = 200) -> None:
             headers={**H, "Prefer": "resolution=merge-duplicates,return=minimal"},
             json=batch,
             timeout=60,
+            verify=_VERIFY,
         )
         if not resp.ok:
             print(f"  [ERROR] batch {i}-{i+len(batch)}: {resp.status_code} {resp.text[:300]}")
@@ -240,11 +291,11 @@ def main() -> int:
     print(f"Supabase: {SUPABASE_URL}")
 
     print("\n=== load lawyers map ===")
-    lawyers_map = fetch_lawyers_map()
-    print(f"  {len(lawyers_map)} lawyers")
+    lawyers_map, partner_ids = fetch_lawyers_map()
+    print(f"  {len(lawyers_map)} lawyers  ({len(partner_ids)} partner)")
 
     print("\n=== build rows (tier=喆律轉案) ===")
-    rows, stats = build_rows(csv_path, lawyers_map, verbose=args.verbose)
+    rows, stats = build_rows(csv_path, lawyers_map, partner_ids, verbose=args.verbose)
     print(f"\nStats:")
     for k, v in sorted(stats.items()):
         print(f"  {k:30s} {v}")
