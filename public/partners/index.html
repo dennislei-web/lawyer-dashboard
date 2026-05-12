@@ -1599,17 +1599,36 @@ function renderDrill() {
     '法律010轉案': '從法律010平台導入後轉給此律師承辦（法律010轉案 tier）',
     '律師自案': '律師自己帶進來的舊客戶或自有案源（自案 tier）',
   };
+  const SOURCE_COLOR = {
+    '律師自諮詢': '#5dd39e',
+    '喆律轉案': '#4ecdc4',
+    '法律010轉案': '#b58bff',
+    '律師自案': '#e25a5a',
+    '委任-咨詢': '#6aa9ff',
+    '委任-利潤': '#4a90e2',
+    '顯皓承辦': '#ff9f43',
+    '顯皓自案': '#ffa534',
+  };
   const ltSourceEntries = Object.entries(ltSourceBreak)
     .filter(([,v]) => Math.abs(v) > 0.5)
     .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const ltSourceTotal = ltSourceEntries.reduce((s,[,v]) => s + v, 0);
   const ltOwnBreakStr = ltSourceEntries.length > 1
-    ? `<br><span style="color:var(--text-muted);font-size:0.72rem">　律師主案案源：${ltSourceEntries.map(([k,v]) => {
-        const lbl = SOURCE_LABEL[k] || k;
-        const tip = SOURCE_TIP[lbl] || '';
-        return tip
-          ? `<span style="text-decoration:underline dotted; cursor:help" title="${tip}">${lbl}</span> $${fmt(v)}`
-          : `${lbl} $${fmt(v)}`;
-      }).join('、')}</span>`
+    ? `<div style="margin-top:6px; padding:6px 8px; background:rgba(255,255,255,0.04); border-radius:4px;">
+        <div style="color:var(--text-muted); font-size:0.68rem; margin-bottom:4px; letter-spacing:0.5px">律師主案案源</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; font-size:0.72rem;">
+          ${ltSourceEntries.map(([k,v]) => {
+            const lbl = SOURCE_LABEL[k] || k;
+            const tip = SOURCE_TIP[lbl] || '';
+            const pct = ltSourceTotal > 0 ? (v / ltSourceTotal * 100).toFixed(0) : 0;
+            const color = SOURCE_COLOR[lbl] || '#888';
+            const labelHtml = tip
+              ? `<span style="text-decoration:underline dotted; cursor:help" title="${tip}">${lbl}</span>`
+              : lbl;
+            return `<div style="display:flex; align-items:center; gap:5px; white-space:nowrap;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${color}; flex-shrink:0"></span><span style="flex:1; overflow:hidden; text-overflow:ellipsis">${labelHtml}</span><span style="color:var(--text-muted)">${pct}%</span><b>$${fmt(v)}</b></div>`;
+          }).join('')}
+        </div>
+      </div>`
     : '';
 
   const formulaLine = isJudicial
