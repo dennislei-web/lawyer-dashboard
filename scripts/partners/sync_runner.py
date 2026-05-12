@@ -181,6 +181,9 @@ def main() -> int:
     ap.add_argument("--from-drive", action="store_true",
                     help="從 Drive API 下載 xlsx（需 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON 或 GOOGLE_APPLICATION_CREDENTIALS）；"
                          "未指定則用 PARTNERS_*_INPUT_DIRS env / 預設本機路徑")
+    ap.add_argument("--upload-cross-referral", action="store_true",
+                    help="parse 完後把 senior_profit_share.csv 的跨轉案 upsert 到 Supabase "
+                         "partner_cross_referral 表（供 /revenue 部門分析新 KPI 用）")
     args = ap.parse_args()
 
     workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="partners_sync_"))
@@ -209,6 +212,10 @@ def main() -> int:
     run_step("parse_senior",   SCRIPT_DIR / "parse_senior.py", env)
     run_step("parse_consult",  SCRIPT_DIR / "parse_consult.py", env)
     run_step("build_embedded", SCRIPT_DIR / "build_embedded.py", env)
+
+    # Step 1.5: optional Supabase upload (cross-referral KPI feed)
+    if args.upload_cross_referral:
+        run_step("upload_cross_referral", SCRIPT_DIR / "upload_cross_referral.py", env)
 
     # Step 3-4: extract + upsert + diff
     fresh_html = workdir / "dashboard.html"

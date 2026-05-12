@@ -811,8 +811,23 @@
           </div>
         </div>
 
+        <!-- ▼ 合署跨轉（補正口徑：諮詢律師諮詢→合署承辦的案，CRM 收款已 excludePartner 排除，補回喆律端進帳） -->
+        <div class="section-divider"><span class="section-icon">🔁</span>合署跨轉 <span class="section-note">（諮詢律師諮詢→合署承辦；下方 CRM 收款已排除這部分）</span></div>
+        <div class="kpi-row" style="grid-template-columns:repeat(2,1fr)">
+          <div class="kpi-card">
+            <div class="kpi-label">諮詢轉出件數（→合署）</div>
+            <div class="kpi-value" id="drillKpiCrossOut">-</div>
+            <div class="kpi-sub" id="drillKpiCrossOutSub"></div>
+          </div>
+          <div class="kpi-card gold">
+            <div class="kpi-label kpi-label-tip" data-tooltip="合署端進帳（諮詢轉出） = 本部門諮詢律師諮詢、由合署律師承辦的案件中，「喆律端應入帳」金額加總。&#10;&#10;這筆錢實際進喆律口袋，但因為 group_name 含「合署」，會被部門分析的 CRM 收款 excludePartner() 過濾掉。此 KPI 把這部分還原。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。">合署端進帳金額（諮詢轉出）<span class="tip-icon">ⓘ</span></div>
+            <div class="kpi-value gold" id="drillKpiCrossFirm">-</div>
+            <div class="kpi-sub" id="drillKpiCrossFirmSub"></div>
+          </div>
+        </div>
+
         <!-- ▼ CRM 收款 -->
-        <div class="section-divider"><span class="section-icon">💰</span>CRM 收款 <span class="section-note">（即時記帳 revenue_records，含舊案分期、追加費）</span></div>
+        <div class="section-divider"><span class="section-icon">💰</span>CRM 收款 <span class="section-note">（即時記帳 revenue_records，含舊案分期、追加費；已 excludePartner，合署承辦案不在此）</span></div>
         <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi-card gold"><div class="kpi-label">付款金額（CRM）</div><div class="kpi-value gold" id="drillKpiPay">-</div><div class="kpi-sub" id="drillKpiPaySub"></div></div>
           <div class="kpi-card red"><div class="kpi-label">退款</div><div class="kpi-value red" id="drillKpiRef">-</div><div class="kpi-sub" id="drillKpiRefSub"></div></div>
@@ -1907,6 +1922,40 @@ function aggConsultByDept(cases, deptName, maxCompleteM) {
   return { consult: consult, signed: signed, collected: collected };
 }
 
+// partner_cross_referral 快取（year 是民國年）
+var _crossReferralCache = {};
+async function fetchCrossReferralByYear(year) {
+  // year 是西元；partner_cross_referral.year 存民國年
+  var minguo = year - 1911;
+  if (_crossReferralCache[year]) return _crossReferralCache[year];
+  if (!sb) return [];
+  var resp = await sb.from('partner_cross_referral')
+    .select('year,month,direction,partner_lawyer_name,referring_lawyer_id,case_amount,firm_amount,raw_tier,join_quality')
+    .eq('direction', 'out')
+    .eq('year', minguo);
+  if (resp.error) { console.error('cross_referral fetch:', resp.error); return []; }
+  _crossReferralCache[year] = resp.data || [];
+  return _crossReferralCache[year];
+}
+
+function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
+  // direction='out': 用 referring_lawyer_id 反推當時部門
+  // year 為民國年；用 (year+1911)-MM-01 作為部門歷史查詢日期
+  var count = 0, firm = 0, joined = 0, unjoined = 0;
+  rows.forEach(function(r) {
+    var mm = parseInt(r.month, 10);
+    if (mm < 1 || mm > maxCompleteM) return;
+    if (!r.referring_lawyer_id) { unjoined++; return; }
+    if (typeof getDeptForLawyer === 'undefined') return;
+    var dateStr = (r.year + 1911) + '-' + (mm < 10 ? '0'+mm : mm) + '-01';
+    if (getDeptForLawyer(r.referring_lawyer_id, dateStr) !== deptName) return;
+    count++;
+    firm += Number(r.firm_amount || 0);
+    joined++;
+  });
+  return { count: count, firm: firm, joined: joined, unjoined: unjoined };
+}
+
 function aggRevenueByOffice(recs, office, maxCompleteM) {
   // 已經 excludePartner 過。再過濾 office + 月份窗口
   var pay = 0, ref = 0, payN = 0, refN = 0;
@@ -1959,11 +2008,13 @@ async function loadDeptDrillPage() {
   // 平行抓本年 + 去年資料；YoY 也要 apples-to-apples，所以 prevMaxM 同步
   var prevYear = drillSelectedYear - 1;
   var prevMaxM = maxCompleteM;
-  var [curRev, prevRev, curCases, prevCases] = await Promise.all([
+  var [curRev, prevRev, curCases, prevCases, curCross, prevCross] = await Promise.all([
     loadRecords({ year: drillSelectedYear }),
     loadRecords({ year: prevYear }),
     fetchConsultCasesByYear(drillSelectedYear),
-    fetchConsultCasesByYear(prevYear)
+    fetchConsultCasesByYear(prevYear),
+    fetchCrossReferralByYear(drillSelectedYear),
+    fetchCrossReferralByYear(prevYear)
   ]);
   curRev = excludePartner(curRev);
   prevRev = excludePartner(prevRev);
@@ -1973,6 +2024,8 @@ async function loadDeptDrillPage() {
   var prevC = aggConsultByDept(prevCases, deptName, prevMaxM);
   var curR = aggRevenueByOffice(curRev, office, maxCompleteM);
   var prevR = aggRevenueByOffice(prevRev, office, prevMaxM);
+  var curX = aggCrossReferralByDept(curCross, deptName, maxCompleteM);
+  var prevX = aggCrossReferralByDept(prevCross, deptName, prevMaxM);
 
   function fmtPct(v) { return (v>=0?'+':'') + v.toFixed(1) + '%'; }
   function pctClass(v) { return v>0?'text-green':(v<0?'text-red':'text-muted'); }
@@ -1997,6 +2050,17 @@ async function loadDeptDrillPage() {
   var prevEff = prevC.consult>0 ? (prevC.collected/prevC.consult) : 0;
   document.getElementById('drillKpiEff').textContent = formatMoney(curEff);
   document.getElementById('drillKpiEffSub').innerHTML = yoyHtml(curEff, prevEff, true);
+
+  // 合署跨轉 KPI
+  document.getElementById('drillKpiCrossOut').textContent = curX.count.toLocaleString();
+  var crossOutSub = '';
+  if (prevX.count || curX.count) crossOutSub = yoyHtml(curX.count, prevX.count);
+  if (curX.unjoined > 0) {
+    crossOutSub += (crossOutSub ? ' · ' : '') + '<span class="text-muted">' + curX.unjoined + ' 筆未匹配諮詢</span>';
+  }
+  document.getElementById('drillKpiCrossOutSub').innerHTML = crossOutSub;
+  document.getElementById('drillKpiCrossFirm').textContent = formatMoney(curX.firm);
+  document.getElementById('drillKpiCrossFirmSub').innerHTML = yoyHtml(curX.firm, prevX.firm, true);
 
   document.getElementById('drillKpiPay').textContent = formatMoney(curR.pay);
   document.getElementById('drillKpiPaySub').innerHTML = yoyHtml(curR.pay, prevR.pay, true);
