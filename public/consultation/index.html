@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>喆律法律事務所 - 諮詢分析儀表板</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -1563,12 +1564,6 @@
     </div>
     <div class="header-right">
       <span class="user-name" id="userName"></span>
-      <select id="viewAsSelect" class="btn btn-ghost btn-sm" style="display:none;height:auto;padding:5px 8px;cursor:pointer;" title="切換視角預覽（僅本機，不影響真實權限）" onchange="applyViewAs(this.value)">
-        <option value="real">🔑 真實視角</option>
-        <option value="manager_upload">📊 主管（可上傳）</option>
-        <option value="manager_no_upload">📊 主管（不可上傳）</option>
-        <option value="lawyer">🔒 律師</option>
-      </select>
       <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeToggleBtn" title="切換明暗主題">🌙</button>
       <a href="/lawyer-dashboard/revenue/" class="btn btn-ghost btn-sm" style="text-decoration:none">營運</a>
       <a href="/lawyer-dashboard/finance/" class="btn btn-ghost btn-sm" style="text-decoration:none">財務規劃</a>
@@ -2497,7 +2492,8 @@ async function loadDashboard(user) {
     return;
   }
 
-  currentLawyer = lawyers[0];
+  realLawyer = lawyers[0];
+  currentLawyer = window.ViewAs ? window.ViewAs.apply(realLawyer) : realLawyer;
   document.getElementById('userName').textContent = currentLawyer.name;
 
   // Fetch all rows with batched parallelism (5 concurrent requests max)
@@ -2682,19 +2678,9 @@ function canViewCollected() {
   return !!currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager');
 }
 
-// ===================== VIEW-AS (admin 視角切換) =====================
-// 真實 admin 帳號可在不登出的情況下，預覽其他角色看到的畫面。
-// 只動前端 currentLawyer 物件，不改 DB；切到主管/律師後仍能切回真實視角。
-function buildLawyerForMode(base, mode) {
-  switch (mode) {
-    case 'manager_upload':    return { ...base, role: 'manager', can_upload: true };
-    case 'manager_no_upload': return { ...base, role: 'manager', can_upload: false };
-    case 'lawyer':            return { ...base, role: 'lawyer',  can_upload: false };
-    case 'real':
-    default:                  return { ...base };
-  }
-}
-
+// ===================== VIEW-AS (role-dependent UI refresh) =====================
+// 視角切換的 mode 決定由 shell 經由 localStorage 套用到 currentLawyer.role；
+// 子頁只負責根據當前 currentLawyer.role 重新調整 UI。
 function refreshRoleDependentUI() {
   // 非主管 (admin/manager) 一律隱藏已收金額相關欄位
   document.body.classList.toggle('no-collected', !canViewCollected());
@@ -2713,39 +2699,10 @@ function refreshRoleDependentUI() {
   if (manualSyncBtn) manualSyncBtn.style.display = canUpload ? '' : 'none';
 }
 
-function applyViewAs(mode) {
-  if (!realLawyer || realLawyer.role !== 'admin') return; // 只真實 admin 可切換
-  currentLawyer = buildLawyerForMode(realLawyer, mode);
-  sessionStorage.setItem('viewAs', mode);
-  refreshRoleDependentUI();
-  // 重新 render 當前 tab
-  const activeTab = document.querySelector('.tab-btn.active');
-  if (activeTab && activeTab.id) {
-    const tabName = activeTab.id.replace('tab-', '');
-    showTab(tabName);
-  } else {
-    renderOverviewPage();
-  }
-}
-
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
-  // 保存真實身份，初始化視角切換器（僅真實 admin 可用）
   if (!realLawyer) realLawyer = { ...currentLawyer };
-  const viewAsSel = document.getElementById('viewAsSelect');
-  if (viewAsSel) {
-    const isRealAdmin = realLawyer.role === 'admin';
-    viewAsSel.style.display = isRealAdmin ? '' : 'none';
-    const savedMode = sessionStorage.getItem('viewAs') || 'real';
-    if (isRealAdmin && savedMode !== 'real') {
-      currentLawyer = buildLawyerForMode(realLawyer, savedMode);
-      viewAsSel.value = savedMode;
-    } else {
-      viewAsSel.value = 'real';
-    }
-  }
-
   refreshRoleDependentUI();
 
   // Build year filter options from data
@@ -5717,7 +5674,6 @@ function showLoginPage() {
   document.getElementById('loginError').style.display = 'none';
   currentUser = currentLawyer = null;
   realLawyer = null;
-  try { sessionStorage.removeItem('viewAs'); } catch(e) {}
   allStats = [];
   allCases = [];
   allLawyersMap = {};

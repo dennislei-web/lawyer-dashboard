@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>喆律法律事務所 - 合署律師</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
@@ -870,8 +871,8 @@ async function checkSession() {
   if (s.data.session) {
     currentUser = s.data.session.user;
     var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
-    currentLawyer = r.data;
-    isAdmin = r.data && r.data.role === 'admin';
+    currentLawyer = window.ViewAs && r.data ? window.ViewAs.apply(r.data) : r.data;
+    isAdmin = currentLawyer && currentLawyer.role === 'admin';
     if (!hasAccess()) { showNoAccess(); return; }
     showDashboard();
   } else {
@@ -890,8 +891,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     if (r.error) throw r.error;
     currentUser = r.data.user;
     var lr = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
-    currentLawyer = lr.data;
-    isAdmin = lr.data && lr.data.role === 'admin';
+    currentLawyer = window.ViewAs && lr.data ? window.ViewAs.apply(lr.data) : lr.data;
+    isAdmin = currentLawyer && currentLawyer.role === 'admin';
     if (!hasAccess()) { showNoAccess(); return; }
     showDashboard();
   } catch(ex) {

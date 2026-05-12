@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>喆律法律事務所 - OKR 追蹤</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
@@ -388,7 +389,7 @@ async function showDashboard() {
 async function loadUserProfile() {
   if (!sb || !currentUser) return;
   var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
-  if (r.data) currentLawyer = r.data;
+  if (r.data) currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
 }
 async function checkSession() {
   if (!sb) return showLogin();

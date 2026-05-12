@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>喆律法律事務所 - 財務規劃</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
@@ -788,7 +789,10 @@ async function checkSession() {
 async function loadUserProfile() {
   if (!sb || !currentUser) return;
   var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
-  if (r.data) { currentLawyer = r.data; isAdmin = r.data.role === 'admin'; }
+  if (r.data) {
+    currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
+    isAdmin = currentLawyer.role === 'admin';
+  }
 }
 function showLogin() { document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; }
 async function showDashboard() {

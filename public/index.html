@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>喆律法律事務所 - 儀表板</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="shared/view-as.js"></script>
   <style>
     :root {
       --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
@@ -403,10 +404,14 @@ async function checkSession() {
     showLogin();
   }
 }
+var realLawyer = null; // 真實身份；admin 切視角時 currentLawyer 會被改，realLawyer 保留原值
 async function loadUserProfile() {
   if (!sb || !currentUser) return;
   var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
-  if (r.data) currentLawyer = r.data;
+  if (r.data) {
+    realLawyer = r.data;
+    currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
+  }
 }
 function showLogin() {
   document.getElementById('loginPage').style.display = 'flex';
@@ -416,6 +421,14 @@ function showShell() {
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('shell').style.display = 'flex';
   document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  // 視角切換下拉（只真實 admin 看得到）
+  if (window.ViewAs) {
+    window.ViewAs.installSelector(
+      document.querySelector('.header-right'),
+      realLawyer ? realLawyer.role : null,
+      function () { location.reload(); }
+    );
+  }
   updateNavVisibility();
 
   // 初始路由 — 若 hash 指定不可存取的 route，挑第一個可存取的
@@ -456,6 +469,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
 
 document.getElementById('logoutBtn').addEventListener('click', async function() {
   if (sb) await sb.auth.signOut();
+  if (window.ViewAs) window.ViewAs.clear();
   // Full reload on logout ensures iframes clear their cached Supabase client state too.
   location.reload();
 });
