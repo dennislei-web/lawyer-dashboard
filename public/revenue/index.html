@@ -317,7 +317,7 @@
     }
     .filter-select:focus, .filter-input:focus { outline: none; border-color: var(--gold); }
 
-    .year-btns { display: flex; gap: 4px; }
+    .year-btns { display: flex; gap: 4px; flex-wrap: wrap; }
     .year-btn {
       padding: 5px 14px; font-size: 0.8rem; border: 1px solid var(--border);
       border-radius: 6px; background: var(--bg-row); color: var(--text-muted);
@@ -814,6 +814,18 @@
           <div class="year-btns" id="drillModeBtns">
             <button class="year-btn active" data-mode="ytd">至目前月份</button>
             <button class="year-btn" data-mode="full">全年</button>
+            <button class="year-btn" data-mode="m1">1月</button>
+            <button class="year-btn" data-mode="m2">2月</button>
+            <button class="year-btn" data-mode="m3">3月</button>
+            <button class="year-btn" data-mode="m4">4月</button>
+            <button class="year-btn" data-mode="m5">5月</button>
+            <button class="year-btn" data-mode="m6">6月</button>
+            <button class="year-btn" data-mode="m7">7月</button>
+            <button class="year-btn" data-mode="m8">8月</button>
+            <button class="year-btn" data-mode="m9">9月</button>
+            <button class="year-btn" data-mode="m10">10月</button>
+            <button class="year-btn" data-mode="m11">11月</button>
+            <button class="year-btn" data-mode="m12">12月</button>
           </div>
         </div>
 
@@ -1967,12 +1979,12 @@ async function fetchConsultCasesByYear(year) {
   return all;
 }
 
-function aggConsultByDept(cases, deptName, maxCompleteM) {
+function aggConsultByDept(cases, deptName, minM, maxM) {
   // 過濾月份窗口 + 律師當時屬於 deptName（用 getDeptForLawyer 處理轉所歷史）
   var consult = 0, signed = 0, collected = 0;
   cases.forEach(function(c) {
     var mm = parseInt((c.case_date||'').substring(5,7), 10);
-    if (mm < 1 || mm > maxCompleteM) return;
+    if (mm < minM || mm > maxM) return;
     if (typeof getDeptForLawyer === 'undefined') return;
     if (getDeptForLawyer(c.lawyer_id, c.case_date) !== deptName) return;
     consult++;
@@ -1998,11 +2010,11 @@ async function fetchCrossReferralByYear(year) {
   return _crossReferralCache[year];
 }
 
-function filterCrossReferralByDept(rows, deptName, maxCompleteM) {
+function filterCrossReferralByDept(rows, deptName, minM, maxM) {
   // 回傳 (annotated rows for modal display) — 每筆加 _refDept (referring 部門) 跟 _inDept (是否屬本部門)
   return rows.filter(function(r) {
     var mm = parseInt(r.month, 10);
-    if (mm < 1 || mm > maxCompleteM) return false;
+    if (mm < minM || mm > maxM) return false;
     return true;
   }).map(function(r) {
     var dateStr = (r.year + 1911) + '-' + (parseInt(r.month,10) < 10 ? '0'+r.month : r.month) + '-01';
@@ -2012,13 +2024,13 @@ function filterCrossReferralByDept(rows, deptName, maxCompleteM) {
   }).filter(function(r) { return r._inDept; });
 }
 
-function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
+function aggCrossReferralByDept(rows, deptName, minM, maxM) {
   // direction='out': 用 referring_lawyer_id 反推當時部門
   // year 為民國年；用 (year+1911)-MM-01 作為部門歷史查詢日期
   var count = 0, caseAmt = 0, joined = 0, unjoined = 0;
   rows.forEach(function(r) {
     var mm = parseInt(r.month, 10);
-    if (mm < 1 || mm > maxCompleteM) return;
+    if (mm < minM || mm > maxM) return;
     if (!r.referring_lawyer_id) { unjoined++; return; }
     if (typeof getDeptForLawyer === 'undefined') return;
     var dateStr = (r.year + 1911) + '-' + (mm < 10 ? '0'+mm : mm) + '-01';
@@ -2030,26 +2042,26 @@ function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
   return { count: count, caseAmt: caseAmt, joined: joined, unjoined: unjoined };
 }
 
-function aggRevenueByOffice(recs, office, maxCompleteM) {
+function aggRevenueByOffice(recs, office, minM, maxM) {
   // 已經 excludePartner 過。再過濾 office + 月份窗口
   var pay = 0, ref = 0, payN = 0, refN = 0;
   recs.forEach(function(r) {
     if (r.office !== office) return;
     var mm = parseInt((r.record_date||'').substring(5,7), 10);
-    if (mm < 1 || mm > maxCompleteM) return;
+    if (mm < minM || mm > maxM) return;
     if (r.transaction_type === 'PaymentTransaction') { pay += Number(r.amount||0); payN++; }
     else { ref += Number(r.amount||0); refN++; }
   });
   return { pay: pay, ref: ref, net: pay - ref, payN: payN, refN: refN };
 }
 
-function aggSourcesByOffice(recs, office, maxCompleteM) {
+function aggSourcesByOffice(recs, office, minM, maxM) {
   var map = {};
   recs.forEach(function(r) {
     if (r.office !== office) return;
     if (r.transaction_type !== 'PaymentTransaction') return;
     var mm = parseInt((r.record_date||'').substring(5,7), 10);
-    if (mm < 1 || mm > maxCompleteM) return;
+    if (mm < minM || mm > maxM) return;
     splitSources(r.source_channel).forEach(function(s) {
       if (!map[s]) map[s] = { cases: 0, pay: 0 };
       map[s].cases++;
@@ -2063,20 +2075,39 @@ function closeCrossReferralModal() {
   document.getElementById('crossReferralModal').classList.remove('active');
 }
 
-async function openCrossReferralDetails() {
-  var office = document.getElementById('drillDeptSelect').value;
-  var deptName = OFFICE_TO_DEPT[office] || office;
+// 部門細看「區間」按鈕 → 月份窗口（用於 KPI / 來源 / 歷年比較）
+// trend 圖固定 12 個月，不受此影響
+function getDrillRange() {
   var modeBtn = document.querySelector('#drillModeBtns .year-btn.active');
   var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
   var now = new Date();
-  var maxCompleteM = (mode === 'full') ? 12 : (now.getMonth() || 12);
+  var minM, maxM, label;
+  if (mode === 'full') {
+    minM = 1; maxM = 12; label = '全年';
+  } else if (mode.charAt(0) === 'm') {
+    var n = parseInt(mode.substring(1), 10);
+    minM = n; maxM = n; label = n + '月';
+  } else { // ytd
+    minM = 1;
+    maxM = now.getMonth();
+    if (maxM === 0) maxM = 12;
+    label = (maxM === 12) ? '全年' : ('1-' + maxM + ' 月');
+  }
+  return { mode: mode, minM: minM, maxM: maxM, label: label };
+}
+
+async function openCrossReferralDetails() {
+  var office = document.getElementById('drillDeptSelect').value;
+  var deptName = OFFICE_TO_DEPT[office] || office;
+  var range = getDrillRange();
+  var minM = range.minM, maxM = range.maxM;
 
   var rows = await fetchCrossReferralByYear(drillSelectedYear);
-  var filtered = filterCrossReferralByDept(rows, deptName, maxCompleteM);
+  var filtered = filterCrossReferralByDept(rows, deptName, minM, maxM);
 
   var unmatched = rows.filter(function(r){
     var mm = parseInt(r.month,10);
-    if (mm < 1 || mm > maxCompleteM) return false;
+    if (mm < minM || mm > maxM) return false;
     return !r.referring_lawyer_id;
   });
 
@@ -2124,22 +2155,14 @@ async function loadDeptDrillPage() {
   var office = document.getElementById('drillDeptSelect').value;
   var deptName = OFFICE_TO_DEPT[office] || office;
 
-  var modeBtn = document.querySelector('#drillModeBtns .year-btn.active');
-  var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
+  var range = getDrillRange();
+  var mode = range.mode;
+  var minM = range.minM, maxM = range.maxM;
+  var monthLabel = range.label;
   var now = new Date();
-  // YTD 模式：所有年度都對齊到當年已完整結束的月份窗口（為了讓選任一年度都能跟 2026 同期比較）
-  var maxCompleteM;
-  if (mode === 'full') {
-    maxCompleteM = 12;
-  } else {
-    maxCompleteM = now.getMonth();
-    if (maxCompleteM === 0) maxCompleteM = 12;
-  }
-  var monthLabel = maxCompleteM === 12 ? '全年' : ('1-'+maxCompleteM+' 月');
 
-  // 平行抓本年 + 去年資料；YoY 也要 apples-to-apples，所以 prevMaxM 同步
+  // 平行抓本年 + 去年資料；YoY 也要 apples-to-apples，所以 prev 窗口同步
   var prevYear = drillSelectedYear - 1;
-  var prevMaxM = maxCompleteM;
   var [curRev, prevRev, curCases, prevCases, curCross, prevCross] = await Promise.all([
     loadRecords({ year: drillSelectedYear }),
     loadRecords({ year: prevYear }),
@@ -2152,12 +2175,12 @@ async function loadDeptDrillPage() {
   prevRev = excludePartner(prevRev);
 
   // === KPI: 諮詢數 / 成案數 / 簽約率 / 諮詢效益值（用 consultation_cases 即時算）===
-  var curC = aggConsultByDept(curCases, deptName, maxCompleteM);
-  var prevC = aggConsultByDept(prevCases, deptName, prevMaxM);
-  var curR = aggRevenueByOffice(curRev, office, maxCompleteM);
-  var prevR = aggRevenueByOffice(prevRev, office, prevMaxM);
-  var curX = aggCrossReferralByDept(curCross, deptName, maxCompleteM);
-  var prevX = aggCrossReferralByDept(prevCross, deptName, prevMaxM);
+  var curC = aggConsultByDept(curCases, deptName, minM, maxM);
+  var prevC = aggConsultByDept(prevCases, deptName, minM, maxM);
+  var curR = aggRevenueByOffice(curRev, office, minM, maxM);
+  var prevR = aggRevenueByOffice(prevRev, office, minM, maxM);
+  var curX = aggCrossReferralByDept(curCross, deptName, minM, maxM);
+  var prevX = aggCrossReferralByDept(prevCross, deptName, minM, maxM);
 
   function fmtPct(v) { return (v>=0?'+':'') + v.toFixed(1) + '%'; }
   function pctClass(v) { return v>0?'text-green':(v<0?'text-red':'text-muted'); }
@@ -2229,10 +2252,11 @@ async function loadDeptDrillPage() {
   function fadeFn(arr, fadeFromIdx) {
     return arr.map(function(v, i) { return (i > fadeFromIdx) ? null : v; });
   }
-  // 不淡化：full mode 或非當年；淡化：YTD mode 且當年的 partial month 之後
-  var solidConsult = (mode==='full' || !isCurrentYear) ? consultData : fadeFn(consultData, lastCompleteIdx);
-  var solidSigned  = (mode==='full' || !isCurrentYear) ? signedData : fadeFn(signedData, lastCompleteIdx);
-  var solidNet     = (mode==='full' || !isCurrentYear) ? netData : fadeFn(netData, lastCompleteIdx);
+  // 不淡化：non-YTD mode 或非當年；淡化：YTD mode 且當年的 partial month 之後
+  var shouldFade = (mode==='ytd' && isCurrentYear);
+  var solidConsult = shouldFade ? fadeFn(consultData, lastCompleteIdx) : consultData;
+  var solidSigned  = shouldFade ? fadeFn(signedData, lastCompleteIdx) : signedData;
+  var solidNet     = shouldFade ? fadeFn(netData, lastCompleteIdx) : netData;
 
   document.getElementById('drillTrendTitle').textContent = office + ' ' + drillSelectedYear + ' 月度趨勢';
   document.getElementById('drillTrendSub').textContent =
@@ -2298,7 +2322,7 @@ async function loadDeptDrillPage() {
   var curRateData  = monthly.map(rateOrNull);
   var prevRateData = prevMonthly.map(rateOrNull);
   // 同樣淡化未結束月份（當年）
-  var solidCurRate = (mode==='full' || !isCurrentYear) ? curRateData : fadeFn(curRateData, lastCompleteIdx);
+  var solidCurRate = shouldFade ? fadeFn(curRateData, lastCompleteIdx) : curRateData;
 
   document.getElementById('drillSignRateTitle').textContent =
     office + ' ' + drillSelectedYear + ' 月度成案率（vs ' + prevYear + ' 同月）';
@@ -2358,8 +2382,8 @@ async function loadDeptDrillPage() {
   });
 
   // === 來源 ===
-  var srcCur = aggSourcesByOffice(curRev, office, maxCompleteM);
-  var srcPrev = aggSourcesByOffice(prevRev, office, prevMaxM);
+  var srcCur = aggSourcesByOffice(curRev, office, minM, maxM);
+  var srcPrev = aggSourcesByOffice(prevRev, office, minM, maxM);
   var srcSet = {};
   Object.keys(srcCur).forEach(function(s){ srcSet[s]=true; });
   Object.keys(srcPrev).forEach(function(s){ srcSet[s]=true; });
@@ -2433,11 +2457,9 @@ async function loadDeptDrillPage() {
       '</tr>';
   }).join('');
 
-  // === P3: 歷年比較表（4 年度同期對齊）===
-  var histMaxM;
-  if (mode === 'full') histMaxM = 12;
-  else { histMaxM = now.getMonth(); if (histMaxM === 0) histMaxM = 12; }
-  var histLabel = histMaxM === 12 ? '全年' : ('1-'+histMaxM+' 月');
+  // === P3: 歷年比較表（4 年度同期對齊；窗口由區間按鈕決定）===
+  var histLabel = monthLabel;
+  var histMaxM = maxM; // 用於下方表格標題裡的 "同期對齊" 判斷（=12 表示全年無需對齊提示）
 
   var histYears = [drillSelectedYear-3, drillSelectedYear-2, drillSelectedYear-1, drillSelectedYear];
   var perYearMetrics = {};
@@ -2446,8 +2468,8 @@ async function loadDeptDrillPage() {
     return Promise.all([loadRecords({year:y}), fetchConsultCasesByYear(y)]).then(function(ret) {
       var revRecs = excludePartner(ret[0]);
       var caseRecs = ret[1];
-      var rev = aggRevenueByOffice(revRecs, office, histMaxM);
-      var cons = aggConsultByDept(caseRecs, deptName, histMaxM);
+      var rev = aggRevenueByOffice(revRecs, office, minM, maxM);
+      var cons = aggConsultByDept(caseRecs, deptName, minM, maxM);
       perYearMetrics[y] = {
         consult: cons.consult,
         signed: cons.signed,
