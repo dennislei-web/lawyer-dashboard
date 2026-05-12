@@ -1338,17 +1338,32 @@ async function fetchAllByYear(year) {
   if (!sb) return [];
   var key = 'y'+year;
   if (_cache[key]) return _cache[key];
-  var all = [], from = 0, ps = 1000;
-  while (true) {
-    var q = sb.from('revenue_records').select('*').eq('is_void', false)
-      .gte('record_date', year+'-01-01').lte('record_date', year+'-12-31')
-      .order('record_date', { ascending: false }).range(from, from + ps - 1);
-    var r = await q;
-    if (r.error) { console.error('fetch:', r.error); break; }
-    var rows = r.data || [];
-    all = all.concat(rows);
-    if (rows.length < ps) break;
-    from += ps;
+  var ps = 1000, BATCH = 5, MAX_PAGES = 100;
+  var all = [];
+  var done = false;
+  var pageIdx = 0;
+  while (!done && pageIdx < MAX_PAGES) {
+    var promises = [];
+    for (var i = 0; i < BATCH; i++) {
+      (function (p) {
+        promises.push(
+          sb.from('revenue_records').select('*').eq('is_void', false)
+            .gte('record_date', year+'-01-01').lte('record_date', year+'-12-31')
+            .order('record_date', { ascending: false })
+            .range(p * ps, (p + 1) * ps - 1)
+            .then(function (r) { return { idx: p, rows: r.data || [], err: r.error }; })
+        );
+      })(pageIdx + i);
+    }
+    var results = (await Promise.all(promises)).sort(function (a, b) { return a.idx - b.idx; });
+    for (var j = 0; j < results.length; j++) {
+      var rec = results[j];
+      if (rec.err) { console.error('fetch:', rec.err); done = true; break; }
+      if (rec.rows.length === 0) { done = true; break; }
+      all = all.concat(rec.rows);
+      if (rec.rows.length < ps) { done = true; break; }
+    }
+    pageIdx += BATCH;
   }
   _cache[key] = all;
   return all;
@@ -1401,10 +1416,13 @@ function aggregateSources(recs) {
   return map;
 }
 async function renderMonthlyYoY(tbodyId, filterFn) {
-  // Current year data
-  var curRecs = filterFn(await loadRecords({ year: selectedYear }));
-  // Previous year data for YoY comparison
-  var prevRecs = filterFn(await loadRecords({ year: selectedYear - 1 }));
+  // 平行抓當年 + 前一年（YoY 比較）
+  var pairs = await Promise.all([
+    loadRecords({ year: selectedYear }),
+    loadRecords({ year: selectedYear - 1 })
+  ]);
+  var curRecs = filterFn(pairs[0]);
+  var prevRecs = filterFn(pairs[1]);
 
   var months = {};
   for (var m=1;m<=12;m++) months[String(m).padStart(2,'0')]={pay:0,ref:0,n:0};
@@ -1683,11 +1701,13 @@ async function loadDeptComparePage() {
     });
   }
 
-  // 抓 4 年資料、套月份窗口、按 office 彙總（payN = 收款筆數，pay = 營收，ref = 退款）
+  // 平行抓 4 年資料、套月份窗口、按 office 彙總（payN = 收款筆數，pay = 營收，ref = 退款）
+  var yearResults = await Promise.all(years.map(function(y) {
+    return loadRecords({ year: y, office: office||undefined });
+  }));
   var perYear = {};
-  for (var i=0;i<years.length;i++) {
-    var y = years[i];
-    var recs = excludePartner(filterToWindow(await loadRecords({ year: y, office: office||undefined })));
+  years.forEach(function(y, idx) {
+    var recs = excludePartner(filterToWindow(yearResults[idx]));
     var map = {};
     recs.forEach(function(r) {
       var o = r.office || '未分配';
@@ -1699,7 +1719,7 @@ async function loadDeptComparePage() {
       }
     });
     perYear[y] = map;
-  }
+  });
 
   // 部門清單（聯集），依最近一年營收排
   var deptSet = {};
@@ -1841,17 +1861,32 @@ var drillSelectedYear = new Date().getFullYear();
 async function fetchConsultCasesByYear(year) {
   if (_drillCaseCache[year]) return _drillCaseCache[year];
   if (!sb) return [];
-  var all = [], from = 0, ps = 1000;
-  while (true) {
-    var q = sb.from('consultation_cases').select('lawyer_id,case_date,is_signed,revenue,collected')
-      .gte('case_date', year+'-01-01').lte('case_date', year+'-12-31')
-      .order('case_date', { ascending: false }).range(from, from + ps - 1);
-    var r = await q;
-    if (r.error) { console.error('consult fetch:', r.error); break; }
-    var rows = r.data || [];
-    all = all.concat(rows);
-    if (rows.length < ps) break;
-    from += ps;
+  var ps = 1000, BATCH = 5, MAX_PAGES = 100;
+  var all = [];
+  var done = false;
+  var pageIdx = 0;
+  while (!done && pageIdx < MAX_PAGES) {
+    var promises = [];
+    for (var i = 0; i < BATCH; i++) {
+      (function (p) {
+        promises.push(
+          sb.from('consultation_cases').select('lawyer_id,case_date,is_signed,revenue,collected')
+            .gte('case_date', year+'-01-01').lte('case_date', year+'-12-31')
+            .order('case_date', { ascending: false })
+            .range(p * ps, (p + 1) * ps - 1)
+            .then(function (r) { return { idx: p, rows: r.data || [], err: r.error }; })
+        );
+      })(pageIdx + i);
+    }
+    var results = (await Promise.all(promises)).sort(function (a, b) { return a.idx - b.idx; });
+    for (var j = 0; j < results.length; j++) {
+      var rec = results[j];
+      if (rec.err) { console.error('consult fetch:', rec.err); done = true; break; }
+      if (rec.rows.length === 0) { done = true; break; }
+      all = all.concat(rec.rows);
+      if (rec.rows.length < ps) { done = true; break; }
+    }
+    pageIdx += BATCH;
   }
   _drillCaseCache[year] = all;
   return all;
