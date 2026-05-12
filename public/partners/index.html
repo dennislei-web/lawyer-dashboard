@@ -735,38 +735,38 @@ if (window.location.search.indexOf('embed=1') > -1) {
       <button id="tier-def-toggle" type="button" class="btn-sm" style="margin-left:auto; cursor:pointer">tier 類型說明 ▾</button>
     </div>
     <div id="tier-def-panel" class="card" style="display:none; margin-bottom:16px">
-      <h3 style="margin-bottom:10px">tier 類型速查（用來對照 KPI 的「主案／非主辦案件」分類）</h3>
+      <h3 style="margin-bottom:10px">tier 類型速查（用來對照 KPI 的「承辦／非承辦案件」分類）</h3>
       <div style="overflow-x:auto">
         <table style="min-width:640px">
           <thead><tr><th style="width:18%">tier</th><th style="width:14%">類別</th><th>意義</th></tr></thead>
           <tbody>
             <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 司法官合署 —</td></tr>
-            <tr><td>委任-引案(喆律)</td><td><span class="badge badge-orange">主案 B</span></td><td>委任費 A × 30%，客戶由喆律帶來的引案費，歸喆律</td></tr>
-            <tr><td>委任-咨詢(律師)</td><td><span class="badge badge-blue">主案 C</span></td><td>委任費 A × 10%，律師諮詢貢獻歸律師</td></tr>
-            <tr><td>委任-利潤 E（喆律/律師）</td><td><span class="badge badge-green">主案 E</span></td><td>A − B − C − D 剩餘利潤，按合約比例分（50/50 或 15/85）</td></tr>
-            <tr><td>處理費 D</td><td><span class="badge badge-orange">主案成本</span></td><td>共擔成本（人事薪資、員工交通、閱卷、刷卡手續費等），從 A 扣除</td></tr>
-            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>律師自招案件，劉/方 10/90、孫/許 5/95 分</td></tr>
+            <tr><td>委任-引案(喆律)</td><td><span class="badge badge-orange">承辦 B</span></td><td>委任費 A × 30%，客戶由喆律帶來的引案費，歸喆律</td></tr>
+            <tr><td>委任-咨詢(律師)</td><td><span class="badge badge-blue">承辦 C</span></td><td>委任費 A × 10%，律師諮詢貢獻歸律師</td></tr>
+            <tr><td>委任-利潤 E（喆律/律師）</td><td><span class="badge badge-green">承辦 E</span></td><td>A − B − C − D 剩餘利潤，按合約比例分（50/50 或 15/85）</td></tr>
+            <tr><td>處理費 D</td><td><span class="badge badge-orange">承辦成本</span></td><td>共擔成本（人事薪資、員工交通、閱卷、刷卡手續費等），從 A 扣除</td></tr>
+            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>律師自招案件，劉/方 10/90、孫/許 5/95 分</td></tr>
             <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 資深轉合署 —</td></tr>
-            <tr><td>諮詢成案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>律師諮詢後自己承辦的案件，30/70 分</td></tr>
-            <tr><td>喆律轉案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>喆律轉入由資深律師承辦，40/60 分</td></tr>
-            <tr><td>法律010轉案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>法律010 品牌轉入的案件，30/70 分（部分律師後調為 35/65）</td></tr>
-            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">主案</span></td><td>資深律師自招案件，10/90 分</td></tr>
-            <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 非主辦案件收入（雙 cohort 共通）—</td></tr>
-            <tr><td>諮詢</td><td><span class="badge badge-blue">非主辦</span></td><td>律師為客戶諮詢的諮詢費（100% 歸律師，通常 $2,000/場）</td></tr>
-            <tr><td>介紹(律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金</td></tr>
-            <tr><td>追溯(律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>過去介紹費事後補/扣的修正</td></tr>
-            <tr><td>轉案(喆律/律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>律師之間或與喆律之間的案件轉介分潤（非主案轉案）</td></tr>
-            <tr><td>協力處理案件(喆律/律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>律師被別的主辦律師雇來協助處理（如協助開庭、寫狀、研究等），領勞務費；該案不是孫律的，他只是協力者</td></tr>
-            <tr><td>續委(喆律/律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>舊客戶後續委任衍生的分潤</td></tr>
-            <tr><td>合作(喆律/律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>多律師合作案的分潤</td></tr>
-            <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">非主辦</span></td><td>（資深諮詢律師）諮詢後由他人承辦，抽成 5% 獎金</td></tr>
-            <tr><td>其他（左表）</td><td><span class="badge badge-blue">非主辦</span></td><td>資深律師端的左表（喆律收款）比例非標準 0.7 / 0.6 / 1.0 的案件，僅 11 筆（主要陳璽仲 115/3 的 0.4 案、蕭予馨 2 筆 0.9 等）</td></tr>
-            <tr><td>其他-自案（右表）</td><td><span class="badge badge-blue">非主辦</span></td><td>資深律師端右表（律師收款付喆律）但比例既非 0.1（標準自案）也非 0.3 / 0.35（法律010 轉案）的案件，全庫僅 5 筆：4 筆 40%（含林昀法扶舊案、退款、吳柏慶/蕭予馨各 1 筆）+ 1 筆 60%（陳璽仲王斯弘特殊協議）</td></tr>
+            <tr><td>諮詢成案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>律師諮詢後自己承辦的案件，30/70 分</td></tr>
+            <tr><td>喆律轉案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>喆律轉入由資深律師承辦，40/60 分</td></tr>
+            <tr><td>法律010轉案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>法律010 品牌轉入的案件，30/70 分（部分律師後調為 35/65）</td></tr>
+            <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>資深律師自招案件，10/90 分</td></tr>
+            <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 非承辦案件收入（雙 cohort 共通）—</td></tr>
+            <tr><td>諮詢</td><td><span class="badge badge-blue">非承辦</span></td><td>律師為客戶諮詢的諮詢費（100% 歸律師，通常 $2,000/場）</td></tr>
+            <tr><td>介紹(律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金</td></tr>
+            <tr><td>追溯(律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>過去介紹費事後補/扣的修正</td></tr>
+            <tr><td>轉案(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>律師之間或與喆律之間的案件轉介分潤（非承辦轉案）</td></tr>
+            <tr><td>協力處理案件(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>律師被別的承辦律師雇來協助處理（如協助開庭、寫狀、研究等），領勞務費；該案不是孫律的，他只是協力者</td></tr>
+            <tr><td>續委(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>舊客戶後續委任衍生的分潤</td></tr>
+            <tr><td>合作(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>多律師合作案的分潤</td></tr>
+            <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>（資深諮詢律師）諮詢後由他人承辦，抽成 5% 獎金</td></tr>
+            <tr><td>其他（左表）</td><td><span class="badge badge-blue">非承辦</span></td><td>資深律師端的左表（喆律收款）比例非標準 0.7 / 0.6 / 1.0 的案件，僅 11 筆（主要陳璽仲 115/3 的 0.4 案、蕭予馨 2 筆 0.9 等）</td></tr>
+            <tr><td>其他-自案（右表）</td><td><span class="badge badge-blue">非承辦</span></td><td>資深律師端右表（律師收款付喆律）但比例既非 0.1（標準自案）也非 0.3 / 0.35（法律010 轉案）的案件，全庫僅 5 筆：4 筆 40%（含林昀法扶舊案、退款、吳柏慶/蕭予馨各 1 筆）+ 1 筆 60%（陳璽仲王斯弘特殊協議）</td></tr>
           </tbody>
         </table>
       </div>
       <div class="note" style="margin-top:10px">
-        「主案」收入全部來自「主案件金額」（委任 + 自案）的拆分；「非主辦案件」收入另外發生（律師被人請來協助、介紹他案、純諮詢等），不在主案件金額範圍內。
+        「承辦」收入全部來自「承辦案件金額」（委任 + 自案）的拆分；「非承辦案件」收入另外發生（律師被人請來協助、介紹他案、純諮詢等），不在承辦案件金額範圍內。
       </div>
     </div>
     <div class="grid grid-4" id="drill-kpi" style="margin-bottom:16px"></div>
@@ -1519,8 +1519,8 @@ function renderDrill() {
   const share = (zt + lt) > 0 ? zt / (zt + lt) * 100 : 0;
   const isJudicial = selectedCohort === 'judicial';
 
-  // 拆分主案 vs 附屬收入
-  //   主案 tier = 委任 B/C/E + 自案 + (senior) 諮詢成案/喆律轉案/法律010轉案
+  // 拆分承辦 vs 附屬收入
+  //   承辦 tier = 委任 B/C/E + 自案 + (senior) 諮詢成案/喆律轉案/法律010轉案
   //   附屬 tier = 諮詢費、介紹、追溯、受僱、續委、轉案、合作、其他、其他-自案、成案獎金
   const OWN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)','自案(喆律)',
                        '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)',
@@ -1555,7 +1555,7 @@ function renderDrill() {
     '追溯': '過去介紹費事後補/扣的修正',
     '受僱': '律師替他人承辦的案件分潤',
     '續委': '舊客戶後續委任衍生的分潤',
-    '轉案': '律師之間或與喆律之間的案件轉介分潤（非主案轉案）',
+    '轉案': '律師之間或與喆律之間的案件轉介分潤（非承辦轉案）',
     '合作': '多律師合作案的分潤',
     '其他': '解析時未對上標準比例（左表非 0.7/0.6/1.0）的特殊案件',
     '其他-自案': '右表特殊比例案件（全庫僅 5 筆：4 筆 40% 含法扶舊案/退款等、1 筆 60% 特殊協議）'
@@ -1574,7 +1574,7 @@ function renderDrill() {
     }).join('、');
   }
 
-  // 律師主案再依案源拆分（諮詢成案=律師自諮詢、喆律轉案=喆律諮詢轉、010轉案、自案、委任、顯皓）
+  // 律師承辦再依案源拆分（諮詢成案=律師自諮詢、喆律轉案=喆律諮詢轉、010轉案、自案、委任、顯皓）
   const ltSourceBreak = {};
   for (const m of monthly) {
     for (const [k, v] of Object.entries(m.tier || {})) {
@@ -1632,7 +1632,7 @@ function renderDrill() {
     : '';
 
   const formulaLine = isJudicial
-    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律承辦分潤 + 律師承辦分潤">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`
+    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="承辦案件金額 = 處理費 D + 喆律承辦分潤 + 律師承辦分潤">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`
     : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`;
   const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
@@ -1641,17 +1641,17 @@ function renderDrill() {
   const monthlyFee = (selectedCohort === 'consult') ? (lMiscBreak['月固定費'] || 0) : 0;
   const feeNote = monthlyFee > 0 ? ` − <span style="color:var(--orange)">月固定費 $${fmt(monthlyFee)}</span>` : '';
   const zMiscHtml = ztMisc > 0
-    ? `主案 $${fmt(ztOwn)} + <span style="color:var(--orange)">非主辦 $${fmt(ztMisc)}</span>${feeNote}${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非主辦明細：${zMiscBreakStr}</span>` : ''}`
+    ? `承辦 $${fmt(ztOwn)} + <span style="color:var(--orange)">非承辦 $${fmt(ztMisc)}</span>${feeNote}${zMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非承辦明細：${zMiscBreakStr}</span>` : ''}`
     : (monthlyFee > 0
-      ? `主案 $${fmt(ztOwn)}${feeNote}`
-      : `全部來自主案分潤`);
+      ? `承辦 $${fmt(ztOwn)}${feeNote}`
+      : `全部來自承辦分潤`);
   const lMiscHtml = ltMisc > 0
-    ? `主案 $${fmt(ltOwn)} + <span style="color:var(--orange)">非主辦 $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非主辦明細：${lMiscBreakStr}</span>` : ''}`
-    : `全部來自主案分潤`;
+    ? `承辦 $${fmt(ltOwn)} + <span style="color:var(--orange)">非承辦 $${fmt(ltMisc)}</span>${lMiscBreakStr ? `<br><span style="color:var(--text-muted);font-size:0.72rem">非承辦明細：${lMiscBreakStr}</span>` : ''}`
+    : `全部來自承辦分潤`;
 
   document.getElementById('drill-kpi').innerHTML = `
     <div class="kpi">
-      <div class="label">主案件金額</div>
+      <div class="label">承辦案件金額</div>
       <div class="value">$${fmt(totalBase)}</div>
       <div class="sub">${monthly.length} 個月 · 委任 $${fmt(A)} ／ 自案 $${fmt(selfA)}${dSubHtml}</div>
     </div>
@@ -1744,8 +1744,8 @@ function renderDrillCases() {
   }
 }
 
-// Senior：用 profit_share 精準顯示每筆主案的 ratio + split
-// 非主案（諮詢/其他/其他-自案/成案獎金）統一移到「非主辦案件收入明細」表格不重複
+// Senior：用 profit_share 精準顯示每筆承辦的 ratio + split
+// 非承辦（諮詢/其他/其他-自案/成案獎金）統一移到「非承辦案件收入明細」表格不重複
 const SENIOR_MAIN_TIERS = ['諮詢成案', '喆律轉案', '法律010轉案', '自案'];
 
 function renderDrillCasesSenior(title, body) {
@@ -1756,14 +1756,14 @@ function renderDrillCasesSenior(title, body) {
   );
   const ps = psAll.filter(p => SENIOR_MAIN_TIERS.includes(p.tier));
 
-  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 主案 ${ps.length} 筆`;
+  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 承辦 ${ps.length} 筆`;
 
   if (ps.length === 0) {
-    body.innerHTML = '<div class="note">此月無主案件（諮詢、協力等非主辦收入見下方）</div>';
+    body.innerHTML = '<div class="note">此月無承辦案件（諮詢、協力等非承辦收入見下方）</div>';
     return;
   }
 
-  // 依 tier 群組（只剩主案 tier）
+  // 依 tier 群組（只剩承辦 tier）
   const groups = {};
   for (const p of ps) {
     const k = p.tier || '未分類';
@@ -1829,12 +1829,12 @@ function renderDrillCasesSenior(title, body) {
   body.innerHTML = html;
 }
 
-// Judicial：依 收入 sheet 的 section 欄分主案 tier（承辦/自案）+ classification 補強。
+// Judicial：依 收入 sheet 的 section 欄分承辦 tier（承辦/自案）+ classification 補強。
 // section 是 parser 從 收入 sheet 子標題（如「自案」「介紹」）撥的，比 first_date
 // 推的 classification 更可靠（律師 explicit 標 vs 系統推測）。
 
 function _judicialDerivedTier(c) {
-  // 非主辦先過濾
+  // 非承辦先過濾
   if (c.section === '介紹') return null;
   if (c.classification === '諮詢') return null;
   // 自案：section=自案 OR classification=自案（首委>1年）
@@ -1859,7 +1859,7 @@ function renderDrillCasesJudicial(title, body) {
     return true;
   });
 
-  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 主案 ${cases.length} 筆`;
+  title.textContent = `案件明細  ${drillLawyer}  ${selectedYear}/${String(selectedMonth).padStart(2,'0')}  · 承辦 ${cases.length} 筆`;
 
   const mRec = (DATA.monthly || []).find(m =>
     m.lawyer === drillLawyer &&
@@ -1873,7 +1873,7 @@ function renderDrillCasesJudicial(title, body) {
   const tierMap = mRec.tier || {};
 
   if (cases.length === 0) {
-    body.innerHTML = '<div class="note">此月無主案件（諮詢、其他非主辦收入見下方）</div>'
+    body.innerHTML = '<div class="note">此月無承辦案件（諮詢、其他非承辦收入見下方）</div>'
       + renderAuxIncomeTable(tierMap);
     return;
   }
@@ -1920,7 +1920,7 @@ function renderDrillCasesJudicial(title, body) {
 
   let html = `<div class="note" style="margin-bottom:8px">
     司法官合署分潤是月度聚合（一/二/三段，依合約比例分）。下列依案件來源分組，金額為 KPI 實際聚合值。
-    諮詢費等非主辦收入見下方表格：
+    諮詢費等非承辦收入見下方表格：
   </div>`;
 
   for (const tier of tierOrder) {
@@ -1994,7 +1994,7 @@ function renderDrillCasesJudicial(title, body) {
             ⚠ 本群組有 <strong>${small_cases.length} 筆 $2,000 小額案件</strong>（sum $${fmt(small_cases.length * 2000)}）。
             本月分潤 sheet 一、諮詢委任段 諮詢費 a = <strong>$${fmt(consultA)}</strong>（約 ${consult_count_est} 筆 × $2,000），
             故這 ${small_cases.length} 筆中可能有 <strong>${consult_in_small} 筆</strong>實為諮詢費，
-            金額已正確計入下方非主辦明細的「諮詢」row（諮詢律師取 100%，喆律 0）。
+            金額已正確計入下方非承辦明細的「諮詢」row（諮詢律師取 100%，喆律 0）。
             Parser 無法精確判斷哪些屬諮詢哪些屬委任 — 律師在分潤 sheet 自己歸段。
           </div>`;
         } else if (small_cases.length > 0 && consultA === 0) {
@@ -2010,20 +2010,20 @@ function renderDrillCasesJudicial(title, body) {
   const totalZ = (tierStats['委任案']?.z || 0) + (tierStats['自案']?.z || 0);
   const totalL = (tierStats['委任案']?.l || 0) + (tierStats['自案']?.l || 0);
   html += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
-    <strong>當月主案合計</strong> &nbsp;
+    <strong>當月承辦合計</strong> &nbsp;
     案額 $${fmt(commA + selfA)} &nbsp;→&nbsp;
     <span style="color:var(--orange)">喆律 $${fmt(totalZ)}</span> /
     <span style="color:var(--green)">律師 $${fmt(totalL)}</span>
     ${procD > 0 ? `<span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px">（扣除 D $${fmt(procD)} 共擔成本）</span>` : ''}
   </div>`;
 
-  // ---- 非主辦案件收入明細 ----
+  // ---- 非承辦案件收入明細 ----
   html += renderAuxIncomeTable(tierMap);
 
   body.innerHTML = html;
 }
 
-// 附屬收入明細：從 monthly.tier 抽出非「主案」的 tier，依 tier 名分組顯示喆律/律師
+// 附屬收入明細：從 monthly.tier 抽出非「承辦」的 tier，依 tier 名分組顯示喆律/律師
 function renderAuxIncomeTable(tierMap) {
   const isMainTier = (tier) => {
     if (tier.startsWith('委任-')) return true;
@@ -2048,7 +2048,7 @@ function renderAuxIncomeTable(tierMap) {
   }
   const keys = Object.keys(groups);
   if (keys.length === 0) {
-    return `<div style="margin-top:14px;color:var(--text-muted);font-size:0.85rem">非主辦案件收入：本月無</div>`;
+    return `<div style="margin-top:14px;color:var(--text-muted);font-size:0.85rem">非承辦案件收入：本月無</div>`;
   }
   // 排序：先 諮詢，再依字母
   const order = ['諮詢', '介紹', '追溯', '轉案', '受僱', '續委', '合作', '成案獎金', '其他', '其他-自案'];
@@ -2069,9 +2069,9 @@ function renderAuxIncomeTable(tierMap) {
   }
 
   return `<div style="margin-top:24px;padding-top:14px;border-top:2px dashed var(--border)">
-    <h3 style="margin-bottom:6px">非主辦案件收入明細</h3>
+    <h3 style="margin-bottom:6px">非承辦案件收入明細</h3>
     <div class="note" style="margin-bottom:8px">
-      律師非當主辦的收入：被請來協力處理、介紹他案、純諮詢等。不在主案件金額內，對應 KPI 上的「非主辦明細」。
+      律師非當承辦的收入：被請來協力處理、介紹他案、純諮詢等。不在承辦案件金額內，對應 KPI 上的「非承辦明細」。
     </div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>類型</th><th class="num">喆律</th><th class="num">律師</th><th class="num">小計</th></tr></thead>
