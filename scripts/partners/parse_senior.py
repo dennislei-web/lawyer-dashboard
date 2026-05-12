@@ -54,8 +54,9 @@ def find_input_files():
     return sorted(results, key=lambda x: (x[2], x[1]))
 
 # ---------- sheet 分類 ----------
-YYMM_RE = re.compile(r'^(\d{3})(\d{2})$')
-MONTH_ONLY_RE = re.compile(r'^(\d{1,2})月$')
+# YYMM 後面允許接任何非數字後綴（容錯「11501收入」「11501分潤」等命名）
+YYMM_RE = re.compile(r'^(\d{3})(\d{2})(?!\d)')
+MONTH_ONLY_RE = re.compile(r'^(\d{1,2})月')
 
 def classify_sheet(sn, fallback_roc_year=None):
     sn = sn.strip()
