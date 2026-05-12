@@ -194,6 +194,39 @@
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
       padding: 20px; position: relative; overflow: hidden;
     }
+    .kpi-card.clickable { cursor: pointer; transition: transform .15s, border-color .15s; }
+    .kpi-card.clickable:hover { transform: translateY(-2px); border-color: var(--gold); }
+
+    /* ===================== MODAL ===================== */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(2,11,24,0.8); backdrop-filter: blur(4px);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      width: 100%; max-width: 920px; max-height: 86vh; margin: 20px;
+      overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+    .modal-header {
+      padding: 18px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 1.05rem; font-weight: 700; }
+    .modal-close { cursor: pointer; opacity: .6; font-size: 1.4rem; line-height: 1; padding: 4px 8px; }
+    .modal-close:hover { opacity: 1; }
+    .modal-body { padding: 16px 24px 24px; overflow-y: auto; }
+    .modal-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .modal-table th, .modal-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+    .modal-table th { font-weight: 600; opacity: .7; font-size: .8rem; position: sticky; top: 0; background: var(--bg-card); }
+    .modal-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .modal-table tr.unmatched td { opacity: .55; }
+    .modal-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: .72rem; }
+    .modal-badge.exact { background: rgba(93,211,158,0.18); color: #5dd39e; }
+    .modal-badge.nearest { background: rgba(201,168,76,0.18); color: var(--gold); }
+    .modal-badge.none { background: rgba(255,107,107,0.18); color: #ff6b6b; }
     .kpi-card::before {
       content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     }
@@ -814,12 +847,12 @@
         <!-- ▼ 合署跨轉（補正口徑：諮詢律師諮詢→合署承辦的案，CRM 收款已 excludePartner 排除，補回喆律端進帳） -->
         <div class="section-divider"><span class="section-icon">🔁</span>合署跨轉 <span class="section-note">（諮詢律師諮詢→合署承辦；下方 CRM 收款已排除這部分）</span></div>
         <div class="kpi-row" style="grid-template-columns:repeat(2,1fr)">
-          <div class="kpi-card">
-            <div class="kpi-label">諮詢轉出件數（→合署）</div>
+          <div class="kpi-card clickable" onclick="openCrossReferralDetails()">
+            <div class="kpi-label">諮詢轉出件數（→合署）<span style="opacity:.5;font-size:.78rem;margin-left:6px">點此看明細</span></div>
             <div class="kpi-value" id="drillKpiCrossOut">-</div>
             <div class="kpi-sub" id="drillKpiCrossOutSub"></div>
           </div>
-          <div class="kpi-card gold">
+          <div class="kpi-card gold clickable" onclick="openCrossReferralDetails()">
             <div class="kpi-label kpi-label-tip" data-tooltip="合署端進帳（諮詢轉出） = 本部門諮詢律師諮詢、由合署律師承辦的案件中，「喆律端應入帳」金額加總。&#10;&#10;這筆錢實際進喆律口袋，但因為 group_name 含「合署」，會被部門分析的 CRM 收款 excludePartner() 過濾掉。此 KPI 把這部分還原。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。">合署端進帳金額（諮詢轉出）<span class="tip-icon">ⓘ</span></div>
             <div class="kpi-value gold" id="drillKpiCrossFirm">-</div>
             <div class="kpi-sub" id="drillKpiCrossFirmSub"></div>
@@ -1217,6 +1250,33 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- 合署跨轉明細 Modal -->
+<div class="modal-overlay" id="crossReferralModal" onclick="if(event.target===this)closeCrossReferralModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="crossReferralModalTitle">合署跨轉明細</div>
+      <div class="modal-close" onclick="closeCrossReferralModal()">×</div>
+    </div>
+    <div class="modal-body">
+      <div id="crossReferralModalSummary" style="margin-bottom:12px;opacity:.75;font-size:.88rem"></div>
+      <table class="modal-table">
+        <thead>
+          <tr>
+            <th>月份</th>
+            <th>客戶</th>
+            <th>諮詢律師</th>
+            <th>承辦合署律師</th>
+            <th class="num">案件金額</th>
+            <th class="num">喆律端入帳</th>
+            <th>對應品質</th>
+          </tr>
+        </thead>
+        <tbody id="crossReferralModalBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -1930,12 +1990,26 @@ async function fetchCrossReferralByYear(year) {
   if (_crossReferralCache[year]) return _crossReferralCache[year];
   if (!sb) return [];
   var resp = await sb.from('partner_cross_referral')
-    .select('year,month,direction,partner_lawyer_name,referring_lawyer_id,case_amount,firm_amount,raw_tier,join_quality')
+    .select('year,month,direction,partner_lawyer_name,referring_lawyer_id,case_amount,firm_amount,raw_tier,join_quality,client_name,referring_lawyer:lawyers!referring_lawyer_id(name)')
     .eq('direction', 'out')
     .eq('year', minguo);
   if (resp.error) { console.error('cross_referral fetch:', resp.error); return []; }
   _crossReferralCache[year] = resp.data || [];
   return _crossReferralCache[year];
+}
+
+function filterCrossReferralByDept(rows, deptName, maxCompleteM) {
+  // 回傳 (annotated rows for modal display) — 每筆加 _refDept (referring 部門) 跟 _inDept (是否屬本部門)
+  return rows.filter(function(r) {
+    var mm = parseInt(r.month, 10);
+    if (mm < 1 || mm > maxCompleteM) return false;
+    return true;
+  }).map(function(r) {
+    var dateStr = (r.year + 1911) + '-' + (parseInt(r.month,10) < 10 ? '0'+r.month : r.month) + '-01';
+    var refDept = r.referring_lawyer_id && typeof getDeptForLawyer !== 'undefined'
+      ? getDeptForLawyer(r.referring_lawyer_id, dateStr) : null;
+    return Object.assign({}, r, { _refDept: refDept, _inDept: refDept === deptName });
+  }).filter(function(r) { return r._inDept; });
 }
 
 function aggCrossReferralByDept(rows, deptName, maxCompleteM) {
@@ -1983,6 +2057,58 @@ function aggSourcesByOffice(recs, office, maxCompleteM) {
     });
   });
   return map;
+}
+
+function closeCrossReferralModal() {
+  document.getElementById('crossReferralModal').classList.remove('active');
+}
+
+async function openCrossReferralDetails() {
+  var office = document.getElementById('drillDeptSelect').value;
+  var deptName = OFFICE_TO_DEPT[office] || office;
+  var modeBtn = document.querySelector('#drillModeBtns .year-btn.active');
+  var mode = modeBtn ? modeBtn.dataset.mode : 'ytd';
+  var now = new Date();
+  var maxCompleteM = (mode === 'full') ? 12 : (now.getMonth() || 12);
+
+  var rows = await fetchCrossReferralByYear(drillSelectedYear);
+  var filtered = filterCrossReferralByDept(rows, deptName, maxCompleteM);
+  filtered.sort(function(a,b){
+    if (a.month !== b.month) return parseInt(a.month,10) - parseInt(b.month,10);
+    return (b.firm_amount || 0) - (a.firm_amount || 0);
+  });
+
+  var unmatched = rows.filter(function(r){
+    var mm = parseInt(r.month,10);
+    if (mm < 1 || mm > maxCompleteM) return false;
+    return !r.referring_lawyer_id;
+  });
+
+  document.getElementById('crossReferralModalTitle').textContent =
+    office + ' ' + drillSelectedYear + ' 諮詢轉合署明細';
+  document.getElementById('crossReferralModalSummary').innerHTML =
+    '共 <b>' + filtered.length + '</b> 件、喆律端進帳 <b>' + formatMoney(filtered.reduce(function(s,r){return s+(Number(r.firm_amount)||0)},0)) + '</b>。' +
+    (unmatched.length ? '另有 <b>' + unmatched.length + '</b> 筆無法對應到任何諮詢律師的轉案（不在本明細，諮詢可能漏填或客戶名不一致）。' : '');
+
+  var tbody = document.getElementById('crossReferralModalBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;opacity:.6">此區間無資料</td></tr>';
+  } else {
+    tbody.innerHTML = filtered.map(function(r) {
+      var refName = (r.referring_lawyer && r.referring_lawyer.name) || '(找不到)';
+      var qBadge = '<span class="modal-badge ' + (r.join_quality || 'none') + '">' + (r.join_quality || 'none') + '</span>';
+      return '<tr>' +
+        '<td>' + r.month + '月</td>' +
+        '<td>' + (r.client_name || '') + '</td>' +
+        '<td>' + refName + '</td>' +
+        '<td>' + (r.partner_lawyer_name || '') + '</td>' +
+        '<td class="num">' + formatMoney(r.case_amount) + '</td>' +
+        '<td class="num">' + formatMoney(r.firm_amount) + '</td>' +
+        '<td>' + qBadge + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+  document.getElementById('crossReferralModal').classList.add('active');
 }
 
 async function loadDeptDrillPage() {
