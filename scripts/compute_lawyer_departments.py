@@ -53,6 +53,13 @@ NON_CONSULTING_LAWYER_IDS = {
     "27d25c54-6fa5-4b30-8367-851007e0a845",  # 黃逸庭
 }
 
+# 手動覆寫：auto-detect 從 lawyers.office + revenue_records 推算錯誤時用
+# 例：lawyers.office 是「喆律法律事務所」這種沒城市資訊的，會 fallback 到
+#     revenue_records 最常出現的 office，但實際身分可能不是。
+LAWYER_DEPT_OVERRIDE = {
+    "70623a0d-c3dd-47d5-abd7-9061fb39f8a8": "合署(司法官)",  # 方心瑜
+}
+
 # 1. 律師列表
 lawyers = fetch_all("lawyers", {"select": "id,name,office,role,is_active"})
 print(f"律師總數：{len(lawyers)}")
@@ -101,6 +108,11 @@ for l in lawyers:
         else:
             result[lid] = None
             unresolved.append((name, "(revenue_records 無資料)"))
+
+# 3.5 套用手動覆寫
+for lid, dept in LAWYER_DEPT_OVERRIDE.items():
+    if lid in result:
+        result[lid] = dept
 
 # 4. 統計
 from collections import Counter as C
