@@ -414,6 +414,18 @@
       white-space: nowrap;
       padding-left: 24px;
     }
+    /* 律師排名 / 離職律師表：讓 6 個資料欄均分整列寬度，避免律師/所別欄吃太多空間 */
+    body.no-collected #rankingTable,
+    body.no-collected #resignedTable {
+      table-layout: fixed;
+    }
+    body.no-collected #rankingTable th.num,
+    body.no-collected #rankingTable td.num,
+    body.no-collected #resignedTable th.num,
+    body.no-collected #resignedTable td.num {
+      width: auto;
+      padding-left: 12px;
+    }
 
     /* ===================== SECTION CARD ===================== */
     .section {
