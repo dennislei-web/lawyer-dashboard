@@ -403,6 +403,9 @@
     .kpi-value.green { color: var(--green); }
     .kpi-value.red   { color: var(--red); }
 
+    /* 非主管不顯示已收金額相關資訊 */
+    body.no-collected .collected-only { display: none !important; }
+
     /* ===================== SECTION CARD ===================== */
     .section {
       background: var(--bg-card);
@@ -1576,11 +1579,11 @@
         <div class="kpi-label">諮詢效益</div>
         <div class="kpi-value" id="ov-consult-eff">—</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card collected-only">
         <div class="kpi-label">累計已收金額</div>
         <div class="kpi-value gold" id="ov-collected">—</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card collected-only">
         <div class="kpi-label">平均簽約收款</div>
         <div class="kpi-value" id="ov-avg-collected">—</div>
       </div>
@@ -1602,8 +1605,8 @@
               <th class="sortable num" data-col="consult_count">諮詢數</th>
               <th class="sortable num" data-col="signed_count">簽約數</th>
               <th class="sortable num" data-col="sign_rate">簽約率</th>
-              <th class="sortable num" data-col="collected">已收金額</th>
-              <th class="sortable num" data-col="avg_collected">平均簽約收款</th>
+              <th class="sortable num collected-only" data-col="collected">已收金額</th>
+              <th class="sortable num collected-only" data-col="avg_collected">平均簽約收款</th>
             </tr>
           </thead>
           <tbody id="rankingTableBody">
@@ -1627,7 +1630,7 @@
           <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">簽約率（%）</div>
           <div style="position:relative;height:260px;"><canvas id="deptSignRateChart"></canvas></div>
         </div>
-        <div style="background:var(--bg-row);border-radius:8px;padding:14px;">
+        <div class="collected-only" style="background:var(--bg-row);border-radius:8px;padding:14px;">
           <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">已收金額</div>
           <div style="position:relative;height:260px;"><canvas id="deptCollectedChart"></canvas></div>
         </div>
@@ -1656,7 +1659,7 @@
               <th rowspan="2" style="vertical-align:middle;">所別</th>
               <th colspan="2" class="num" style="border-bottom:1px solid var(--border);">諮詢場次</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">委任率</th>
-              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">個案收費</th>
+              <th colspan="3" class="num collected-only" style="border-bottom:1px solid var(--border);">個案收費</th>
               <th colspan="3" class="num" style="border-bottom:1px solid var(--border);">諮詢效益</th>
             </tr>
             <tr>
@@ -1665,9 +1668,9 @@
               <th class="num sortable" data-ycol="sign_rate_curr" id="yoyHdr-curr1">今年</th>
               <th class="num sortable" data-ycol="sign_rate_prev" id="yoyHdr-prev1">對照</th>
               <th class="num sortable" data-ycol="sign_rate_delta">Δ</th>
-              <th class="num sortable" data-ycol="avg_collected_curr" id="yoyHdr-curr2">今年</th>
-              <th class="num sortable" data-ycol="avg_collected_prev" id="yoyHdr-prev2">對照</th>
-              <th class="num sortable" data-ycol="avg_collected_delta">Δ</th>
+              <th class="num sortable collected-only" data-ycol="avg_collected_curr" id="yoyHdr-curr2">今年</th>
+              <th class="num sortable collected-only" data-ycol="avg_collected_prev" id="yoyHdr-prev2">對照</th>
+              <th class="num sortable collected-only" data-ycol="avg_collected_delta">Δ</th>
               <th class="num sortable" data-ycol="consult_eff_curr" id="yoyHdr-curr3">今年</th>
               <th class="num sortable" data-ycol="consult_eff_prev" id="yoyHdr-prev3">對照</th>
               <th class="num sortable" data-ycol="consult_eff_delta">Δ</th>
@@ -1699,8 +1702,8 @@
                 <th class="num">諮詢數</th>
                 <th class="num">簽約數</th>
                 <th class="num">簽約率</th>
-                <th class="num">已收金額</th>
-                <th class="num">平均簽約收款</th>
+                <th class="num collected-only">已收金額</th>
+                <th class="num collected-only">平均簽約收款</th>
               </tr>
             </thead>
             <tbody id="resignedTableBody">
@@ -1711,7 +1714,7 @@
     </div>
 
     <!-- Amount Range Analysis -->
-    <div class="section" id="amountRangeSection">
+    <div class="section collected-only" id="amountRangeSection">
       <div class="section-header">
         <div class="section-title">成案金額區間分析</div>
       </div>
@@ -1752,11 +1755,11 @@
         <div class="kpi-label">諮詢效益</div>
         <div class="kpi-value" id="dt-consult-eff">—</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card collected-only">
         <div class="kpi-label">累計已收金額</div>
         <div class="kpi-value gold" id="dt-collected">—</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card collected-only">
         <div class="kpi-label">平均簽約收款</div>
         <div class="kpi-value" id="dt-avg-collected">—</div>
       </div>
@@ -1795,8 +1798,8 @@
                 <th class="num">諮詢數</th>
                 <th class="num">簽約數</th>
                 <th class="num">簽約率</th>
-                <th class="num">已收金額</th>
-                <th class="num">平均簽約收款</th>
+                <th class="num collected-only">已收金額</th>
+                <th class="num collected-only">平均簽約收款</th>
                 <th class="num">諮詢效益</th>
               </tr>
             </thead>
@@ -1825,7 +1828,7 @@
     </div>
 
     <!-- 成案金額區間分析 (from quality detail) -->
-    <div class="section" style="margin-top:20px;">
+    <div class="section collected-only" style="margin-top:20px;">
       <div class="section-header">
         <div class="section-title">成案金額區間分析</div>
       </div>
@@ -1860,7 +1863,7 @@
         <div class="yoy-value" id="yoy-signed">—</div>
         <div class="yoy-change flat" id="yoy-signed-change">vs 上一年</div>
       </div>
-      <div class="yoy-card">
+      <div class="yoy-card collected-only">
         <div class="yoy-label">累計已收金額</div>
         <div class="yoy-value" id="yoy-collected">—</div>
         <div class="yoy-change flat" id="yoy-collected-change">vs 上一年</div>
@@ -2646,8 +2649,16 @@ function canViewAll() {
   return !!currentLawyer;
 }
 
+// 已收金額相關資訊只開放給主管 (admin / manager)
+function canViewCollected() {
+  return !!currentLawyer && (currentLawyer.role === 'admin' || currentLawyer.role === 'manager');
+}
+
 function showDashboard() {
   document.getElementById('dashboard').style.display = 'block';
+
+  // 非主管 (admin/manager) 一律隱藏已收金額相關欄位
+  document.body.classList.toggle('no-collected', !canViewCollected());
 
   // Show tabs based on role/upload permission:
   //   admin → 永遠可上傳
@@ -3010,11 +3021,12 @@ function buildLawyerYoyRows(currStats, prevStats) {
   return rows;
 }
 
-function yoyDeltaCell(val, isPercentPoint, prevHas) {
-  if (!prevHas) return '<td class="num yoy-change flat" title="去年無資料">—</td>';
+function yoyDeltaCell(val, isPercentPoint, prevHas, extraCls) {
+  const ec = extraCls ? ' ' + extraCls : '';
+  if (!prevHas) return `<td class="num yoy-change flat${ec}" title="去年無資料">—</td>`;
   const cls = Math.abs(val) < (isPercentPoint ? 2 : 5) ? 'flat' : (val > 0 ? 'up' : 'down');
   const sign = val > 0 ? '+' : '';
-  return `<td class="num yoy-change ${cls}">${sign}${val.toFixed(1)}%</td>`;
+  return `<td class="num yoy-change ${cls}${ec}">${sign}${val.toFixed(1)}%</td>`;
 }
 
 function buildYoyCompareButtons(currYear, activeYear) {
@@ -3140,9 +3152,9 @@ function renderLawyerYoy(currYear, prevYear, deptFilter) {
       <td class="num ${rateClassCurr}">${r.sign_rate_curr.toFixed(1)}%</td>
       <td class="num">${prevRateTxt}</td>
       ${yoyDeltaCell(r.sign_rate_delta, true, prevHasRate)}
-      <td class="num">$${Math.round(r.avg_collected_curr).toLocaleString()}</td>
-      <td class="num">${prevAvgTxt}</td>
-      ${yoyDeltaCell(r.avg_collected_delta, false, r.avg_collected_prev > 0)}
+      <td class="num collected-only">$${Math.round(r.avg_collected_curr).toLocaleString()}</td>
+      <td class="num collected-only">${prevAvgTxt}</td>
+      ${yoyDeltaCell(r.avg_collected_delta, false, r.avg_collected_prev > 0, 'collected-only')}
       <td class="num">$${Math.round(r.consult_eff_curr).toLocaleString()}</td>
       <td class="num">${prevEffTxt}</td>
       ${yoyDeltaCell(r.consult_eff_delta, false, r.consult_eff_prev > 0)}
@@ -3191,8 +3203,8 @@ function renderRankingTable(stats) {
       <td class="num">${r.consult_count.toLocaleString()}</td>
       <td class="num">${r.signed_count.toLocaleString()}</td>
       <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
-      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.avg_collected).toLocaleString()}</td>
     </tr>`;
   }).join('');
 }
@@ -3215,8 +3227,8 @@ function renderSelfTable(stats) {
     <td class="num">${r.consult_count.toLocaleString()}</td>
     <td class="num">${r.signed_count.toLocaleString()}</td>
     <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
-    <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-    <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    <td class="num collected-only">$${Math.round(r.collected).toLocaleString()}</td>
+    <td class="num collected-only">$${Math.round(r.avg_collected).toLocaleString()}</td>
   </tr>`;
 }
 
@@ -3272,8 +3284,8 @@ function renderResignedSection(stats) {
       <td class="num">${r.consult_count.toLocaleString()}</td>
       <td class="num">${r.signed_count.toLocaleString()}</td>
       <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
-      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.avg_collected).toLocaleString()}</td>
     </tr>`;
   }).join('');
 }
@@ -3610,8 +3622,8 @@ function renderDetailTable(stats) {
       <td class="num">${t.consult_count.toLocaleString()}</td>
       <td class="num">${t.signed_count.toLocaleString()}</td>
       <td class="num ${rateClass}">${rate.toFixed(1)}%</td>
-      <td class="num">$${Math.round(t.collected).toLocaleString()}</td>
-      <td class="num">$${Math.round(avg).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(t.collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(avg).toLocaleString()}</td>
       <td class="num">$${Math.round(eff).toLocaleString()}</td>
     </tr>`;
   }).join('');
@@ -3864,8 +3876,8 @@ function renderMonthCards(stats, year, partialMonthMM) {
             <div class="month-stat">諮詢 <span>${t.consult_count}</span></div>
             <div class="month-stat">簽約 <span>${t.signed_count}</span></div>
             <div class="month-stat">簽約率 <span class="${rateClass}">${t.sign_rate.toFixed(1)}%</span></div>
-            <div class="month-stat">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
-            <div class="month-stat">平均收款 <span>$${Math.round(t.avg_collected).toLocaleString()}</span></div>
+            <div class="month-stat collected-only">已收 <span>$${Math.round(t.collected).toLocaleString()}</span></div>
+            <div class="month-stat collected-only">平均收款 <span>$${Math.round(t.avg_collected).toLocaleString()}</span></div>
           </div>
         </div>
         <div class="expand-icon">▼</div>
@@ -3880,8 +3892,8 @@ function renderMonthCards(stats, year, partialMonthMM) {
               <th class="sortable num" data-col="consult_count" data-month="${key}">諮詢數</th>
               <th class="sortable num" data-col="signed_count" data-month="${key}">簽約數</th>
               <th class="sortable num" data-col="sign_rate" data-month="${key}">簽約率</th>
-              <th class="sortable num sort-desc" data-col="collected" data-month="${key}">已收金額</th>
-              <th class="sortable num" data-col="avg_collected" data-month="${key}">平均簽約收款</th>
+              <th class="sortable num sort-desc collected-only" data-col="collected" data-month="${key}">已收金額</th>
+              <th class="sortable num collected-only" data-col="avg_collected" data-month="${key}">平均簽約收款</th>
             </tr>
           </thead>
           <tbody>${renderMonthBodyRows(lawyerRows, 'collected', 'desc')}</tbody>
@@ -3927,8 +3939,8 @@ function renderMonthBodyRows(lawyerRows, sortCol, sortDir) {
       <td class="num">${r.consult_count}</td>
       <td class="num">${r.signed_count}</td>
       <td class="num ${rc}">${r.sign_rate.toFixed(1)}%</td>
-      <td class="num">$${Math.round(r.collected).toLocaleString()}</td>
-      <td class="num">$${Math.round(r.avg_collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.avg_collected).toLocaleString()}</td>
     </tr>`;
   }).join('');
 }
@@ -3988,7 +4000,8 @@ function generateInsights(lawyerId) {
     }
   }
 
-  // 平均成案金額
+  // 平均成案金額（已收金額相關，僅主管可見）
+  if (!canViewCollected()) return insights;
   const avgCollected = totals.avg_collected;
   if (avgCollected >= 80000) {
     insights.push({ type: 'success', icon: '\u2713', text: '高單價律師，擅長複雜大案：平均成案金額 $' + Math.round(avgCollected).toLocaleString() });
@@ -4532,7 +4545,7 @@ document.getElementById('caseContentModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeCaseContentModal();
 });
 
-function renderYoyRow(label, curr, prev, isPercent) {
+function renderYoyRow(label, curr, prev, isPercent, extraClass) {
   const fmtVal = (v) => {
     if (isPercent) return v.toFixed(1) + '%';
     if (Math.abs(v) >= 1000) return '$' + Math.round(v).toLocaleString();
@@ -4556,7 +4569,7 @@ function renderYoyRow(label, curr, prev, isPercent) {
     }
   }
 
-  return `<tr>
+  return `<tr${extraClass ? ' class="' + extraClass + '"' : ''}>
     <td>${escHtml(label)}</td>
     <td class="num">${fmtVal(curr)}</td>
     <td class="num">${fmtVal(prev)}</td>
@@ -4645,8 +4658,8 @@ function renderDetailYoy(lawyerId) {
           ${renderYoyRow('諮詢數', tA.consult_count, tB.consult_count, false)}
           ${renderYoyRow('簽約數', tA.signed_count, tB.signed_count, false)}
           ${renderYoyRow('簽約率', tA.sign_rate, tB.sign_rate, true)}
-          ${renderYoyRow('已收金額', tA.collected, tB.collected, false)}
-          ${renderYoyRow('平均成案金額', tA.avg_collected, tB.avg_collected, false)}
+          ${renderYoyRow('已收金額', tA.collected, tB.collected, false, 'collected-only')}
+          ${renderYoyRow('平均成案金額', tA.avg_collected, tB.avg_collected, false, 'collected-only')}
           ${renderYoyRow('諮詢效益', tA.consult_eff, tB.consult_eff, false)}
         </tbody>
       </table>
