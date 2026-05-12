@@ -405,12 +405,19 @@ async function checkSession() {
   }
 }
 var realLawyer = null; // 真實身份；admin 切視角時 currentLawyer 會被改，realLawyer 保留原值
+var allLawyersForViewAs = []; // 視角下拉用 — 只在 admin 才撈
 async function loadUserProfile() {
   if (!sb || !currentUser) return;
   var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
   if (r.data) {
     realLawyer = r.data;
     currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
+    if (realLawyer.role === 'admin') {
+      try {
+        var all = await sb.from('lawyers').select('id,name,role,can_upload,dashboard_access,is_active').order('name');
+        allLawyersForViewAs = all.data || [];
+      } catch (e) { allLawyersForViewAs = []; }
+    }
   }
 }
 function showLogin() {
@@ -425,7 +432,8 @@ function showShell() {
   if (window.ViewAs) {
     window.ViewAs.installSelector(
       document.querySelector('.header-right'),
-      realLawyer ? realLawyer.role : null,
+      realLawyer,
+      allLawyersForViewAs,
       function () { location.reload(); }
     );
   }
