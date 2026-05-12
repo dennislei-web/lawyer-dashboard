@@ -1615,7 +1615,7 @@ function renderDrill() {
   const ltSourceTotal = ltSourceEntries.reduce((s,[,v]) => s + v, 0);
   const ltOwnBreakStr = ltSourceEntries.length > 1
     ? `<div style="margin-top:6px; padding:6px 8px; background:rgba(255,255,255,0.04); border-radius:4px;">
-        <div style="color:var(--text-muted); font-size:0.68rem; margin-bottom:4px; letter-spacing:0.5px">律師主案案源</div>
+        <div style="color:var(--text-muted); font-size:0.68rem; margin-bottom:4px; letter-spacing:0.5px">律師承辦案源</div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; font-size:0.72rem;">
           ${ltSourceEntries.map(([k,v]) => {
             const lbl = SOURCE_LABEL[k] || k;
@@ -1632,8 +1632,8 @@ function renderDrill() {
     : '';
 
   const formulaLine = isJudicial
-    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律主案分潤 + 律師主案分潤">＝ D $${fmt(procD)} + 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`
-    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律主案 $${fmt(ztOwn)} + 律師主案 $${fmt(ltOwn)}</span>`;
+    ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="主案件金額 = 處理費 D + 喆律承辦分潤 + 律師承辦分潤">＝ D $${fmt(procD)} + 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`
+    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ 喆律承辦 $${fmt(ztOwn)} + 律師承辦 $${fmt(ltOwn)}</span>`;
   const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
