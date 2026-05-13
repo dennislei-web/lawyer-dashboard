@@ -1601,6 +1601,7 @@ function renderDrill() {
   const ratio = lt > 0 ? zt / lt : 0;
   const share = (zt + lt) > 0 ? zt / (zt + lt) * 100 : 0;
   const isJudicial = selectedCohort === 'judicial';
+  const isConsult = selectedCohort === 'consult';
 
   // 司法官 cohort 用詞調整：喆律不是實際承辦人，是分擔受雇成本+利潤分配，
   // 所以「承辦」改稱「主案」、「喆律承辦」改稱「喆律案件分潤」
@@ -1642,9 +1643,10 @@ function renderDrill() {
   //        喆律 OWN = MAIN + 成案獎金（諮詢律師諮詢、由喆律端他人承辦，喆律算實際承辦人）
   //        律師 OWN = MAIN（自案 律師 90% 算律師承辦；成案獎金的 5% 是獎金、不算承辦）
   //        自案(喆律) 不在任何一邊：律師自帶案、喆律抽 10% 平台費，formula 中單獨列為 selfZPart
+  //        consult cohort：顯皓承辦/顯皓自案 律師實際承辦、喆律僅 40%/10% 分潤，
+  //        故喆律端歸非承辦（→ zMiscBreak「顯皓承辦分潤」「顯皓自案分潤」），律師端仍算承辦
   const MAIN_Z_TIERS = ['委任-引案(喆律)','委任-利潤(喆律)',
-                        '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)',
-                        '顯皓承辦(喆律)','顯皓自案(喆律)'];
+                        '諮詢成案(喆律)','喆律轉案(喆律)','法律010轉案(喆律)'];
   const OWN_Z_TIERS = [...MAIN_Z_TIERS, '成案獎金(喆律)'];
   const OWN_L_TIERS = ['委任-咨詢(律師)','委任-利潤(律師)','自案(律師)',
                        '諮詢成案(律師)','喆律轉案(律師)','法律010轉案(律師)',
@@ -1665,7 +1667,8 @@ function renderDrill() {
       else if (OWN_L_TIERS.indexOf(k) !== -1) ltOwn += v;
       else if (k.endsWith('(喆律)')) {
         ztMisc += v;
-        const base = k.replace('(喆律)', '');
+        let base = k.replace('(喆律)', '');
+        if (isConsult && (base === '顯皓承辦' || base === '顯皓自案')) base += '分潤';
         zMiscBreak[base] = (zMiscBreak[base] || 0) + v;
       } else {
         // 諮詢、成案獎金(律師)、介紹(律師)、追溯(律師) 等律師端附屬
@@ -1687,7 +1690,11 @@ function renderDrill() {
     '合作': '多律師合作案的分潤',
     '其他': '解析時未對上標準比例（左表非 0.7/0.6/1.0）的特殊案件',
     '其他-自案': '右表特殊比例案件（全庫僅 5 筆：4 筆 40% 含法扶舊案/退款等、1 筆 60% 特殊協議）',
-    '自案': '律師自帶案件，喆律僅抽 10% 平台費（不算喆律承辦；律師端 90% 算律師承辦）'
+    '自案': '律師自帶案件，喆律僅抽 10% 平台費（不算喆律承辦；律師端 90% 算律師承辦）',
+    '諮詢費': '客戶付的諮詢費全進喆律帳戶（100% 喆律）；律師月獎金率另計，看當月委任金額/諮詢場次倍數（0/3/5/8%）',
+    '顯皓承辦分潤': '諮詢後律師自己承辦的案件，款項進律師帳戶、喆律抽 40% 分潤；律師端 60% 仍算律師承辦',
+    '顯皓自案分潤': '律師自招案件（非喆律諮詢來源），喆律抽 10% 平台費；律師端 90% 仍算律師承辦',
+    '月固定費': '喆律每月給律師月固定費 130,000；從喆律端淨收入扣除、加到律師端'
   };
   // per-lawyer 特殊 tier 的細緻說明（覆蓋 global TIER_TIP）
   const perLawyerTips = (DATA.special_tier_tips && DATA.special_tier_tips[drillLawyer]) || {};
@@ -1765,11 +1772,21 @@ function renderDrill() {
   const selfZPart = ownSelfZ > 0
     ? ` + <span style="color:var(--orange); text-decoration:underline dotted; cursor:help" title="${TERM.self_z_tip}">喆律自案分潤 $${fmt(ownSelfZ)}</span>`
     : '';
+  // consult cohort：顯皓承辦/顯皓自案 喆律端為分潤、非實際承辦，但仍是承辦案件金額的一部分
+  const xhShareZ = isConsult ? monthly.reduce((s, m) => s + (m.tier['顯皓承辦(喆律)'] || 0), 0) : 0;
+  const xhSelfZ  = isConsult ? monthly.reduce((s, m) => s + (m.tier['顯皓自案(喆律)'] || 0), 0) : 0;
+  const consultSharePart = (xhShareZ > 0 || xhSelfZ > 0)
+    ? ` + <span style="color:var(--orange); text-decoration:underline dotted; cursor:help" title="顯皓承辦/顯皓自案 律師實際承辦、喆律僅分潤（40%/10%）">顯皓承辦分潤 $${fmt(xhShareZ)} + 顯皓自案分潤 $${fmt(xhSelfZ)}</span>`
+    : '';
   // formula 用 ztMain（本律師主辦案件）— 不含成案獎金，否則加總會超過承辦案件金額
   const ztMainTip = TERM.zhelu_principal_tip;
+  const ownTotalTip = isConsult
+    ? '承辦案件金額 = 喆律承辦(諮詢成案) + 律師承辦 + 顯皓承辦分潤 + 顯皓自案分潤'
+    : TERM.own_total_tip;
+  const noCostNote = isConsult ? '諮詢律師無共擔成本條款' : '資深律師無共擔成本條款';
   const formulaLine = isJudicial
     ? `<br><span style="color:var(--orange)">處理費 D 扣除 $${fmt(procD)}（人事等共擔成本）</span><br><span style="color:var(--text-muted)" title="${TERM.own_total_tip}">＝ D $${fmt(procD)} + <span style="text-decoration:underline dotted; cursor:help" title="${ztMainTip}">${TERM.zhelu_principal}</span> $${fmt(ztMain)} + ${TERM.lawyer_principal} $${fmt(ltOwn)}${selfZPart}</span>`
-    : `<br><span style="color:var(--text-muted)">資深律師無共擔成本條款</span><br><span style="color:var(--text-muted)">＝ <span style="text-decoration:underline dotted; cursor:help" title="${ztMainTip}">${TERM.zhelu_principal}</span> $${fmt(ztMain)} + ${TERM.lawyer_principal} $${fmt(ltOwn)}${selfZPart}</span>`;
+    : `<br><span style="color:var(--text-muted)">${noCostNote}</span><br><span style="color:var(--text-muted)" title="${ownTotalTip}">＝ <span style="text-decoration:underline dotted; cursor:help" title="${ztMainTip}">${TERM.zhelu_principal}</span> $${fmt(ztMain)} + ${TERM.lawyer_principal} $${fmt(ltOwn)}${selfZPart}${consultSharePart}</span>`;
   const dSubHtml = formulaLine + ltOwnBreakStr;
   const zMiscBreakStr = fmtBreak(zMiscBreak);
   const lMiscBreakStr = fmtBreak(lMiscBreak);
