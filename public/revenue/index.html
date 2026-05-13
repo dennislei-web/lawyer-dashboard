@@ -8,7 +8,7 @@
   <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="../lawyer-departments.js?v=20260513b"></script>
+  <script src="../lawyer-departments.js?v=20260513c"></script>
   <style>
     :root {
       --bg-main:    #020b18;
@@ -2027,6 +2027,16 @@ async function fetchCrossReferralByYear(year) {
   return _crossReferralCache[year];
 }
 
+// 跨轉 KPI 用：取 referring lawyer 部門，先看 REFERRAL_DEPT_OVERRIDE，
+// 再 fallback 到 getDeptForLawyer。讓合署 cohort 內原分所人（如李昭萱、許煜婕）
+// 的轉案被歸到原所統計，其他 KPI 不受影響。
+function getReferralDept(lawyerId, dateStr) {
+  if (typeof REFERRAL_DEPT_OVERRIDE !== 'undefined' && REFERRAL_DEPT_OVERRIDE[lawyerId]) {
+    return REFERRAL_DEPT_OVERRIDE[lawyerId];
+  }
+  return (typeof getDeptForLawyer !== 'undefined') ? getDeptForLawyer(lawyerId, dateStr) : null;
+}
+
 function filterCrossReferralByDept(rows, deptName, minM, maxM) {
   // 回傳 (annotated rows for modal display) — 每筆加 _refDept (referring 部門) 跟 _inDept (是否屬本部門)
   return rows.filter(function(r) {
@@ -2035,23 +2045,20 @@ function filterCrossReferralByDept(rows, deptName, minM, maxM) {
     return true;
   }).map(function(r) {
     var dateStr = (r.year + 1911) + '-' + (parseInt(r.month,10) < 10 ? '0'+r.month : r.month) + '-01';
-    var refDept = r.referring_lawyer_id && typeof getDeptForLawyer !== 'undefined'
-      ? getDeptForLawyer(r.referring_lawyer_id, dateStr) : null;
+    var refDept = r.referring_lawyer_id ? getReferralDept(r.referring_lawyer_id, dateStr) : null;
     return Object.assign({}, r, { _refDept: refDept, _inDept: refDept === deptName });
   }).filter(function(r) { return r._inDept; });
 }
 
 function aggCrossReferralByDept(rows, deptName, minM, maxM) {
-  // direction='out': 用 referring_lawyer_id 反推當時部門
-  // year 為民國年；用 (year+1911)-MM-01 作為部門歷史查詢日期
+  // direction='out': 用 referring_lawyer_id 反推當時部門（REFERRAL_DEPT_OVERRIDE 優先）
   var count = 0, caseAmt = 0, joined = 0, unjoined = 0;
   rows.forEach(function(r) {
     var mm = parseInt(r.month, 10);
     if (mm < minM || mm > maxM) return;
     if (!r.referring_lawyer_id) { unjoined++; return; }
-    if (typeof getDeptForLawyer === 'undefined') return;
     var dateStr = (r.year + 1911) + '-' + (mm < 10 ? '0'+mm : mm) + '-01';
-    if (getDeptForLawyer(r.referring_lawyer_id, dateStr) !== deptName) return;
+    if (getReferralDept(r.referring_lawyer_id, dateStr) !== deptName) return;
     count++;
     caseAmt += Number(r.case_amount || 0);
     joined++;
