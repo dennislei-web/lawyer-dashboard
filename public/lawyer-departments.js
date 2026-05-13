@@ -87,12 +87,29 @@ var LAWYER_DEPT_HISTORY = {
   ],
 };
 
-// 跨轉 KPI 專用：合署 cohort 內某些諮詢律師原本是分所人，業務口徑視為原所
+// 跨轉 KPI 專用：合署 cohort 內諮詢律師業務口徑回歸所屬分所
 // （只影響 aggCrossReferralByDept / filterCrossReferralByDept；
-//  諮詢數、效益值、CRM 收款等其他 KPI 不受影響）
+//  諮詢數、效益值、CRM 收款等其他 KPI 走原本 getDeptForLawyer 不受影響）
+//
+// 中所：李昭萱（前中所所長）、許煜婕（前中所諮詢律師）轉合署後仍視為中所
+// 北所：司法官 cohort 4 位 + 資深合署中仍掛「合署」dept 的 4 位
+//   （柯雪莉/蕭予馨在 LAWYER_DEPARTMENTS 已是「台北」，不用列）
 var REFERRAL_DEPT_OVERRIDE = {
-  "21e50125-59e7-4ac8-8729-470b7eea40f0": "台中",  // 李昭萱（前中所所長）
-  "912dbdab-bb02-4a7d-9d12-d01fc26099a8": "台中",  // 許煜婕（前中所諮詢律師）
+  // 中所
+  "21e50125-59e7-4ac8-8729-470b7eea40f0": "台中",  // 李昭萱
+  "912dbdab-bb02-4a7d-9d12-d01fc26099a8": "台中",  // 許煜婕
+
+  // 北所 — 司法官 cohort
+  "2a5d914a-ce97-45e0-baaf-80b16db7c089": "台北",  // 劉明潔
+  "1feec3c1-acd2-4c1d-b6e1-a75117163345": "台北",  // 孫少輔
+  "70623a0d-c3dd-47d5-abd7-9061fb39f8a8": "台北",  // 方心瑜
+  "a7a129d8-1dad-4209-a4a9-f316c0d67ccf": "台北",  // 許致維
+
+  // 北所 — 資深合署 cohort（掛「合署」、未歸分所者）
+  "da25b0fc-132c-4120-b3c1-d840394c2ed4": "台北",  // 吳柏慶
+  "93368933-3017-4c7c-af49-5ff0ea5ec3a6": "台北",  // 徐棠娜
+  "e19e0019-1e9b-437e-a4f7-76262809f406": "台北",  // 林昀
+  "163713b3-50bc-4ef3-a1f2-dc811749569e": "台北",  // 陳璽仲
 };
 
 function getDeptForLawyer(lawyerId, dateOrMonth) {
