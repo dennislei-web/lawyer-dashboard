@@ -22,6 +22,9 @@ from datetime import datetime, date
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from collections import Counter
+
+from group_inference import load_history
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -32,6 +35,10 @@ import functools
 print = functools.partial(print, flush=True)
 
 load_dotenv()
+
+# group_name 推算：在 main() 進來時 lazy load 一次
+_GROUP_HISTORY = None
+_INFER_STATS = Counter()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -185,6 +192,18 @@ def transform_record(item):
     processed_at = item.get("processed_at", "")
     record_date = processed_at[:10] if processed_at else None
 
+    office = case.get("council_office", {}).get("name") if case.get("council_office") else None
+    group_name = case.get("group", {}).get("name") if case.get("group") else None
+
+    # CRM 端 group 為空時，從歷史律師→group 對應推算（避免部門儀表板失真）
+    if not group_name and _GROUP_HISTORY is not None:
+        inferred, source = _GROUP_HISTORY.infer(record_date, assigned_lawyers, office)
+        if inferred:
+            group_name = inferred
+            _INFER_STATS[source] += 1
+        else:
+            _INFER_STATS["no_match"] += 1
+
     return {
         "transaction_id": item.get("id"),
         "record_date": record_date,
@@ -196,8 +215,8 @@ def transform_record(item):
         "responsible_lawyer": responsible,
         "assigned_lawyers": assigned_lawyers,
         "brand": case.get("department", {}).get("name") if case.get("department") else None,
-        "office": case.get("council_office", {}).get("name") if case.get("council_office") else None,
-        "group_name": case.get("group", {}).get("name") if case.get("group") else None,
+        "office": office,
+        "group_name": group_name,
         "source_channel": source_channel,
         "service_items": service_items,
         "accrued_expense": item.get("case_service_item", {}).get("accrued_expense", 0),
@@ -312,19 +331,35 @@ def main():
         session = crm_login(CRM_USERNAME, CRM_PASSWORD)
         print("   ✓ 登入成功\n")
 
+        # 載入 group_name 歷史（用於 ingest 時自動補 null group_name）
+        global _GROUP_HISTORY
+        print("2. 載入律師 → group 對應表（推算 fallback 用）...")
+        try:
+            _GROUP_HISTORY = load_history(SUPABASE_URL, SUPABASE_KEY, verify=False)
+            print(f"   ✓ 已載入 {len(_GROUP_HISTORY.all_lawyers)} 位律師歷史\n")
+        except Exception as e:
+            print(f"   ⚠ 載入失敗，將略過自動推算: {e}\n")
+            _GROUP_HISTORY = None
+
         # 爬取每個月份
         all_records = []
-        print("2. 爬取對帳資料...")
+        print("3. 爬取對帳資料...")
         for year, month in months_to_scrape:
             start_date, end_date = get_month_range(year, month)
             raw_data = scrape_reconciliation(session, start_date, end_date)
             records = [transform_record(item) for item in raw_data]
             all_records.extend(records)
 
-        print(f"\n   共取得 {len(all_records)} 筆記錄\n")
+        print(f"\n   共取得 {len(all_records)} 筆記錄")
+        if _INFER_STATS:
+            total_inferred = sum(n for k, n in _INFER_STATS.items() if k != "no_match")
+            print(f"   📌 group_name 推算: {total_inferred} 筆（CRM 空值已自動補），無法推: {_INFER_STATS.get('no_match', 0)}")
+            for src, n in _INFER_STATS.most_common():
+                print(f"      {src}: {n}")
+        print()
 
         # 匯入 Supabase
-        print("3. 匯入 Supabase...")
+        print("4. 匯入 Supabase...")
         rows_updated = 0
         if all_records:
             upsert_records(all_records)
