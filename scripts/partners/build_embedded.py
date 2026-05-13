@@ -211,7 +211,10 @@ def build_judicial_cohort():
                 '‣ <strong style="color:var(--green)">1 年內再委任</strong>（&le;365 天）'
                 '= 喆律案，沿用 30% B 費 + E 分成<br>'
                 '‣ <strong style="color:#b58bff">1 年外再委任</strong>（&gt;365 天）'
-                '= 律師自案，B = 0%、E 分成比律師端'
+                '= 律師自案，B = 0%、E 分成比律師端<br>'
+                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 — '
+                '第一次委任前若只有諮詢不算首委、委任後若只有諮詢也不算續委，'
+                '只有實際委任才納入計算。'
             ),
             'kpi_labels': {
                 'moved_bucket_name': '1 年外續委總額（會重新歸類）',
@@ -558,7 +561,10 @@ def build_senior_cohort():
                 '喆律轉案 40%、法律010轉案 30%…）<br>'
                 '‣ <strong style="color:var(--gold)">新制</strong>：僅對 '
                 '<span style="color:var(--green)">「原本歸為律師自案」且 1 年內續委</span> 的案件，'
-                '由 10% 提升為 30%（視同諮詢成案）；其他案件維持原比例'
+                '由 10% 提升為 30%（視同諮詢成案）；其他案件維持原比例<br>'
+                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 — '
+                '第一次委任前若只有諮詢不算首委、委任後若只有諮詢也不算續委，'
+                '只有實際委任才納入計算。'
             ),
             'kpi_labels': {
                 'moved_bucket_name': '受影響案件總額（自案且 1 年內續委）',
