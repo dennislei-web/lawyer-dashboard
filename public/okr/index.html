@@ -1295,19 +1295,31 @@ function renderKR4() {
 
   // 資料完整度警示：partners JSON 的數據來自律師手動填 Excel + sync_runner 同步，
   // 月底前後若部分律師還沒回填，commission_A / self_A 會偏低、誤判落後
-  var totalExpected = d.partnerCohorts.judicial.length + d.partnerCohorts.senior.length;
+  // 律師起算月：未列入 = 該年 1 月前就已加入（不影響判斷）；用於排除「還沒入夥」的月份
+  var LAWYER_START = {
+    '吳柏慶': { year: 2026, month: 3 },
+  };
+  function startedBy(lawyer, m) {
+    var st = LAWYER_START[lawyer];
+    if (!st) return true;
+    if (st.year < state.year) return true;
+    if (st.year > state.year) return false;
+    return st.month <= m;
+  }
+  var allPartners = d.partnerCohorts.judicial.concat(d.partnerCohorts.senior);
   var checkRange = fm != null ? [fm] : (function() { var r=[]; for (var mm=1; mm<=monthsElapsed(); mm++) r.push(mm); return r; })();
   var incomplete = [];
   checkRange.forEach(function(mm) {
+    var expected = allPartners.filter(function(lw) { return startedBy(lw, mm); }).length;
     var got = Object.keys(d.partnerLawyersByMonth[mm] || {}).length;
-    if (totalExpected > 0 && got < totalExpected) incomplete.push({ month:mm, got:got });
+    if (expected > 0 && got < expected) incomplete.push({ month:mm, got:got, expected:expected });
   });
-  if (incomplete.length > 0 && totalExpected > 0) {
+  if (incomplete.length > 0) {
     var hint = document.createElement('div');
     hint.style.cssText = 'background:rgba(224,149,74,0.15); border:1px solid var(--orange); color:var(--text); padding:8px 12px; border-radius:6px; font-size:0.78rem; margin-bottom:10px;';
     hint.innerHTML = '<b style="color:var(--orange)">⚠️ 資料完整度：</b>'
       + incomplete.map(function(x) {
-          return x.month + '月 ' + x.got + '/' + totalExpected + ' 位回填';
+          return x.month + '月 ' + x.got + '/' + x.expected + ' 位回填';
         }).join('、')
       + '　— 律師分潤 Excel 還沒齊，數字可能偏低；請等 partners sync 完整後再對標。';
     card.appendChild(hint);
