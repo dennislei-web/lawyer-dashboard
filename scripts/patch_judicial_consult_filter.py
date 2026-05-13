@@ -34,8 +34,10 @@ def _parse_date(s):
 def reclassify_judicial(j: dict) -> None:
     cases = j.get("cases", [])
 
-    # first_seen 錨點只看金額 > 2000 的承辦紀錄（諮詢費不能當錨點）
+    # first_seen 錨點只看金額 > 2000 的承辦紀錄；同步記錄每位當事人的全部大額日期
+    # 供 ±7 天 companion 檢查（拆帳模式：俞亞辛 \$1k+\$49k）
     bucket = defaultdict(list)
+    big_dates_by_key = defaultdict(list)
     for c in cases:
         if c.get("section") != "承辦": continue
         amt = c.get("amount") or 0
@@ -45,6 +47,7 @@ def reclassify_judicial(j: dict) -> None:
         client = (c.get("client") or "").strip()
         if not client: continue
         bucket[c["lawyer"]].append({"date": d, "client": client})
+        big_dates_by_key[(c["lawyer"], client)].append(d)
 
     first_seen = {}
     for l, items in bucket.items():
@@ -54,7 +57,13 @@ def reclassify_judicial(j: dict) -> None:
             if key not in first_seen:
                 first_seen[key] = it["date"]
 
-    # 同當事人若曾成立委任，所有紀錄（含拆帳的諮詢費）都納入分類
+    def _has_big_companion(lawyer, client, d, window_days=7):
+        for bd in big_dates_by_key.get((lawyer, client), ()):
+            if abs((d - bd).days) <= window_days:
+                return True
+        return False
+
+    # 紀錄本身 > \$2,000 → 委任；≤ \$2,000 但 ±7 天有大額同伴 → 拆帳；否則孤筆排除
     for c in cases:
         d = _parse_date(c.get("date"))
         client = (c.get("client") or "").strip()
@@ -63,11 +72,11 @@ def reclassify_judicial(j: dict) -> None:
         c["first_date"] = None
         if c.get("section") == "承辦" and d is not None and client:
             fs = first_seen.get((c["lawyer"], client))
-            if fs is None:
-                # 純諮詢當事人，整筆排除
-                pass
+            amt = c.get("amount") or 0
+            qualifies = fs is not None and (amt > 2000 or _has_big_companion(c["lawyer"], client, d))
+            if not qualifies:
+                pass  # 純諮詢當事人或孤筆小額，排除
             elif d <= fs:
-                # 同一首委 episode（含拆出的諮詢費，可能早 1-3 天）
                 c["classification"] = "首委"
                 c["days_since_first"] = 0
                 c["first_date"] = fs.strftime("%Y-%m-%d")

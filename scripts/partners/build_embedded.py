@@ -105,10 +105,11 @@ def build_judicial_cohort():
 
     # repeat-client classification (Tab 5)
     # 首委錨點只看金額 > 2000 的承辦案件（諮詢費不能當錨點）。
-    # 但「同當事人若已成立委任，後續所有紀錄（含拆帳的諮詢費）都納入」—
-    # 因為實務常把一筆委任拆成「諮詢費 + 委任費扣諮詢」兩列，金額小的那列
-    # 不能單獨被排除。從未成立委任的純諮詢當事人才整筆排除。
+    # 一筆委任常被 CRM 拆成「諮詢費 + 委任費扣諮詢」兩列（俞亞辛模式：1-3 天內），
+    # 所以小額紀錄要先過「±7 天有無大額同伴」這層才納入分類；單純客戶過陣子
+    # 回來諮詢一次（蕭博文模式）的孤筆 ≤$2000 紀錄會被排除。
     承辦_by_lawyer = defaultdict(list)
+    big_dates_by_key = defaultdict(list)
     for c in cases:
         if c.get('voided') == '是': continue
         if c.get('section') != '承辦': continue
@@ -118,6 +119,7 @@ def build_judicial_cohort():
         client = (c.get('client') or '').strip()
         if not client: continue
         承辦_by_lawyer[c['lawyer']].append({'raw': c, 'date': d, 'client': client})
+        big_dates_by_key[(c['lawyer'], client)].append(d)
 
     first_seen = {}
     for l, items in 承辦_by_lawyer.items():
@@ -126,6 +128,12 @@ def build_judicial_cohort():
             key = (l, it['client'])
             if key not in first_seen:
                 first_seen[key] = it['date']
+
+    def _has_big_companion(lawyer, client, d, window_days=7):
+        for bd in big_dates_by_key.get((lawyer, client), ()):
+            if abs((d - bd).days) <= window_days:
+                return True
+        return False
 
     cases_recent = []
     for c in cases:
@@ -137,8 +145,10 @@ def build_judicial_cohort():
         first_date = None
         if c.get('section') == '承辦' and d is not None and client:
             fs = first_seen.get((c['lawyer'], client))
-            if fs is None:
-                # 純諮詢當事人，從未成立委任 → 排除
+            amt = num(c.get('amount'))
+            qualifies = fs is not None and (amt > 2000 or _has_big_companion(c['lawyer'], client, d))
+            if not qualifies:
+                # 純諮詢當事人，或孤筆小額（無 ±7 天大額同伴）→ 排除
                 classification = 'n/a'
             elif d <= fs:
                 # 同一首委 episode 內的紀錄（含拆出的諮詢費，可能早 1-3 天）
