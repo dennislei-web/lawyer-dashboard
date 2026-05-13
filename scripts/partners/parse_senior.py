@@ -260,6 +260,15 @@ def parse_profit_section(rows, lawyer, year, month):
         if any(k in first for k in SECTION_END_KEYWORDS):
             break
 
+        # 第二張對帳表（與第一張分潤表資訊重複）的標頭 — 蕭予馨等版型在分潤表
+        # 下方還有一個「喆律應付（費用進入的喆律帳戶）/ 客戶 | 案件性質 | 月客戶付款金 ...」
+        # 的對帳表，col 1 = 案件性質（如「喆律轉案」），若 senior layout 把它當 client
+        # 會產出空當事人的鬼魂 row。在此 break 即可避免。
+        if '費用進入' in first or '費用進入' in c1s:
+            break
+        if c1s == '案件性質' or first == '案件性質':
+            break
+
         # 「喆律應付-其他」標記（col 0 或 col 1）
         if c1s in ('喆律應付-其他', '喆律應付 - 其他') or first in ('喆律應付-其他', '喆律應付 - 其他'):
             in_other_section = True
