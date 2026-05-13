@@ -2305,7 +2305,7 @@ async function loadDeptDrillPage() {
     document.getElementById('drillKpiPartnerEff').textContent = formatMoney(pEffReal);
     var pEffDiff = pEffReal - pEffCrm;
     var pEffNote = pEffDiff > 1
-      ? '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(pEffCrm) + '・補正 +' + formatMoney(pEffDiff) + '</span>'
+      ? '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(pEffCrm) + '・補正 +平均' + formatMoney(pEffDiff) + '元</span>'
       : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(pEffCrm) + '（無補正）</span>';
     document.getElementById('drillKpiPartnerEffSub').innerHTML = yoyHtml(pEffReal, pPrevEffReal, true) + pEffNote;
   } else {
