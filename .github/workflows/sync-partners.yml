@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write  # 推送 commit 到 main
+  actions: write   # 觸發 deploy-pages.yml
 
 concurrency:
   group: sync-partners
@@ -35,9 +36,25 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Run sync from Drive
+        id: sync
         env:
           GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
+          before=$(git rev-parse HEAD)
           python scripts/partners/sync_runner.py --from-drive --upload-cross-referral --commit
+          after=$(git rev-parse HEAD)
+          if [ "$before" != "$after" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Pages deploy (only if commit pushed)
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy-pages.yml --ref main
+          echo "Triggered deploy-pages.yml"
