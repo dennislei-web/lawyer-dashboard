@@ -2236,7 +2236,7 @@ async function loadDeptDrillPage() {
   var effYoY = yoyHtml(curEffReal, prevEffReal, true);
   var effCrmDiff = curEffReal - curEffCrm;
   var effCrmNote = effCrmDiff > 1
-    ? '<br><span class="text-muted" style="font-size:0.78rem" title="CRM 端 collected 尚未涵蓋合署跨轉的部分（多發生在 YTD 月份），真實值 = max(CRM collected, 合署跨轉金額) per 案">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +' + formatMoney(effCrmDiff) + '</span>'
+    ? '<br><span class="text-muted" style="font-size:0.78rem" title="CRM 端 collected 尚未涵蓋合署跨轉的部分（多發生在 YTD 月份），真實值 = max(CRM collected, 合署跨轉金額) per 案">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +平均' + formatMoney(effCrmDiff) + '元</span>'
     : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(curEffCrm) + '（無補正）</span>';
   document.getElementById('drillKpiEffSub').innerHTML = effYoY + effCrmNote;
 
