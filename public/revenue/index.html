@@ -874,17 +874,20 @@
         </div>
 
         <!-- ▼ 合署跨轉（補正口徑：諮詢律師諮詢→合署承辦的案，CRM 收款已 excludePartner 排除，補回喆律端進帳） -->
-        <div class="section-divider"><span class="section-icon">🔁</span>合署跨轉 <span class="section-note">（諮詢律師諮詢→合署承辦；下方 CRM 收款已排除這部分）</span></div>
-        <div class="kpi-row" style="grid-template-columns:repeat(2,1fr)">
-          <div class="kpi-card clickable" onclick="openCrossReferralDetails()">
-            <div class="kpi-label">諮詢轉出件數（→合署）<span style="opacity:.5;font-size:.78rem;margin-left:6px">點此看明細</span></div>
-            <div class="kpi-value" id="drillKpiCrossOut">-</div>
-            <div class="kpi-sub" id="drillKpiCrossOutSub"></div>
-          </div>
-          <div class="kpi-card gold clickable" onclick="openCrossReferralDetails()">
-            <div class="kpi-label kpi-label-tip" data-tooltip="諮詢轉出總金額 = 本部門諮詢律師諮詢、由合署律師承辦的案件「總委任費」加總（不是只算喆律端入帳）。&#10;&#10;這代表諮詢律師為事務所貢獻、但因 group_name 含「合署」被部門分析 CRM 收款 excludePartner() 過濾掉的案件規模。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。&#10;&#10;點此查看明細。">諮詢轉出總金額<span class="tip-icon">ⓘ</span></div>
-            <div class="kpi-value gold" id="drillKpiCrossFirm">-</div>
-            <div class="kpi-sub" id="drillKpiCrossFirmSub"></div>
+        <!-- 只在台北所/台中所顯示（其他所無合署 cohort）；display 由 loadDeptDrillPage() 控制 -->
+        <div id="drillCrossReferralSection">
+          <div class="section-divider"><span class="section-icon">🔁</span>合署跨轉 <span class="section-note">（諮詢律師諮詢→合署承辦；下方 CRM 收款已排除這部分）</span></div>
+          <div class="kpi-row" style="grid-template-columns:repeat(2,1fr)">
+            <div class="kpi-card clickable" onclick="openCrossReferralDetails()">
+              <div class="kpi-label">諮詢轉出件數（→合署）<span style="opacity:.5;font-size:.78rem;margin-left:6px">點此看明細</span></div>
+              <div class="kpi-value" id="drillKpiCrossOut">-</div>
+              <div class="kpi-sub" id="drillKpiCrossOutSub"></div>
+            </div>
+            <div class="kpi-card gold clickable" onclick="openCrossReferralDetails()">
+              <div class="kpi-label kpi-label-tip" data-tooltip="諮詢轉出總金額 = 本部門諮詢律師諮詢、由合署律師承辦的案件「總委任費」加總（不是只算喆律端入帳）。&#10;&#10;這代表諮詢律師為事務所貢獻、但因 group_name 含「合署」被部門分析 CRM 收款 excludePartner() 過濾掉的案件規模。&#10;&#10;資料來源：senior_profit_share.csv tier='喆律轉案'（資深轉合署 cohort）。&#10;⚠️ 合署律師月底才回填上月資料，當月數字 T+1 月後才完整。&#10;&#10;點此查看明細。">諮詢轉出總金額<span class="tip-icon">ⓘ</span></div>
+              <div class="kpi-value gold" id="drillKpiCrossFirm">-</div>
+              <div class="kpi-sub" id="drillKpiCrossFirmSub"></div>
+            </div>
           </div>
         </div>
 
@@ -2315,16 +2318,22 @@ async function loadDeptDrillPage() {
     partnerSection.style.display = 'none';
   }
 
-  // 合署跨轉 KPI
-  document.getElementById('drillKpiCrossOut').textContent = curX.count.toLocaleString();
-  var crossOutSub = '';
-  if (prevX.count || curX.count) crossOutSub = yoyHtml(curX.count, prevX.count);
-  if (curX.unjoined > 0) {
-    crossOutSub += (crossOutSub ? ' · ' : '') + '<span class="text-muted">' + curX.unjoined + ' 筆未匹配諮詢</span>';
+  // 合署跨轉 KPI（只在台北/台中顯示，其他所無合署 cohort）
+  var crossSection = document.getElementById('drillCrossReferralSection');
+  if (office === '台北所' || office === '台中所') {
+    crossSection.style.display = '';
+    document.getElementById('drillKpiCrossOut').textContent = curX.count.toLocaleString();
+    var crossOutSub = '';
+    if (prevX.count || curX.count) crossOutSub = yoyHtml(curX.count, prevX.count);
+    if (curX.unjoined > 0) {
+      crossOutSub += (crossOutSub ? ' · ' : '') + '<span class="text-muted">' + curX.unjoined + ' 筆未匹配諮詢</span>';
+    }
+    document.getElementById('drillKpiCrossOutSub').innerHTML = crossOutSub;
+    document.getElementById('drillKpiCrossFirm').textContent = formatMoney(curX.caseAmt);
+    document.getElementById('drillKpiCrossFirmSub').innerHTML = yoyHtml(curX.caseAmt, prevX.caseAmt, true);
+  } else {
+    crossSection.style.display = 'none';
   }
-  document.getElementById('drillKpiCrossOutSub').innerHTML = crossOutSub;
-  document.getElementById('drillKpiCrossFirm').textContent = formatMoney(curX.caseAmt);
-  document.getElementById('drillKpiCrossFirmSub').innerHTML = yoyHtml(curX.caseAmt, prevX.caseAmt, true);
 
   document.getElementById('drillKpiPay').textContent = formatMoney(curR.pay);
   document.getElementById('drillKpiPaySub').innerHTML = yoyHtml(curR.pay, prevR.pay, true);
