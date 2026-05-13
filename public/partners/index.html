@@ -667,6 +667,8 @@ if (window.location.search.indexOf('embed=1') > -1) {
 
     <div class="grid grid-4" id="kpi-cards"></div>
 
+    <div id="consult-breakdown" style="margin-top:16px"></div>
+
     <div class="grid grid-2" style="margin-top:16px">
       <div class="card">
         <h3>月度堆疊 · 喆律總收入 × 律師</h3>
@@ -1232,6 +1234,87 @@ function renderKPI() {
     <div class="kpi"><div class="label">喆律 / 律師 收入比</div>
       <div class="value">${totalL>0 ? (totalZ/totalL).toFixed(2) : '—'}</div>
       <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>`;
+}
+
+function renderConsultBreakdown() {
+  const el = document.getElementById('consult-breakdown');
+  if (!el) return;
+  if (selectedCohort !== 'consult') { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  const monthly = filteredMonthly(selectedYear);
+  const TIERS = [
+    { name: '諮詢費',   ratio: '100/0', zKey: '諮詢費(喆律)',   lKey: null,
+      tip: '客戶付的諮詢費全進喆律帳戶；律師月獎金率另計（看當月委任金額/諮詢場次倍數，0/3/5/8%）' },
+    { name: '諮詢成案', ratio: '95/5',  zKey: '諮詢成案(喆律)', lKey: '諮詢成案(律師)',
+      tip: '諮詢後由喆律端他人承辦；律師取 5% 成案獎金，95% 歸喆律（實際每月比例會浮動）' },
+    { name: '顯皓承辦', ratio: '40/60', zKey: '顯皓承辦(喆律)', lKey: '顯皓承辦(律師)',
+      tip: '諮詢後律師自己承辦；款項進律師帳戶，喆律抽 40%' },
+    { name: '顯皓自案', ratio: '10/90', zKey: '顯皓自案(喆律)', lKey: '顯皓自案(律師)',
+      tip: '律師自招案件（非喆律諮詢來源）；喆律抽 10% 平台費' },
+  ];
+  let subZ = 0, subL = 0, rowsHtml = '';
+  for (const t of TIERS) {
+    let z = 0, l = 0;
+    for (const m of monthly) {
+      z += (m.tier[t.zKey] || 0);
+      if (t.lKey) l += (m.tier[t.lKey] || 0);
+    }
+    subZ += z; subL += l;
+    const sub = z + l;
+    rowsHtml += `<tr>
+      <td><span style="text-decoration:underline dotted; cursor:help" title="${t.tip}">${t.name}</span>
+          <span style="color:var(--text-muted); font-size:0.78em; margin-left:6px">${t.ratio}</span></td>
+      <td class="num">$${fmt(sub)}</td>
+      <td class="num" style="color:var(--gold)">$${fmt(z)}</td>
+      <td class="num" style="color:var(--blue)">$${fmt(l)}</td>
+    </tr>`;
+  }
+  let fixed = 0;
+  for (const m of monthly) fixed += (m.tier['月固定費(律師)'] || 0);
+  const totZ = subZ - fixed;
+  const totL = subL + fixed;
+  const periodLabel = selectedYear === 'all'
+    ? '全部'
+    : `${selectedYear} 年${selectedMonth ? ' · ' + selectedMonth + ' 月' : ''}`;
+  el.innerHTML = `
+    <div class="card">
+      <h3>諮詢律師收入明細（${periodLabel}）</h3>
+      <table style="margin-top:8px">
+        <thead>
+          <tr>
+            <th>項目（喆律/律師 分潤比例）</th>
+            <th class="num">分潤前金額</th>
+            <th class="num">喆律端</th>
+            <th class="num">律師端</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <tr style="border-top:1px solid var(--border); font-weight:600;">
+            <td>各項分潤小計</td>
+            <td class="num">$${fmt(subZ + subL)}</td>
+            <td class="num" style="color:var(--gold)">$${fmt(subZ)}</td>
+            <td class="num" style="color:var(--blue)">$${fmt(subL)}</td>
+          </tr>
+          <tr>
+            <td><span style="text-decoration:underline dotted; cursor:help" title="喆律每月給律師月固定費 130,000；從喆律端淨收入扣除、加到律師端">月固定費（喆律 → 律師）</span></td>
+            <td class="num">—</td>
+            <td class="num" style="color:var(--orange)">−$${fmt(fixed)}</td>
+            <td class="num" style="color:var(--orange)">+$${fmt(fixed)}</td>
+          </tr>
+          <tr style="border-top:2px solid var(--border); font-weight:700;">
+            <td>合計（對應上方 KPI）</td>
+            <td class="num">—</td>
+            <td class="num" style="color:var(--gold)">$${fmt(totZ)}</td>
+            <td class="num" style="color:var(--blue)">$${fmt(totL)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">
+        喆律總收入 = 各項喆律端 − 月固定費；律師總收入 = 各項律師端 + 月固定費。
+      </div>
+    </div>
+  `;
 }
 
 const charts = {};
@@ -2487,6 +2570,7 @@ function renderAll() {
   renderYearFilter();
   renderContractMatrix();
   renderKPI();
+  renderConsultBreakdown();
   renderMonthlyStacked('chart-monthly-zhelu', 'zhelu_total');
   renderMonthlyStacked('chart-monthly-lawyer', 'lawyer_total');
   renderZhelCompDoughnut();
