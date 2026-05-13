@@ -5726,6 +5726,8 @@ document.getElementById('passwordModal').addEventListener('click', (e) => {
 var unsignedRange = 1;
 var unsignedSortCol = 'case_date';
 var unsignedSortDir = 'desc';
+// 預設律師：lawyer 帳號=自己、非 lawyer 帳號=雷皓明（只在 select 第一次填好後套用一次）
+var unsignedDefaultLawyerApplied = false;
 
 function setUnsignedRange(months) {
   unsignedRange = months;
@@ -6000,6 +6002,20 @@ function renderUnsignedPage() {
       lawyers.forEach(l => {
         filterSelect.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
       });
+    }
+    // 第一次有選項時套用預設：lawyer 帳號=自己、其他 role=雷皓明
+    if (!unsignedDefaultLawyerApplied && filterSelect.options.length > 1) {
+      let defaultLawyerId = '';
+      if (currentLawyer && currentLawyer.role === 'lawyer') {
+        defaultLawyerId = currentLawyer.id;
+      } else {
+        const dennis = Object.values(allLawyersMap).find(l => l && l.name === '雷皓明');
+        if (dennis) defaultLawyerId = dennis.id;
+      }
+      if (defaultLawyerId && filterSelect.querySelector(`option[value="${defaultLawyerId}"]`)) {
+        filterSelect.value = defaultLawyerId;
+      }
+      unsignedDefaultLawyerApplied = true;
     }
     // Build staff filter from tracking_staff data
     if (staffSelect.options.length <= 1) {
