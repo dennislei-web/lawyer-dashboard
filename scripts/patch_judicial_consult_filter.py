@@ -98,6 +98,30 @@ def reclassify_judicial(j: dict) -> None:
         })
     j["repeat_entries"] = new_entries
 
+    # CRM 已直接歸自案的續委（>1 年），供對帳用
+    direct_self_renewals = []
+    for c in cases:
+        if c.get("section") != "自案": continue
+        d = _parse_date(c.get("date"))
+        if d is None: continue
+        client = (c.get("client") or "").strip()
+        if not client: continue
+        fs = first_seen.get((c["lawyer"], client))
+        if fs is None: continue
+        days = (d - fs).days
+        if days <= 365: continue
+        direct_self_renewals.append({
+            "lawyer": c["lawyer"], "year": c["year"], "month": c["month"],
+            "client": client,
+            "amount": c.get("amount") or 0,
+            "date": c.get("date"),
+            "first_date": fs.strftime("%Y-%m-%d"),
+            "days_since_first": days,
+            "source": c.get("source"),
+        })
+    direct_self_renewals.sort(key=lambda x: -x["amount"])
+    j["direct_self_renewals"] = direct_self_renewals
+
 
 def main() -> int:
     text = HTML_PATH.read_text(encoding="utf-8")
@@ -124,6 +148,8 @@ def main() -> int:
     # confirm 林麗敏 disappears
     lin = [e for e in j["repeat_entries"] if e.get("client") == "林麗敏"]
     print(f"  林麗敏 entries remaining: {len(lin)}")
+    # report direct_self_renewals
+    print(f"  direct_self_renewals: {len(j.get('direct_self_renewals', []))} 筆")
 
     new_json = json.dumps(data, ensure_ascii=False)
     new_text = EMBEDDED_RE.sub(lambda mm: mm.group(1) + new_json + mm.group(3), text, count=1)

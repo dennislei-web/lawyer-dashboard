@@ -200,6 +200,32 @@ def build_judicial_cohort():
             'source': c.get('source'),
         })
 
+    # CRM 已直接歸自案的續委（>1 年）— 對帳用，金額影響 0
+    # 律師接案時若已知 >1 年是老客戶，可能直接寫成 section='自案'（跳過喆律 B）
+    # 這些紀錄不在「重新歸類」清單裡（已是自案），但要列出供對帳
+    direct_self_renewals = []
+    for c in cases:
+        if c.get('voided') == '是': continue
+        if c.get('section') != '自案': continue
+        d = _parse_date(c.get('date'))
+        if d is None: continue
+        client = (c.get('client') or '').strip()
+        if not client: continue
+        fs = first_seen.get((c['lawyer'], client))
+        if fs is None: continue  # 純自案新客，不算續委
+        days = (d - fs).days
+        if days <= 365: continue  # 1 年內，不在此清單範圍
+        direct_self_renewals.append({
+            'lawyer': c['lawyer'], 'year': c['year'], 'month': c['month'],
+            'client': client,
+            'amount': num(c['amount']),
+            'date': c.get('date'),
+            'first_date': fs.strftime('%Y-%m-%d'),
+            'days_since_first': days,
+            'source': c.get('source'),
+        })
+    direct_self_renewals.sort(key=lambda x: -x['amount'])
+
     return {
         'lawyers': LAWYERS,
         'colors': JUDICIAL_COLORS,
@@ -209,6 +235,7 @@ def build_judicial_cohort():
         'sources': source_flat,
         'cases': cases_recent,
         'repeat_entries': repeat_entries,
+        'direct_self_renewals': direct_self_renewals,
         'has_repeat_tab': True,
         'repeat_config': {
             'direction': 'zhelu_loses',

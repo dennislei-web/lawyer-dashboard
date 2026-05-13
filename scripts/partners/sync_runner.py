@@ -147,8 +147,9 @@ def upsert_embedded(current: dict, fresh: dict) -> dict:
 
         # cohort-level fields — 用 fresh 蓋過（這些是 hardcoded 或從 cases 衍生）
         for fld in ["lawyers", "colors", "contract_matrix", "contract_tiers",
-                    "sources", "repeat_entries", "has_repeat_tab",
-                    "repeat_config", "special_tier_tips", "extra_kpis"]:
+                    "sources", "repeat_entries", "direct_self_renewals",
+                    "has_repeat_tab", "repeat_config",
+                    "special_tier_tips", "extra_kpis"]:
             if fld in f_cohort:
                 m_cohort[fld] = f_cohort[fld]
 
