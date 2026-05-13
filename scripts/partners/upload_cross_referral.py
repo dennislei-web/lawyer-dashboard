@@ -84,6 +84,26 @@ def num(x):
         return None
 
 
+# CSV 客戶欄常見的 CRM 標記後綴，會讓 exact match 失敗
+_CLIENT_SUFFIXES = ("-退款", "-收款", "-付款", "-加款", "-退費")
+
+
+def normalize_client_for_lookup(name: str) -> str:
+    """把 CSV client 字串洗成可對到 consultation_cases.client_name 的形式。
+    DB 仍存原字串；只是 lookup 時 strip 掉 CRM artifacts:
+      `鄭襄-退款` → `鄭襄`
+      `程俱揚等`  → `程俱揚`（等 = 多當事人省略寫法）
+    """
+    s = (name or "").strip()
+    for suf in _CLIENT_SUFFIXES:
+        if s.endswith(suf):
+            s = s[:-len(suf)].strip()
+            break
+    if s.endswith("等"):
+        s = s[:-1].strip()
+    return s
+
+
 def minguo_to_western(y: int) -> int:
     return int(y) + 1911
 
@@ -193,16 +213,20 @@ def build_rows(csv_path: Path, lawyers_map: dict[str, str], partner_ids: set[str
             if verbose:
                 print(f"  [WARN] 找不到合署律師 ID: {partner_name}")
 
-        # client → consultation_cases lookup（快取）
-        if client not in client_cache:
+        # client → consultation_cases lookup（快取）。lookup 用 normalize 過的名字，
+        # DB 仍存原 CSV 字串（保留 -退款 / 等 等審計痕跡）
+        client_lookup = normalize_client_for_lookup(client)
+        if client_lookup != client:
+            stats["normalized_client"] += 1
+        if client_lookup not in client_cache:
             try:
-                client_cache[client] = fetch_consult_cases_by_client(client)
+                client_cache[client_lookup] = fetch_consult_cases_by_client(client_lookup)
             except requests.HTTPError as e:
                 if verbose:
-                    print(f"  [WARN] 查 client={client} 失敗: {e}")
-                client_cache[client] = []
+                    print(f"  [WARN] 查 client={client_lookup} 失敗: {e}")
+                client_cache[client_lookup] = []
 
-        cases = client_cache[client]
+        cases = client_cache[client_lookup]
         # 只排除「同一位 partner 本人」（避免自諮詢自承辦的記錄被選）；
         # 其他合署律師的諮詢記錄保留，由前端 LAWYER_DEPT_HISTORY 處理：
         # 例如李昭萱 114 年諮詢會被歸到中所（轉合署前），許煜婕會被歸到合署部門
