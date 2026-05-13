@@ -853,7 +853,7 @@
           <div class="kpi-card blue"><div class="kpi-label">諮詢數</div><div class="kpi-value blue" id="drillKpiConsult">-</div><div class="kpi-sub" id="drillKpiConsultSub"></div></div>
           <div class="kpi-card green"><div class="kpi-label">成案數</div><div class="kpi-value green" id="drillKpiSigned">-</div><div class="kpi-sub" id="drillKpiSignedSub"></div></div>
           <div class="kpi-card gold">
-            <div class="kpi-label kpi-label-tip" data-tooltip="諮詢效益值 = 諮詢成案『已收』金額 ÷ 諮詢數&#10;= 每接一通諮詢平均能帶來多少實際收進來的錢&#10;&#10;注意：分子來自諮詢漏斗（consultation_cases），與下方『CRM 付款金額』口徑不同，不要直接相減。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
+            <div class="kpi-label kpi-label-tip" data-tooltip="真實諮詢效益值 = 每筆 consultation_case 取 max(CRM collected, 合署跨轉金額) 加總 ÷ 諮詢數&#10;= 每接一通諮詢平均帶進來的錢，含轉到合署承辦的案件&#10;&#10;為什麼要補正：跨轉到合署的案，CRM 端 collected 可能尚未填齊（多在當年 YTD），&#10;但 partner_cross_referral 表已從合署 Excel 直接抓到金額。取 max 避免重複計算。&#10;&#10;sub 行的「CRM 口徑」是原本只看 collected 的值（與下方『CRM 付款金額』口徑不同，不要直接相減）。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
             <div class="kpi-value gold" id="drillKpiEff">-</div>
             <div class="kpi-sub" id="drillKpiEffSub"></div>
           </div>
@@ -1960,7 +1960,7 @@ async function fetchConsultCasesByYear(year) {
     for (var i = 0; i < BATCH; i++) {
       (function (p) {
         promises.push(
-          sb.from('consultation_cases').select('lawyer_id,case_date,is_signed,revenue,collected')
+          sb.from('consultation_cases').select('id,lawyer_id,case_date,is_signed,revenue,collected')
             .gte('case_date', year+'-01-01').lte('case_date', year+'-12-31')
             .order('case_date', { ascending: false })
             .range(p * ps, (p + 1) * ps - 1)
@@ -1982,9 +1982,19 @@ async function fetchConsultCasesByYear(year) {
   return all;
 }
 
-function aggConsultByDept(cases, deptName, minM, maxM) {
+function aggConsultByDept(cases, deptName, minM, maxM, crossRows) {
   // 過濾月份窗口 + 律師當時屬於 deptName（用 getDeptForLawyer 處理轉所歷史）
-  var consult = 0, signed = 0, collected = 0;
+  // effective_collected：每筆 consultation_case 取 max(c.collected, Σ PCR.case_amount)
+  // 補正 CRM 端 collected 未涵蓋的合署跨轉金額（多發生在 YTD 未填齊月份）
+  var pcrByCaseId = {};
+  if (crossRows && crossRows.length) {
+    crossRows.forEach(function(r) {
+      var cid = r.consultation_case_id;
+      if (!cid) return;
+      pcrByCaseId[cid] = (pcrByCaseId[cid] || 0) + Number(r.case_amount || 0);
+    });
+  }
+  var consult = 0, signed = 0, collected = 0, effective_collected = 0;
   cases.forEach(function(c) {
     var mm = parseInt((c.case_date||'').substring(5,7), 10);
     if (mm < minM || mm > maxM) return;
@@ -1992,9 +2002,13 @@ function aggConsultByDept(cases, deptName, minM, maxM) {
     if (getDeptForLawyer(c.lawyer_id, c.case_date) !== deptName) return;
     consult++;
     if (c.is_signed) signed++;
-    collected += Number(c.collected || 0);
+    var coll = Number(c.collected || 0);
+    collected += coll;
+    var pcr = pcrByCaseId[c.id] || 0;
+    effective_collected += Math.max(coll, pcr);
   });
-  return { consult: consult, signed: signed, collected: collected };
+  return { consult: consult, signed: signed, collected: collected,
+           effective_collected: effective_collected };
 }
 
 // partner_cross_referral 快取（year 是民國年）
@@ -2005,7 +2019,7 @@ async function fetchCrossReferralByYear(year) {
   if (_crossReferralCache[year]) return _crossReferralCache[year];
   if (!sb) return [];
   var resp = await sb.from('partner_cross_referral')
-    .select('year,month,direction,partner_lawyer_name,referring_lawyer_id,case_amount,firm_amount,raw_tier,join_quality,client_name,referring_lawyer:lawyers!referring_lawyer_id(name)')
+    .select('year,month,direction,partner_lawyer_name,referring_lawyer_id,consultation_case_id,case_amount,firm_amount,raw_tier,join_quality,client_name,referring_lawyer:lawyers!referring_lawyer_id(name)')
     .eq('direction', 'out')
     .eq('year', minguo);
   if (resp.error) { console.error('cross_referral fetch:', resp.error); return []; }
@@ -2181,8 +2195,8 @@ async function loadDeptDrillPage() {
   prevRev = excludePartner(prevRev);
 
   // === KPI: 諮詢數 / 成案數 / 簽約率 / 諮詢效益值（用 consultation_cases 即時算）===
-  var curC = aggConsultByDept(curCases, deptName, minM, maxM);
-  var prevC = aggConsultByDept(prevCases, deptName, minM, maxM);
+  var curC = aggConsultByDept(curCases, deptName, minM, maxM, curCross);
+  var prevC = aggConsultByDept(prevCases, deptName, minM, maxM, prevCross);
   var curR = aggRevenueByOffice(curRev, office, minM, maxM);
   var prevR = aggRevenueByOffice(prevRev, office, minM, maxM);
   var curX = aggCrossReferralByDept(curCross, deptName, minM, maxM);
@@ -2207,10 +2221,17 @@ async function loadDeptDrillPage() {
   document.getElementById('drillKpiSignRateSub').innerHTML = (prevC.consult>0)
     ? '<span class="'+pctClass(curRate-prevRate)+'">vs '+prevYear+' '+prevRate.toFixed(1)+'% · '+fmtPct(curRate-prevRate).replace('%','％')+'</span>'
     : '';
-  var curEff = curC.consult>0 ? (curC.collected/curC.consult) : 0;
-  var prevEff = prevC.consult>0 ? (prevC.collected/prevC.consult) : 0;
-  document.getElementById('drillKpiEff').textContent = formatMoney(curEff);
-  document.getElementById('drillKpiEffSub').innerHTML = yoyHtml(curEff, prevEff, true);
+  // 諮詢效益值：主數字用「真實值」(含合署跨轉補正)、sub 補 CRM 口徑對照
+  var curEffReal = curC.consult>0 ? (curC.effective_collected/curC.consult) : 0;
+  var prevEffReal = prevC.consult>0 ? (prevC.effective_collected/prevC.consult) : 0;
+  var curEffCrm = curC.consult>0 ? (curC.collected/curC.consult) : 0;
+  document.getElementById('drillKpiEff').textContent = formatMoney(curEffReal);
+  var effYoY = yoyHtml(curEffReal, prevEffReal, true);
+  var effCrmDiff = curEffReal - curEffCrm;
+  var effCrmNote = effCrmDiff > 1
+    ? '<br><span class="text-muted" style="font-size:0.78rem" title="CRM 端 collected 尚未涵蓋合署跨轉的部分（多發生在 YTD 月份），真實值 = max(CRM collected, 合署跨轉金額) per 案">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +' + formatMoney(effCrmDiff) + '</span>'
+    : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(curEffCrm) + '（無補正）</span>';
+  document.getElementById('drillKpiEffSub').innerHTML = effYoY + effCrmNote;
 
   // 合署跨轉 KPI
   document.getElementById('drillKpiCrossOut').textContent = curX.count.toLocaleString();
@@ -2471,16 +2492,17 @@ async function loadDeptDrillPage() {
   var perYearMetrics = {};
   // 平行抓 4 年資料；fetchAllByYear / fetchConsultCasesByYear 都有 cache
   await Promise.all(histYears.map(function(y) {
-    return Promise.all([loadRecords({year:y}), fetchConsultCasesByYear(y)]).then(function(ret) {
+    return Promise.all([loadRecords({year:y}), fetchConsultCasesByYear(y), fetchCrossReferralByYear(y)]).then(function(ret) {
       var revRecs = excludePartner(ret[0]);
       var caseRecs = ret[1];
+      var crossRecs = ret[2];
       var rev = aggRevenueByOffice(revRecs, office, minM, maxM);
-      var cons = aggConsultByDept(caseRecs, deptName, minM, maxM);
+      var cons = aggConsultByDept(caseRecs, deptName, minM, maxM, crossRecs);
       perYearMetrics[y] = {
         consult: cons.consult,
         signed: cons.signed,
         signRate: cons.consult>0 ? (cons.signed/cons.consult*100) : 0,
-        eff: cons.consult>0 ? (cons.collected/cons.consult) : 0,
+        eff: cons.consult>0 ? (cons.effective_collected/cons.consult) : 0,
         avgSigned: cons.signed>0 ? (cons.collected/cons.signed) : 0,
         pay: rev.pay,
         ref: rev.ref,
