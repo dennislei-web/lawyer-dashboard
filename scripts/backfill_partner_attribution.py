@@ -16,12 +16,22 @@ import sys
 from datetime import date
 
 import requests
+import warnings
 from dotenv import load_dotenv
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv("scripts/.env")
+
+# 公司 proxy MITM TLS：requests 用全域 Session + verify=False 統一處理
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings("ignore")
+_session = requests.Session()
+_session.verify = False
+requests.get = _session.get
+requests.post = _session.post
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
