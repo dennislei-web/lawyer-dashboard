@@ -87,6 +87,29 @@ var LAWYER_DEPT_HISTORY = {
   ],
 };
 
+// 部門細看的「合署律師」獨立 KPI 用：列出每所實際對應的合署律師（司法官 + 資深合署）
+// 不含黃顯皓（諮詢律師 cohort、分潤規則特殊、且本來就 dept='台北'）
+var PARTNER_LAWYERS_BY_OFFICE = {
+  "台中": [
+    "21e50125-59e7-4ac8-8729-470b7eea40f0",  // 李昭萱
+    "912dbdab-bb02-4a7d-9d12-d01fc26099a8",  // 許煜婕
+    "163713b3-50bc-4ef3-a1f2-dc811749569e",  // 陳璽仲
+  ],
+  "台北": [
+    // 司法官 cohort
+    "2a5d914a-ce97-45e0-baaf-80b16db7c089",  // 劉明潔
+    "1feec3c1-acd2-4c1d-b6e1-a75117163345",  // 孫少輔
+    "70623a0d-c3dd-47d5-abd7-9061fb39f8a8",  // 方心瑜
+    "a7a129d8-1dad-4209-a4a9-f316c0d67ccf",  // 許致維
+    // 資深合署
+    "da25b0fc-132c-4120-b3c1-d840394c2ed4",  // 吳柏慶
+    "93368933-3017-4c7c-af49-5ff0ea5ec3a6",  // 徐棠娜
+    "e19e0019-1e9b-437e-a4f7-76262809f406",  // 林昀
+    "9383d84a-cc19-40f8-bb81-f6264c97b5b3",  // 柯雪莉
+    "2c58a141-206d-42fe-abb6-d25ca67d2b01",  // 蕭予馨
+  ],
+};
+
 // 跨轉 KPI 專用：合署 cohort 內諮詢律師業務口徑回歸所屬分所
 // （只影響 aggCrossReferralByDept / filterCrossReferralByDept；
 //  諮詢數、效益值、CRM 收款等其他 KPI 走原本 getDeptForLawyer 不受影響）

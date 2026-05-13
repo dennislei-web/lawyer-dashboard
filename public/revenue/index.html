@@ -8,7 +8,7 @@
   <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="../lawyer-departments.js?v=20260513d"></script>
+  <script src="../lawyer-departments.js?v=20260513e"></script>
   <style>
     :root {
       --bg-main:    #020b18;
@@ -856,6 +856,20 @@
             <div class="kpi-label kpi-label-tip" data-tooltip="真實諮詢效益值 = 每筆 consultation_case 取 max(CRM collected, 合署跨轉金額) 加總 ÷ 諮詢數&#10;= 每接一通諮詢平均帶進來的錢，含轉到合署承辦的案件&#10;&#10;為什麼要補正：跨轉到合署的案，CRM 端 collected 可能尚未填齊（多在當年 YTD），&#10;但 partner_cross_referral 表已從合署 Excel 直接抓到金額。取 max 避免重複計算。&#10;&#10;sub 行的「CRM 口徑」是原本只看 collected 的值（與下方『CRM 付款金額』口徑不同，不要直接相減）。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
             <div class="kpi-value gold" id="drillKpiEff">-</div>
             <div class="kpi-sub" id="drillKpiEffSub"></div>
+          </div>
+        </div>
+
+        <!-- ▼ 合署律師（業務口徑）— 只在北所/中所顯示 -->
+        <div id="drillPartnerSection" style="display:none">
+          <div class="section-divider"><span class="section-icon">🤝</span>合署律師 <span class="section-note" id="drillPartnerSectionNote">（業務口徑：司法官 + 資深合署律師的諮詢/成案/效益；不在上方諮詢漏斗內）</span></div>
+          <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
+            <div class="kpi-card blue"><div class="kpi-label">諮詢數（合署律師）</div><div class="kpi-value blue" id="drillKpiPartnerConsult">-</div><div class="kpi-sub" id="drillKpiPartnerConsultSub"></div></div>
+            <div class="kpi-card green"><div class="kpi-label">成案數（合署律師）</div><div class="kpi-value green" id="drillKpiPartnerSigned">-</div><div class="kpi-sub" id="drillKpiPartnerSignedSub"></div></div>
+            <div class="kpi-card gold">
+              <div class="kpi-label kpi-label-tip" data-tooltip="合署律師（partner cohort）的諮詢效益值，含 PCR 補正口徑。&#10;同上方諮詢漏斗的效益值算法：每筆案件取 max(CRM collected, 合署跨轉金額) ÷ 諮詢數。">諮詢效益值（合署律師）<span class="tip-icon">ⓘ</span></div>
+              <div class="kpi-value gold" id="drillKpiPartnerEff">-</div>
+              <div class="kpi-sub" id="drillKpiPartnerEffSub"></div>
+            </div>
           </div>
         </div>
 
@@ -1982,6 +1996,41 @@ async function fetchConsultCasesByYear(year) {
   return all;
 }
 
+// 部門細看的「合署律師」獨立 KPI：用 lawyer_id 白名單篩，不走 getDeptForLawyer
+// 涵蓋 PARTNER_LAWYERS_BY_OFFICE 指定的合署律師（司法官+資深合署）
+// effective_collected 同 aggConsultByDept 用 max(c.collected, Σ PCR.case_amount)
+function aggPartnerLawyersByOffice(cases, office, minM, maxM, crossRows) {
+  var deptName = (typeof OFFICE_TO_DEPT !== 'undefined') ? (OFFICE_TO_DEPT[office] || office) : office;
+  var ids = (typeof PARTNER_LAWYERS_BY_OFFICE !== 'undefined') ? PARTNER_LAWYERS_BY_OFFICE[deptName] : null;
+  if (!ids || ids.length === 0) return null;
+  var idSet = {};
+  ids.forEach(function(x) { idSet[x] = true; });
+
+  var pcrByCaseId = {};
+  if (crossRows && crossRows.length) {
+    crossRows.forEach(function(r) {
+      var cid = r.consultation_case_id;
+      if (!cid) return;
+      pcrByCaseId[cid] = (pcrByCaseId[cid] || 0) + Number(r.case_amount || 0);
+    });
+  }
+
+  var consult = 0, signed = 0, collected = 0, effective_collected = 0;
+  cases.forEach(function(c) {
+    if (!idSet[c.lawyer_id]) return;
+    var mm = parseInt((c.case_date||'').substring(5,7), 10);
+    if (mm < minM || mm > maxM) return;
+    consult++;
+    if (c.is_signed) signed++;
+    var coll = Number(c.collected || 0);
+    collected += coll;
+    var pcr = pcrByCaseId[c.id] || 0;
+    effective_collected += Math.max(coll, pcr);
+  });
+  return { consult: consult, signed: signed, collected: collected,
+           effective_collected: effective_collected };
+}
+
 function aggConsultByDept(cases, deptName, minM, maxM, crossRows) {
   // 過濾月份窗口 + 律師當時屬於 deptName（用 getDeptForLawyer 處理轉所歷史）
   // effective_collected：每筆 consultation_case 取 max(c.collected, Σ PCR.case_amount)
@@ -2204,6 +2253,8 @@ async function loadDeptDrillPage() {
   // === KPI: 諮詢數 / 成案數 / 簽約率 / 諮詢效益值（用 consultation_cases 即時算）===
   var curC = aggConsultByDept(curCases, deptName, minM, maxM, curCross);
   var prevC = aggConsultByDept(prevCases, deptName, minM, maxM, prevCross);
+  var curP = aggPartnerLawyersByOffice(curCases, office, minM, maxM, curCross);
+  var prevP = aggPartnerLawyersByOffice(prevCases, office, minM, maxM, prevCross);
   var curR = aggRevenueByOffice(curRev, office, minM, maxM);
   var prevR = aggRevenueByOffice(prevRev, office, minM, maxM);
   var curX = aggCrossReferralByDept(curCross, deptName, minM, maxM);
@@ -2239,6 +2290,27 @@ async function loadDeptDrillPage() {
     ? '<br><span class="text-muted" style="font-size:0.78rem" title="CRM 端 collected 尚未涵蓋合署跨轉的部分（多發生在 YTD 月份），真實值 = max(CRM collected, 合署跨轉金額) per 案">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +平均' + formatMoney(effCrmDiff) + '元</span>'
     : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(curEffCrm) + '（無補正）</span>';
   document.getElementById('drillKpiEffSub').innerHTML = effYoY + effCrmNote;
+
+  // 合署律師 KPI（業務口徑，只在北/中所有 PARTNER_LAWYERS_BY_OFFICE 對應時顯示）
+  var partnerSection = document.getElementById('drillPartnerSection');
+  if (curP) {
+    partnerSection.style.display = '';
+    document.getElementById('drillKpiPartnerConsult').textContent = curP.consult.toLocaleString();
+    document.getElementById('drillKpiPartnerConsultSub').innerHTML = yoyHtml(curP.consult, prevP ? prevP.consult : 0);
+    document.getElementById('drillKpiPartnerSigned').textContent = curP.signed.toLocaleString();
+    document.getElementById('drillKpiPartnerSignedSub').innerHTML = yoyHtml(curP.signed, prevP ? prevP.signed : 0);
+    var pEffReal = curP.consult>0 ? (curP.effective_collected/curP.consult) : 0;
+    var pPrevEffReal = (prevP && prevP.consult>0) ? (prevP.effective_collected/prevP.consult) : 0;
+    var pEffCrm = curP.consult>0 ? (curP.collected/curP.consult) : 0;
+    document.getElementById('drillKpiPartnerEff').textContent = formatMoney(pEffReal);
+    var pEffDiff = pEffReal - pEffCrm;
+    var pEffNote = pEffDiff > 1
+      ? '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(pEffCrm) + '・補正 +' + formatMoney(pEffDiff) + '</span>'
+      : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(pEffCrm) + '（無補正）</span>';
+    document.getElementById('drillKpiPartnerEffSub').innerHTML = yoyHtml(pEffReal, pPrevEffReal, true) + pEffNote;
+  } else {
+    partnerSection.style.display = 'none';
+  }
 
   // 合署跨轉 KPI
   document.getElementById('drillKpiCrossOut').textContent = curX.count.toLocaleString();
