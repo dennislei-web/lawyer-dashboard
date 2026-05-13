@@ -34,7 +34,7 @@ def _parse_date(s):
 def reclassify_judicial(j: dict) -> None:
     cases = j.get("cases", [])
 
-    # rebuild first_seen with amount > 2000 filter
+    # first_seen 錨點只看金額 > 2000 的承辦紀錄（諮詢費不能當錨點）
     bucket = defaultdict(list)
     for c in cases:
         if c.get("section") != "承辦": continue
@@ -54,22 +54,23 @@ def reclassify_judicial(j: dict) -> None:
             if key not in first_seen:
                 first_seen[key] = it["date"]
 
-    # re-classify cases in place
+    # 同當事人若曾成立委任，所有紀錄（含拆帳的諮詢費）都納入分類
     for c in cases:
         d = _parse_date(c.get("date"))
         client = (c.get("client") or "").strip()
-        amt = c.get("amount") or 0
         c["classification"] = "n/a"
         c["days_since_first"] = None
         c["first_date"] = None
-        if c.get("section") == "承辦" and d is not None and client and amt > 2000:
+        if c.get("section") == "承辦" and d is not None and client:
             fs = first_seen.get((c["lawyer"], client))
             if fs is None:
+                # 純諮詢當事人，整筆排除
                 pass
-            elif fs == d:
+            elif d <= fs:
+                # 同一首委 episode（含拆出的諮詢費，可能早 1-3 天）
                 c["classification"] = "首委"
                 c["days_since_first"] = 0
-                c["first_date"] = d.strftime("%Y-%m-%d")
+                c["first_date"] = fs.strftime("%Y-%m-%d")
             else:
                 days = (d - fs).days
                 c["days_since_first"] = days

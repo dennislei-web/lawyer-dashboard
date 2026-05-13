@@ -104,7 +104,10 @@ def build_judicial_cohort():
         source_by_lawyer[lawyer][source]['amount'] += num(c['amount'])
 
     # repeat-client classification (Tab 5)
-    # 金額 ≤ 2000 視為純諮詢，不當首委錨點也不算續委（與資深 cohort 一致）
+    # 首委錨點只看金額 > 2000 的承辦案件（諮詢費不能當錨點）。
+    # 但「同當事人若已成立委任，後續所有紀錄（含拆帳的諮詢費）都納入」—
+    # 因為實務常把一筆委任拆成「諮詢費 + 委任費扣諮詢」兩列，金額小的那列
+    # 不能單獨被排除。從未成立委任的純諮詢當事人才整筆排除。
     承辦_by_lawyer = defaultdict(list)
     for c in cases:
         if c.get('voided') == '是': continue
@@ -132,14 +135,16 @@ def build_judicial_cohort():
         classification = 'n/a'
         days_since_first = None
         first_date = None
-        if c.get('section') == '承辦' and d is not None and client and num(c.get('amount')) > 2000:
+        if c.get('section') == '承辦' and d is not None and client:
             fs = first_seen.get((c['lawyer'], client))
             if fs is None:
+                # 純諮詢當事人，從未成立委任 → 排除
                 classification = 'n/a'
-            elif fs == d:
+            elif d <= fs:
+                # 同一首委 episode 內的紀錄（含拆出的諮詢費，可能早 1-3 天）
                 classification = '首委'
                 days_since_first = 0
-                first_date = d.strftime('%Y-%m-%d')
+                first_date = fs.strftime('%Y-%m-%d')
             else:
                 days = (d - fs).days
                 days_since_first = days
@@ -214,9 +219,9 @@ def build_judicial_cohort():
                 '= 喆律案，沿用 30% B 費 + E 分成<br>'
                 '‣ <strong style="color:#b58bff">1 年外再委任</strong>（&gt;365 天）'
                 '= 律師自案，B = 0%、E 分成比律師端<br>'
-                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 — '
-                '第一次委任前若只有諮詢不算首委、委任後若只有諮詢也不算續委，'
-                '只有實際委任才納入計算。'
+                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 '
+                '（金額 &gt; $2,000 的承辦紀錄）— 同當事人若曾成立委任，所有紀錄（含拆帳的諮詢費）都納入；'
+                '從未成立委任的純諮詢當事人整筆排除。'
             ),
             'kpi_labels': {
                 'moved_bucket_name': '1 年外續委總額（會重新歸類）',
@@ -564,9 +569,9 @@ def build_senior_cohort():
                 '‣ <strong style="color:var(--gold)">新制</strong>：僅對 '
                 '<span style="color:var(--green)">「原本歸為律師自案」且 1 年內續委</span> 的案件，'
                 '由 10% 提升為 30%（視同諮詢成案）；其他案件維持原比例<br>'
-                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 — '
-                '第一次委任前若只有諮詢不算首委、委任後若只有諮詢也不算續委，'
-                '只有實際委任才納入計算。'
+                '‣ <strong style="color:var(--gold)">計算基礎</strong>：以實際「委任」為錨點 '
+                '（金額 &gt; $2,000 的承辦紀錄）— 同當事人若曾成立委任，所有紀錄（含拆帳的諮詢費）都納入；'
+                '從未成立委任的純諮詢當事人整筆排除。'
             ),
             'kpi_labels': {
                 'moved_bucket_name': '受影響案件總額（自案且 1 年內續委）',
