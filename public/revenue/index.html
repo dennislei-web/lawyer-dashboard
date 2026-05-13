@@ -926,6 +926,9 @@
             <span class="table-title" id="drillSrcTableTitle">來源管道明細</span>
             <span class="table-sub">每列為該部門在該來源的數據與 YoY 變化</span>
           </div>
+          <div style="padding:10px 20px;background:rgba(201,168,76,0.06);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.78rem;line-height:1.6">
+            💡 <strong style="color:var(--text)">應收金額</strong>＝期間內所有進帳（依 <code>record_date</code> 計，含舊案分期、追加費、法顧、顧問費），<strong style="color:var(--text)">不</strong>等於當期諮詢的貢獻。想看當期諮詢動能請看上方 KPI 區的「諮詢數」與「諮詢效益值」（依 <code>case_date</code> 計，僅限期間內諮詢的案件）。
+          </div>
           <div style="overflow-x:auto">
             <table>
               <thead>
@@ -935,10 +938,10 @@
                   <th colspan="4" class="group-header group-money col-divider">業務貢獻（金額視角）</th>
                 </tr>
                 <tr>
-                  <th class="text-right">收款筆數</th>
+                  <th class="text-right" title="期間內該管道有進帳的收款筆數（依 record_date 計）。一筆案件可能在多月分期，會被算多次。">收款筆數</th>
                   <th class="text-right">筆數佔部門比</th>
                   <th class="text-right">YoY 筆數</th>
-                  <th class="text-right col-divider">應收金額</th>
+                  <th class="text-right col-divider" title="期間內所有進帳金額（依 record_date 計），含舊案分期、追加費、法顧、顧問費等。非當期諮詢貢獻。">應收金額</th>
                   <th class="text-right">營收佔部門比</th>
                   <th class="text-right" title="今年該管道營收占部門比 vs 去年同期占比">營收占比 YoY</th>
                   <th class="text-right">YoY 營收</th>
