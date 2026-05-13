@@ -182,7 +182,7 @@ def main() -> int:
                     help="從 Drive API 下載 xlsx（需 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON 或 GOOGLE_APPLICATION_CREDENTIALS）；"
                          "未指定則用 PARTNERS_*_INPUT_DIRS env / 預設本機路徑")
     ap.add_argument("--upload-cross-referral", action="store_true",
-                    help="parse 完後把 senior_profit_share.csv 的跨轉案 upsert 到 Supabase "
+                    help="parse 完後把 senior + judicial 兩個 cohort 的跨轉案 upsert 到 Supabase "
                          "partner_cross_referral 表（供 /revenue 部門分析新 KPI 用）")
     args = ap.parse_args()
 
@@ -215,7 +215,9 @@ def main() -> int:
 
     # Step 1.5: optional Supabase upload (cross-referral KPI feed)
     if args.upload_cross_referral:
-        run_step("upload_cross_referral", SCRIPT_DIR / "upload_cross_referral.py", env)
+        run_step("upload_cross_referral (senior)", SCRIPT_DIR / "upload_cross_referral.py", env)
+        # judicial cohort 從 cases.csv + consultation_cases 反查（4-5 分鐘）
+        run_step("upload_cross_referral (judicial)", SCRIPT_DIR / "upload_judicial_cross_referral.py", env)
 
     # Step 3-4: extract + upsert + diff
     fresh_html = workdir / "dashboard.html"
