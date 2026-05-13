@@ -104,10 +104,12 @@ def build_judicial_cohort():
         source_by_lawyer[lawyer][source]['amount'] += num(c['amount'])
 
     # repeat-client classification (Tab 5)
+    # 金額 ≤ 2000 視為純諮詢，不當首委錨點也不算續委（與資深 cohort 一致）
     承辦_by_lawyer = defaultdict(list)
     for c in cases:
         if c.get('voided') == '是': continue
         if c.get('section') != '承辦': continue
+        if num(c.get('amount')) <= 2000: continue
         d = _parse_date(c.get('date'))
         if d is None: continue
         client = (c.get('client') or '').strip()
@@ -130,7 +132,7 @@ def build_judicial_cohort():
         classification = 'n/a'
         days_since_first = None
         first_date = None
-        if c.get('section') == '承辦' and d is not None and client:
+        if c.get('section') == '承辦' and d is not None and client and num(c.get('amount')) > 2000:
             fs = first_seen.get((c['lawyer'], client))
             if fs is None:
                 classification = 'n/a'
