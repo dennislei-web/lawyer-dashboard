@@ -520,16 +520,6 @@
           <div class="chart-container"><canvas id="pieChart"></canvas></div>
         </div>
       </div>
-      <div class="table-card">
-        <div class="table-header"><span class="table-title">損益摘要</span></div>
-        <table>
-          <thead><tr>
-            <th>項目</th><th class="text-right">預算</th><th class="text-right">實際 YTD</th>
-            <th class="text-right">差異</th><th class="text-right">執行率</th>
-          </tr></thead>
-          <tbody id="summaryBody"></tbody>
-        </table>
-      </div>
     </div>
 
     <!-- ========== 預算編列 ========== -->
@@ -997,8 +987,6 @@ async function loadOverviewData() {
   renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth);
   // Pie chart
   renderPieChart(budgetMap, actualMap, maxActualMonth);
-  // Summary table
-  renderSummaryTable(budgetMap, actualMap, maxActualMonth);
 }
 
 function renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth) {
@@ -1070,38 +1058,6 @@ function renderPieChart(budgetMap, actualMap, maxActualMonth) {
       plugins: { legend: { position: 'right', labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 10 }, padding: 8 } } }
     }
   });
-}
-
-function renderSummaryTable(budgetMap, actualMap, maxActualMonth) {
-  var sections = [
-    { label: '營業收入', section: 'revenue', sign: 1 },
-    { label: '營業費用', section: 'operating_expense', sign: -1 },
-    { label: '營業外收入', section: 'non_operating_income', sign: 1 },
-    { label: '所得稅', section: 'tax', sign: -1 }
-  ];
-  var html = '';
-  var netBudget = 0, netActual = 0;
-  sections.forEach(function(s) {
-    var budget = sumBySection(budgetMap, s.section);
-    var actual = sumBySection(actualMap, s.section);
-    var diff = budget - actual;
-    var rate = budget > 0 ? (actual / budget * 100).toFixed(1) + '%' : '-';
-    netBudget += budget * s.sign;
-    netActual += actual * s.sign;
-    html += '<tr><td style="font-weight:600">' + s.label + '</td>';
-    html += '<td class="text-right">' + fmtCurrency(budget) + '</td>';
-    html += '<td class="text-right">' + fmtCurrency(actual) + '</td>';
-    html += '<td class="text-right ' + (diff >= 0 ? 'text-green' : 'text-red') + '">' + fmtCurrency(diff) + '</td>';
-    html += '<td class="text-right">' + rate + '</td></tr>';
-  });
-  // Net row
-  var netDiff = netBudget - netActual;
-  html += '<tr style="border-top:2px solid var(--gold)"><td style="font-weight:700;color:var(--gold-light)">淨利</td>';
-  html += '<td class="text-right text-gold" style="font-weight:700">' + fmtCurrency(netBudget) + '</td>';
-  html += '<td class="text-right text-gold" style="font-weight:700">' + fmtCurrency(netActual) + '</td>';
-  html += '<td class="text-right ' + (netDiff >= 0 ? 'text-green' : 'text-red') + '" style="font-weight:700">' + fmtCurrency(netDiff) + '</td>';
-  html += '<td class="text-right">-</td></tr>';
-  document.getElementById('summaryBody').innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════════
