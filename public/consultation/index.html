@@ -6737,7 +6737,7 @@ async function renderTrackerPage() {
   // 1. lawyers + monthly_stats（2025 1-4 + 2026 1-4）
   const [{ data: lawyersData }, { data: statsData }, { data: trackerData }, { data: briefList }] = await Promise.all([
     sb.from('lawyers').select('id,name,office,is_active,email,role'),
-    sb.from('monthly_stats').select('lawyer_id,month,consult_count,signed_count,collected').gte('month','2025-01').lt('month','2026-05'),
+    sb.from('monthly_stats').select('lawyer_id,month,consult_count,signed_count,collected').gte('month','2025-01'),
     sb.from('consultation_tracker').select('*'),
     sb.storage.from('briefs').list('', { limit: 200 })
   ]);
