@@ -6695,6 +6695,7 @@ let trackerLoaded = false;
 let trackerRows = [];          // [{lawyer, kpi, briefs[], tracker}]
 let trackerFilters = { search:'', home:'', status:'', brief:'' };
 let trackerSort = { key: 'consult', dir: 'desc' };   // 預設按諮詢量降冪
+let trackerGrand = { consult:0, signed:0, collected:0 };  // 全諮詢律師 grand total（含離職）
 let trackerSaveTimers = new Map();
 
 async function renderTrackerPage() {
@@ -6724,6 +6725,7 @@ async function renderTrackerPage() {
 
   // 3. 算 KPI
   const cur = {}, prev = {};
+  const grand = { consult:0, signed:0, collected:0 };
   (statsData||[]).forEach(s => {
     const yr = s.month.slice(0,4), mm = s.month.slice(5,7);
     if (!['01','02','03','04'].includes(mm)) return;
@@ -6733,7 +6735,14 @@ async function renderTrackerPage() {
     d.c  += s.consult_count || 0;
     d.sg += s.signed_count  || 0;
     d.co += Number(s.collected || 0);
+    // grand total（2026 1-4 全諮詢律師、含離職、排除非諮詢人員）— 對齊年度追蹤頁
+    if (yr === '2026' && !TRACKER_NON_CONSULTING.has(s.lawyer_id)) {
+      grand.consult   += s.consult_count || 0;
+      grand.signed    += s.signed_count  || 0;
+      grand.collected += Number(s.collected || 0);
+    }
   });
+  trackerGrand = grand;
 
   // 4. 組 rows：所有 2026 1-4 諮詢 >=1 的諮詢律師 + 有 brief 的人
   const rows = [];
@@ -6860,19 +6869,21 @@ function renderTrackerTable() {
     }
   });
 
-  // Summary
+  // Summary — 數據用全諮詢律師 grand total（含離職、對齊年度追蹤）
   const sum = document.getElementById('trackerSummary');
-  const totalC = trackerRows.reduce((a,r) => a+r.kpi.consult, 0);
-  const totalSg = trackerRows.reduce((a,r) => a+r.kpi.signed, 0);
-  const totalCo = trackerRows.reduce((a,r) => a+r.kpi.collected, 0);
+  const G = trackerGrand;
+  const grandRate = G.consult ? G.signed/G.consult*100 : 0;
+  const grandEff  = G.consult ? G.collected/G.consult : 0;
   const totalDone = trackerRows.filter(r => r.tracker.one_on_one_status === 'done').length;
   const totalPending = trackerRows.filter(r => r.tracker.one_on_one_status === 'pending').length;
   const totalScheduled = trackerRows.filter(r => r.tracker.one_on_one_status === 'scheduled').length;
   const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
   sum.innerHTML = `
-    <div class="kpi-card"><div class="kpi-label">律師數</div><div class="kpi-value">${trackerRows.length}</div></div>
-    <div class="kpi-card"><div class="kpi-label">合計諮詢 (1-4 月)</div><div class="kpi-value">${totalC.toLocaleString()}</div></div>
-    <div class="kpi-card"><div class="kpi-label">合計效益</div><div class="kpi-value">$${Math.round(totalC ? totalCo/totalC : 0).toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">律師數（活躍）</div><div class="kpi-value">${trackerRows.length}</div></div>
+    <div class="kpi-card"><div class="kpi-label">總諮詢 (1-4 月)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">總簽約</div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">簽約率</div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
+    <div class="kpi-card"><div class="kpi-label">諮詢效益</div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
     <div class="kpi-card"><div class="kpi-label">1-on-1 已完成</div><div class="kpi-value">${totalDone}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
     <div class="kpi-card"><div class="kpi-label">已排程</div><div class="kpi-value" style="color:var(--gold);">${totalScheduled}</div></div>
     <div class="kpi-card"><div class="kpi-label">待安排</div><div class="kpi-value" style="color:var(--red);">${totalPending}</div></div>
