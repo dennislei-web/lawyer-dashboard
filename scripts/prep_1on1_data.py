@@ -682,7 +682,12 @@ def main():
         "_metadata": {
             "total_my_cases": len(my_cases),
             "cases_with_mr_count": len(all_mr_cases),
-            "data_snapshot": f"{all_months[0]} ~ {all_months[-1]}" if all_months else "",
+            "data_snapshot": (
+                f"{min(c['case_date'] for c in my_cases if c.get('case_date'))[:7]} ~ "
+                f"{max(c['case_date'] for c in my_cases if c.get('case_date'))[:7]}"
+                if any(c.get('case_date') for c in my_cases)
+                else (f"{all_months[0]} ~ {all_months[-1]}" if all_months else "")
+            ),
         },
     }
 

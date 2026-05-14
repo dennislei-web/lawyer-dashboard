@@ -1327,7 +1327,53 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
     # === 月度趨勢表（揭示轉折點，避免「近 3 月」被誤解為均勻下滑）===
     monthly_trend_html = ""
     monthly = prep.get("monthly_trend", [])
-    if monthly:
+    # 偵測「近 12 月全零案」— 律師長期停接案的情況
+    all_zero_recent = monthly and all((m.get("consult_count") or 0) == 0 for m in monthly[-12:])
+    if all_zero_recent and all_cases:
+        # 改用歷史活躍區間
+        active_dates = sorted([c.get("case_date") for c in all_cases if c.get("case_date")])
+        if active_dates:
+            from collections import defaultdict
+            month_agg = defaultdict(lambda: {"n": 0, "s": 0, "col": 0})
+            for c in all_cases:
+                d = c.get("case_date")
+                if not d: continue
+                key = d[:7]
+                month_agg[key]["n"] += 1
+                if c.get("is_signed"):
+                    month_agg[key]["s"] += 1
+                month_agg[key]["col"] += (c.get("collected") or 0)
+            hist_months = sorted(month_agg.keys())
+            rows_h = []
+            for k in hist_months:
+                d = month_agg[k]
+                rate = (d["s"]/d["n"]*100) if d["n"] else 0
+                eff = d["col"]/d["n"] if d["n"] else 0
+                rate_color = "up" if rate >= 50 else ("down" if rate < 30 else "")
+                rows_h.append(
+                    f"<tr><td><b>{esc(k)}</b></td>"
+                    f"<td>{d['n']}</td><td>{d['s']}</td>"
+                    f"<td class='{rate_color}'>{rate:.0f}%</td>"
+                    f"<td>{int(d['col']):,}</td>"
+                    f"<td><b>{int(eff):,}</b></td></tr>"
+                )
+            inactive_months = (len(monthly[-12:]) if monthly else 12)
+            monthly_trend_html = f"""
+            <div class="section" style="page-break-inside: avoid;">
+              <div class="section-title">📅 月度趨勢（律師停接案期，改以歷史活躍區間顯示）</div>
+              <p class="small" style="margin:0 0 4px;color:#b91c1c;">
+                ⚠️ <b>此律師近 {inactive_months} 個月零新案</b>，本表跳過全零月份，
+                改顯示**歷史活躍區間 {hist_months[0]} ~ {hist_months[-1]}** 的月度數據作為能力盤點參考。
+              </p>
+              <table class="month-trend-table">
+                <thead><tr>
+                  <th>月份</th><th>諮詢</th><th>簽</th><th>成案率</th><th>收款</th><th>效益/人</th>
+                </tr></thead>
+                <tbody>{''.join(rows_h)}</tbody>
+              </table>
+            </div>
+            """
+    elif monthly:
         # 取最近 12 個月
         last12 = monthly[-12:]
         # 先掃近 6 個月找「結構性轉折點」：跌幅 >= 30% + 前月 >= 20K + 後續月份沒回到前月水準
@@ -1632,7 +1678,7 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
         else:
             actions.append({
                 "title": f"優先改善「{top_b_name}」",
-                "why": f"AI 歸因顯示「{top_b_name}」在 17 筆未簽案件中出現 {top_b_cnt} 次，是你最高頻漏掉的動作。",
+                "why": f"AI 歸因顯示「{top_b_name}」在 {len(unsigned)} 筆未簽案件中出現 {top_b_cnt} 次，是你最高頻漏掉的動作。",
                 "how": ["每次諮詢後自檢：這次有沒有做到這個動作？沒有的話下次怎麼補？"],
                 "metric": f"下次 AI 分析：「{top_b_name}」斷點 < {int(top_b_cnt*0.5)} 次",
             })
@@ -1738,10 +1784,17 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
         mid_check = "跑一次 AI 分析最新一週諮詢記錄，看行為斷點整體是否改善"
 
     # 下次 1-on-1：動態計算指標（基於這位律師近 3 月實際數字）
+    # 但若律師近期停接案、近 3 月全 0，改用歷史整體平均當 baseline（× 1.15）
     cur_eff = rec.get('consult_eff') or 0
-    target_eff = int(cur_eff * 1.15 / 1000) * 1000 if cur_eff else 30000
     rec_avg_unit = (rec['collected'] / rec['signed_count']) if rec.get('signed_count') else 0
+    if cur_eff == 0 and rec_avg_unit == 0:
+        # 停接案 fallback：用整體歷史 baseline
+        cur_eff = ov.get('consult_eff') or 0
+        rec_avg_unit = ov.get('avg_collected') or 0
+    target_eff = int(cur_eff * 1.15 / 1000) * 1000 if cur_eff else 30000
     target_unit = int(rec_avg_unit * 1.15 / 1000) * 1000 if rec_avg_unit else 60000
+    # baseline 標籤 — 顯示用「歷史」還是「近3月」
+    baseline_label = "歷史" if (rec.get('consult_eff') or 0) == 0 and (rec.get('signed_count') or 0) == 0 else "近3月"
 
     # 最高佔比的前 2 個失敗原因（去掉「已簽約」）
     top2 = [(r, n) for r, n in top_reasons if r != "已簽約"][:2]
@@ -1757,8 +1810,8 @@ def build_html(prep, llm, all_cases=None, lag_stats=None):
         behavior_line = f'<li>AI 行為斷點「{esc(bn)}」：目標 &lt; {max(1, int(bc*0.5))} 次（目前 {bc} 次）</li>'
 
     indicators_html = f"""
-            <li><b>整體諮詢效益</b>：目標 ≥ {target_eff:,}/人（近3月 {int(cur_eff):,}）← <b>首要指標</b></li>
-            <li><b>已簽案件平均客單價</b>：目標 ≥ {target_unit:,}（近3月 {int(rec_avg_unit):,}）← 延伸業務探索效果</li>
+            <li><b>整體諮詢效益</b>：目標 ≥ {target_eff:,}/人（{baseline_label} {int(cur_eff):,}）← <b>首要指標</b></li>
+            <li><b>已簽案件平均客單價</b>：目標 ≥ {target_unit:,}（{baseline_label} {int(rec_avg_unit):,}）← 延伸業務探索效果</li>
             <li>未簽失敗原因{top2_names} 合計占比：目標 &lt; {target_top2}%（目前 {top2_pct:.0f}%）</li>
             {behavior_line}
     """
