@@ -6743,6 +6743,7 @@ async function renderTrackerPage() {
     if (TRACKER_NON_CONSULTING.has(lid)) return;
     const l = id2lawyer.get(lid);
     if (!l) return;
+    if (!l.is_active) return; // 離職律師不列入
     const c = cur[lid]  || { c:0, sg:0, co:0 };
     const p = prev[lid] || { c:0, sg:0, co:0 };
     const eff   = c.c ? c.co/c.c : 0;
