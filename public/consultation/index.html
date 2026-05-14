@@ -1975,15 +1975,15 @@
       <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
         <thead>
           <tr style="background:var(--bg-row);border-bottom:1px solid var(--border);">
-            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">律師</th>
-            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">諮詢</th>
-            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">簽約率</th>
-            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">效益</th>
-            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">YoY 效益</th>
-            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">Brief</th>
+            <th class="tracker-sort" data-sort="name" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">律師<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="consult" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">諮詢<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="rate" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">簽約率<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="eff" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">效益<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="yoy" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">YoY 效益<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="brief" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">Brief<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:240px;">個人化目標</th>
-            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">1-on-1 日期</th>
-            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">狀態</th>
+            <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">1-on-1 日期<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="status" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">狀態<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:300px;">下一步</th>
             <th style="text-align:left;padding:10px 8px;min-width:300px;">備註</th>
           </tr>
@@ -6694,6 +6694,7 @@ const TRACKER_NON_CONSULTING = new Set([
 let trackerLoaded = false;
 let trackerRows = [];          // [{lawyer, kpi, briefs[], tracker}]
 let trackerFilters = { search:'', home:'', status:'', brief:'' };
+let trackerSort = { key: 'consult', dir: 'desc' };   // 預設按諮詢量降冪
 let trackerSaveTimers = new Map();
 
 async function renderTrackerPage() {
@@ -6778,7 +6779,41 @@ async function renderTrackerPage() {
   document.getElementById('trackerFilterStatus').onchange = (e) => { trackerFilters.status = e.target.value; renderTrackerTable(); };
   document.getElementById('trackerFilterBrief').onchange  = (e) => { trackerFilters.brief  = e.target.value; renderTrackerTable(); };
 
+  // 7. 綁排序
+  document.querySelectorAll('#trackerTable .tracker-sort').forEach(th => {
+    th.onclick = () => {
+      const key = th.dataset.sort;
+      if (trackerSort.key === key) {
+        trackerSort.dir = trackerSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        trackerSort.key = key;
+        // 文字欄位預設 asc、數字/日期預設 desc
+        trackerSort.dir = (key === 'name' || key === 'status') ? 'asc' : 'desc';
+      }
+      renderTrackerTable();
+    };
+  });
+
   renderTrackerTable();
+}
+
+function trackerSortVal(r, key) {
+  const k = r.kpi, t = r.tracker;
+  switch (key) {
+    case 'name':    return r.lawyer.name;
+    case 'consult': return k.consult || 0;
+    case 'rate':    return k.consult ? k.rate : -1;
+    case 'eff':     return k.consult ? k.eff : -1;
+    case 'yoy':     return (k.has_prev && k.yoy !== null) ? k.yoy : -Infinity;
+    case 'brief':   return r.briefs.length;
+    case 'date':    return t.one_on_one_date || '';
+    case 'status':  {
+      // 排序順序：done < scheduled < followup < pending（升冪時做完的在前）
+      const order = { done:0, scheduled:1, followup:2, pending:3 };
+      return order[t.one_on_one_status] ?? 99;
+    }
+    default: return 0;
+  }
 }
 
 function trackerHome(l) {
@@ -6792,13 +6827,37 @@ function trackerHome(l) {
 function renderTrackerTable() {
   const tbody = document.getElementById('trackerTbody');
   const f = trackerFilters;
-  const filtered = trackerRows.filter(r => {
+  let filtered = trackerRows.filter(r => {
     if (f.search && !r.lawyer.name.includes(f.search)) return false;
     if (f.home && r.home !== f.home) return false;
     if (f.status && r.tracker.one_on_one_status !== f.status) return false;
     if (f.brief === 'has' && r.briefs.length === 0) return false;
     if (f.brief === 'none' && r.briefs.length > 0) return false;
     return true;
+  });
+
+  // 排序
+  const mult = trackerSort.dir === 'asc' ? 1 : -1;
+  filtered.sort((a, b) => {
+    const va = trackerSortVal(a, trackerSort.key);
+    const vb = trackerSortVal(b, trackerSort.key);
+    if (typeof va === 'string' && typeof vb === 'string') {
+      return va.localeCompare(vb, 'zh-TW') * mult;
+    }
+    return (va > vb ? 1 : va < vb ? -1 : 0) * mult;
+  });
+
+  // 表頭排序指示
+  document.querySelectorAll('#trackerTable .tracker-sort').forEach(th => {
+    const ind = th.querySelector('.sort-ind');
+    if (!ind) return;
+    if (th.dataset.sort === trackerSort.key) {
+      ind.textContent = trackerSort.dir === 'asc' ? ' ↑' : ' ↓';
+      th.style.color = 'var(--gold)';
+    } else {
+      ind.textContent = '';
+      th.style.color = '';
+    }
   });
 
   // Summary
