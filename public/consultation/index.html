@@ -1979,11 +1979,28 @@
         #trackerTable textarea:focus, #trackerTable input:focus, #trackerTable select:focus {
           outline: none; border-color: var(--gold);
         }
-        /* 狀態膠囊顏色 */
-        .status-pill[data-status="pending"]   { background: rgba(239,83,80,0.18);  color: #ef5350; border-color: rgba(239,83,80,0.35); }
-        .status-pill[data-status="scheduled"] { background: rgba(255,193,7,0.18);  color: #ffc107; border-color: rgba(255,193,7,0.35); }
-        .status-pill[data-status="done"]      { background: rgba(76,175,80,0.18);  color: #4caf50; border-color: rgba(76,175,80,0.35); }
-        .status-pill[data-status="followup"]  { background: rgba(255,152,0,0.18);  color: #ff9800; border-color: rgba(255,152,0,0.35); }
+        /* 狀態圓點：select 縮成小圓，dropdown 展開看完整 */
+        .status-dot {
+          appearance: none; -webkit-appearance: none; -moz-appearance: none;
+          width: 18px; height: 18px; border-radius: 50%;
+          border: 2px solid var(--border);
+          font-size: 0; color: transparent;
+          padding: 0; margin: 0;
+          cursor: pointer; vertical-align: middle;
+          background-repeat: no-repeat; background-position: center;
+          transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .status-dot:hover  { transform: scale(1.15); box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
+        .status-dot:focus  { outline: none; box-shadow: 0 0 0 2px var(--gold); }
+        .status-dot[data-status="pending"]   { background-color: #ef5350; border-color: #ef5350; }
+        .status-dot[data-status="scheduled"] { background-color: #ffc107; border-color: #ffc107; }
+        .status-dot[data-status="done"]      { background-color: #4caf50; border-color: #4caf50; }
+        .status-dot[data-status="followup"]  { background-color: #ff9800; border-color: #ff9800; }
+        /* dropdown option 樣式 — 展開時看到完整 emoji + 文字 */
+        .status-dot option {
+          font-size: 0.85rem; color: var(--text); background: var(--bg-card);
+          padding: 6px 10px;
+        }
       </style>
       <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
         <thead>
@@ -6736,23 +6753,35 @@ async function renderTrackerPage() {
     if (files && files.length) id2briefs.set(f.name, files.map(x => ({ name: x.name, path: `${f.name}/${x.name}`, size: x.metadata?.size||0, updated_at: x.updated_at })));
   }));
 
-  // 3. 算 KPI
-  const cur = {}, prev = {};
+  // 3. 算 KPI（對齊「總覽頁」整年 2026；YoY 仍用 1-4 vs 1-4 公平比較）
+  const cur = {};      // 2026 整年 per lawyer（row 顯示）
+  const cur14 = {};    // 2026 1-4 月 per lawyer（給 YoY 用）
+  const prev14 = {};   // 2025 1-4 月 per lawyer（給 YoY 用）
   const grand = { consult:0, signed:0, collected:0 };
   (statsData||[]).forEach(s => {
     const yr = s.month.slice(0,4), mm = s.month.slice(5,7);
-    if (!['01','02','03','04'].includes(mm)) return;
-    const bucket = yr === '2026' ? cur : (yr === '2025' ? prev : null);
-    if (!bucket) return;
-    const d = bucket[s.lawyer_id] = bucket[s.lawyer_id] || { c:0, sg:0, co:0 };
-    d.c  += s.consult_count || 0;
-    d.sg += s.signed_count  || 0;
-    d.co += Number(s.collected || 0);
-    // grand total（2026 1-4 全諮詢律師、含離職、排除非諮詢人員）— 對齊年度追蹤頁
-    if (yr === '2026' && !TRACKER_NON_CONSULTING.has(s.lawyer_id)) {
-      grand.consult   += s.consult_count || 0;
-      grand.signed    += s.signed_count  || 0;
-      grand.collected += Number(s.collected || 0);
+    const in14 = ['01','02','03','04'].includes(mm);
+    if (yr === '2026') {
+      const d = cur[s.lawyer_id] = cur[s.lawyer_id] || { c:0, sg:0, co:0 };
+      d.c  += s.consult_count || 0;
+      d.sg += s.signed_count  || 0;
+      d.co += Number(s.collected || 0);
+      if (in14) {
+        const d14 = cur14[s.lawyer_id] = cur14[s.lawyer_id] || { c:0, sg:0, co:0 };
+        d14.c  += s.consult_count || 0;
+        d14.sg += s.signed_count  || 0;
+        d14.co += Number(s.collected || 0);
+      }
+      if (!TRACKER_NON_CONSULTING.has(s.lawyer_id)) {
+        grand.consult   += s.consult_count || 0;
+        grand.signed    += s.signed_count  || 0;
+        grand.collected += Number(s.collected || 0);
+      }
+    } else if (yr === '2025' && in14) {
+      const d = prev14[s.lawyer_id] = prev14[s.lawyer_id] || { c:0, sg:0, co:0 };
+      d.c  += s.consult_count || 0;
+      d.sg += s.signed_count  || 0;
+      d.co += Number(s.collected || 0);
     }
   });
   trackerGrand = grand;
@@ -6766,12 +6795,15 @@ async function renderTrackerPage() {
     const l = id2lawyer.get(lid);
     if (!l) return;
     if (!l.is_active) return; // 離職律師不列入
-    const c = cur[lid]  || { c:0, sg:0, co:0 };
-    const p = prev[lid] || { c:0, sg:0, co:0 };
+    const c   = cur[lid]    || { c:0, sg:0, co:0 };   // 2026 整年（row 顯示）
+    const c14 = cur14[lid]  || { c:0, sg:0, co:0 };   // 2026 1-4（給 YoY）
+    const p   = prev14[lid] || { c:0, sg:0, co:0 };   // 2025 1-4（給 YoY）
     const eff   = c.c ? c.co/c.c : 0;
     const rate  = c.c ? c.sg/c.c*100 : 0;
+    const eff14 = c14.c ? c14.co/c14.c : 0;
     const p_eff = p.c ? p.co/p.c : 0;
-    const yoy   = p_eff ? (eff - p_eff)/p_eff*100 : null;
+    // YoY 用 1-4 對 1-4 公平比較
+    const yoy   = p_eff ? (eff14 - p_eff)/p_eff*100 : null;
     rows.push({
       lawyer: l,
       home: trackerHome(l),
@@ -6893,7 +6925,7 @@ function renderTrackerTable() {
   const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
   sum.innerHTML = `
     <div class="kpi-card"><div class="kpi-label">律師數（活躍）</div><div class="kpi-value">${trackerRows.length}</div></div>
-    <div class="kpi-card"><div class="kpi-label">總諮詢 (1-4 月)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">總諮詢 (2026)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
     <div class="kpi-card"><div class="kpi-label">總簽約</div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
     <div class="kpi-card"><div class="kpi-label">簽約率</div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
     <div class="kpi-card"><div class="kpi-label">諮詢效益</div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
@@ -6927,11 +6959,11 @@ function renderTrackerTable() {
       <td style="${cellNum}">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
       <td style="${cellNum}">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
       <td style="${cellNum}">${yoyHtml}</td>
-      <td style="${cellBase}"><select data-field="one_on_one_status" class="status-pill" data-status="${t.one_on_one_status||'pending'}" style="border:1px solid var(--border);padding:4px 6px;border-radius:12px;font-size:0.72rem;font-weight:600;width:72px;text-align:center;cursor:pointer;">
-        <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
-        <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>已排程</option>
-        <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
-        <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
+      <td style="${cellBase}text-align:center;"><select data-field="one_on_one_status" class="status-dot" data-status="${t.one_on_one_status||'pending'}" title="點擊切換狀態">
+        <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>🔴 待安排</option>
+        <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>🟡 已排程</option>
+        <option value="done"${t.one_on_one_status==='done'?' selected':''}>🟢 已完成</option>
+        <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>🟠 待追蹤</option>
       </select></td>
       <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.72rem;width:110px;"></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
@@ -6970,8 +7002,8 @@ async function onTrackerFieldChange(e) {
   const field = e.target.dataset.field;
   let value = e.target.value;
   if (field === 'one_on_one_date' && !value) value = null;
-  // 狀態 select 即時更新 data-status 讓顏色跟著切換
-  if (field === 'one_on_one_status' && e.target.classList.contains('status-pill')) {
+  // 狀態 select 即時更新 data-status 讓圓點顏色跟著切換
+  if (field === 'one_on_one_status' && e.target.classList.contains('status-dot')) {
     e.target.setAttribute('data-status', value);
   }
 
