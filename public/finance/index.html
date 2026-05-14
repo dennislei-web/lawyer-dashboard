@@ -916,8 +916,14 @@ function fmtCurrency(n) {
 //  YEAR BUTTONS
 // ═══════════════════════════════════════════════════════════
 function initAllYearBtns() {
-  var years = [114, 115, 116];
-  ['ovYearBtns','budgetYearBtns','compareYearBtns','histYearBtns'].forEach(function(id) {
+  var tabYears = {
+    ovYearBtns: [115, 116],
+    budgetYearBtns: [115, 116],
+    compareYearBtns: [115, 116],
+    histYearBtns: [114, 115, 116],
+  };
+  Object.keys(tabYears).forEach(function(id) {
+    var years = tabYears[id];
     var el = document.getElementById(id); if (!el) return;
     el.innerHTML = '';
     years.forEach(function(y) {
