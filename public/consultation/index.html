@@ -2002,7 +2002,7 @@
           padding: 6px 10px;
         }
       </style>
-      <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
+      <table id="trackerTable" style="width:max-content;border-collapse:collapse;font-size:0.85rem;min-width:1700px;">
         <thead>
           <tr style="background:var(--bg-row);border-bottom:1px solid var(--border);">
             <th class="tracker-sort" data-sort="name" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">律師<span class="sort-ind"></span></th>
@@ -6967,11 +6967,11 @@ function renderTrackerTable() {
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>🟢 已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>🟠 待追蹤</option>
       </select></td>
-      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.72rem;width:110px;"></td>
+      <td style="${cellBase}white-space:nowrap;width:96px;min-width:96px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:3px 4px;border-radius:4px;font-size:0.68rem;width:92px;"></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
-      <td style="${cellBase}"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;min-width:480px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
-      <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:140px;min-width:360px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
-      <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:140px;min-width:360px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+      <td style="${cellBase}min-width:480px;width:480px;"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="next_action" style="${taStyle}min-height:140px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
+      <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="notes" style="${taStyle}min-height:140px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
   }).join('');
 
