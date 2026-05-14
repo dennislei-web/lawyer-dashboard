@@ -1976,17 +1976,16 @@
         <thead>
           <tr style="background:var(--bg-row);border-bottom:1px solid var(--border);">
             <th style="text-align:left;padding:10px 8px;white-space:nowrap;">律師</th>
-            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">所/cohort</th>
             <th style="text-align:right;padding:10px 8px;white-space:nowrap;">諮詢</th>
             <th style="text-align:right;padding:10px 8px;white-space:nowrap;">簽約率</th>
             <th style="text-align:right;padding:10px 8px;white-space:nowrap;">效益</th>
             <th style="text-align:right;padding:10px 8px;white-space:nowrap;">YoY 效益</th>
             <th style="text-align:left;padding:10px 8px;white-space:nowrap;">Brief</th>
-            <th style="text-align:left;padding:10px 8px;min-width:220px;">個人化目標</th>
+            <th style="text-align:left;padding:10px 8px;min-width:240px;">個人化目標</th>
             <th style="text-align:left;padding:10px 8px;white-space:nowrap;">1-on-1 日期</th>
             <th style="text-align:left;padding:10px 8px;white-space:nowrap;">狀態</th>
-            <th style="text-align:left;padding:10px 8px;min-width:200px;">下一步</th>
-            <th style="text-align:left;padding:10px 8px;min-width:200px;">備註</th>
+            <th style="text-align:left;padding:10px 8px;min-width:300px;">下一步</th>
+            <th style="text-align:left;padding:10px 8px;min-width:300px;">備註</th>
           </tr>
         </thead>
         <tbody id="trackerTbody"></tbody>
@@ -6701,7 +6700,7 @@ async function renderTrackerPage() {
   if (!canViewTracker()) return;
   if (trackerLoaded) { renderTrackerTable(); return; }
   const tbody = document.getElementById('trackerTbody');
-  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-muted);">載入中…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">載入中…</td></tr>';
 
   // 1. lawyers + monthly_stats（2025 1-4 + 2026 1-4）
   const [{ data: lawyersData }, { data: statsData }, { data: trackerData }, { data: briefList }] = await Promise.all([
@@ -6837,13 +6836,12 @@ function renderTrackerTable() {
     return `
     <tr data-lid="${r.lawyer.id}" style="border-bottom:1px solid var(--border);">
       <td style="padding:8px;white-space:nowrap;font-weight:600;">${r.lawyer.name}${inactiveTag}</td>
-      <td style="padding:8px;white-space:nowrap;color:var(--text-muted);font-size:0.78rem;">${r.home}</td>
       <td style="padding:8px;text-align:right;">${k.consult || '—'}</td>
       <td style="padding:8px;text-align:right;">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
       <td style="padding:8px;text-align:right;">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
       <td style="padding:8px;text-align:right;">${yoyHtml}</td>
       <td style="padding:8px;">${briefHtml}</td>
-      <td style="padding:8px;"><textarea data-field="target_text" rows="2" style="width:100%;min-width:200px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="例：諮詢當下自己開口報價，外包率 < 30%">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="padding:8px;"><textarea data-field="target_text" rows="3" style="width:100%;min-width:240px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="例：諮詢當下自己開口報價，外包率 < 30%">${escapeHtml(t.target_text||'')}</textarea></td>
       <td style="padding:8px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;"></td>
       <td style="padding:8px;"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;">
         <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
@@ -6851,8 +6849,8 @@ function renderTrackerTable() {
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
       </select></td>
-      <td style="padding:8px;"><textarea data-field="next_action" rows="2" style="width:100%;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
-      <td style="padding:8px;"><textarea data-field="notes" rows="2" style="width:100%;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+      <td style="padding:8px;"><textarea data-field="next_action" rows="4" style="width:100%;min-width:300px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
+      <td style="padding:8px;"><textarea data-field="notes" rows="4" style="width:100%;min-width:300px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
   }).join('');
 
