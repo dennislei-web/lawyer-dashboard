@@ -381,6 +381,154 @@ def parse_profit_section(rows, lawyer, year, month):
 
     return entries
 
+# ---------- 備用版型：11504-style「勞務 + 案件報酬分配」 ----------
+# 部分律師（如吳柏慶）不用「XX律師分潤 / 喆律應付」結構，改用編號分節：
+#   1、勞務                            (左, 喆律端付律師)
+#   3、案件報酬分配-直接進入律師帳戶  (右, 律師端收 → 付喆律)
+#   4、案件報酬分配-由喆律代收         (右, 喆律端收 → 付律師)
+# 當主 parse_profit_section 抓不到分潤段落時，fallback 到本解析器。
+
+# 案件性質字串 → tier。None = 純勞務，不算案件業績、跳過。
+CASE_NATURE_TO_TIER = {
+    '諮詢': '諮詢',
+    '諮詢費': '諮詢',
+    '成案獎金': '成案獎金',
+    '諮詢後轉回所內': '成案獎金',
+    '轉案': '喆律轉案',
+    '喆律轉案': '喆律轉案',
+    '轉諮': '諮詢成案',  # 30/70 ratio 對應諮詢成案
+    '諮詢成案': '諮詢成案',
+    '自案': '自案',
+    '喆律自案': '自案',
+    '法0轉諮': '法律010轉案',
+    '法律010轉案': '法律010轉案',
+    '代開庭': None,
+    '2小時': None,
+    '6小時': None,
+    '勞務': None,
+}
+
+def _cs(row, j):
+    if not row or j >= len(row) or row[j] is None: return ''
+    return str(row[j]).strip()
+
+def find_alt_tables(rows):
+    """偵測 11504-style 表頭。回傳 list[dict]，每個 dict 含 style/header_idx/start_col/direction。"""
+    found = []
+    for i, row in enumerate(rows):
+        if not row: continue
+        L = len(row)
+        # labor 版型：客戶名稱 | 類型 | 實付金額 | 比例 | 應付金額
+        for off in range(0, max(1, min(8, L - 4))):
+            if (_cs(row, off) == '客戶名稱'
+                    and _cs(row, off + 1) == '類型'
+                    and '實付' in _cs(row, off + 2)
+                    and '比例' in _cs(row, off + 3)
+                    and '應付' in _cs(row, off + 4)):
+                found.append({'style': 'labor', 'header_idx': i, 'start_col': off})
+                break
+        # allocation 版型：編號 | 客戶名稱 | 案件性質 | 給付比例 | 當月客戶付款金額 | 應付給喆律/應付金額
+        for off in range(0, max(1, min(10, L - 5))):
+            if (_cs(row, off) == '編號'
+                    and _cs(row, off + 1) == '客戶名稱'
+                    and ('性質' in _cs(row, off + 2) or _cs(row, off + 2) == '類型')
+                    and '比例' in _cs(row, off + 3)
+                    and ('付款' in _cs(row, off + 4) or '金額' in _cs(row, off + 4))
+                    and '應付' in _cs(row, off + 5)):
+                last_label = _cs(row, off + 5)
+                if '給喆律' in last_label:
+                    direction = 'lawyer_collected'
+                else:
+                    direction = 'zhelu_collected'  # default 給「應付金額」
+                    for k in range(max(0, i - 3), i):
+                        joined = ' '.join(_cs(rows[k], c) for c in range(len(rows[k])))
+                        if '直接進入' in joined:
+                            direction = 'lawyer_collected'; break
+                        if '喆律代收' in joined:
+                            direction = 'zhelu_collected'; break
+                found.append({
+                    'style': 'allocation', 'header_idx': i,
+                    'start_col': off, 'direction': direction,
+                })
+                break
+    return found
+
+def parse_alt_profit_sections(rows, lawyer, year, month):
+    """11504-style 備用解析（勞務 + 案件報酬分配）。"""
+    out = []
+    for h in find_alt_tables(rows):
+        style, c0 = h['style'], h['start_col']
+        i = h['header_idx'] + 1
+        blank_streak = 0
+        while i < len(rows):
+            row = rows[i]
+            if not row:
+                blank_streak += 1
+                if blank_streak >= 3: break
+                i += 1; continue
+            first = _cs(row, 0)
+            if any(k in first for k in SECTION_END_KEYWORDS): break
+            if first.startswith('115年') or first.startswith('116年') or first.startswith('114年'): break
+
+            if style == 'labor':
+                client_s = _cs(row, c0)
+                type_s = _cs(row, c0 + 1)
+                amt_v = row[c0 + 2] if c0 + 2 < len(row) else None
+                ratio_v = row[c0 + 3] if c0 + 3 < len(row) else None
+                payable_v = row[c0 + 4] if c0 + 4 < len(row) else None
+            else:
+                client_s = _cs(row, c0 + 1)
+                type_s = _cs(row, c0 + 2)
+                ratio_v = row[c0 + 3] if c0 + 3 < len(row) else None
+                amt_v = row[c0 + 4] if c0 + 4 < len(row) else None
+                payable_v = row[c0 + 5] if c0 + 5 < len(row) else None
+
+            if client_s.startswith('小計') or client_s in ('合計', '總計'): break
+            if not client_s:
+                blank_streak += 1
+                if blank_streak >= 3: break
+                i += 1; continue
+            blank_streak = 0
+            if not (is_num(amt_v) and is_num(ratio_v)):
+                i += 1; continue
+
+            tier = CASE_NATURE_TO_TIER.get(type_s)
+            if tier is None:  # 代開庭/2小時/6小時/勞務 或未知 → skip
+                i += 1; continue
+
+            amt = to_num(amt_v)
+            ratio = float(ratio_v)
+            payable = to_num(payable_v) if is_num(payable_v) else amt * ratio
+
+            if style == 'labor':
+                # 喆律端付律師：payable = 律師拿
+                lawyer_amt = payable
+                zhelu_amt = amt - lawyer_amt
+                side = 'zhelu_handled'
+                note = '11504-labor'
+            elif h['direction'] == 'lawyer_collected':
+                # 律師收，付喆律：payable = 喆律拿
+                zhelu_amt = payable
+                lawyer_amt = amt - zhelu_amt
+                side = 'lawyer_handled'
+                note = '11504-lawyer-collected'
+            else:
+                # 喆律代收，付律師：payable = 喆律 keeps
+                zhelu_amt = payable
+                lawyer_amt = amt - zhelu_amt
+                side = 'zhelu_handled'
+                note = '11504-zhelu-collected'
+
+            out.append({
+                'lawyer': lawyer, 'year': year, 'month': month,
+                'side': side, 'tier': tier,
+                'client': client_s, 'case_amount': amt, 'ratio': ratio,
+                'lawyer_amt': lawyer_amt, 'zhelu_amt': zhelu_amt,
+                'note': note,
+            })
+            i += 1
+    return out
+
 # ---------- main ----------
 def main():
     files = find_input_files()
@@ -424,6 +572,9 @@ def main():
             # profit
             try:
                 entries = parse_profit_section(rows, lawyer, year, month)
+                if not entries:
+                    # fallback：11504-style「勞務 + 案件報酬分配」版型
+                    entries = parse_alt_profit_sections(rows, lawyer, year, month)
                 profit_rows.extend(entries)
                 # monthly total from entries
                 z = sum(e['zhelu_amt'] for e in entries)
