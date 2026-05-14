@@ -6945,8 +6945,10 @@ function renderTrackerTable() {
       ? `<span style="color:${k.yoy >= 0 ? 'var(--green)':'var(--red)'};">${k.yoy >= 0 ? '+':''}${k.yoy.toFixed(0)}%</span>`
       : '<span style="color:var(--text-muted);">—</span>';
     const briefHtml = r.briefs.length === 0
-      ? '<span style="color:var(--text-muted);font-size:0.78rem;">無</span>'
-      : r.briefs.map(b => `<a href="#" onclick="openBrief('${r.lawyer.id}','${b.name}');return false;" style="display:inline-block;background:var(--bg-row);padding:2px 8px;border-radius:4px;margin:1px 2px;color:var(--gold);text-decoration:none;font-size:0.75rem;" title="${b.name}">${trackerBriefLabel(b.name)}</a>`).join('');
+      ? '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>'
+      : `<div style="display:flex;flex-direction:column;gap:3px;align-items:stretch;width:40px;">` +
+        r.briefs.map(b => `<a href="#" onclick="openBrief('${r.lawyer.id}','${b.name}');return false;" style="display:block;background:var(--bg-row);padding:2px 4px;border-radius:3px;color:var(--gold);text-decoration:none;font-size:0.7rem;text-align:center;" title="${b.name}">${trackerBriefLabel(b.name)}</a>`).join('') +
+        `</div>`;
     const inactiveTag = k.inactive ? '<span style="background:var(--red-dim);color:var(--red);font-size:0.65rem;padding:1px 5px;border-radius:3px;margin-left:4px;">離職</span>' : '';
     const cellBase  = 'padding:10px 8px;vertical-align:top;';
     const cellNum   = cellBase + 'text-align:right;font-variant-numeric:tabular-nums;';
@@ -6967,9 +6969,9 @@ function renderTrackerTable() {
       </select></td>
       <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.72rem;width:110px;"></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
-      <td style="${cellBase}"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;min-width:420px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
-      <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:110px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
-      <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:110px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;min-width:480px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:140px;min-width:360px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:140px;min-width:360px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
   }).join('');
 
@@ -6981,14 +6983,10 @@ function renderTrackerTable() {
 }
 
 function trackerBriefLabel(name) {
-  if (name === 'v1.pdf')  return '📄 v1';
-  if (name === 'v2.pdf')  return '📄 v2';
-  if (name === 'v1b.pdf') return '📄 v1b';
-  if (name === 'v1.md')   return '📝 v1.md';
-  if (name === 'worksheet.docx') return '📝 工作表';
-  if (name === 'worksheet_fixed.docx') return '📝 工作表(修正)';
-  if (name.startsWith('followup_')) return '📋 ' + name.replace('followup_','').replace(/\..+$/,'') + ' 紀錄';
-  return name;
+  if (name === 'v1.pdf')  return 'v1';
+  if (name === 'v2.pdf')  return 'v2';
+  if (name === 'v1b.pdf') return 'v1b';
+  return name.replace(/\..+$/,'');
 }
 
 function escapeHtml(s) {
