@@ -1972,6 +1972,14 @@
     <div id="trackerSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
 
     <div class="table-card" style="overflow-x:auto;">
+      <style>
+        #trackerTable tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+        #trackerTable tbody tr:hover { background: var(--bg-row); }
+        #trackerTable thead th { position: sticky; top: 0; background: var(--bg-row); z-index: 5; }
+        #trackerTable textarea:focus, #trackerTable input:focus, #trackerTable select:focus {
+          outline: none; border-color: var(--gold);
+        }
+      </style>
       <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
         <thead>
           <tr style="background:var(--bg-row);border-bottom:1px solid var(--border);">
@@ -6903,24 +6911,28 @@ function renderTrackerTable() {
       ? '<span style="color:var(--text-muted);font-size:0.78rem;">無</span>'
       : r.briefs.map(b => `<a href="#" onclick="openBrief('${r.lawyer.id}','${b.name}');return false;" style="display:inline-block;background:var(--bg-row);padding:2px 8px;border-radius:4px;margin:1px 2px;color:var(--gold);text-decoration:none;font-size:0.75rem;" title="${b.name}">${trackerBriefLabel(b.name)}</a>`).join('');
     const inactiveTag = k.inactive ? '<span style="background:var(--red-dim);color:var(--red);font-size:0.65rem;padding:1px 5px;border-radius:3px;margin-left:4px;">離職</span>' : '';
+    const cellBase  = 'padding:10px 8px;vertical-align:top;';
+    const cellNum   = cellBase + 'text-align:right;font-variant-numeric:tabular-nums;';
+    const cellName  = cellBase + 'white-space:nowrap;font-weight:600;';
+    const taStyle   = 'width:100%;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.45;box-sizing:border-box;';
     return `
     <tr data-lid="${r.lawyer.id}" style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px;white-space:nowrap;font-weight:600;">${r.lawyer.name}${inactiveTag}</td>
-      <td style="padding:8px;text-align:right;">${k.consult || '—'}</td>
-      <td style="padding:8px;text-align:right;">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
-      <td style="padding:8px;text-align:right;">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
-      <td style="padding:8px;text-align:right;">${yoyHtml}</td>
-      <td style="padding:8px;">${briefHtml}</td>
-      <td style="padding:8px;"><textarea data-field="target_text" rows="3" style="width:100%;min-width:240px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="例：諮詢當下自己開口報價，外包率 < 30%">${escapeHtml(t.target_text||'')}</textarea></td>
-      <td style="padding:8px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;"></td>
-      <td style="padding:8px;"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;">
+      <td style="${cellName}">${r.lawyer.name}${inactiveTag}</td>
+      <td style="${cellNum}">${k.consult || '—'}</td>
+      <td style="${cellNum}">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
+      <td style="${cellNum}">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
+      <td style="${cellNum}">${yoyHtml}</td>
+      <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
+      <td style="${cellBase}"><textarea data-field="target_text" style="${taStyle}min-height:110px;" placeholder="例：諮詢當下自己開口報價，外包率 < 30%">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.78rem;width:130px;"></td>
+      <td style="${cellBase}"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;">
         <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
         <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>已排程</option>
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
       </select></td>
-      <td style="padding:8px;"><textarea data-field="next_action" rows="4" style="width:100%;min-width:300px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
-      <td style="padding:8px;"><textarea data-field="notes" rows="4" style="width:100%;min-width:300px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;resize:vertical;line-height:1.4;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:110px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:110px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
   }).join('');
 
