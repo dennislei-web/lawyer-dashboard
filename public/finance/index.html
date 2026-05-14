@@ -512,7 +512,7 @@
       </div>
       <div class="chart-row">
         <div class="chart-card">
-          <div class="chart-title">月度趨勢：預算 vs 實際 vs 去年</div>
+          <div class="chart-title">月度趨勢：預算 vs 實際</div>
           <div class="chart-container"><canvas id="trendChart"></canvas></div>
         </div>
         <div class="chart-card">
@@ -990,18 +990,16 @@ async function loadOverviewData() {
 }
 
 function renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth) {
-  var budgetData = [], actualData = [], histData = [];
+  var budgetData = [], actualData = [];
   for (var mo = 1; mo <= 12; mo++) {
-    var bTotal = 0, aTotal = 0, hTotal = 0;
+    var bTotal = 0, aTotal = 0;
     categories.forEach(function(c) {
       if (c.section !== 'operating_expense' || c.is_subtotal) return;
       bTotal += ((budgetMap[c.id] || {})[mo] || 0);
       aTotal += ((actualMap[c.id] || {})[mo] || 0);
-      hTotal += ((histMap[c.id] || {})[mo] || 0);
     });
     budgetData.push(bTotal);
     actualData.push(mo <= maxActualMonth ? aTotal : null);
-    histData.push(hTotal);
   }
 
   var ctx = document.getElementById('trendChart');
@@ -1013,8 +1011,7 @@ function renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth) {
       labels: MONTH_LABELS,
       datasets: [
         { label: '預算', data: budgetData, borderColor: cs.getPropertyValue('--gold').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
-        { label: '實際', data: actualData, borderColor: cs.getPropertyValue('--blue').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 },
-        { label: '去年', data: histData, borderColor: cs.getPropertyValue('--text-muted').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 1, borderDash: [4,4] }
+        { label: '實際', data: actualData, borderColor: cs.getPropertyValue('--blue').trim(), backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 }
       ]
     },
     options: {
