@@ -1559,6 +1559,7 @@
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('qa')" id="tab-qa">🤖 AI 問答</button>
+        <button class="tab-btn" onclick="showTab('tracker')" id="tab-tracker" style="display:none;">🎯 1-on-1 追蹤</button>
         <button class="tab-btn" onclick="showTab('upload')" id="tab-upload" style="display:none;">資料上傳</button>
       </div>
     </div>
@@ -1941,6 +1942,60 @@
   </div>
 
   <!-- ===== AI 問答 PAGE ===== -->
+  <!-- ============ 🎯 1-on-1 追蹤頁（僅雷皓明可見） ============ -->
+  <div id="pageTracker" class="page">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+      <div>
+        <h1 class="page-title" style="margin:0;">🎯 1-on-1 追蹤</h1>
+        <div style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">每位諮詢律師的個人化目標、1-on-1 進度與 brief 文件</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="trackerSearch" placeholder="搜尋律師..." style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;width:180px;">
+        <select id="trackerFilterHome" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
+          <option value="">全部所/cohort</option>
+        </select>
+        <select id="trackerFilterStatus" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
+          <option value="">全部狀態</option>
+          <option value="pending">待安排</option>
+          <option value="scheduled">已排程</option>
+          <option value="done">已完成</option>
+          <option value="followup">待追蹤</option>
+        </select>
+        <select id="trackerFilterBrief" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
+          <option value="">全部 brief</option>
+          <option value="has">有 brief</option>
+          <option value="none">無 brief</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="trackerSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
+
+    <div class="table-card" style="overflow-x:auto;">
+      <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
+        <thead>
+          <tr style="background:var(--bg-row);border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">律師</th>
+            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">所/cohort</th>
+            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">諮詢</th>
+            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">簽約率</th>
+            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">效益</th>
+            <th style="text-align:right;padding:10px 8px;white-space:nowrap;">YoY 效益</th>
+            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">Brief</th>
+            <th style="text-align:left;padding:10px 8px;min-width:220px;">個人化目標</th>
+            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">1-on-1 日期</th>
+            <th style="text-align:left;padding:10px 8px;white-space:nowrap;">狀態</th>
+            <th style="text-align:left;padding:10px 8px;min-width:200px;">下一步</th>
+            <th style="text-align:left;padding:10px 8px;min-width:200px;">備註</th>
+          </tr>
+        </thead>
+        <tbody id="trackerTbody"></tbody>
+      </table>
+    </div>
+    <div id="trackerEmpty" style="display:none;text-align:center;padding:40px;color:var(--text-muted);">無符合條件的律師</div>
+    <div style="margin-top:12px;color:var(--text-muted);font-size:0.78rem;">所有欄位 inline 編輯，blur 自動儲存。 KPI 數據為 2026 1-4 月 vs 2025 1-4 月。</div>
+  </div>
+
   <div id="pageQa" class="page">
     <div class="section-header" style="margin-bottom:16px;">
       <div class="section-title" style="font-size:1.1rem;">🤖 AI 諮詢助理</div>
@@ -2618,7 +2673,7 @@ function reRenderActivePage() {
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -2630,6 +2685,8 @@ function showTab(tab) {
   document.getElementById('pageUnsigned').classList.toggle('active', tab === 'unsigned');
   document.getElementById('pageQa').classList.toggle('active', tab === 'qa');
   document.getElementById('pageAdmin').classList.toggle('active', tab === 'admin');
+  const pt = document.getElementById('pageTracker');
+  if (pt) pt.classList.toggle('active', tab === 'tracker');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
@@ -2646,11 +2703,15 @@ function showTab(tab) {
     if (!currentLawyer || currentLawyer.role !== 'admin') return;
     renderAdminPage();
   }
+  if (tab === 'tracker') {
+    if (!canViewTracker()) return;
+    renderTrackerPage();
+  }
 }
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -2660,8 +2721,15 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageUnsigned').classList.remove('active');
   document.getElementById('pageQa').classList.remove('active');
   document.getElementById('pageAdmin').classList.remove('active');
+  const pt2 = document.getElementById('pageTracker');
+  if (pt2) pt2.classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
   renderDetailPage();
+}
+
+// 🎯 1-on-1 追蹤：僅雷皓明可見
+function canViewTracker() {
+  return !!(realLawyer && realLawyer.email === 'dennis.lei@010.tw');
 }
 
 function goBackFromDetail() {
@@ -2697,6 +2765,9 @@ function refreshRoleDependentUI() {
   if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
   const manualSyncBtn = document.getElementById('manualSyncBtn');
   if (manualSyncBtn) manualSyncBtn.style.display = canUpload ? '' : 'none';
+  // 🎯 1-on-1 追蹤 tab — 永遠用 realLawyer.email 判斷（不受 View-As 影響）
+  const trackerTab = document.getElementById('tab-tracker');
+  if (trackerTab) trackerTab.style.display = canViewTracker() ? '' : 'none';
 }
 
 function showDashboard() {
@@ -6611,6 +6682,249 @@ function escHtml(str) {
 
 // ===================== AI QA =====================
 const QA_EDGE_FN_URL = `${SUPABASE_URL}/functions/v1/qa_ask`;
+// ============================================================
+// 🎯 1-on-1 追蹤頁（僅雷皓明可見）
+// ============================================================
+const TRACKER_NON_CONSULTING = new Set([
+  '76636726-2f80-4888-895f-ccbaf7c2ba81','27ea064c-98eb-477e-8c61-13b052ab23ed',
+  'ff69ecc5-224b-4ce8-8a6e-618721927479','7794fbee-c262-4a66-acba-11b712833165',
+  '9409dfa5-4a02-45c0-9981-6b561a13141e','00068630-51ba-4239-890e-59bfb8e69cbd',
+  '3822ab76-80f0-4234-afef-2814a834ca70','5b1d9857-df6f-4106-afd3-5482fa14b56a',
+  '62a18b12-394a-44af-b9c8-1538626a84df','27d25c54-6fa5-4b30-8367-851007e0a845'
+]);
+let trackerLoaded = false;
+let trackerRows = [];          // [{lawyer, kpi, briefs[], tracker}]
+let trackerFilters = { search:'', home:'', status:'', brief:'' };
+let trackerSaveTimers = new Map();
+
+async function renderTrackerPage() {
+  if (!canViewTracker()) return;
+  if (trackerLoaded) { renderTrackerTable(); return; }
+  const tbody = document.getElementById('trackerTbody');
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-muted);">載入中…</td></tr>';
+
+  // 1. lawyers + monthly_stats（2025 1-4 + 2026 1-4）
+  const [{ data: lawyersData }, { data: statsData }, { data: trackerData }, { data: briefList }] = await Promise.all([
+    sb.from('lawyers').select('id,name,office,is_active,email,role'),
+    sb.from('monthly_stats').select('lawyer_id,month,consult_count,signed_count,collected').gte('month','2025-01').lt('month','2026-05'),
+    sb.from('consultation_tracker').select('*'),
+    sb.storage.from('briefs').list('', { limit: 200 })
+  ]);
+
+  const id2lawyer = new Map((lawyersData||[]).map(l => [l.id, l]));
+  const id2tracker = new Map((trackerData||[]).map(t => [t.lawyer_id, t]));
+
+  // 2. 列每位 lawyer 的 briefs (storage 結構：{lawyer_id}/...)
+  const id2briefs = new Map();
+  const folders = (briefList||[]).filter(x => x.id === null && x.name); // folders（lawyer_id）
+  await Promise.all(folders.map(async f => {
+    const { data: files } = await sb.storage.from('briefs').list(f.name, { limit: 100 });
+    if (files && files.length) id2briefs.set(f.name, files.map(x => ({ name: x.name, path: `${f.name}/${x.name}`, size: x.metadata?.size||0, updated_at: x.updated_at })));
+  }));
+
+  // 3. 算 KPI
+  const cur = {}, prev = {};
+  (statsData||[]).forEach(s => {
+    const yr = s.month.slice(0,4), mm = s.month.slice(5,7);
+    if (!['01','02','03','04'].includes(mm)) return;
+    const bucket = yr === '2026' ? cur : (yr === '2025' ? prev : null);
+    if (!bucket) return;
+    const d = bucket[s.lawyer_id] = bucket[s.lawyer_id] || { c:0, sg:0, co:0 };
+    d.c  += s.consult_count || 0;
+    d.sg += s.signed_count  || 0;
+    d.co += Number(s.collected || 0);
+  });
+
+  // 4. 組 rows：所有 2026 1-4 諮詢 >=1 的諮詢律師 + 有 brief 的人
+  const rows = [];
+  const seen = new Set();
+  function pushLawyer(lid) {
+    if (seen.has(lid)) return;
+    if (TRACKER_NON_CONSULTING.has(lid)) return;
+    const l = id2lawyer.get(lid);
+    if (!l) return;
+    const c = cur[lid]  || { c:0, sg:0, co:0 };
+    const p = prev[lid] || { c:0, sg:0, co:0 };
+    const eff   = c.c ? c.co/c.c : 0;
+    const rate  = c.c ? c.sg/c.c*100 : 0;
+    const p_eff = p.c ? p.co/p.c : 0;
+    const yoy   = p_eff ? (eff - p_eff)/p_eff*100 : null;
+    rows.push({
+      lawyer: l,
+      home: trackerHome(l),
+      kpi: { consult:c.c, signed:c.sg, collected:c.co, eff, rate, p_eff, yoy, has_prev:!!p.c, inactive: !l.is_active },
+      briefs: id2briefs.get(lid) || [],
+      tracker: id2tracker.get(lid) || { lawyer_id: lid, pattern_group:'', target_text:'', one_on_one_date:null, one_on_one_status:'pending', next_action:'', notes:'' }
+    });
+    seen.add(lid);
+  }
+  // 2026 有諮詢的
+  Object.keys(cur).forEach(pushLawyer);
+  // 有 brief 但 2026 沒諮詢的（離職/停接案）
+  for (const lid of id2briefs.keys()) pushLawyer(lid);
+
+  rows.sort((a,b) => b.kpi.consult - a.kpi.consult);
+  trackerRows = rows;
+  trackerLoaded = true;
+
+  // 5. 填 home 篩選
+  const homes = Array.from(new Set(rows.map(r => r.home))).sort();
+  const sel = document.getElementById('trackerFilterHome');
+  sel.innerHTML = '<option value="">全部所/cohort</option>' + homes.map(h => `<option value="${h}">${h}</option>`).join('');
+
+  // 6. 綁篩選/搜尋
+  document.getElementById('trackerSearch').oninput = (e) => { trackerFilters.search = e.target.value.trim(); renderTrackerTable(); };
+  sel.onchange = (e) => { trackerFilters.home = e.target.value; renderTrackerTable(); };
+  document.getElementById('trackerFilterStatus').onchange = (e) => { trackerFilters.status = e.target.value; renderTrackerTable(); };
+  document.getElementById('trackerFilterBrief').onchange  = (e) => { trackerFilters.brief  = e.target.value; renderTrackerTable(); };
+
+  renderTrackerTable();
+}
+
+function trackerHome(l) {
+  const off = (l.office || '').trim();
+  if (off.includes('司法官')) return '司法官合署';
+  if (off.includes('合署'))   return '合署';
+  // 從 revenue 推 office 在 dashboard 沒有，就用 office 欄位（多半為「喆律法律事務所」）
+  return off || '未分類';
+}
+
+function renderTrackerTable() {
+  const tbody = document.getElementById('trackerTbody');
+  const f = trackerFilters;
+  const filtered = trackerRows.filter(r => {
+    if (f.search && !r.lawyer.name.includes(f.search)) return false;
+    if (f.home && r.home !== f.home) return false;
+    if (f.status && r.tracker.one_on_one_status !== f.status) return false;
+    if (f.brief === 'has' && r.briefs.length === 0) return false;
+    if (f.brief === 'none' && r.briefs.length > 0) return false;
+    return true;
+  });
+
+  // Summary
+  const sum = document.getElementById('trackerSummary');
+  const totalC = trackerRows.reduce((a,r) => a+r.kpi.consult, 0);
+  const totalSg = trackerRows.reduce((a,r) => a+r.kpi.signed, 0);
+  const totalCo = trackerRows.reduce((a,r) => a+r.kpi.collected, 0);
+  const totalDone = trackerRows.filter(r => r.tracker.one_on_one_status === 'done').length;
+  const totalPending = trackerRows.filter(r => r.tracker.one_on_one_status === 'pending').length;
+  const totalScheduled = trackerRows.filter(r => r.tracker.one_on_one_status === 'scheduled').length;
+  const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
+  sum.innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">律師數</div><div class="kpi-value">${trackerRows.length}</div></div>
+    <div class="kpi-card"><div class="kpi-label">合計諮詢 (1-4 月)</div><div class="kpi-value">${totalC.toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">合計效益</div><div class="kpi-value">$${Math.round(totalC ? totalCo/totalC : 0).toLocaleString()}</div></div>
+    <div class="kpi-card"><div class="kpi-label">1-on-1 已完成</div><div class="kpi-value">${totalDone}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
+    <div class="kpi-card"><div class="kpi-label">已排程</div><div class="kpi-value" style="color:var(--gold);">${totalScheduled}</div></div>
+    <div class="kpi-card"><div class="kpi-label">待安排</div><div class="kpi-value" style="color:var(--red);">${totalPending}</div></div>
+    <div class="kpi-card"><div class="kpi-label">有 brief</div><div class="kpi-value">${totalWithBrief}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
+  `;
+
+  // Empty
+  document.getElementById('trackerEmpty').style.display = filtered.length === 0 ? '' : 'none';
+  if (filtered.length === 0) { tbody.innerHTML = ''; return; }
+
+  tbody.innerHTML = filtered.map(r => {
+    const k = r.kpi, t = r.tracker;
+    const yoyHtml = (k.has_prev && k.yoy !== null)
+      ? `<span style="color:${k.yoy >= 0 ? 'var(--green)':'var(--red)'};">${k.yoy >= 0 ? '+':''}${k.yoy.toFixed(0)}%</span>`
+      : '<span style="color:var(--text-muted);">—</span>';
+    const briefHtml = r.briefs.length === 0
+      ? '<span style="color:var(--text-muted);font-size:0.78rem;">無</span>'
+      : r.briefs.map(b => `<a href="#" onclick="openBrief('${r.lawyer.id}','${b.name}');return false;" style="display:inline-block;background:var(--bg-row);padding:2px 8px;border-radius:4px;margin:1px 2px;color:var(--gold);text-decoration:none;font-size:0.75rem;" title="${b.name}">${trackerBriefLabel(b.name)}</a>`).join('');
+    const inactiveTag = k.inactive ? '<span style="background:var(--red-dim);color:var(--red);font-size:0.65rem;padding:1px 5px;border-radius:3px;margin-left:4px;">離職</span>' : '';
+    return `
+    <tr data-lid="${r.lawyer.id}" style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;white-space:nowrap;font-weight:600;">${r.lawyer.name}${inactiveTag}</td>
+      <td style="padding:8px;white-space:nowrap;color:var(--text-muted);font-size:0.78rem;">${r.home}</td>
+      <td style="padding:8px;text-align:right;">${k.consult || '—'}</td>
+      <td style="padding:8px;text-align:right;">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
+      <td style="padding:8px;text-align:right;">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
+      <td style="padding:8px;text-align:right;">${yoyHtml}</td>
+      <td style="padding:8px;">${briefHtml}</td>
+      <td style="padding:8px;"><textarea data-field="target_text" rows="2" style="width:100%;min-width:200px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="例：諮詢當下自己開口報價，外包率 < 30%">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="padding:8px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;"></td>
+      <td style="padding:8px;"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;">
+        <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
+        <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>已排程</option>
+        <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
+        <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
+      </select></td>
+      <td style="padding:8px;"><textarea data-field="next_action" rows="2" style="width:100%;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
+      <td style="padding:8px;"><textarea data-field="notes" rows="2" style="width:100%;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.78rem;resize:vertical;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+    </tr>`;
+  }).join('');
+
+  // 綁編輯
+  tbody.querySelectorAll('[data-field]').forEach(el => {
+    el.addEventListener('change', onTrackerFieldChange);
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') el.addEventListener('blur', onTrackerFieldChange);
+  });
+}
+
+function trackerBriefLabel(name) {
+  if (name === 'v1.pdf')  return '📄 v1';
+  if (name === 'v2.pdf')  return '📄 v2';
+  if (name === 'v1b.pdf') return '📄 v1b';
+  if (name === 'v1.md')   return '📝 v1.md';
+  if (name === 'worksheet.docx') return '📝 工作表';
+  if (name === 'worksheet_fixed.docx') return '📝 工作表(修正)';
+  if (name.startsWith('followup_')) return '📋 ' + name.replace('followup_','').replace(/\..+$/,'') + ' 紀錄';
+  return name;
+}
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function onTrackerFieldChange(e) {
+  const tr = e.target.closest('tr');
+  if (!tr) return;
+  const lid = tr.dataset.lid;
+  const field = e.target.dataset.field;
+  let value = e.target.value;
+  if (field === 'one_on_one_date' && !value) value = null;
+
+  // debounce per (lid, field)
+  const key = lid + ':' + field;
+  if (trackerSaveTimers.has(key)) clearTimeout(trackerSaveTimers.get(key));
+  trackerSaveTimers.set(key, setTimeout(async () => {
+    const row = trackerRows.find(r => r.lawyer.id === lid);
+    if (!row) return;
+    row.tracker[field] = value;
+    const payload = { lawyer_id: lid, [field]: value };
+    // 確保其他欄位也送（upsert）
+    const t = row.tracker;
+    const upsertBody = {
+      lawyer_id: lid,
+      pattern_group: t.pattern_group || null,
+      target_text: t.target_text || null,
+      one_on_one_date: t.one_on_one_date || null,
+      one_on_one_status: t.one_on_one_status || 'pending',
+      next_action: t.next_action || null,
+      notes: t.notes || null
+    };
+    const { error } = await sb.from('consultation_tracker').upsert(upsertBody, { onConflict: 'lawyer_id' });
+    if (error) {
+      console.warn('tracker save error', error);
+      e.target.style.borderColor = 'var(--red)';
+      setTimeout(()=>{ e.target.style.borderColor = ''; }, 2000);
+    } else {
+      e.target.style.borderColor = 'var(--green)';
+      setTimeout(()=>{ e.target.style.borderColor = ''; }, 600);
+      // status 改變要重畫 summary
+      if (field === 'one_on_one_status') renderTrackerTable();
+    }
+  }, 350));
+}
+
+async function openBrief(lawyerId, filename) {
+  const path = `${lawyerId}/${filename}`;
+  const { data, error } = await sb.storage.from('briefs').createSignedUrl(path, 600);
+  if (error || !data) { alert('無法開啟 brief：' + (error?.message || 'unknown')); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
 let qaListState = { search: '', sort: 'recent', tag: null };
 let qaListDebounceTimer = null;
 
