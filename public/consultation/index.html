@@ -1988,10 +1988,10 @@
             <th class="tracker-sort" data-sort="rate" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">簽約率<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="eff" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">效益<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="yoy" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">YoY<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="status" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">狀態<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">1-on-1 日期<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="brief" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">Brief<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:240px;">個人化目標</th>
-            <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">1-on-1 日期<span class="sort-ind"></span></th>
-            <th class="tracker-sort" data-sort="status" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">狀態<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:300px;">下一步</th>
             <th style="text-align:left;padding:10px 8px;min-width:300px;">備註</th>
           </tr>
@@ -6922,15 +6922,15 @@ function renderTrackerTable() {
       <td style="${cellNum}">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
       <td style="${cellNum}">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
       <td style="${cellNum}">${yoyHtml}</td>
-      <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
-      <td style="${cellBase}"><textarea data-field="target_text" style="${taStyle}min-height:140px;font-family:inherit;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
-      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.78rem;width:130px;"></td>
       <td style="${cellBase}"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;">
         <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
         <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>已排程</option>
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
       </select></td>
+      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.78rem;width:130px;"></td>
+      <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
+      <td style="${cellBase}"><textarea data-field="target_text" style="${taStyle}min-height:140px;font-family:inherit;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
       <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:110px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
       <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:110px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
