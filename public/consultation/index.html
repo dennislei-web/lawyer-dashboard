@@ -1994,7 +1994,7 @@
             <th class="tracker-sort" data-sort="eff" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">效益<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="yoy" style="text-align:right;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">YoY<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="status" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">狀態<span class="sort-ind"></span></th>
-            <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">1-on-1 日期<span class="sort-ind"></span></th>
+            <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">日期<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="brief" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">Brief<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:240px;">個人化目標</th>
             <th style="text-align:left;padding:10px 8px;min-width:300px;">下一步</th>
@@ -6933,7 +6933,7 @@ function renderTrackerTable() {
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>待追蹤</option>
       </select></td>
-      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.78rem;width:130px;"></td>
+      <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:0.72rem;width:110px;"></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
       <td style="${cellBase}"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;min-width:420px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
       <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:110px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
