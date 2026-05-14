@@ -1979,6 +1979,11 @@
         #trackerTable textarea:focus, #trackerTable input:focus, #trackerTable select:focus {
           outline: none; border-color: var(--gold);
         }
+        /* 狀態膠囊顏色 */
+        .status-pill[data-status="pending"]   { background: rgba(239,83,80,0.18);  color: #ef5350; border-color: rgba(239,83,80,0.35); }
+        .status-pill[data-status="scheduled"] { background: rgba(255,193,7,0.18);  color: #ffc107; border-color: rgba(255,193,7,0.35); }
+        .status-pill[data-status="done"]      { background: rgba(76,175,80,0.18);  color: #4caf50; border-color: rgba(76,175,80,0.35); }
+        .status-pill[data-status="followup"]  { background: rgba(255,152,0,0.18);  color: #ff9800; border-color: rgba(255,152,0,0.35); }
       </style>
       <table id="trackerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:1400px;">
         <thead>
@@ -6922,7 +6927,7 @@ function renderTrackerTable() {
       <td style="${cellNum}">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
       <td style="${cellNum}">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
       <td style="${cellNum}">${yoyHtml}</td>
-      <td style="${cellBase}"><select data-field="one_on_one_status" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.8rem;">
+      <td style="${cellBase}"><select data-field="one_on_one_status" class="status-pill" data-status="${t.one_on_one_status||'pending'}" style="border:1px solid var(--border);padding:4px 6px;border-radius:12px;font-size:0.72rem;font-weight:600;width:72px;text-align:center;cursor:pointer;">
         <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>待安排</option>
         <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>已排程</option>
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>已完成</option>
@@ -6930,7 +6935,7 @@ function renderTrackerTable() {
       </select></td>
       <td style="${cellBase}white-space:nowrap;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:0.78rem;width:130px;"></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
-      <td style="${cellBase}"><textarea data-field="target_text" style="${taStyle}min-height:140px;font-family:inherit;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="${cellBase}"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;min-width:420px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
       <td style="${cellBase}"><textarea data-field="next_action" style="${taStyle}min-height:110px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
       <td style="${cellBase}"><textarea data-field="notes" style="${taStyle}min-height:110px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
@@ -6965,6 +6970,10 @@ async function onTrackerFieldChange(e) {
   const field = e.target.dataset.field;
   let value = e.target.value;
   if (field === 'one_on_one_date' && !value) value = null;
+  // 狀態 select 即時更新 data-status 讓顏色跟著切換
+  if (field === 'one_on_one_status' && e.target.classList.contains('status-pill')) {
+    e.target.setAttribute('data-status', value);
+  }
 
   // debounce per (lid, field)
   const key = lid + ':' + field;
