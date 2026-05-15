@@ -198,13 +198,10 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
     </div>
 
     <div class="card">
-      <h2>喆律在 010 平台 總計<span class="hint">對應 sheet[3] 第 75 列；月度可看工作日進度估算</span></h2>
+      <h2>喆律在 010 平台 總計<span class="hint">對應 sheet[3] 第 75 列；單月顯示工作日進度</span></h2>
       <div class="controls">
-        <label>檢視範圍：</label>
-        <select id="totalMode">
-          <option value="month">月度（依截止月）</option>
-          <option value="year">年度（截止月之該年）</option>
-        </select>
+        <label>期間：</label>
+        <select id="totalPeriod" style="min-width:220px"></select>
       </div>
       <div id="totalSummary"></div>
     </div>
@@ -436,8 +433,92 @@ function renderCompare(){
   const [ey, em] = endYM.split('-').map(Number);
   const months = lastNMonths(ey, em, 6);  // [(y,m), (y,m), ...]
   renderCompareTeam(months);
-  renderTotalSummary(ey, em);
+  renderTotalSummary();
   renderCompareLawyer(months);
+}
+
+function initTotalPeriod(){
+  const sel = document.getElementById('totalPeriod');
+  if(!sel || !lawyerData.length) return;
+  // 找最新月 (latest in data)
+  let latest = lawyerData.reduce((m, r) => {
+    const k = r.year*12 + r.month;
+    return k > m.k ? {k, y:r.year, m:r.month} : m;
+  }, {k:0, y:0, m:0});
+  const years = [...new Set(lawyerData.map(r=>r.year))].sort((a,b)=>b-a);
+  const opts = [];
+  // 最近 6 個月（單月）
+  let y = latest.y, m = latest.m;
+  for(let i=0; i<6; i++){
+    const ymStr = `${y}-${String(m).padStart(2,'0')}`;
+    opts.push({v:`month:${ymStr}`, l: i===0 ? `當月 (${ymStr})` : (i===1 ? `上月 (${ymStr})` : ymStr)});
+    m--; if(m<1){m=12; y--;}
+  }
+  opts.push({v:'sep1', l:'─── 分隔 ───', disabled:true});
+  // YTD 該年
+  opts.push({v:`ytd:${latest.y}`, l:`${latest.y} 至今 YTD（1-${latest.m}月）`});
+  // 全年
+  years.forEach(yr => opts.push({v:`year:${yr}`, l:`${yr} 全年`}));
+  opts.push({v:'sep2', l:'─── 分隔 ───', disabled:true});
+  // 滾動視窗
+  opts.push({v:'recent:3', l:'最近 3 個月'});
+  opts.push({v:'recent:6', l:'最近 6 個月'});
+  opts.push({v:'recent:12', l:'最近 12 個月'});
+  opts.push({v:'recent:24', l:'最近 24 個月'});
+
+  sel.innerHTML = opts.map(o => `<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
+  if(!sel.value || sel.value.startsWith('sep')) sel.value = opts[0].v;
+}
+
+function resolvePeriod(){
+  // 回傳 { rows, label, isSingleMonth, monthForWD }
+  const period = document.getElementById('totalPeriod').value || '';
+  const [type, val] = period.split(':');
+
+  if(type === 'month'){
+    const [y, mo] = val.split('-').map(Number);
+    return {
+      rows: lawyerData.filter(r => r.year === y && r.month === mo),
+      label: `${y}-${String(mo).padStart(2,'0')}（單月）`,
+      isSingleMonth: true,
+      monthForWD: [y, mo],
+    };
+  }
+  if(type === 'year'){
+    const y = parseInt(val);
+    const rows = lawyerData.filter(r => r.year === y);
+    const monthCount = new Set(rows.map(r => r.month)).size;
+    return {
+      rows, label: `${y} 全年（${monthCount} 個月）`,
+      isSingleMonth: false, monthForWD: null,
+    };
+  }
+  if(type === 'ytd'){
+    const y = parseInt(val);
+    const latestM = lawyerData.filter(r=>r.year===y).reduce((mx,r)=>r.month>mx?r.month:mx, 0);
+    const rows = lawyerData.filter(r => r.year === y && r.month <= latestM);
+    return {
+      rows, label: `${y}-01 到 ${y}-${String(latestM).padStart(2,'0')} YTD`,
+      isSingleMonth: false, monthForWD: null,
+    };
+  }
+  if(type === 'recent'){
+    const n = parseInt(val);
+    let latest = lawyerData.reduce((m, r) => {
+      const k = r.year*12 + r.month;
+      return k > m.k ? {k, y:r.year, m:r.month} : m;
+    }, {k:0, y:0, m:0});
+    const months = lastNMonths(latest.y, latest.m, n);
+    const keys = new Set(months.map(([y,mo])=>`${y}-${mo}`));
+    const rows = lawyerData.filter(r => keys.has(`${r.year}-${r.month}`));
+    const first = months[0], last = months[months.length-1];
+    return {
+      rows,
+      label: `最近 ${n} 月（${first[0]}-${String(first[1]).padStart(2,'0')} 到 ${last[0]}-${String(last[1]).padStart(2,'0')}）`,
+      isSingleMonth: false, monthForWD: null,
+    };
+  }
+  return { rows: [], label: '-', isSingleMonth: false, monthForWD: null };
 }
 
 function workingDayProgress(year, month){
@@ -463,16 +544,8 @@ function workingDayProgress(year, month){
   return { passed, total, progress: total ? passed/total : 0, status:'current' };
 }
 
-function renderTotalSummary(ey, em){
-  const mode = document.getElementById('totalMode').value;
-  let inScope, scopeLabel;
-  if(mode === 'month'){
-    inScope = lawyerData.filter(r => r.year === ey && r.month === em);
-    scopeLabel = `${ey}-${String(em).padStart(2,'0')}`;
-  } else {
-    inScope = lawyerData.filter(r => r.year === ey);
-    scopeLabel = `${ey} 全年（含 ${[...new Set(inScope.map(r=>r.month))].length} 個月）`;
-  }
+function renderTotalSummary(){
+  const { rows: inScope, label: scopeLabel, isSingleMonth, monthForWD } = resolvePeriod();
   const sum = (k) => inScope.reduce((s,r)=>s+(r[k]||0), 0);
   const total_referrals = sum('referrals');
   const total_attended = sum('attended');
@@ -486,22 +559,29 @@ function renderTotalSummary(ey, em){
   const avg_unit_wan = total_referrals ? total_revenue/total_referrals/10000 : 0;
   const avg_signed_wan = total_signed ? total_revenue/total_signed/10000 : 0;
 
-  // 狀態分布
+  // 狀態分布: 單月直接用；其他期間用該期間最新月
   let statusRows;
-  if(mode === 'month') statusRows = inScope;
-  else {
-    const monthsInYr = [...new Set(inScope.map(r => r.month))].sort((a,b)=>b-a);
-    statusRows = lawyerData.filter(r => r.year === ey && r.month === monthsInYr[0]);
-  }
+  if(isSingleMonth) statusRows = inScope;
+  else if(inScope.length){
+    const latestKey = inScope.reduce((mx, r) => {
+      const k = r.year*12+r.month;
+      return k > mx ? k : mx;
+    }, 0);
+    const latestY = Math.floor(latestKey/12) + (latestKey%12===0?0:0);
+    // 反推 y/m
+    const candidates = inScope.filter(r => r.year*12+r.month === latestKey);
+    statusRows = candidates;
+  } else statusRows = [];
   const cntPrio = statusRows.filter(r=>r.referral_status==='優先').length;
   const cntNorm = statusRows.filter(r=>r.referral_status==='正常').length;
   const cntSlow = statusRows.filter(r=>r.referral_status==='暫緩').length;
   const cntTotal = cntPrio + cntNorm + cntSlow;
   const pct = (n) => cntTotal>0 ? (n/cntTotal*100).toFixed(0)+'%' : '-';
 
-  // 工作日 (僅月度)
+  // 工作日 (僅單月)
   let workingDayHtml = '';
-  if(mode === 'month'){
+  if(isSingleMonth && monthForWD){
+    const [ey, em] = monthForWD;
     const wd = workingDayProgress(ey, em);
     if(wd.status === 'current'){
       const projected = wd.progress > 0 ? Math.round(total_revenue / wd.progress) : 0;
@@ -523,6 +603,8 @@ function renderTotalSummary(ey, em){
     }
   }
 
+  // 狀態 label
+  const statusLabel = isSingleMonth ? '當月' : '期間最新月';
   const html = `
     <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">檢視範圍：${scopeLabel}</div>
     <div class="totals-grid">
@@ -562,7 +644,7 @@ function renderTotalSummary(ey, em){
       </div>
       ${workingDayHtml}
       <div class="stat-block status-block">
-        <div class="stat-label">律師狀態分布（${mode==='month' ? '當月' : '最新月'} active ${cntTotal}）</div>
+        <div class="stat-label">律師狀態分布（${statusLabel} active ${cntTotal}）</div>
         <div class="stat-value">
           <span class="status status-優先">優先 ${cntPrio} (${pct(cntPrio)})</span>
           <span class="status status-正常">正常 ${cntNorm} (${pct(cntNorm)})</span>
@@ -886,7 +968,7 @@ function renderDrill(){
 }
 
 // ═══ Render dispatch ═══
-function renderAll(){ renderCompare(); renderTeam(); initDrillSelector(); renderDrill(); }
+function renderAll(){ initTotalPeriod(); renderCompare(); renderTeam(); initDrillSelector(); renderDrill(); }
 
 // ═══ Tab switch ═══
 document.querySelectorAll('.tab-btn').forEach(b=>{
@@ -902,7 +984,7 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
 document.getElementById('cmpEndMonth').addEventListener('change', renderCompare);
 document.getElementById('cmpMetric').addEventListener('change', renderCompare);
 document.getElementById('cmpLawyerMetric').addEventListener('change', renderCompare);
-document.getElementById('totalMode').addEventListener('change', renderCompare);
+document.getElementById('totalPeriod').addEventListener('change', renderTotalSummary);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
