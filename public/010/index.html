@@ -74,6 +74,10 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
 .tbl col.col-status{width:80px}
 .tbl col.col-trend{width:60px}
 .tbl tr:hover td{background:var(--bg-hover)}
+.tbl th.sortable{cursor:pointer;user-select:none}
+.tbl th.sortable:hover{background:var(--bg-hover);color:var(--gold)}
+.tbl th .sort-arr{margin-left:3px;color:var(--gold);font-size:10px}
+.tbl th.sorted-asc, .tbl th.sorted-desc{color:var(--gold)}
 .tbl td.pos{color:var(--green)} .tbl td.neg{color:var(--red)} .tbl td.warn{color:var(--orange)}
 .tbl td.bg-green{background:var(--green-dim)}
 .tbl td.bg-red{background:var(--red-dim)}
@@ -193,13 +197,7 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
           <option value="overall_sign_rate">當月狀態</option>
           <option value="referral_status">轉案狀態</option>
         </select>
-        <label>排序：</label>
-        <select id="cmpLawyerSort">
-          <option value="total_revenue">當月總金額</option>
-          <option value="referrals">當月件數</option>
-          <option value="trend6">近 6 月總金額和</option>
-          <option value="lawyer">姓名</option>
-        </select>
+        <span style="color:var(--text-muted);font-size:12px;margin-left:6px">點欄位 header 排序</span>
       </div>
       <div id="cmpLawyerTbl"></div>
     </div>
@@ -261,6 +259,40 @@ let currentUser=null, currentLawyer=null;
 // ═══ Cache ═══
 let teamData=[], lawyerData=[]; // 全部 fact 表
 let currentEndYM = null;
+
+// Sort state per table（key 可以是欄位名 或 'ym:YYYY-M' 表月份欄；'name' 是律師/同仁名）
+let teamSort = { key: null, dir: 'desc' };
+let lawyerSort = { key: null, dir: 'desc' };
+
+function applySort(state, clickedKey, isString){
+  if(state.key === clickedKey){
+    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.key = clickedKey;
+    state.dir = isString ? 'asc' : 'desc';
+  }
+}
+function arrowFor(state, key){
+  if(state.key !== key) return '';
+  return `<span class="sort-arr">${state.dir==='asc'?'▲':'▼'}</span>`;
+}
+function sortedRows(rows, state, getVal){
+  if(!state.key) return rows;
+  const sign = state.dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a,b)=>{
+    const va = getVal(a), vb = getVal(b);
+    if(va==null && vb==null) return 0;
+    if(va==null) return 1;
+    if(vb==null) return -1;
+    if(typeof va==='number' && typeof vb==='number') return (va-vb)*sign;
+    return String(va).localeCompare(String(vb), 'zh-Hant') * sign;
+  });
+}
+window.__010Sort = function(table, key, isString){
+  if(table==='team'){ applySort(teamSort, key, isString); }
+  else { applySort(lawyerSort, key, isString); }
+  renderCompare();
+};
 
 // ═══ Auth ═══
 async function checkSession(){
@@ -396,19 +428,49 @@ function renderCompareTeam(months){
   const metric = document.getElementById('cmpMetric').value;
   const endYM = months[months.length-1];
   const inEnd = teamData.filter(r=>r.year===endYM[0] && r.month===endYM[1]);
-  const members = inEnd.map(r=>r.team_member);
+
+  // 建 row data
+  const rows = inEnd.map(r => {
+    const name = r.team_member;
+    const vals = months.map(([y,m])=>{
+      const x = teamData.find(t=>t.year===y && t.month===m && t.team_member===name);
+      return x ? x[metric] : null;
+    });
+    const trendSum = vals.reduce((s,v)=> s + (typeof v==='number'? v : 0), 0);
+    return { name, vals, trendSum };
+  });
+
+  // sort
+  const sorted = sortedRows(rows, teamSort, (r)=>{
+    const k = teamSort.key;
+    if(!k) return null;
+    if(k==='name') return r.name;
+    if(k==='trend') return r.trendSum;
+    if(k.startsWith('ym:')){
+      const idx = parseInt(k.slice(3),10);
+      return r.vals[idx];
+    }
+    return null;
+  });
+
+  // 預設按最後一月 desc
+  if(!teamSort.key && rows.length){
+    sorted.sort((a,b)=> (b.vals[months.length-1]||0) - (a.vals[months.length-1]||0));
+  }
+
   let html = '<table class="tbl"><colgroup><col class="col-name">';
   months.forEach(()=> html += '<col class="col-month">');
-  html += '<col class="col-trend"></colgroup><thead><tr><th class="name-col">010 同仁</th>';
-  months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
-  html += '<th class="center">趨勢</th></tr></thead><tbody>';
-  members.forEach(name=>{
+  html += '<col class="col-trend"></colgroup><thead><tr>';
+  html += `<th class="name-col sortable" onclick="__010Sort('team','name',true)">010 同仁${arrowFor(teamSort,'name')}</th>`;
+  months.forEach(([y,m],i)=>{
+    const k = 'ym:'+i;
+    html += `<th class="sortable" onclick="__010Sort('team','${k}',false)">${y}-${String(m).padStart(2,'0')}${arrowFor(teamSort,k)}</th>`;
+  });
+  html += `<th class="center sortable" onclick="__010Sort('team','trend',false)">趨勢${arrowFor(teamSort,'trend')}</th>`;
+  html += '</tr></thead><tbody>';
+  sorted.forEach(({name,vals,trendSum})=>{
     let row = `<tr><td class="name-col">${name}</td>`;
-    const vals = months.map(([y,m])=>{
-      const r = teamData.find(x=>x.year===y && x.month===m && x.team_member===name);
-      return r ? r[metric] : null;
-    });
-    vals.forEach((v)=>{
+    vals.forEach(v=>{
       const cls = colorClass(metric, v);
       row += `<td class="${cls}">${valStr(metric,v)}</td>`;
     });
@@ -423,9 +485,7 @@ function renderCompareTeam(months){
 }
 function renderCompareLawyer(months){
   const metric = document.getElementById('cmpLawyerMetric').value;
-  const sort = document.getElementById('cmpLawyerSort').value;
   const endYM = months[months.length-1];
-  // 列出曾在最近 6 月有資料的律師
   const recentYMs = new Set(months.map(([y,m])=>`${y}-${m}`));
   const rowsByLawyer = {};
   lawyerData.forEach(r=>{
@@ -434,44 +494,65 @@ function renderCompareLawyer(months){
       rowsByLawyer[r.lawyer][`${r.year}-${r.month}`] = r;
     }
   });
-  const lawyers = Object.keys(rowsByLawyer);
-  // sort
-  lawyers.sort((a,b)=>{
-    if(sort==='lawyer') return a.localeCompare(b,'zh-Hant');
-    const rA = rowsByLawyer[a][`${endYM[0]}-${endYM[1]}`];
-    const rB = rowsByLawyer[b][`${endYM[0]}-${endYM[1]}`];
-    if(sort==='trend6'){
-      const sumA = months.reduce((s,[y,m])=> s + ((rowsByLawyer[a][`${y}-${m}`]||{}).total_revenue||0),0);
-      const sumB = months.reduce((s,[y,m])=> s + ((rowsByLawyer[b][`${y}-${m}`]||{}).total_revenue||0),0);
-      return sumB-sumA;
+
+  // 建 row data
+  const rows = Object.keys(rowsByLawyer).map(lw=>{
+    const ld = rowsByLawyer[lw];
+    const endRec = ld[`${endYM[0]}-${endYM[1]}`];
+    const region = endRec ? endRec.region : '';
+    const status = endRec ? endRec.referral_status : '-';
+    const vals = months.map(([y,m])=>{
+      const r = ld[`${y}-${m}`];
+      return r ? r[metric] : null;
+    });
+    const trendRevenue = months.map(([y,m])=>{ const r=ld[`${y}-${m}`]; return r? (r.total_revenue||0) : 0 });
+    const trendSum = trendRevenue.reduce((s,v)=>s+v,0);
+    return { lw, region, status, vals, trendRevenue, trendSum };
+  });
+
+  // 預設排序：當月 metric desc
+  if(!lawyerSort.key){
+    rows.sort((a,b)=> (b.vals[months.length-1]||0) - (a.vals[months.length-1]||0));
+  }
+  const sorted = sortedRows(rows, lawyerSort, (r)=>{
+    const k = lawyerSort.key;
+    if(!k) return null;
+    if(k==='name') return r.lw;
+    if(k==='region') return r.region;
+    if(k==='status'){
+      const order = {'優先':3, '正常':2, '暫緩':1, '-':0};
+      return order[r.status] ?? 0;
     }
-    return ((rB||{})[sort]||0) - ((rA||{})[sort]||0);
+    if(k==='trend') return r.trendSum;
+    if(k.startsWith('ym:')){
+      const idx = parseInt(k.slice(3),10);
+      return r.vals[idx];
+    }
+    return null;
   });
 
   let html = '<table class="tbl"><colgroup><col class="col-name"><col class="col-region">';
   months.forEach(()=> html += '<col class="col-month">');
   html += '<col class="col-status"><col class="col-trend"></colgroup>';
-  html += '<thead><tr><th class="name-col">合作律師</th><th class="center">地區</th>';
-  months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
-  html += '<th class="center">狀態 (當月)</th><th class="center">趨勢</th></tr></thead><tbody>';
-  lawyers.forEach(lw=>{
-    const ld = rowsByLawyer[lw];
-    const endRec = ld[`${endYM[0]}-${endYM[1]}`];
-    const region = endRec ? endRec.region : '';
+  html += '<thead><tr>';
+  html += `<th class="name-col sortable" onclick="__010Sort('lawyer','name',true)">合作律師${arrowFor(lawyerSort,'name')}</th>`;
+  html += `<th class="center sortable" onclick="__010Sort('lawyer','region',true)">地區${arrowFor(lawyerSort,'region')}</th>`;
+  months.forEach(([y,m],i)=>{
+    const k = 'ym:'+i;
+    html += `<th class="sortable" onclick="__010Sort('lawyer','${k}',false)">${y}-${String(m).padStart(2,'0')}${arrowFor(lawyerSort,k)}</th>`;
+  });
+  html += `<th class="center sortable" onclick="__010Sort('lawyer','status',false)">狀態 (當月)${arrowFor(lawyerSort,'status')}</th>`;
+  html += `<th class="center sortable" onclick="__010Sort('lawyer','trend',false)">趨勢${arrowFor(lawyerSort,'trend')}</th>`;
+  html += '</tr></thead><tbody>';
+  sorted.forEach(({lw, region, status, vals, trendRevenue})=>{
     let row = `<tr><td class="name-col"><a href="#" data-lawyer="${lw}" class="lw-link">${lw}</a></td><td class="center">${region||''}</td>`;
-    const vals = months.map(([y,m])=>{
-      const r = ld[`${y}-${m}`];
-      return r ? r[metric] : null;
-    });
     vals.forEach(v=>{
       const cls = colorClass(metric, v);
       row += `<td class="${cls}">${valStr(metric,v)}</td>`;
     });
-    const status = endRec ? endRec.referral_status : '-';
     row += `<td class="center"><span class="status status-${status==='-'?'空':status}">${status||'-'}</span></td>`;
-    const nums = months.map(([y,m])=>{ const r=ld[`${y}-${m}`]; return r? (r.total_revenue||0) : 0 });
-    const max = Math.max(...nums, 1);
-    row += '<td class="center"><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
+    const max = Math.max(...trendRevenue, 1);
+    row += '<td class="center"><span class="spark">' + trendRevenue.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
     row += '</tr>';
     html += row;
   });
@@ -640,7 +721,6 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
 document.getElementById('cmpEndMonth').addEventListener('change', renderCompare);
 document.getElementById('cmpMetric').addEventListener('change', renderCompare);
 document.getElementById('cmpLawyerMetric').addEventListener('change', renderCompare);
-document.getElementById('cmpLawyerSort').addEventListener('change', renderCompare);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
