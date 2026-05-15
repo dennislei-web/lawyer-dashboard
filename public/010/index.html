@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>法律 010 - 喆律法律事務所</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root{
+  --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+  --border:#1e3050; --border-light:#243a5e;
+  --gold:#c9a84c; --gold-light:#e8c97a;
+  --text:#e0e0e0; --text-muted:#8899aa;
+  --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+  --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+  --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+  --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-main);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei",sans-serif;font-size:14px;line-height:1.5}
+a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
+
+/* Login */
+#loginPage{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-box{background:var(--bg-card);padding:40px;border-radius:8px;border:1px solid var(--border);width:100%;max-width:380px}
+.login-box h1{font-size:20px;margin-bottom:24px;color:var(--gold)}
+.login-box label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:13px}
+.login-box input{width:100%;padding:10px 12px;background:var(--bg-row);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:14px;margin-bottom:16px}
+.login-box button{width:100%;padding:10px;background:var(--gold);color:#000;border:0;border-radius:4px;font-size:14px;font-weight:600;cursor:pointer}
+.login-box button:disabled{opacity:0.5;cursor:not-allowed}
+.login-err{color:var(--red);margin-top:12px;font-size:13px;display:none}
+
+/* Layout */
+#dashboard{display:none;padding:20px;max-width:1600px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.header h1{font-size:22px;color:var(--gold);font-weight:600}
+.header h1 .sub{color:var(--text-muted);font-size:13px;font-weight:400;margin-left:12px}
+.header-right{display:flex;align-items:center;gap:12px;font-size:13px}
+.userbadge{color:var(--text-muted)}
+.btn{padding:6px 12px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer;font-size:13px}
+.btn:hover{background:var(--bg-hover)}
+.btn-primary{background:var(--gold);color:#000;border:0;font-weight:600}
+.btn-primary:hover{background:var(--gold-light)}
+
+/* Freshness banner */
+.freshness{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:16px;font-size:13px}
+.freshness .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.freshness .dot.stale{background:var(--orange)}
+.freshness .dot.old{background:var(--red)}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+.tab-btn{padding:10px 18px;background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:14px;border-bottom:2px solid transparent}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--gold);border-bottom-color:var(--gold)}
+.page{display:none}
+.page.active{display:block}
+
+/* Card */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px}
+.card h2{font-size:16px;color:var(--gold);margin-bottom:12px;font-weight:600}
+.card h2 .hint{color:var(--text-muted);font-size:12px;font-weight:400;margin-left:8px}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--border)}
+.tbl th{background:var(--bg-row);color:var(--gold-light);font-weight:500;text-align:center;position:sticky;top:0;font-size:12px}
+.tbl th.name-col,.tbl td.name-col{text-align:left;color:var(--text)}
+.tbl tr:hover td{background:var(--bg-hover)}
+.tbl td.num{font-variant-numeric:tabular-nums}
+.tbl td.pos{color:var(--green)} .tbl td.neg{color:var(--red)} .tbl td.warn{color:var(--orange)}
+.tbl td.bg-green{background:var(--green-dim)}
+.tbl td.bg-red{background:var(--red-dim)}
+.tbl td.bg-orange{background:var(--orange-dim)}
+.tbl td.bg-blue{background:var(--blue-dim)}
+
+/* Status pill */
+.status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.status-優先{background:var(--blue-dim);color:var(--blue)}
+.status-正常{background:var(--green-dim);color:var(--green)}
+.status-暫緩{background:var(--red-dim);color:var(--red)}
+.status-空{background:var(--bg-row);color:var(--text-muted)}
+
+/* Sparkline */
+.spark{display:inline-flex;align-items:flex-end;gap:1px;height:18px;vertical-align:middle}
+.spark span{width:4px;background:var(--blue);border-radius:1px;min-height:2px}
+
+/* Controls */
+.controls{display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+.controls label{color:var(--text-muted);font-size:13px}
+.controls select,.controls input{padding:6px 10px;background:var(--bg-row);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px}
+
+/* Loading */
+.loading{padding:40px;text-align:center;color:var(--text-muted)}
+
+/* Charts container */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chart-grid > div{background:var(--bg-row);border-radius:4px;padding:12px;height:240px}
+.chart-grid h3{font-size:13px;color:var(--gold-light);margin-bottom:8px;font-weight:500}
+
+/* No access */
+#noAccessPage{display:none;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginPage">
+  <div class="login-box">
+    <h1>法律 010 儀表板</h1>
+    <form id="loginForm">
+      <label>Email</label>
+      <input id="loginEmail" type="email" required>
+      <label>密碼</label>
+      <input id="loginPassword" type="password" required>
+      <button id="loginBtn" type="submit">登入</button>
+      <div class="login-err" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- No access -->
+<div id="noAccessPage">
+  <div class="login-box">
+    <h1 style="color:var(--red)">無瀏覽權限</h1>
+    <p style="color:var(--text-muted);margin-bottom:16px">您的帳號（<span id="noAccessUser"></span>）沒有法律010儀表板的瀏覽權限，請聯繫管理員。</p>
+    <button class="btn" id="noAccessLogout">登出</button>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard">
+  <div class="header">
+    <h1>法律 010 儀表板 <span class="sub">轉案業績歷史檢視</span></h1>
+    <div class="header-right">
+      <span class="userbadge" id="userBadge"></span>
+      <a href="https://docs.google.com/spreadsheets/d/1bGmKAFdCKZdfuag4tbGB7WeRxqBGFyJsvwDgbBpcZb4/edit" target="_blank" class="btn">🔗 開 Sheet</a>
+      <button class="btn" id="refreshBtn">⟳ 重新整理</button>
+      <button class="btn" id="logoutBtn">登出</button>
+    </div>
+  </div>
+
+  <div class="freshness" id="freshness">
+    <span class="dot" id="freshnessDot"></span>
+    <span id="freshnessText">資料更新於 ...</span>
+    <span style="color:var(--text-muted);margin-left:auto">同步算法 lock-in vs sheet[3]：兆群/柏廷/沛琪/冠瑜/法0共用 業績 100% 一致；件數會因 sheet 即時 entry 略多</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="compare">月對比</button>
+    <button class="tab-btn" data-tab="team">同仁團隊 24 月</button>
+    <button class="tab-btn" data-tab="lawyer">律師個人 drill</button>
+  </div>
+
+  <!-- View 1: 月對比 -->
+  <div class="page active" id="page-compare">
+    <div class="card">
+      <h2>010 同仁業績<span class="hint">最近 6 個月並列；當月狀態 (T) 出席率×委任率 >35% 綠底；BI 警示 (U) 平均單價 >2.1 萬綠底</span></h2>
+      <div class="controls">
+        <label>截止月：</label>
+        <select id="cmpEndMonth"></select>
+        <label>顯示指標：</label>
+        <select id="cmpMetric">
+          <option value="total_revenue">總業績</option>
+          <option value="current_month_revenue">當月業績</option>
+          <option value="cross_month_revenue">跨月業績</option>
+          <option value="total_referrals">總轉出件數</option>
+          <option value="signed">委任件數</option>
+          <option value="attend_rate">出席率</option>
+          <option value="sign_rate">成案率</option>
+          <option value="avg_signed_amount">委任均價</option>
+        </select>
+      </div>
+      <div id="cmpTeamTbl"></div>
+    </div>
+
+    <div class="card">
+      <h2>合作律師業績<span class="hint">點律師名 → 切到個人 drill view；BI 警示 = 平均單價(萬/案)</span></h2>
+      <div class="controls">
+        <label>顯示指標：</label>
+        <select id="cmpLawyerMetric">
+          <option value="total_revenue">總金額</option>
+          <option value="referrals">已轉件數</option>
+          <option value="signed">委任件數</option>
+          <option value="sign_rate">委任率</option>
+          <option value="avg_unit_price_wan">BI 警示 (萬/案)</option>
+          <option value="overall_sign_rate">當月狀態</option>
+          <option value="referral_status">轉案狀態</option>
+        </select>
+        <label>排序：</label>
+        <select id="cmpLawyerSort">
+          <option value="total_revenue">當月總金額</option>
+          <option value="referrals">當月件數</option>
+          <option value="trend6">近 6 月總金額和</option>
+          <option value="lawyer">姓名</option>
+        </select>
+      </div>
+      <div id="cmpLawyerTbl"></div>
+    </div>
+  </div>
+
+  <!-- View 2: 同仁團隊 -->
+  <div class="page" id="page-team">
+    <div class="card">
+      <h2>010 同仁 24 月趨勢<span class="hint">看哪位同仁業績在 grow / shrink</span></h2>
+      <div class="controls">
+        <label>指標：</label>
+        <select id="teamMetric">
+          <option value="total_revenue">總業績</option>
+          <option value="current_month_revenue">當月業績</option>
+          <option value="cross_month_revenue">跨月業績</option>
+          <option value="total_referrals">總轉出件數</option>
+          <option value="signed">委任件數</option>
+          <option value="attend_rate">出席率</option>
+          <option value="sign_rate">成案率</option>
+        </select>
+      </div>
+      <div style="height:400px;background:var(--bg-row);border-radius:4px;padding:12px">
+        <canvas id="teamChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- View 3: 律師 drill -->
+  <div class="page" id="page-lawyer">
+    <div class="card">
+      <h2>合作律師個人 drill<span class="hint">24 月趨勢；點月份看當月細節</span></h2>
+      <div class="controls">
+        <label>律師：</label>
+        <select id="drillLawyer"></select>
+        <span id="drillStatus" style="color:var(--text-muted)"></span>
+      </div>
+      <div class="chart-grid">
+        <div><h3>已轉件數（vs 月目標）</h3><canvas id="dChartRef"></canvas></div>
+        <div><h3>委任率 (出席→簽約)</h3><canvas id="dChartSign"></canvas></div>
+        <div><h3>總金額（當月+跨月）</h3><canvas id="dChartRev"></canvas></div>
+        <div><h3>BI 警示（萬/案）</h3><canvas id="dChartBI"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>24 月明細</h2>
+      <div id="drillTbl"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ Config ═══
+const SUPABASE_URL='https://zpbkeyhxyykbvownrngf.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+let sb=null;
+try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }catch(e){console.error(e)}
+let currentUser=null, currentLawyer=null;
+
+// ═══ Cache ═══
+let teamData=[], lawyerData=[]; // 全部 fact 表
+let currentEndYM = null;
+
+// ═══ Auth ═══
+async function checkSession(){
+  if(!sb) return showLogin();
+  const s = await sb.auth.getSession();
+  if(s.data.session){
+    currentUser = s.data.session.user;
+    await loadUserProfile();
+    showDashboard();
+  } else showLogin();
+}
+async function loadUserProfile(){
+  if(!sb||!currentUser) return;
+  const r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if(r.data) currentLawyer = r.data;
+}
+function showLogin(){
+  document.getElementById('loginPage').style.display='flex';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+}
+async function showDashboard(){
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer?currentLawyer.name:(currentUser?.email||'');
+  await loadData();
+}
+document.getElementById('loginForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const btn=document.getElementById('loginBtn'), err=document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try{
+    const r = await sb.auth.signInWithPassword({
+      email: document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value
+    });
+    if(r.error) throw r.error;
+    currentUser = r.data.user; await loadUserProfile(); showDashboard();
+  }catch(ex){ err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
+  finally{ btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  if(sb) await sb.auth.signOut();
+  currentUser=null; currentLawyer=null; showLogin();
+});
+
+// ═══ Data load ═══
+async function loadData(){
+  // 拉全部 fact 表 (212 team + 1517 lawyer 不大)
+  const [tm, lw] = await Promise.all([
+    sb.from('fact_010_monthly_team').select('*').order('year',{ascending:false}).order('month',{ascending:false}).limit(2000),
+    sb.from('fact_010_monthly_lawyer').select('*').order('year',{ascending:false}).order('month',{ascending:false}).limit(5000),
+  ]);
+  if(tm.error){ console.error(tm.error); alert('無權限讀 fact_010_monthly_team: '+tm.error.message); return; }
+  if(lw.error){ console.error(lw.error); alert('無權限讀 fact_010_monthly_lawyer: '+lw.error.message); return; }
+  teamData = tm.data || [];
+  lawyerData = lw.data || [];
+  renderFreshness();
+  initMonthSelector();
+  renderAll();
+}
+function renderFreshness(){
+  if(!teamData.length) return;
+  const maxCt = teamData.reduce((m,r)=>{
+    const t = new Date(r.computed_at).getTime();
+    return t>m?t:m;
+  }, 0);
+  const ageMin = Math.round((Date.now()-maxCt)/60000);
+  const el = document.getElementById('freshnessText');
+  const dot = document.getElementById('freshnessDot');
+  let txt;
+  if(ageMin<60) txt = `資料更新於 ${ageMin} 分鐘前`;
+  else if(ageMin<1440) txt = `資料更新於 ${Math.round(ageMin/60)} 小時前`;
+  else txt = `資料更新於 ${Math.round(ageMin/1440)} 天前`;
+  el.textContent = txt + '（手動 sync：python scripts/sync_010.py）';
+  dot.className='dot' + (ageMin>1440?' old': ageMin>120?' stale':'');
+}
+function initMonthSelector(){
+  // 用 team data 找出有資料的 year/month list
+  const ymSet = new Set();
+  teamData.forEach(r=> ymSet.add(`${r.year}-${String(r.month).padStart(2,'0')}`));
+  const yms = Array.from(ymSet).sort().reverse();
+  const sel = document.getElementById('cmpEndMonth');
+  sel.innerHTML = yms.map(ym=>`<option value="${ym}">${ym}</option>`).join('');
+  currentEndYM = yms[0];
+  sel.value = currentEndYM;
+}
+
+// ═══ View 1: 月對比 ═══
+function renderCompare(){
+  const endYM = document.getElementById('cmpEndMonth').value;
+  if(!endYM) return;
+  const [ey, em] = endYM.split('-').map(Number);
+  const months = lastNMonths(ey, em, 6);  // [(y,m), (y,m), ...]
+  renderCompareTeam(months);
+  renderCompareLawyer(months);
+}
+function lastNMonths(year, month, n){
+  const out=[];
+  let y=year, m=month;
+  for(let i=0;i<n;i++){ out.unshift([y,m]); m--; if(m<1){m=12;y--} }
+  return out;
+}
+function valStr(metric, v){
+  if(v==null || v==='-' || v==='') return '-';
+  if(typeof v==='string') return v;
+  if(metric==='attend_rate'||metric==='sign_rate'||metric==='overall_sign_rate') return (v*100).toFixed(1)+'%';
+  if(metric==='avg_unit_price_wan') return v.toFixed(2);
+  if(typeof v==='number'){
+    if(v>=1000) return v.toLocaleString();
+    return v.toFixed(metric.includes('rate')?2:0);
+  }
+  return String(v);
+}
+function colorClass(metric, v){
+  if(v==null) return '';
+  // 同仁業績類 用相對於該指標的橫向 max
+  if(metric==='referral_status'){
+    if(v==='優先') return 'bg-blue';
+    if(v==='正常') return 'bg-green';
+    if(v==='暫緩') return 'bg-red';
+  }
+  if(metric==='overall_sign_rate'){
+    return v>0.35 ? 'bg-green' : '';
+  }
+  if(metric==='avg_unit_price_wan'){
+    return v>2.1 ? 'bg-green' : '';
+  }
+  return '';
+}
+function renderCompareTeam(months){
+  const metric = document.getElementById('cmpMetric').value;
+  // 010 同仁 list = 出現在 endYM 月的
+  const endYM = months[months.length-1];
+  const inEnd = teamData.filter(r=>r.year===endYM[0] && r.month===endYM[1]);
+  const members = inEnd.map(r=>r.team_member);
+  let html = '<table class="tbl"><thead><tr><th class="name-col">010 同仁</th>';
+  months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
+  html += '<th>趨勢</th></tr></thead><tbody>';
+  members.forEach(name=>{
+    let row = `<tr><td class="name-col">${name}</td>`;
+    const vals = months.map(([y,m])=>{
+      const r = teamData.find(x=>x.year===y && x.month===m && x.team_member===name);
+      return r ? r[metric] : null;
+    });
+    vals.forEach((v,i)=>{
+      const cls = colorClass(metric, v);
+      row += `<td class="num ${cls}">${valStr(metric,v)}</td>`;
+    });
+    // 趨勢 sparkline
+    const nums = vals.map(v=> typeof v==='number'? v : 0);
+    const max = Math.max(...nums, 1);
+    row += '<td><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
+    row += '</tr>';
+    html += row;
+  });
+  html += '</tbody></table>';
+  document.getElementById('cmpTeamTbl').innerHTML = html;
+}
+function renderCompareLawyer(months){
+  const metric = document.getElementById('cmpLawyerMetric').value;
+  const sort = document.getElementById('cmpLawyerSort').value;
+  const endYM = months[months.length-1];
+  // 列出曾在最近 6 月有資料的律師
+  const recentYMs = new Set(months.map(([y,m])=>`${y}-${m}`));
+  const rowsByLawyer = {};
+  lawyerData.forEach(r=>{
+    if(recentYMs.has(`${r.year}-${r.month}`)){
+      if(!rowsByLawyer[r.lawyer]) rowsByLawyer[r.lawyer] = {};
+      rowsByLawyer[r.lawyer][`${r.year}-${r.month}`] = r;
+    }
+  });
+  const lawyers = Object.keys(rowsByLawyer);
+  // sort
+  lawyers.sort((a,b)=>{
+    if(sort==='lawyer') return a.localeCompare(b,'zh-Hant');
+    const rA = rowsByLawyer[a][`${endYM[0]}-${endYM[1]}`];
+    const rB = rowsByLawyer[b][`${endYM[0]}-${endYM[1]}`];
+    if(sort==='trend6'){
+      const sumA = months.reduce((s,[y,m])=> s + ((rowsByLawyer[a][`${y}-${m}`]||{}).total_revenue||0),0);
+      const sumB = months.reduce((s,[y,m])=> s + ((rowsByLawyer[b][`${y}-${m}`]||{}).total_revenue||0),0);
+      return sumB-sumA;
+    }
+    return ((rB||{})[sort]||0) - ((rA||{})[sort]||0);
+  });
+
+  let html = '<table class="tbl"><thead><tr><th class="name-col">合作律師</th><th>地區</th>';
+  months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
+  html += '<th>狀態 (當月)</th><th>趨勢</th></tr></thead><tbody>';
+  lawyers.forEach(lw=>{
+    const ld = rowsByLawyer[lw];
+    const endRec = ld[`${endYM[0]}-${endYM[1]}`];
+    const region = endRec ? endRec.region : '';
+    let row = `<tr><td class="name-col"><a href="#" data-lawyer="${lw}" class="lw-link">${lw}</a></td><td>${region||''}</td>`;
+    const vals = months.map(([y,m])=>{
+      const r = ld[`${y}-${m}`];
+      return r ? r[metric] : null;
+    });
+    vals.forEach(v=>{
+      const cls = colorClass(metric, v);
+      row += `<td class="num ${cls}">${valStr(metric,v)}</td>`;
+    });
+    const status = endRec ? endRec.referral_status : '-';
+    row += `<td><span class="status status-${status==='-'?'空':status}">${status||'-'}</span></td>`;
+    const nums = months.map(([y,m])=>{ const r=ld[`${y}-${m}`]; return r? (r.total_revenue||0) : 0 });
+    const max = Math.max(...nums, 1);
+    row += '<td><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
+    row += '</tr>';
+    html += row;
+  });
+  html += '</tbody></table>';
+  document.getElementById('cmpLawyerTbl').innerHTML = html;
+  document.querySelectorAll('.lw-link').forEach(a=> a.addEventListener('click',(e)=>{
+    e.preventDefault();
+    const lw = a.getAttribute('data-lawyer');
+    document.getElementById('drillLawyer').value = lw;
+    document.querySelector('.tab-btn[data-tab="lawyer"]').click();
+    renderDrill();
+  }));
+}
+
+// ═══ View 2: 同仁團隊 ═══
+let teamChartRef=null;
+function renderTeam(){
+  const metric = document.getElementById('teamMetric').value;
+  // 24 月軸
+  const sorted = [...teamData].sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+  if(!sorted.length) return;
+  const lastY = sorted[sorted.length-1].year, lastM = sorted[sorted.length-1].month;
+  const months = lastNMonths(lastY, lastM, 24);
+  const labels = months.map(([y,m])=>`${y}-${String(m).padStart(2,'0')}`);
+  // 找 active 同仁
+  const members = [...new Set(teamData.map(r=>r.team_member))].sort();
+  const palette = ['#4f8ef7','#c9a84c','#4caf82','#e0954a','#e05c5c','#9c6cff'];
+  const datasets = members.map((mem,i)=>({
+    label: mem,
+    data: months.map(([y,m])=>{
+      const r = teamData.find(x=>x.year===y && x.month===m && x.team_member===mem);
+      return r ? r[metric] : null;
+    }),
+    borderColor: palette[i%palette.length],
+    backgroundColor: palette[i%palette.length]+'20',
+    tension: 0.2,
+    spanGaps: true,
+  }));
+  if(teamChartRef) teamChartRef.destroy();
+  teamChartRef = new Chart(document.getElementById('teamChart'), {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ color:'#e0e0e0' } } },
+      scales:{
+        x:{ ticks:{ color:'#8899aa', maxRotation:45, minRotation:45 }, grid:{ color:'#1e3050' } },
+        y:{ ticks:{ color:'#8899aa' }, grid:{ color:'#1e3050' } }
+      }
+    }
+  });
+}
+
+// ═══ View 3: 律師 drill ═══
+let drillCharts={};
+function initDrillSelector(){
+  // 找最近 12 月有出現過的律師
+  const recentYM = lawyerData.reduce((m,r)=>{
+    const y = r.year*12+r.month;
+    return y>m?y:m;
+  }, 0);
+  const cutoff = recentYM - 12;
+  const active = [...new Set(lawyerData.filter(r=> r.year*12+r.month >= cutoff).map(r=>r.lawyer))].sort();
+  const sel = document.getElementById('drillLawyer');
+  sel.innerHTML = active.map(l=>`<option value="${l}">${l}</option>`).join('');
+}
+function renderDrill(){
+  const lw = document.getElementById('drillLawyer').value;
+  if(!lw) return;
+  const sorted = [...lawyerData].sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+  const lastY = sorted[sorted.length-1].year, lastM = sorted[sorted.length-1].month;
+  const months = lastNMonths(lastY, lastM, 24);
+  const labels = months.map(([y,m])=>`${y}-${String(m).padStart(2,'0')}`);
+  const data = months.map(([y,m])=> lawyerData.find(r=>r.lawyer===lw && r.year===y && r.month===m) || null);
+
+  const refs = data.map(r=> r? r.referrals : null);
+  const tgts = data.map(r=> r? r.monthly_target : null);
+  const signRate = data.map(r=> r? (r.sign_rate||0)*100 : null);
+  const total = data.map(r=> r? r.total_revenue : null);
+  const current = data.map(r=> r? r.current_month_revenue : null);
+  const cross = data.map(r=> r? r.cross_month_revenue : null);
+  const bi = data.map(r=> r? r.avg_unit_price_wan : null);
+
+  // Charts
+  ['dChartRef','dChartSign','dChartRev','dChartBI'].forEach(id=>{
+    if(drillCharts[id]) drillCharts[id].destroy();
+  });
+  const opts = (yTitle)=>({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#e0e0e0',font:{size:11}}}},
+    scales:{
+      x:{ticks:{color:'#8899aa',font:{size:10},maxRotation:60,minRotation:60},grid:{color:'#1e3050'}},
+      y:{title:{display:true,text:yTitle,color:'#8899aa',font:{size:11}},ticks:{color:'#8899aa'},grid:{color:'#1e3050'}}
+    }
+  });
+  drillCharts.dChartRef = new Chart(document.getElementById('dChartRef'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'已轉件數',data:refs,backgroundColor:'#4f8ef7'},
+      {label:'月目標',data:tgts,type:'line',borderColor:'#e0954a',borderDash:[3,3],pointRadius:0}
+    ]},
+    options:opts('件')
+  });
+  drillCharts.dChartSign = new Chart(document.getElementById('dChartSign'),{
+    type:'line',
+    data:{labels,datasets:[{label:'委任率 %',data:signRate,borderColor:'#4caf82',tension:0.2,spanGaps:true}]},
+    options:opts('%')
+  });
+  drillCharts.dChartRev = new Chart(document.getElementById('dChartRev'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'當月',data:current,backgroundColor:'#4f8ef7',stack:'s'},
+      {label:'跨月',data:cross,backgroundColor:'#c9a84c',stack:'s'},
+    ]},
+    options:opts('NT$')
+  });
+  drillCharts.dChartBI = new Chart(document.getElementById('dChartBI'),{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'BI 警示 (萬/案)',data:bi,borderColor:'#e0954a',tension:0.2,spanGaps:true},
+    ]},
+    options:opts('萬')
+  });
+
+  // 明細表
+  let html = '<table class="tbl"><thead><tr><th class="name-col">月份</th><th>件數</th><th>目標</th><th>出席</th><th>委任</th><th>委任率</th><th>當月收款</th><th>跨月收款</th><th>總金額</th><th>BI</th><th>狀態</th></tr></thead><tbody>';
+  months.slice().reverse().forEach(([y,m])=>{
+    const r = data[months.findIndex(x=>x[0]===y && x[1]===m)];
+    if(!r){ html += `<tr><td class="name-col">${y}-${String(m).padStart(2,'0')}</td><td colspan="10" style="color:var(--text-muted);text-align:left">無資料</td></tr>`; return; }
+    html += `<tr><td class="name-col">${y}-${String(m).padStart(2,'0')}</td>`
+      + `<td class="num">${r.referrals}</td><td class="num">${r.monthly_target||'-'}</td>`
+      + `<td class="num">${r.attended}</td><td class="num">${r.signed}</td>`
+      + `<td class="num">${((r.sign_rate||0)*100).toFixed(1)}%</td>`
+      + `<td class="num">${(r.current_month_revenue||0).toLocaleString()}</td>`
+      + `<td class="num">${(r.cross_month_revenue||0).toLocaleString()}</td>`
+      + `<td class="num">${(r.total_revenue||0).toLocaleString()}</td>`
+      + `<td class="num">${(r.avg_unit_price_wan||0).toFixed(2)}</td>`
+      + `<td><span class="status status-${r.referral_status==='-'?'空':r.referral_status}">${r.referral_status||'-'}</span></td>`
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('drillTbl').innerHTML = html;
+
+  // status hint
+  const latestRow = data.slice().reverse().find(r=>r);
+  if(latestRow){
+    document.getElementById('drillStatus').textContent =
+      `最新 ${latestRow.year}-${String(latestRow.month).padStart(2,'0')}: 件 ${latestRow.referrals} / 委任 ${latestRow.signed} / 總 ${(latestRow.total_revenue||0).toLocaleString()} / 狀態 ${latestRow.referral_status}`;
+  }
+}
+
+// ═══ Render dispatch ═══
+function renderAll(){ renderCompare(); renderTeam(); initDrillSelector(); renderDrill(); }
+
+// ═══ Tab switch ═══
+document.querySelectorAll('.tab-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('page-'+b.getAttribute('data-tab')).classList.add('active');
+  });
+});
+
+// ═══ Control binds ═══
+document.getElementById('cmpEndMonth').addEventListener('change', renderCompare);
+document.getElementById('cmpMetric').addEventListener('change', renderCompare);
+document.getElementById('cmpLawyerMetric').addEventListener('change', renderCompare);
+document.getElementById('cmpLawyerSort').addEventListener('change', renderCompare);
+document.getElementById('teamMetric').addEventListener('change', renderTeam);
+document.getElementById('drillLawyer').addEventListener('change', renderDrill);
+document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('noAccessLogout').addEventListener('click', async ()=>{
+  if(sb) await sb.auth.signOut(); location.reload();
+});
+
+// ═══ Init ═══
+checkSession();
+</script>
+</body>
+</html>
