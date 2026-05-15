@@ -63,12 +63,17 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
 .card h2 .hint{color:var(--text-muted);font-size:12px;font-weight:400;margin-left:8px}
 
 /* Table */
-.tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th,.tbl td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--border)}
-.tbl th{background:var(--bg-row);color:var(--gold-light);font-weight:500;text-align:center;position:sticky;top:0;font-size:12px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.tbl th,.tbl td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl th{background:var(--bg-row);color:var(--gold-light);font-weight:500;position:sticky;top:0;font-size:12px}
 .tbl th.name-col,.tbl td.name-col{text-align:left;color:var(--text)}
+.tbl th.center,.tbl td.center{text-align:center}
+.tbl col.col-name{width:96px}
+.tbl col.col-region{width:60px}
+.tbl col.col-month{width:88px}
+.tbl col.col-status{width:80px}
+.tbl col.col-trend{width:60px}
 .tbl tr:hover td{background:var(--bg-hover)}
-.tbl td.num{font-variant-numeric:tabular-nums}
 .tbl td.pos{color:var(--green)} .tbl td.neg{color:var(--red)} .tbl td.warn{color:var(--orange)}
 .tbl td.bg-green{background:var(--green-dim)}
 .tbl td.bg-red{background:var(--red-dim)}
@@ -389,27 +394,27 @@ function colorClass(metric, v){
 }
 function renderCompareTeam(months){
   const metric = document.getElementById('cmpMetric').value;
-  // 010 同仁 list = 出現在 endYM 月的
   const endYM = months[months.length-1];
   const inEnd = teamData.filter(r=>r.year===endYM[0] && r.month===endYM[1]);
   const members = inEnd.map(r=>r.team_member);
-  let html = '<table class="tbl"><thead><tr><th class="name-col">010 同仁</th>';
+  let html = '<table class="tbl"><colgroup><col class="col-name">';
+  months.forEach(()=> html += '<col class="col-month">');
+  html += '<col class="col-trend"></colgroup><thead><tr><th class="name-col">010 同仁</th>';
   months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
-  html += '<th>趨勢</th></tr></thead><tbody>';
+  html += '<th class="center">趨勢</th></tr></thead><tbody>';
   members.forEach(name=>{
     let row = `<tr><td class="name-col">${name}</td>`;
     const vals = months.map(([y,m])=>{
       const r = teamData.find(x=>x.year===y && x.month===m && x.team_member===name);
       return r ? r[metric] : null;
     });
-    vals.forEach((v,i)=>{
+    vals.forEach((v)=>{
       const cls = colorClass(metric, v);
-      row += `<td class="num ${cls}">${valStr(metric,v)}</td>`;
+      row += `<td class="${cls}">${valStr(metric,v)}</td>`;
     });
-    // 趨勢 sparkline
     const nums = vals.map(v=> typeof v==='number'? v : 0);
     const max = Math.max(...nums, 1);
-    row += '<td><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
+    row += '<td class="center"><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
     row += '</tr>';
     html += row;
   });
@@ -443,27 +448,30 @@ function renderCompareLawyer(months){
     return ((rB||{})[sort]||0) - ((rA||{})[sort]||0);
   });
 
-  let html = '<table class="tbl"><thead><tr><th class="name-col">合作律師</th><th>地區</th>';
+  let html = '<table class="tbl"><colgroup><col class="col-name"><col class="col-region">';
+  months.forEach(()=> html += '<col class="col-month">');
+  html += '<col class="col-status"><col class="col-trend"></colgroup>';
+  html += '<thead><tr><th class="name-col">合作律師</th><th class="center">地區</th>';
   months.forEach(([y,m])=> html += `<th>${y}-${String(m).padStart(2,'0')}</th>`);
-  html += '<th>狀態 (當月)</th><th>趨勢</th></tr></thead><tbody>';
+  html += '<th class="center">狀態 (當月)</th><th class="center">趨勢</th></tr></thead><tbody>';
   lawyers.forEach(lw=>{
     const ld = rowsByLawyer[lw];
     const endRec = ld[`${endYM[0]}-${endYM[1]}`];
     const region = endRec ? endRec.region : '';
-    let row = `<tr><td class="name-col"><a href="#" data-lawyer="${lw}" class="lw-link">${lw}</a></td><td>${region||''}</td>`;
+    let row = `<tr><td class="name-col"><a href="#" data-lawyer="${lw}" class="lw-link">${lw}</a></td><td class="center">${region||''}</td>`;
     const vals = months.map(([y,m])=>{
       const r = ld[`${y}-${m}`];
       return r ? r[metric] : null;
     });
     vals.forEach(v=>{
       const cls = colorClass(metric, v);
-      row += `<td class="num ${cls}">${valStr(metric,v)}</td>`;
+      row += `<td class="${cls}">${valStr(metric,v)}</td>`;
     });
     const status = endRec ? endRec.referral_status : '-';
-    row += `<td><span class="status status-${status==='-'?'空':status}">${status||'-'}</span></td>`;
+    row += `<td class="center"><span class="status status-${status==='-'?'空':status}">${status||'-'}</span></td>`;
     const nums = months.map(([y,m])=>{ const r=ld[`${y}-${m}`]; return r? (r.total_revenue||0) : 0 });
     const max = Math.max(...nums, 1);
-    row += '<td><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
+    row += '<td class="center"><span class="spark">' + nums.map(v=>`<span style="height:${Math.max(2,(v/max)*16)}px"></span>`).join('') + '</span></td>';
     row += '</tr>';
     html += row;
   });
