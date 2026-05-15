@@ -886,6 +886,12 @@ function mapChannel(raw) {
 }
 
 // 拆分多人業務（"克威 柏凱" → ["克威","柏凱"]）
+function normalizeClientName(name) {
+  // 處理 CRM 「新名（前名稱：舊名）」alias — 把同公司不同字串視為同一客戶
+  if (!name) return '';
+  return String(name).replace(/[（(]前名稱[：:][^）)]*[）)]/g, '').trim();
+}
+
 function parseSalespeople(s) {
   if (!s) return [];
   return String(s).split(/[\s、,/]+/).map(x => x.trim()).filter(Boolean);
@@ -915,17 +921,22 @@ async function init() {
     STATE.lastSync = log.data?.[0] || null;
     STATE.deposits = dep.data || [];
 
-    // 法顧客戶集合 = advisor_cases ∪ advisor_transactions client_name
+    // 法顧客戶集合 = advisor_cases ∪ advisor_transactions client_name（含 alias 正規化）
     const advisorClients = new Set();
-    STATE.cases.forEach(c => c.client_name && advisorClients.add(c.client_name));
-    STATE.deposits.forEach(t => t.client_name && advisorClients.add(t.client_name));
+    const addClient = (name) => {
+      if (!name) return;
+      advisorClients.add(name);
+      const n = normalizeClientName(name);
+      if (n && n !== name) advisorClients.add(n);
+    };
+    STATE.cases.forEach(c => addClient(c.client_name));
+    STATE.deposits.forEach(t => addClient(t.client_name));
     STATE.advisorClientSet = advisorClients;
 
     // 撈 revenue_records 中屬法顧客戶的部分（用於 reconcile）
     STATE.advisorInRecords = [];
     if (advisorClients.size > 0) {
       const clientList = [...advisorClients];
-      // PostgREST in() URL 可能過長，分批撈
       const BATCH = 80;
       for (let i = 0; i < clientList.length; i += BATCH) {
         const slice = clientList.slice(i, i + BATCH);
@@ -935,8 +946,11 @@ async function init() {
           .in('client_name', slice);
         if (r.data) STATE.advisorInRecords.push(...r.data);
       }
-      // 排除合署 group（合署算 KR4，不算進法顧）
-      STATE.advisorInRecords = STATE.advisorInRecords.filter(r => !(r.group_name && r.group_name.indexOf('合署') !== -1));
+      // 排除合署（合署算 KR4，不算進法顧）；用 normalize 後的 name 做最終 membership 驗證
+      STATE.advisorInRecords = STATE.advisorInRecords.filter(r => {
+        if (r.group_name && r.group_name.indexOf('合署') !== -1) return false;
+        return advisorClients.has(r.client_name) || advisorClients.has(normalizeClientName(r.client_name));
+      });
     }
 
     setupYearFilter();

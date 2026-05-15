@@ -77,11 +77,16 @@ def scrape_advisor_transactions(session, start_date, end_date):
 
 
 def transform_record(item):
-    """將 CRM 法顧交易記錄轉為 DB 格式。"""
+    """將 CRM 法顧交易記錄轉為 DB 格式。
+    subject 可能是公司戶 (有 company_name) 或個人戶 (有 name)，要 fallback。
+    id_number 屬 PII，不存入 client_vat（只存公司統編）。"""
     subj = item.get("subject") or {}
     payment_method = (item.get("payment_method") or {}).get("method")
     processed_at = item.get("processed_at", "") or ""
     record_date = processed_at[:10] if processed_at else None
+
+    client_name = subj.get("company_name") or subj.get("name")
+    client_vat = subj.get("company_vat")  # 個人戶留空，不存 id_number
 
     return {
         "transaction_id": item.get("id"),
@@ -91,8 +96,8 @@ def transform_record(item):
         "is_void": item.get("is_void", False),
         "notes": item.get("note"),
         "payment_method": payment_method,
-        "client_name": subj.get("company_name"),
-        "client_vat": subj.get("company_vat"),
+        "client_name": client_name,
+        "client_vat": client_vat,
         "subject_id": subj.get("id"),
         "organization_id": subj.get("organization_id"),
         "case_id": subj.get("case_id"),

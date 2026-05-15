@@ -600,13 +600,25 @@ function aggregateConsult(monthlyStats, consultCases) {
   state.data.consultByMonth = byMonth;
 }
 
+function normalizeClientName(name) {
+  // 處理 CRM 「新名（前名稱：舊名）」alias — 對 reconcile 時把同公司不同字串視為同一客戶。
+  if (!name) return '';
+  return String(name).replace(/[（(]前名稱[：:][^）)]*[）)]/g, '').trim();
+}
+
 function aggregateRevenue(records, advisorCases, advisorTransactions) {
   // 3-way split：合署 / 法顧客戶 / 一般所內。三組互斥，加總 = revenue_records 全月 (paid - refund)。
-  // 法顧客戶集合 = advisor_transactions ∪ advisor_cases 的 client_name 聯集（authority list）。
+  // 法顧客戶集合 = advisor_transactions ∪ advisor_cases 的 client_name 聯集（含 alias 正規化）。
   // KR1 = byMonth (一般所內) net；KR4 = partnerByMonth (合署)；法顧現金口徑見 aggregateAdvisorCash。
   var advisorClients = {};
-  (advisorTransactions || []).forEach(function(t) { if (t.client_name) advisorClients[t.client_name] = true; });
-  (advisorCases || []).forEach(function(c) { if (c.client_name) advisorClients[c.client_name] = true; });
+  function addClient(name) {
+    if (!name) return;
+    advisorClients[name] = true;
+    var n = normalizeClientName(name);
+    if (n && n !== name) advisorClients[n] = true;
+  }
+  (advisorTransactions || []).forEach(function(t) { addClient(t.client_name); });
+  (advisorCases || []).forEach(function(c) { addClient(c.client_name); });
   state.data.advisorClientSet = advisorClients;
 
   var byMonth = {}, partnerByMonth = {}, advisorRevByMonth = {};
@@ -621,7 +633,7 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
     if (m < 1 || m > 12) return;
     var amt = Number(r.amount || 0);
     var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
-    var isAdvisor = !isPartner && r.client_name && advisorClients[r.client_name];
+    var isAdvisor = !isPartner && r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
     var bucket = isPartner ? partnerByMonth[m] : (isAdvisor ? advisorRevByMonth[m] : byMonth[m]);
     if (r.transaction_type === 'PaymentTransaction')      bucket.paid   += amt;
     else if (r.transaction_type === 'RefundTransaction')  bucket.refund += amt;
