@@ -301,6 +301,8 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
 // ═══ Config ═══
 const SUPABASE_URL='https://zpbkeyhxyykbvownrngf.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+// 排除噪音 entry（單筆零業績的離職 / 試填）
+const HIDDEN_TEAM_MEMBERS = new Set(['政嘉']);
 let sb=null;
 try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }catch(e){console.error(e)}
 let currentUser=null, currentLawyer=null;
@@ -414,9 +416,10 @@ async function loadData(){
       fetchAllPages('fact_010_monthly_team'),
       fetchAllPages('fact_010_monthly_lawyer'),
     ]);
-    teamData = tm;
+    // 過濾隱藏的 team members（政嘉等）
+    teamData = tm.filter(r => !HIDDEN_TEAM_MEMBERS.has(r.team_member));
     lawyerData = lw;
-    console.log(`loaded: team ${tm.length} rows, lawyer ${lw.length} rows`);
+    console.log(`loaded: team ${teamData.length}/${tm.length} rows (filtered hidden), lawyer ${lw.length} rows`);
   }catch(e){
     console.error(e);
     alert('讀取失敗：'+e.message);
