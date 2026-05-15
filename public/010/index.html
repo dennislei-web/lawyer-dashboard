@@ -231,7 +231,7 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
   <!-- View 2: 同仁團隊 -->
   <div class="page" id="page-team">
     <div class="card">
-      <h2>010 同仁 24 月趨勢<span class="hint">看哪位同仁業績在 grow / shrink</span></h2>
+      <h2>010 同仁趨勢<span class="hint">看哪位同仁業績在 grow / shrink；點下方 legend 隱藏/顯示</span></h2>
       <div class="controls">
         <label>指標：</label>
         <select id="teamMetric">
@@ -243,10 +243,23 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
           <option value="attend_rate">出席率</option>
           <option value="sign_rate">成案率</option>
         </select>
+        <label>檢視：</label>
+        <select id="teamGranularity">
+          <option value="month">月別</option>
+          <option value="year">年別</option>
+        </select>
+        <label>期間：</label>
+        <select id="teamPeriod" style="min-width:160px"></select>
+        <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="teamShowInactive"> 含離職</label>
       </div>
+      <div id="teamSummary" style="margin-bottom:14px"></div>
       <div style="height:400px;background:var(--bg-row);border-radius:4px;padding:12px">
         <canvas id="teamChart"></canvas>
       </div>
+    </div>
+    <div class="card">
+      <h2 id="teamTblTitle">同仁明細</h2>
+      <div id="teamTbl"></div>
     </div>
   </div>
 
@@ -856,28 +869,253 @@ function renderCompareLawyer(months){
 
 // ═══ View 2: 同仁團隊 ═══
 let teamChartRef=null;
-function renderTeam(){
-  const metric = document.getElementById('teamMetric').value;
-  // 24 月軸
+
+function getActiveTeamMembers(){
+  const latestYear = teamData.reduce((mx,r)=>r.year>mx?r.year:mx, 0);
+  const active = new Set();
+  teamData.forEach(r => {
+    if(r.year === latestYear && (r.total_revenue||0) > 0){
+      active.add(r.team_member);
+    }
+  });
+  return { active, latestYear };
+}
+
+function initTeamPeriod(){
+  const sel = document.getElementById('teamPeriod');
+  if(!sel) return;
+  const granularity = document.getElementById('teamGranularity').value;
+  const prev = sel.value;
+  if(granularity === 'year'){
+    sel.innerHTML = '<option value="all">全部年份</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const years = [...new Set(teamData.map(r=>r.year))].sort((a,b)=>b-a);
+  const opts = [
+    {v:'all', l:'全部歷史'},
+    {v:'recent:12', l:'最近 12 月'},
+    {v:'recent:24', l:'最近 24 月'},
+    {v:'recent:36', l:'最近 36 月'},
+    {v:'sep', l:'─── 分隔 ───', disabled:true},
+    ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
+  ];
+  sel.innerHTML = opts.map(o=>`<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
+  if(prev && opts.find(o=>o.v===prev && !o.disabled)) sel.value = prev;
+  else sel.value = 'recent:24';  // 預設最近 24 月
+}
+
+function getTeamPeriodKeys(){
+  // 回傳 { granularity, keys: [(y,m) or y], labelFor: fn }
+  const granularity = document.getElementById('teamGranularity').value;
+  const period = document.getElementById('teamPeriod').value;
+  if(granularity === 'year'){
+    const years = [...new Set(teamData.map(r=>r.year))].sort();
+    return { granularity, keys: years, labelFor: y=>String(y) };
+  }
+  // 月別
   const sorted = [...teamData].sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
-  if(!sorted.length) return;
-  const lastY = sorted[sorted.length-1].year, lastM = sorted[sorted.length-1].month;
-  const months = lastNMonths(lastY, lastM, 24);
-  const labels = months.map(([y,m])=>`${y}-${String(m).padStart(2,'0')}`);
-  // 找 active 同仁
+  if(!sorted.length) return { granularity, keys: [], labelFor: x=>'' };
+  const firstYM = [sorted[0].year, sorted[0].month];
+  const lastYM = [sorted[sorted.length-1].year, sorted[sorted.length-1].month];
+  let monthsArr;
+  if(period === 'all'){
+    // build full range from first to last
+    monthsArr = [];
+    let y=firstYM[0], m=firstYM[1];
+    while(y < lastYM[0] || (y===lastYM[0] && m <= lastYM[1])){
+      monthsArr.push([y, m]);
+      m++; if(m>12){m=1; y++;}
+    }
+  } else if(period.startsWith('recent:')){
+    const n = parseInt(period.split(':')[1]);
+    monthsArr = lastNMonths(lastYM[0], lastYM[1], n);
+  } else if(period.startsWith('year:')){
+    const yy = parseInt(period.split(':')[1]);
+    monthsArr = [];
+    for(let mm=1; mm<=12; mm++) monthsArr.push([yy, mm]);
+  } else monthsArr = [];
+  return {
+    granularity, keys: monthsArr,
+    labelFor: ([y,m]) => `${y}-${String(m).padStart(2,'0')}`,
+  };
+}
+
+function getTeamSeriesPerMember(){
+  const { granularity, keys } = getTeamPeriodKeys();
   const members = [...new Set(teamData.map(r=>r.team_member))].sort();
-  const palette = ['#4f8ef7','#c9a84c','#4caf82','#e0954a','#e05c5c','#9c6cff'];
-  const datasets = members.map((mem,i)=>({
-    label: mem,
-    data: months.map(([y,m])=>{
-      const r = teamData.find(x=>x.year===y && x.month===m && x.team_member===mem);
-      return r ? r[metric] : null;
-    }),
-    borderColor: palette[i%palette.length],
-    backgroundColor: palette[i%palette.length]+'20',
-    tension: 0.2,
-    spanGaps: true,
-  }));
+  const { active } = getActiveTeamMembers();
+  const showInactive = document.getElementById('teamShowInactive').checked;
+  const visible = showInactive ? members : members.filter(m => active.has(m));
+  // 為每個 member 算 series values
+  const byMember = {};
+  visible.forEach(mem => {
+    if(granularity === 'year'){
+      byMember[mem] = keys.map(yr => {
+        const rs = teamData.filter(r=>r.team_member===mem && r.year===yr);
+        if(!rs.length) return null;
+        // 年聚合
+        const agg = {
+          referrals: 0, attended:0, signed:0, monthly_target:0,
+          current_month_revenue:0, cross_month_revenue:0, total_revenue:0,
+          total_referrals:0, zhelu_referrals:0, o10_referrals:0,
+        };
+        rs.forEach(r => {
+          ['referrals','attended','signed','monthly_target','current_month_revenue','cross_month_revenue','total_revenue','total_referrals','zhelu_referrals','o10_referrals'].forEach(k=>{
+            agg[k] += r[k]||0;
+          });
+        });
+        agg.attend_rate = agg.total_referrals ? agg.attended/agg.total_referrals : 0;
+        agg.sign_rate = agg.attended ? agg.signed/agg.attended : 0;
+        agg.avg_signed_amount = agg.signed ? agg.current_month_revenue/agg.signed : 0;
+        agg.avg_referral_amount = agg.total_referrals ? agg.current_month_revenue/agg.total_referrals : 0;
+        return agg;
+      });
+    } else {
+      byMember[mem] = keys.map(([y,m])=>{
+        return teamData.find(r => r.team_member===mem && r.year===y && r.month===m) || null;
+      });
+    }
+  });
+  return { granularity, keys, byMember, active };
+}
+
+function renderTeamSummary(seriesData){
+  const { granularity, keys, byMember, active } = seriesData;
+  const unitLabel = granularity==='year' ? '年' : '月';
+  // 期間合計 across 所有顯示的 members
+  const members = Object.keys(byMember);
+  const sumK = (k) => {
+    let s = 0;
+    members.forEach(m => byMember[m].forEach(r => { if(r) s += (r[k]||0); }));
+    return s;
+  };
+  const totRef = sumK('total_referrals') || sumK('referrals');
+  const totAtt = sumK('attended');
+  const totSign = sumK('signed');
+  const totCurrent = sumK('current_month_revenue');
+  const totCross = sumK('cross_month_revenue');
+  const totRev = totCurrent + totCross;
+  const attendRate = totRef ? totAtt/totRef : 0;
+  const signRate = totAtt ? totSign/totAtt : 0;
+  const overallRate = totRef ? totSign/totRef : 0;
+  const avgUnit = totRef ? totRev/totRef/10000 : 0;
+  const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  const activeCount = members.filter(m=>active.has(m)).length;
+  const inactiveCount = members.filter(m=>!active.has(m)).length;
+  const firstLabel = keys.length ? (granularity==='year'? keys[0] : `${keys[0][0]}-${String(keys[0][1]).padStart(2,'0')}`) : '-';
+  const lastLabel = keys.length ? (granularity==='year'? keys[keys.length-1] : `${keys[keys.length-1][0]}-${String(keys[keys.length-1][1]).padStart(2,'0')}`) : '-';
+  const span = keys.length>1 ? `${firstLabel} ~ ${lastLabel}` : firstLabel;
+  const html = `
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${members.length} 位同仁（在職 ${activeCount} / 離職 ${inactiveCount}）　範圍 ${span}（${keys.length} ${unitLabel}）</div>
+    <div class="totals-grid">
+      <div class="stat-block"><div class="stat-label">合計件數</div><div class="stat-value">${totRef.toLocaleString()}</div></div>
+      <div class="stat-block"><div class="stat-label">出席</div><div class="stat-value">${totAtt.toLocaleString()}</div><div class="stat-sub">出席率 ${(attendRate*100).toFixed(1)}%</div></div>
+      <div class="stat-block"><div class="stat-label">委任</div><div class="stat-value green">${totSign.toLocaleString()}</div><div class="stat-sub">委任率 ${(signRate*100).toFixed(1)}% / 整體 ${(overallRate*100).toFixed(1)}%</div></div>
+      <div class="stat-block"><div class="stat-label">當月收款</div><div class="stat-value">${totCurrent.toLocaleString()}</div></div>
+      <div class="stat-block"><div class="stat-label">跨月收款</div><div class="stat-value">${totCross.toLocaleString()}</div></div>
+      <div class="stat-block"><div class="stat-label">總業績</div><div class="stat-value gold">${totRev.toLocaleString()}</div></div>
+      <div class="stat-block"><div class="stat-label">轉介均價</div><div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
+      <div class="stat-block"><div class="stat-label">委任均價</div><div class="stat-value">${avgSigned.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
+    </div>`;
+  document.getElementById('teamSummary').innerHTML = html;
+}
+
+function renderTeamTable(seriesData){
+  const { granularity, keys, byMember, active } = seriesData;
+  const unitLabel = granularity==='year' ? '年' : '月';
+  const periodLabel = (function(){
+    if(granularity==='year') return '全部年別';
+    const p = document.getElementById('teamPeriod').value;
+    if(p==='all') return '全部歷史';
+    if(p.startsWith('recent:')) return `最近 ${p.split(':')[1]} 月`;
+    if(p.startsWith('year:')) return `${p.split(':')[1]} 全年`;
+    return '';
+  })();
+  // 每位同仁的期間合計
+  const members = Object.keys(byMember);
+  const rows = members.map(mem => {
+    const series = byMember[mem];
+    const sumK = (k) => series.reduce((s,r)=>s+(r? (r[k]||0):0), 0);
+    return {
+      member: mem,
+      isActive: active.has(mem),
+      referrals: sumK('total_referrals') || sumK('referrals'),
+      zhelu: sumK('zhelu_referrals'),
+      o10: sumK('o10_referrals'),
+      attended: sumK('attended'),
+      signed: sumK('signed'),
+      current_month_revenue: sumK('current_month_revenue'),
+      cross_month_revenue: sumK('cross_month_revenue'),
+      total_revenue: sumK('total_revenue') || (sumK('current_month_revenue') + sumK('cross_month_revenue')),
+    };
+  });
+  // 後續計算 rates
+  rows.forEach(r => {
+    r.attend_rate = r.referrals ? r.attended/r.referrals : 0;
+    r.sign_rate = r.attended ? r.signed/r.attended : 0;
+    r.overall_rate = r.referrals ? r.signed/r.referrals : 0;
+    r.avg_signed_amount = r.signed ? r.current_month_revenue/r.signed : 0;
+  });
+  rows.sort((a,b)=> b.total_revenue - a.total_revenue);
+
+  document.getElementById('teamTblTitle').textContent = `同仁 ${periodLabel}明細（${rows.length} 人）`;
+  let html = `<table class="tbl"><thead><tr>
+    <th class="name-col">同仁</th>
+    <th>總件數</th><th>010 流量</th><th>喆律流量</th>
+    <th>出席</th><th>出席率</th>
+    <th>委任</th><th>成案率</th>
+    <th>當月業績</th><th>跨月業績</th>
+    <th>總業績</th>
+    <th>委任均價</th>
+    <th class="center">狀態</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const cls = r.isActive ? '' : 'style="opacity:0.55"';
+    const stateLabel = r.isActive ? '在職' : '<span style="color:var(--text-muted)">離職</span>';
+    html += `<tr ${cls}>
+      <td class="name-col">${r.member}${r.isActive?'':' <span class="stat-sub">(休)</span>'}</td>
+      <td>${r.referrals.toLocaleString()}</td>
+      <td>${r.o10.toLocaleString()}</td>
+      <td>${r.zhelu.toLocaleString()}</td>
+      <td>${r.attended.toLocaleString()}</td>
+      <td>${(r.attend_rate*100).toFixed(1)}%</td>
+      <td>${r.signed.toLocaleString()}</td>
+      <td>${(r.overall_rate*100).toFixed(1)}%</td>
+      <td>${r.current_month_revenue.toLocaleString()}</td>
+      <td>${r.cross_month_revenue.toLocaleString()}</td>
+      <td style="color:var(--gold)">${r.total_revenue.toLocaleString()}</td>
+      <td>${(r.avg_signed_amount/10000).toFixed(2)}</td>
+      <td class="center">${stateLabel}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('teamTbl').innerHTML = html;
+}
+
+function renderTeam(){
+  initTeamPeriod();
+  const metric = document.getElementById('teamMetric').value;
+  const seriesData = getTeamSeriesPerMember();
+  const { granularity, keys, byMember, active } = seriesData;
+  renderTeamSummary(seriesData);
+  renderTeamTable(seriesData);
+
+  const labels = keys.map(k => granularity==='year' ? String(k) : `${k[0]}-${String(k[1]).padStart(2,'0')}`);
+  const palette = ['#4f8ef7','#c9a84c','#4caf82','#e0954a','#e05c5c','#9c6cff','#e8c97a','#5fb3d4'];
+  const datasets = Object.keys(byMember).map((mem,i)=>{
+    const isActive = active.has(mem);
+    return {
+      label: mem + (isActive?'':' (休)'),
+      data: byMember[mem].map(r => r? r[metric] : null),
+      borderColor: palette[i%palette.length],
+      backgroundColor: palette[i%palette.length]+'20',
+      tension: 0.2,
+      spanGaps: true,
+      borderDash: isActive ? [] : [5,3],
+    };
+  });
   if(teamChartRef) teamChartRef.destroy();
   teamChartRef = new Chart(document.getElementById('teamChart'), {
     type:'line',
@@ -886,7 +1124,7 @@ function renderTeam(){
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ position:'bottom', labels:{ color:'#e0e0e0' } } },
       scales:{
-        x:{ ticks:{ color:'#8899aa', maxRotation:45, minRotation:45 }, grid:{ color:'#1e3050' } },
+        x:{ ticks:{ color:'#8899aa', maxRotation:45, minRotation:45, autoSkip:true, maxTicksLimit:24 }, grid:{ color:'#1e3050' } },
         y:{ ticks:{ color:'#8899aa' }, grid:{ color:'#1e3050' } }
       }
     }
@@ -1322,6 +1560,9 @@ document.getElementById('cmpMetric').addEventListener('change', renderCompare);
 document.getElementById('cmpLawyerMetric').addEventListener('change', renderCompare);
 document.getElementById('totalPeriod').addEventListener('change', renderTotalSummary);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
+document.getElementById('teamGranularity').addEventListener('change', renderTeam);
+document.getElementById('teamPeriod').addEventListener('change', renderTeam);
+document.getElementById('teamShowInactive').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillSubLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillGranularity').addEventListener('change', renderDrill);
