@@ -61,16 +61,21 @@ serve(async (req) => {
 
     const { data: lawyerRow, error: lawyerErr } = await sbUser
       .from('lawyers')
-      .select('id, name, role')
+      .select('id, name, role, is_active, dashboard_access')
       .eq('auth_user_id', userData.user.id)
       .single();
     if (lawyerErr || !lawyerRow) {
       return Response.json({ error: 'no lawyer profile for this user' },
         { status: 403, headers: CORS_HEADERS });
     }
-    // 010 dashboard 限 admin / manager
-    if (lawyerRow.role !== 'admin' && lawyerRow.role !== 'manager') {
-      return Response.json({ error: 'forbidden: 僅 admin / manager 可觸發 010 同步' },
+    // admin OR manager 且 dashboard_access 含 'law010'
+    const isAdmin = lawyerRow.role === 'admin' && lawyerRow.is_active;
+    const hasAccess = lawyerRow.role === 'manager'
+      && lawyerRow.is_active
+      && Array.isArray(lawyerRow.dashboard_access)
+      && lawyerRow.dashboard_access.includes('law010');
+    if (!isAdmin && !hasAccess) {
+      return Response.json({ error: 'forbidden: 僅 admin 或有 law010 權限的 manager 可觸發' },
         { status: 403, headers: CORS_HEADERS });
     }
 

@@ -248,7 +248,7 @@
   <div class="main">
     <div style="margin-bottom:20px;">
       <div class="page-title">總帳號管理</div>
-      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 6 個儀表板（諮詢分析 / 營運 / 財務規劃 / 法律顧問 / 合署律師 / 委前漏斗）的登入權限</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);">統一管理 7 個儀表板（諮詢分析 / 營運 / 財務規劃 / 法律顧問 / 合署律師 / 委前漏斗 / 法律010）的登入權限</div>
     </div>
 
     <!-- 權限對照 -->
@@ -257,7 +257,7 @@
         <div class="section-title">📊 權限對照</div>
       </div>
       <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
-        所有帳號使用同一套 Supabase Auth；下表列出各角色在 6 個儀表板能看到的範圍與額外功能。<br>
+        所有帳號使用同一套 Supabase Auth；下表列出各角色在 7 個儀表板能看到的範圍與額外功能。<br>
         <strong style="color:var(--gold-light);">部門主管</strong>的可見儀表板與上傳權限可在下方表格逐一勾選。
       </div>
       <div class="table-wrap">
@@ -271,6 +271,7 @@
               <th rowspan="2" style="text-align:center;">法律顧問</th>
               <th rowspan="2" style="text-align:center;">合署律師</th>
               <th rowspan="2" style="text-align:center;">委前漏斗</th>
+              <th rowspan="2" style="text-align:center;">法律010</th>
               <th rowspan="2">額外功能</th>
             </tr>
             <tr>
@@ -281,6 +282,7 @@
           <tbody>
             <tr>
               <td><span style="color:var(--gold-light);font-weight:600;">🔑 管理員 (admin)</span></td>
+              <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
@@ -299,11 +301,13 @@
               <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="text-align:center;" class="text-blue">可勾選</td>
+              <td style="text-align:center;" class="text-blue">可勾選</td>
               <td style="color:var(--text-muted);font-size:0.82rem;">上傳資料（可勾選）</td>
             </tr>
             <tr>
               <td>🔒 律師 (lawyer)</td>
               <td style="text-align:center;" class="text-green">全部資料</td>
+              <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
               <td style="text-align:center;" class="text-red">✗ 無權限</td>
@@ -324,7 +328,7 @@
         <button class="btn-login" style="max-width:140px;padding:6px 14px;font-size:0.82rem;" onclick="openNewAccountModal()">➕ 新增帳號</button>
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
-        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 6 個儀表板。<br>
+        調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 7 個儀表板。<br>
         <span style="color:var(--blue);">部門主管</span>列可勾選個別儀表板與上傳權限；<span style="color:var(--gold-light);">管理員</span>永遠全開、<span style="color:var(--text-muted);">律師</span>僅諮詢分析。
       </div>
       <div class="table-wrap">
@@ -340,6 +344,7 @@
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">法律顧問</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">合署律師</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">委前漏斗</th>
+              <th rowspan="2" style="text-align:center;font-size:0.72rem;">法律010</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">資料上傳</th>
               <th class="sortable" data-sort="status" rowspan="2" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
               <th rowspan="2" style="text-align:center;">密碼</th>
@@ -536,7 +541,7 @@ async function loadLawyers() {
 //   - 無 auth 帳號：登不進任何儀表板（—）
 // 'revenue' = 營運頁全部 tabs
 // 'revenue_dept' = 營運頁僅「部門分析」tab
-var DASHBOARDS = ['consultation','revenue','revenue_dept','finance','advisor','partners','funnel'];
+var DASHBOARDS = ['consultation','revenue','revenue_dept','finance','advisor','partners','funnel','law010'];
 
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
@@ -673,6 +678,7 @@ function renderAdminPage() {
       '<td style="text-align:center;">' + accessCell(l, 'advisor') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'funnel') + '</td>' +
+      '<td style="text-align:center;">' + accessCell(l, 'law010') + '</td>' +
       '<td style="text-align:center;">' + uploadCell(l) + '</td>' +
       '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
       '<td style="text-align:center;">' + passwordBtnHtml + '</td>' +

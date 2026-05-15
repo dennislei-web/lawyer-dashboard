@@ -94,6 +94,12 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
 /* Inactive lawyer option */
 select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:italic}
 
+/* Embed mode (loaded inside main hub iframe) */
+.embed-mode .header { display: none !important; }
+.embed-mode #loginPage { display: none !important; }
+.embed-mode #dashboard { padding-top: 8px; }
+.embed-mode body { padding-top: 0 !important; }
+
 /* Sparkline */
 .spark{display:inline-flex;align-items:flex-end;gap:1px;height:18px;vertical-align:middle}
 .spark span{width:4px;background:var(--blue);border-radius:1px;min-height:2px}
@@ -299,6 +305,16 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
 </div>
 
 <script>
+// ═══ Standalone vs embed ═══
+// 若直接打開 (非 iframe inside shell) → redirect 回 shell
+if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
+  window.location.replace('/lawyer-dashboard/#/law010');
+  throw new Error('redirecting to shell');
+}
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+
 // ═══ Config ═══
 const SUPABASE_URL='https://zpbkeyhxyykbvownrngf.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
@@ -348,7 +364,13 @@ window.__010Sort = function(table, key, isString){
 
 // ═══ Auth ═══
 function hasAccess(){
-  return currentLawyer && currentLawyer.role === 'admin' && currentLawyer.is_active;
+  if(!currentLawyer || !currentLawyer.is_active) return false;
+  if(currentLawyer.role === 'admin') return true;
+  if(currentLawyer.role === 'manager'){
+    const da = Array.isArray(currentLawyer.dashboard_access) ? currentLawyer.dashboard_access : [];
+    return da.indexOf('law010') > -1;
+  }
+  return false;
 }
 
 function showNoAccess(){
