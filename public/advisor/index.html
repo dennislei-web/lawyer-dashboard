@@ -432,18 +432,24 @@
             <div class="yoy-section-title">💰 現金口徑 reconcile <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">（CRM 對帳基礎，跟成案口徑互相驗證）</span></div>
             <div class="yoy-section-note" id="reconcilePeriodNote">—</div>
           </div>
-          <div class="yoy-grid" style="grid-template-columns:repeat(5, 1fr);">
+          <div class="yoy-grid" style="grid-template-columns:repeat(6, 1fr);">
             <div class="yoy-card">
-              <div class="yoy-label">所內法顧客戶</div>
+              <div class="yoy-label">CRM 所內</div>
               <div class="yoy-value" id="reconcileInRecords">—</div>
-              <div class="yoy-prev">revenue_records 法顧（非合署，毛收）</div>
+              <div class="yoy-prev">revenue_records 非合署（毛收）</div>
               <div class="yoy-change flat" id="reconcileInRecordsCount">— 筆</div>
             </div>
             <div class="yoy-card">
-              <div class="yoy-label">法顧儲值帳本</div>
+              <div class="yoy-label">法顧對帳</div>
               <div class="yoy-value" id="reconcileDeposits">—</div>
-              <div class="yoy-prev">CRM 法顧對帳（毛收）</div>
+              <div class="yoy-prev">CRM 法顧儲值（毛收）</div>
               <div class="yoy-change flat" id="reconcileDepositsCount">— 筆</div>
+            </div>
+            <div class="yoy-card" style="border:1px dashed var(--gold);">
+              <div class="yoy-label">轉合署案件</div>
+              <div class="yoy-value" id="reconcilePartnerAdvisor" style="color:var(--gold);">—</div>
+              <div class="yoy-prev">合署律師承辦的法顧案</div>
+              <div class="yoy-change flat" id="reconcilePartnerAdvisorCount">— 筆</div>
             </div>
             <div class="yoy-card" style="border:1px dashed var(--red);">
               <div class="yoy-label">退款 / 作廢 ⚠</div>
@@ -452,15 +458,15 @@
               <div class="yoy-change flat" id="reconcileRefundsCount">— 筆</div>
             </div>
             <div class="yoy-card">
-              <div class="yoy-label"><b>現金口徑合計</b></div>
+              <div class="yoy-label"><b>現金合計</b></div>
               <div class="yoy-value" id="reconcileCashTotal">—</div>
-              <div class="yoy-prev">所內 + 儲值（毛收）</div>
+              <div class="yoy-prev">所內+對帳+轉合署−退款</div>
               <div class="yoy-change flat" id="reconcileCashHint">—</div>
             </div>
-            <div class="yoy-card">
-              <div class="yoy-label">成案口徑</div>
-              <div class="yoy-value" id="reconcileAccrual">—</div>
-              <div class="yoy-prev">advisor_cases（同上方 KPI）</div>
+            <div class="yoy-card" style="border:1px solid var(--blue);">
+              <div class="yoy-label"><b>Sheet 成案</b></div>
+              <div class="yoy-value" id="reconcileAccrual" style="color:var(--blue);">—</div>
+              <div class="yoy-prev">advisor_cases（master）</div>
               <div class="yoy-change flat" id="reconcileDelta">—</div>
             </div>
           </div>
@@ -952,9 +958,8 @@ async function init() {
           .in('client_name', slice);
         if (r.data) STATE.advisorInRecords.push(...r.data);
       }
-      // 律師優先：合署承接的案件一律歸 KR4，不計入法顧 reconcile（業務指示）
+      // 保留所有屬法顧客戶的收款（含合署 group），renderReconcile 會拆「所內」vs「轉合署」顯示
       STATE.advisorInRecords = STATE.advisorInRecords.filter(r => {
-        if (r.group_name && r.group_name.indexOf('合署') !== -1) return false;
         return advisorClients.has(r.client_name) || advisorClients.has(normalizeClientName(r.client_name));
       });
     }
@@ -1314,17 +1319,24 @@ function renderReconcile(accrualAmount) {
     return true;
   };
 
-  // 所內法顧（非合署）：毛收 + 退款分開
+  // 4 channels: CRM 所內 / 轉合署 / 法顧對帳 / 退款
   const inRec = (STATE.advisorInRecords || []).filter(r => dateInRange(r.record_date));
-  let inRecPaid = 0, inRecRefund = 0;
-  let paidCount = 0, refundCount = 0;
+  let nonPaid = 0, nonRefund = 0, parPaid = 0, parRefund = 0;
+  let nonCount = 0, parCount = 0, refundCount = 0;
   inRec.forEach(r => {
     const a = +r.amount || 0;
-    if (r.transaction_type === 'PaymentTransaction') { inRecPaid += a; paidCount++; }
-    else if (r.transaction_type === 'RefundTransaction') { inRecRefund += a; refundCount++; }
+    const isP = r.group_name && r.group_name.indexOf('合署') !== -1;
+    if (r.transaction_type === 'PaymentTransaction') {
+      if (isP) { parPaid += a; parCount++; }
+      else     { nonPaid += a; nonCount++; }
+    } else if (r.transaction_type === 'RefundTransaction') {
+      if (isP) parRefund += a;
+      else     nonRefund += a;
+      refundCount++;
+    }
   });
 
-  // 法顧儲值：只算屬於 advisor_cases 客戶集合（sheet 沒登的客戶不計入，業務指示）
+  // 法顧對帳：advisor_set (sheet) 內客戶的儲值
   const sheetClients = STATE.advisorClientSet || new Set();
   const allDeps = (STATE.deposits || []).filter(t => {
     if (!dateInRange(t.record_date)) return false;
@@ -1336,30 +1348,31 @@ function renderReconcile(accrualAmount) {
   const depPaid = nonVoidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
   const depVoid = voidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
 
-  const refundTotal = inRecRefund + depVoid;
-  const refundCnt = refundCount + voidDeps.length;
-  const cashGross = inRecPaid + depPaid;  // 毛收（不扣退款）
+  const refundTotal = nonRefund + parRefund + depVoid;
+  const cashGross = nonPaid + depPaid + parPaid;
   const cashNet = cashGross - refundTotal;
   const delta = (accrualAmount || 0) - cashNet;
   const periodLabel = isAll ? '全部年度' : (monthSelected ? `${sy} 年 ${sm} 月` : `${sy} 年度`);
 
   document.getElementById('reconcilePeriodNote').textContent = periodLabel;
-  document.getElementById('reconcileInRecords').textContent  = fmtMoneyShort(inRecPaid);
-  document.getElementById('reconcileInRecordsCount').textContent = paidCount + ' 筆收款';
+  document.getElementById('reconcileInRecords').textContent  = fmtMoneyShort(nonPaid);
+  document.getElementById('reconcileInRecordsCount').textContent = nonCount + ' 筆';
   document.getElementById('reconcileDeposits').textContent   = fmtMoneyShort(depPaid);
   document.getElementById('reconcileDepositsCount').textContent = nonVoidDeps.length + ' 筆儲值';
+  document.getElementById('reconcilePartnerAdvisor').textContent = fmtMoneyShort(parPaid);
+  document.getElementById('reconcilePartnerAdvisorCount').textContent = parCount + ' 筆';
   document.getElementById('reconcileRefunds').textContent    = '−' + fmtMoneyShort(refundTotal);
   document.getElementById('reconcileRefundsCount').textContent = refundCount + ' 筆退款 / ' + voidDeps.length + ' 筆作廢';
-  document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashGross);
+  document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashNet);
   document.getElementById('reconcileAccrual').textContent    = fmtMoneyShort(accrualAmount || 0);
 
   const cashHintEl = document.getElementById('reconcileCashHint');
-  cashHintEl.innerHTML = '毛 ' + fmtMoneyShort(cashGross) + '，扣退款後 <b>' + fmtMoneyShort(cashNet) + '</b>';
+  cashHintEl.innerHTML = fmtMoneyShort(nonPaid)+'+'+fmtMoneyShort(depPaid)+'+'+fmtMoneyShort(parPaid)+'−'+fmtMoneyShort(refundTotal);
   cashHintEl.className = 'yoy-change flat';
 
   const deltaEl = document.getElementById('reconcileDelta');
   const sign = delta >= 0 ? '+' : '−';
-  deltaEl.textContent = '成案 − 淨現金 ＝ ' + sign + fmtMoneyShort(Math.abs(delta));
+  deltaEl.textContent = 'Sheet − 現金 ＝ ' + sign + fmtMoneyShort(Math.abs(delta));
   deltaEl.className = 'yoy-change ' + (Math.abs(delta) < 50000 ? 'flat' : (delta > 0 ? 'down' : 'up'));
 }
 
