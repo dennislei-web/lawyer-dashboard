@@ -172,9 +172,12 @@ def transform_record(item):
     client_sources = case.get("client_sources", [])
     source_channel = ", ".join(s.get("name", "") for s in client_sources) if client_sources else None
 
-    # 當事人
-    clients = case.get("clients", [])
-    client_name = ", ".join(c.get("name", "") for c in clients) if clients else None
+    # 當事人 — 個人戶在 case.clients[].name，公司戶在 case.client_companies[].company_name
+    clients = case.get("clients", []) or []
+    client_companies = case.get("client_companies", []) or []
+    parts = [c.get("name", "") for c in clients] + [cc.get("company_name", "") for cc in client_companies]
+    parts = [p for p in parts if p]
+    client_name = ", ".join(parts) if parts else None
 
     # 負責人員 (assigned_members)
     assigned = case.get("assigned_members", [])
