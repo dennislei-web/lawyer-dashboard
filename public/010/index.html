@@ -886,24 +886,30 @@ function initTeamPeriod(){
   if(!sel) return;
   const granularity = document.getElementById('teamGranularity').value;
   const prev = sel.value;
-  if(granularity === 'year'){
-    sel.innerHTML = '<option value="all">全部年份</option>';
-    sel.disabled = true;
-    return;
-  }
   sel.disabled = false;
   const years = [...new Set(teamData.map(r=>r.year))].sort((a,b)=>b-a);
-  const opts = [
-    {v:'all', l:'全部歷史'},
-    {v:'recent:12', l:'最近 12 月'},
-    {v:'recent:24', l:'最近 24 月'},
-    {v:'recent:36', l:'最近 36 月'},
-    {v:'sep', l:'─── 分隔 ───', disabled:true},
-    ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
-  ];
+  let opts;
+  if(granularity === 'year'){
+    opts = [
+      {v:'all', l:'全部年份'},
+      {v:'recent_yr:3', l:'最近 3 年'},
+      {v:'recent_yr:5', l:'最近 5 年'},
+      {v:'sep', l:'─── 分隔 ───', disabled:true},
+      ...years.map(y=>({v:`year:${y}`, l:`${y} 單年`})),
+    ];
+  } else {
+    opts = [
+      {v:'all', l:'全部歷史'},
+      {v:'recent:12', l:'最近 12 月'},
+      {v:'recent:24', l:'最近 24 月'},
+      {v:'recent:36', l:'最近 36 月'},
+      {v:'sep', l:'─── 分隔 ───', disabled:true},
+      ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
+    ];
+  }
   sel.innerHTML = opts.map(o=>`<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
   if(prev && opts.find(o=>o.v===prev && !o.disabled)) sel.value = prev;
-  else sel.value = 'recent:24';  // 預設最近 24 月
+  else sel.value = granularity==='year' ? 'all' : 'recent:24';
 }
 
 function getTeamPeriodKeys(){
@@ -911,7 +917,15 @@ function getTeamPeriodKeys(){
   const granularity = document.getElementById('teamGranularity').value;
   const period = document.getElementById('teamPeriod').value;
   if(granularity === 'year'){
-    const years = [...new Set(teamData.map(r=>r.year))].sort();
+    const allYears = [...new Set(teamData.map(r=>r.year))].sort();
+    let years;
+    if(period === 'all') years = allYears;
+    else if(period.startsWith('recent_yr:')){
+      const n = parseInt(period.split(':')[1]);
+      years = allYears.slice(-n);
+    } else if(period.startsWith('year:')){
+      years = [parseInt(period.split(':')[1])];
+    } else years = allYears;
     return { granularity, keys: years, labelFor: y=>String(y) };
   }
   // 月別
@@ -1026,8 +1040,13 @@ function renderTeamTable(seriesData){
   const { granularity, keys, byMember, active } = seriesData;
   const unitLabel = granularity==='year' ? '年' : '月';
   const periodLabel = (function(){
-    if(granularity==='year') return '全部年別';
     const p = document.getElementById('teamPeriod').value;
+    if(granularity==='year'){
+      if(p==='all') return '全部年別';
+      if(p.startsWith('recent_yr:')) return `最近 ${p.split(':')[1]} 年`;
+      if(p.startsWith('year:')) return `${p.split(':')[1]} 單年`;
+      return '年別';
+    }
     if(p==='all') return '全部歷史';
     if(p.startsWith('recent:')) return `最近 ${p.split(':')[1]} 月`;
     if(p.startsWith('year:')) return `${p.split(':')[1]} 全年`;
@@ -1247,24 +1266,30 @@ function initDrillPeriod(){
   if(!sel) return;
   const granularity = document.getElementById('drillGranularity').value;
   const prev = sel.value;
-  if(granularity === 'year'){
-    sel.innerHTML = '<option value="all">全部年份</option>';
-    sel.disabled = true;
-    return;
-  }
   sel.disabled = false;
   const years = [...new Set(lawyerData.map(r=>r.year))].sort((a,b)=>b-a);
-  const opts = [
-    {v:'all', l:'全部歷史'},
-    {v:'recent:12', l:'最近 12 月'},
-    {v:'recent:24', l:'最近 24 月'},
-    {v:'recent:36', l:'最近 36 月'},
-    {v:'sep', l:'─── 分隔 ───', disabled:true},
-    ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
-  ];
+  let opts;
+  if(granularity === 'year'){
+    opts = [
+      {v:'all', l:'全部年份'},
+      {v:'recent_yr:3', l:'最近 3 年'},
+      {v:'recent_yr:5', l:'最近 5 年'},
+      {v:'sep', l:'─── 分隔 ───', disabled:true},
+      ...years.map(y=>({v:`year:${y}`, l:`${y} 單年`})),
+    ];
+  } else {
+    opts = [
+      {v:'all', l:'全部歷史'},
+      {v:'recent:12', l:'最近 12 月'},
+      {v:'recent:24', l:'最近 24 月'},
+      {v:'recent:36', l:'最近 36 月'},
+      {v:'sep', l:'─── 分隔 ───', disabled:true},
+      ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
+    ];
+  }
   sel.innerHTML = opts.map(o=>`<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
   if(prev && opts.find(o=>o.v===prev && !o.disabled)) sel.value = prev;
-  else sel.value = 'all';
+  else sel.value = granularity==='year' ? 'all' : 'all';
 }
 
 function getDrillSeries(names){
@@ -1331,13 +1356,21 @@ function getDrillSeries(names){
       y.total_revenue += r.total_revenue||0;
       y.months_active += 1;
     });
-    const arr = Object.values(byYear).sort((a,b)=>a.year-b.year);
+    let arr = Object.values(byYear).sort((a,b)=>a.year-b.year);
+    // 期間 filter for year mode
+    if(period === 'all'){ /* no filter */ }
+    else if(period.startsWith('recent_yr:')){
+      const n = parseInt(period.split(':')[1]);
+      arr = arr.slice(-n);
+    } else if(period.startsWith('year:')){
+      const y = parseInt(period.split(':')[1]);
+      arr = arr.filter(r => r.year === y);
+    }
     // compute rates
     arr.forEach(y=>{
       y.attend_rate = y.referrals ? (y.attended/y.referrals) : 0;
       y.sign_rate = y.attended ? (y.signed/y.attended) : 0;
       y.avg_unit_price_wan = y.referrals ? y.total_revenue/y.referrals/10000 : 0;
-      // 年度狀態 用整體 委任率 + 均價 重判
       const T = y.attend_rate * y.sign_rate;
       const U = y.avg_unit_price_wan;
       y.referral_status = y.referrals===0 ? '-'
@@ -1368,7 +1401,12 @@ function renderDrillSummary(displayName, series){
   const granularity = document.getElementById('drillGranularity').value;
   const periodSel = document.getElementById('drillPeriod').value;
   const periodLabel = (function(){
-    if(granularity==='year') return '全部年別';
+    if(granularity==='year'){
+      if(periodSel==='all') return '全部年別';
+      if(periodSel.startsWith('recent_yr:')) return `最近 ${periodSel.split(':')[1]} 年`;
+      if(periodSel.startsWith('year:')) return `${periodSel.split(':')[1]} 單年`;
+      return '年別';
+    }
     if(periodSel==='all') return '全部歷史';
     if(periodSel.startsWith('recent:')) return `最近 ${periodSel.split(':')[1]} 月`;
     if(periodSel.startsWith('year:')) return `${periodSel.split(':')[1]} 全年`;
@@ -1512,8 +1550,13 @@ function renderDrill(){
 
   // 明細表
   const periodLabel = (function(){
-    if(granularity==='year') return '年別';
     const p = document.getElementById('drillPeriod').value;
+    if(granularity==='year'){
+      if(p==='all') return '全部年別';
+      if(p.startsWith('recent_yr:')) return `最近 ${p.split(':')[1]} 年`;
+      if(p.startsWith('year:')) return `${p.split(':')[1]} 單年`;
+      return '年別';
+    }
     if(p==='all') return '全部歷史';
     if(p.startsWith('recent:')) return `最近 ${p.split(':')[1]} 月`;
     if(p.startsWith('year:')) return `${p.split(':')[1]} 全年`;
