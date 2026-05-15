@@ -623,8 +623,8 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
 
   var byMonth = {}, partnerByMonth = {}, advisorRevByMonth = {};
   for (var i=1; i<=12; i++) {
-    byMonth[i]         = { paid:0, refund:0 };
-    partnerByMonth[i]  = { paid:0, refund:0 };
+    byMonth[i]           = { paid:0, refund:0 };
+    partnerByMonth[i]    = { paid:0, refund:0, advisorOverlapPaid:0, advisorOverlapRefund:0 };
     advisorRevByMonth[i] = { paid:0, refund:0 };
   }
   records.forEach(function(r) {
@@ -633,10 +633,23 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
     if (m < 1 || m > 12) return;
     var amt = Number(r.amount || 0);
     var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
-    var isAdvisor = !isPartner && r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
-    var bucket = isPartner ? partnerByMonth[m] : (isAdvisor ? advisorRevByMonth[m] : byMonth[m]);
-    if (r.transaction_type === 'PaymentTransaction')      bucket.paid   += amt;
-    else if (r.transaction_type === 'RefundTransaction')  bucket.refund += amt;
+    var isAdvisor = r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
+    if (isPartner) {
+      // 整筆都歸 KR4 合署
+      if (r.transaction_type === 'PaymentTransaction')      partnerByMonth[m].paid   += amt;
+      else if (r.transaction_type === 'RefundTransaction')  partnerByMonth[m].refund += amt;
+      // 若同時是法顧客戶，記錄 overlap 給法顧現金口徑也加計（雙計，業務同意）
+      if (isAdvisor) {
+        if (r.transaction_type === 'PaymentTransaction')      partnerByMonth[m].advisorOverlapPaid   += amt;
+        else if (r.transaction_type === 'RefundTransaction')  partnerByMonth[m].advisorOverlapRefund += amt;
+      }
+    } else if (isAdvisor) {
+      if (r.transaction_type === 'PaymentTransaction')      advisorRevByMonth[m].paid   += amt;
+      else if (r.transaction_type === 'RefundTransaction')  advisorRevByMonth[m].refund += amt;
+    } else {
+      if (r.transaction_type === 'PaymentTransaction')      byMonth[m].paid   += amt;
+      else if (r.transaction_type === 'RefundTransaction')  byMonth[m].refund += amt;
+    }
   });
   state.data.revenueByMonth = byMonth;
   state.data.partnerRevenueByMonth = partnerByMonth;
@@ -644,14 +657,20 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
 }
 
 function aggregateAdvisorCash(records, advisorTransactions, advisorCases) {
-  // 法顧「現金口徑」= revenue_records 屬法顧客戶 (paid - refund) + advisor_transactions 儲值 (paid - refund)
-  // 跟成案口徑 (advisor_cases.amount_paid) 並列，提供 reconcile 視角。
+  // 法顧「現金口徑」三部分：
+  //   inRecordsNon: 非合署 + 法顧客戶 (revenue_records)
+  //   inRecordsPartner: 合署 + 法顧客戶 (revenue_records overlap — 與 KR4 雙計)
+  //   deposits: 法顧儲值 (advisor_transactions 非作廢)
+  // 跟成案口徑 (advisor_cases.amount_paid) 並列做 reconcile。
   var byMonth = {};
-  for (var i=1; i<=12; i++) byMonth[i] = { inRecords:0, deposits:0, total:0 };
+  for (var i=1; i<=12; i++) byMonth[i] = { inRecordsNon:0, inRecordsPartner:0, deposits:0, total:0 };
   var adv = state.data.advisorRevByMonth || {};
+  var partner = state.data.partnerRevenueByMonth || {};
   for (var m=1; m<=12; m++) {
     var r = adv[m] || { paid:0, refund:0 };
-    byMonth[m].inRecords = (r.paid || 0) - (r.refund || 0);
+    var p = partner[m] || { advisorOverlapPaid:0, advisorOverlapRefund:0 };
+    byMonth[m].inRecordsNon     = (r.paid || 0) - (r.refund || 0);
+    byMonth[m].inRecordsPartner = (p.advisorOverlapPaid || 0) - (p.advisorOverlapRefund || 0);
   }
   (advisorTransactions || []).forEach(function(t) {
     if (!t.record_date) return;
@@ -659,7 +678,7 @@ function aggregateAdvisorCash(records, advisorTransactions, advisorCases) {
     if (mm < 1 || mm > 12) return;
     byMonth[mm].deposits += Number(t.amount || 0);
   });
-  for (var m2=1; m2<=12; m2++) byMonth[m2].total = byMonth[m2].inRecords + byMonth[m2].deposits;
+  for (var m2=1; m2<=12; m2++) byMonth[m2].total = byMonth[m2].inRecordsNon + byMonth[m2].inRecordsPartner + byMonth[m2].deposits;
   state.data.advisorCashByMonth = byMonth;
 }
 
@@ -1293,27 +1312,31 @@ function renderKR3() {
   }));
   card.appendChild(row);
 
-  // 現金口徑副欄：所內法顧客戶 + 法顧儲值，對得上 CRM
+  // 現金口徑副欄：所內法顧 + 合署接的法顧（與 KR4 雙計）+ 法顧儲值
   var cashByMonth = state.data.advisorCashByMonth || {};
-  var cashIn = 0, cashDeposit = 0;
+  var cashNon = 0, cashPartner = 0, cashDeposit = 0;
   if (fm == null) {
     for (var mm=1; mm<=12; mm++) {
-      cashIn      += (cashByMonth[mm] || {}).inRecords || 0;
-      cashDeposit += (cashByMonth[mm] || {}).deposits  || 0;
+      cashNon     += (cashByMonth[mm] || {}).inRecordsNon     || 0;
+      cashPartner += (cashByMonth[mm] || {}).inRecordsPartner || 0;
+      cashDeposit += (cashByMonth[mm] || {}).deposits         || 0;
     }
   } else {
-    cashIn      = (cashByMonth[fm] || {}).inRecords || 0;
-    cashDeposit = (cashByMonth[fm] || {}).deposits  || 0;
+    cashNon     = (cashByMonth[fm] || {}).inRecordsNon     || 0;
+    cashPartner = (cashByMonth[fm] || {}).inRecordsPartner || 0;
+    cashDeposit = (cashByMonth[fm] || {}).deposits         || 0;
   }
-  var cashTotal = cashIn + cashDeposit;
+  var cashTotal = cashNon + cashPartner + cashDeposit;
   var subRow = document.createElement('div');
-  subRow.style.cssText = 'margin-top:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-left:2px solid var(--text-muted); border-radius:3px; font-size:12px; color:var(--text-muted); display:flex; gap:18px; flex-wrap:wrap;';
+  subRow.style.cssText = 'margin-top:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-left:2px solid var(--text-muted); border-radius:3px; font-size:12px; color:var(--text-muted); display:flex; gap:14px; flex-wrap:wrap;';
   subRow.innerHTML =
     '<span><b>現金口徑 reconcile</b>（' + (fm==null?'YTD':fm+'月') + '）：</span>' +
-    '<span>所內法顧客戶 ' + fmt(cashIn/10000) + ' 萬</span>' +
+    '<span>所內法顧 ' + fmt(cashNon/10000) + ' 萬</span>' +
+    '<span>+ 合署接的法顧 <span style="color:var(--gold)">' + fmt(cashPartner/10000) + ' 萬</span></span>' +
     '<span>+ 法顧儲值 ' + fmt(cashDeposit/10000) + ' 萬</span>' +
     '<span>= 合計 <b style="color:var(--text)">' + fmt(cashTotal/10000) + ' 萬</b></span>' +
-    '<span style="opacity:0.7">（成案 vs 現金差 ' + fmt((actualValue('kr3_total_revenue', fm)||0) - cashTotal/10000) + ' 萬）</span>';
+    '<span style="opacity:0.7">（成案 vs 現金差 ' + fmt((actualValue('kr3_total_revenue', fm)||0) - cashTotal/10000) + ' 萬）</span>' +
+    '<span style="opacity:0.6;font-size:11px;width:100%;margin-top:4px;">⚠ 「合署接的法顧」與 KR4 合署數字重疊（雙計），加總 KR1+KR4+法顧現金 會多算這部分</span>';
   card.appendChild(subRow);
 
   // 12 個月堆疊柱狀圖：主動 + 介紹 + 續委任 + 月目標折線
