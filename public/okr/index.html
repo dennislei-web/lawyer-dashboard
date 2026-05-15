@@ -532,7 +532,7 @@ async function loadAll() {
         .eq('fiscal_year', year - 1911).in('data_type', ['actual', 'budget']).eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded(),
       fetchByMonth(year, 'record_date', function() { return sb.from('advisor_transactions').select('record_date,amount,is_void,client_name').eq('is_void', false); }),
-      sb.from('fact_010_monthly_team').select('year,month,team_member,total_revenue,total_referrals,signed,attended').eq('year', year)
+      sb.from('fact_010_monthly_team').select('year,month,team_member,total_revenue,current_month_revenue,cross_month_revenue,total_referrals,signed,attended').eq('year', year)
     ]);
 
     var d = state.data;
@@ -555,9 +555,10 @@ async function loadAll() {
     // KR5 來源：fact_010_monthly_team（按月加總所有同仁）
     d.kr5ByMonth = {};
     fact010Team.forEach(function(r) {
-      if (!d.kr5ByMonth[r.month]) d.kr5ByMonth[r.month] = { revenue:0, referrals:0, signed:0, attended:0 };
+      if (!d.kr5ByMonth[r.month]) d.kr5ByMonth[r.month] = { revenue:0, currentRevenue:0, referrals:0, signed:0, attended:0 };
       var k = d.kr5ByMonth[r.month];
       k.revenue += r.total_revenue || 0;
+      k.currentRevenue += r.current_month_revenue || 0;
       k.referrals += r.total_referrals || 0;
       k.signed += r.signed || 0;
       k.attended += r.attended || 0;
@@ -1512,6 +1513,56 @@ function renderKR4() {
 }
 
 // ═══ KR5 法0 ═══
+// 均單雙數字（對應法律010 dashboard 的「當月估 / 總額估」）
+// 當月估 = current_month_revenue / 分母；總額估 = total_revenue / 分母
+function computeKr5DualAvg(krCode, fm) {
+  var byMonth = state.data.kr5ByMonth || {};
+  var denomKey = (krCode === 'kr5_avg_signed') ? 'signed' : 'referrals';
+  var totRev = 0, currRev = 0, denom = 0;
+  if (fm == null) {
+    var done = monthsElapsed();
+    for (var m=1; m<=done; m++) {
+      var k = byMonth[m]; if (!k) continue;
+      totRev += k.revenue || 0;
+      currRev += k.currentRevenue || 0;
+      denom += k[denomKey] || 0;
+    }
+  } else {
+    var k1 = byMonth[fm];
+    if (k1) {
+      totRev = k1.revenue || 0;
+      currRev = k1.currentRevenue || 0;
+      denom = k1[denomKey] || 0;
+    }
+  }
+  return {
+    currentWan: denom > 0 ? currRev / denom / 10000 : null,
+    totalWan:   denom > 0 ? totRev  / denom / 10000 : null
+  };
+}
+function makeKr5DualAvgCell(label, currentWan, totalWan) {
+  var box = document.createElement('div'); box.className = 'kr-metric';
+  var lbl = document.createElement('div'); lbl.className='label'; lbl.textContent = label; box.appendChild(lbl);
+  var dual = document.createElement('div');
+  dual.style.cssText = 'display:flex; gap:14px; margin-top:2px; align-items:flex-end;';
+  function side(title, val, withBorder) {
+    var col = document.createElement('div');
+    if (withBorder) col.style.cssText = 'border-left:1px solid var(--border-light); padding-left:14px;';
+    var t = document.createElement('div');
+    t.style.cssText = 'font-size:0.62rem; color:var(--text-muted); line-height:1; margin-bottom:3px;';
+    t.textContent = title;
+    var v = document.createElement('div');
+    v.style.cssText = 'font-size:1.05rem; font-weight:700; color:var(--text); font-variant-numeric:tabular-nums;';
+    v.innerHTML = fmtByUnit(val, '萬') + '<span class="unit" style="font-size:0.7rem; color:var(--text-muted); margin-left:2px;">萬</span>';
+    col.appendChild(t); col.appendChild(v);
+    return col;
+  }
+  dual.appendChild(side('當月', currentWan, false));
+  dual.appendChild(side('總額', totalWan, true));
+  box.appendChild(dual);
+  return box;
+}
+
 // KR5 用的指標清單（順序＝展示順序＝編輯矩陣的列順序）
 var KR5_METRICS = [
   { code:'kr5_revenue',      label:'月營收',                   unit:'萬', hasTarget:true },
@@ -1535,15 +1586,10 @@ function renderKR5() {
   var row = document.createElement('div'); row.className='kr-metric-row'; row.style.gridTemplateColumns='repeat(4, 1fr)';
   KR5_METRICS.forEach(function(spec) {
     var label = (fm==null ? 'YTD' : fm+'月') + ' ' + spec.label;
-    // 均單類 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
-    if (spec.nonAggregable && fm == null) {
-      // 均單 YTD = SUM(revenue) / SUM(分母)，由 sumYTD/actualYTD 回傳
-      var ytdVal = actualYTD(spec.code);
-      row.appendChild(makeMetricCell({
-        label: 'YTD ' + spec.label,
-        value: ytdVal,
-        unit: spec.unit
-      }));
+    // 均單類：對應法律010 dashboard 的雙數字（當月估 vs 總額估）
+    if (spec.nonAggregable) {
+      var dual = computeKr5DualAvg(spec.code, fm);
+      row.appendChild(makeKr5DualAvgCell(label, dual.currentWan, dual.totalWan));
       return;
     }
     row.appendChild(makeMetricCell({
