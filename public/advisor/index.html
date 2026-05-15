@@ -1348,7 +1348,9 @@ function renderReconcile(accrualAmount) {
   const depPaid = nonVoidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
   const depVoid = voidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
 
-  const refundTotal = nonRefund + parRefund + depVoid;
+  // 退款只算 revenue_records 真退款（利衝等），advisor_transactions is_void 多是「作廢+重開」
+  // correction pattern（同日同額同備註），不是真現金退回，不該加進 gross 收到。
+  const refundTotal = nonRefund + parRefund;
   const periodLabel = isAll ? '全部年度' : (monthSelected ? `${sy} 年 ${sm} 月` : `${sy} 年度`);
 
   // 顯示 NET (paid - refund 後實得)；退款 顯示 gross 退回金額；合計 = NET + 退款 = gross 收到
@@ -1362,7 +1364,7 @@ function renderReconcile(accrualAmount) {
   document.getElementById('reconcilePartnerAdvisor').textContent = fmtMoneyShort(parNet);
   document.getElementById('reconcilePartnerAdvisorCount').textContent = parCount + ' 筆 (net)';
   document.getElementById('reconcileRefunds').textContent    = '+' + fmtMoneyShort(refundTotal);
-  document.getElementById('reconcileRefundsCount').textContent = refundCount + ' 筆退款 / ' + voidDeps.length + ' 筆作廢';
+  document.getElementById('reconcileRefundsCount').textContent = refundCount + ' 筆真退款（' + voidDeps.length + ' 筆儲值作廢視為 correction 不計）';
   const cashTotalGross = nonNet + depPaid + parNet + refundTotal;
   document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashTotalGross);
   document.getElementById('reconcileAccrual').textContent    = fmtMoneyShort(accrualAmount || 0);
