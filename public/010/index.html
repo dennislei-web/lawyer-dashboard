@@ -91,6 +91,9 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
 .status-暫緩{background:var(--red-dim);color:var(--red)}
 .status-空{background:var(--bg-row);color:var(--text-muted)}
 
+/* Inactive lawyer option */
+select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:italic}
+
 /* Sparkline */
 .spark{display:inline-flex;align-items:flex-end;gap:1px;height:18px;vertical-align:middle}
 .spark span{width:4px;background:var(--blue);border-radius:1px;min-height:2px}
@@ -253,7 +256,11 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
       <h2>合作律師個人 drill<span class="hint">可看全部歷史；月別 / 年別切換</span></h2>
       <div class="controls">
         <label>律師：</label>
-        <select id="drillLawyer"></select>
+        <select id="drillLawyer" style="min-width:200px"></select>
+        <span id="drillSubWrap" style="display:none">
+          <label>視角：</label>
+          <select id="drillSubLawyer" style="min-width:140px"></select>
+        </span>
         <label>檢視：</label>
         <select id="drillGranularity">
           <option value="month">月別</option>
@@ -831,7 +838,17 @@ function renderCompareLawyer(months){
   document.querySelectorAll('.lw-link').forEach(a=> a.addEventListener('click',(e)=>{
     e.preventDefault();
     const lw = a.getAttribute('data-lawyer');
-    document.getElementById('drillLawyer').value = lw;
+    const base = getGroupBase(lw);
+    const sel = document.getElementById('drillLawyer');
+    const groupVal = `group:${base}`;
+    const singleVal = `single:${lw}`;
+    if([...sel.options].some(o => o.value === groupVal)){
+      sel.value = groupVal;
+      updateSubLawyerSelector();
+      document.getElementById('drillSubLawyer').value = lw;
+    } else if([...sel.options].some(o => o.value === singleVal)){
+      sel.value = singleVal;
+    }
     document.querySelector('.tab-btn[data-tab="lawyer"]').click();
     renderDrill();
   }));
@@ -878,13 +895,113 @@ function renderTeam(){
 
 // ═══ View 3: 律師 drill ═══
 let drillCharts={};
+
+function getGroupBase(name){
+  // 「林冠宇-桃園」→ 林冠宇；「喆律-刑事案件」→ 喆律
+  const idx = name.indexOf('-');
+  return idx > 0 ? name.slice(0, idx) : name;
+}
+
+function detectLawyerGroups(allLawyers){
+  // 回傳 { 群組 base: [完整 name 1, name 2, ...] }，只 keep size > 1 的群組
+  const byBase = {};
+  allLawyers.forEach(n => {
+    const base = getGroupBase(n);
+    if(!byBase[base]) byBase[base] = [];
+    byBase[base].push(n);
+  });
+  const groups = {};
+  Object.entries(byBase).forEach(([base, members])=>{
+    if(members.length > 1) groups[base] = members.sort();
+  });
+  return groups;
+}
+
 function initDrillSelector(){
-  // 全部曾出現的律師（不限近 12 月）
-  const all = [...new Set(lawyerData.map(r=>r.lawyer))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const all = [...new Set(lawyerData.map(r=>r.lawyer))];
+  const groups = detectLawyerGroups(all);
+  const grouped = new Set(Object.values(groups).flat());
+  // 找當年度有案律師
+  const latestYear = lawyerData.reduce((mx,r)=>r.year>mx?r.year:mx, 0);
+  const activeNames = new Set(
+    lawyerData.filter(r => r.year === latestYear && (r.referrals||0) > 0).map(r=>r.lawyer)
+  );
+  // 群組視為活躍：只要有任一 sub 活躍
+  const groupActive = base => groups[base].some(n => activeNames.has(n));
+
+  // 建 dropdown entries: group as one + 非群組的 individual
+  const entries = [];
+  Object.keys(groups).forEach(base => entries.push({
+    value: `group:${base}`,
+    label: `${base}（${groups[base].length} 條合計）`,
+    active: groupActive(base),
+  }));
+  all.forEach(n => {
+    if(grouped.has(n)) return;  // 已在群組
+    entries.push({ value:`single:${n}`, label:n, active: activeNames.has(n) });
+  });
+  entries.sort((a,b)=> a.label.localeCompare(b.label, 'zh-Hant'));
+
+  const activeOnes = entries.filter(e => e.active);
+  const inactiveOnes = entries.filter(e => !e.active);
+
+  let html = '';
+  if(activeOnes.length){
+    html += `<optgroup label="${latestYear} 有案">`;
+    activeOnes.forEach(e => html += `<option value="${e.value}">${e.label}</option>`);
+    html += '</optgroup>';
+  }
+  if(inactiveOnes.length){
+    html += `<optgroup label="${latestYear} 未合作（灰）">`;
+    inactiveOnes.forEach(e => html += `<option value="${e.value}" class="inactive">${e.label}（休）</option>`);
+    html += '</optgroup>';
+  }
+
   const sel = document.getElementById('drillLawyer');
   const prev = sel.value;
-  sel.innerHTML = all.map(l=>`<option value="${l}">${l}</option>`).join('');
-  if(prev && all.includes(prev)) sel.value = prev;
+  sel.innerHTML = html;
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+function updateSubLawyerSelector(){
+  const lwValue = document.getElementById('drillLawyer').value;
+  const wrap = document.getElementById('drillSubWrap');
+  const sub = document.getElementById('drillSubLawyer');
+  if(!lwValue || !lwValue.startsWith('group:')){
+    wrap.style.display = 'none';
+    sub.innerHTML = '';
+    return;
+  }
+  const base = lwValue.slice(6);
+  const all = [...new Set(lawyerData.map(r=>r.lawyer))];
+  const members = all.filter(n => getGroupBase(n) === base).sort();
+  const prev = sub.value;
+  let html = `<option value="all">全所合計</option>`;
+  members.forEach(n => html += `<option value="${n}">${n}</option>`);
+  sub.innerHTML = html;
+  wrap.style.display = '';
+  if(prev && [...sub.options].some(o => o.value === prev)) sub.value = prev;
+  else sub.value = 'all';
+}
+
+function getDrillTargetNames(){
+  const lwValue = document.getElementById('drillLawyer').value;
+  if(!lwValue) return { names: [], displayName: '' };
+  if(lwValue.startsWith('single:')){
+    const n = lwValue.slice(7);
+    return { names: [n], displayName: n };
+  }
+  if(lwValue.startsWith('group:')){
+    const base = lwValue.slice(6);
+    const sub = document.getElementById('drillSubLawyer').value;
+    const all = [...new Set(lawyerData.map(r=>r.lawyer))];
+    const members = all.filter(n => getGroupBase(n) === base).sort();
+    if(sub === 'all' || !sub){
+      return { names: members, displayName: `${base}（${members.length} 條合計）` };
+    }
+    return { names: [sub], displayName: sub };
+  }
+  return { names: [], displayName: '' };
 }
 
 function initDrillPeriod(){
@@ -912,11 +1029,49 @@ function initDrillPeriod(){
   else sel.value = 'all';
 }
 
-function getDrillSeries(lw){
+function getDrillSeries(names){
   const granularity = document.getElementById('drillGranularity').value;
   const period = document.getElementById('drillPeriod').value;
-  const all = lawyerData.filter(r=>r.lawyer === lw)
-    .sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+  const nameSet = new Set(names);
+  let all;
+  if(names.length === 1){
+    all = lawyerData.filter(r=>r.lawyer === names[0])
+      .sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+  } else {
+    // 多 lawyer aggregate by year-month
+    const byYM = {};
+    lawyerData.forEach(r=>{
+      if(!nameSet.has(r.lawyer)) return;
+      const k = `${r.year}-${r.month}`;
+      if(!byYM[k]) byYM[k] = {
+        year:r.year, month:r.month,
+        referrals:0, attended:0, signed:0, monthly_target:0,
+        current_month_revenue:0, cross_month_revenue:0, total_revenue:0,
+        region: r.region || '',
+        lawyer: '(group)',
+      };
+      const y = byYM[k];
+      y.referrals += r.referrals||0;
+      y.attended += r.attended||0;
+      y.signed += r.signed||0;
+      y.monthly_target += r.monthly_target||0;
+      y.current_month_revenue += r.current_month_revenue||0;
+      y.cross_month_revenue += r.cross_month_revenue||0;
+      y.total_revenue += r.total_revenue||0;
+    });
+    all = Object.values(byYM).sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+    all.forEach(r=>{
+      r.attend_rate = r.referrals ? r.attended/r.referrals : 0;
+      r.sign_rate = r.attended ? r.signed/r.attended : 0;
+      r.avg_unit_price_wan = r.referrals ? r.total_revenue/r.referrals/10000 : 0;
+      const T = r.attend_rate * r.sign_rate;
+      const U = r.avg_unit_price_wan;
+      r.referral_status = r.referrals===0 ? '-'
+        : (T > 0.35 && U > 3) ? '優先'
+        : (T >= 0.28 || U >= 2.3) ? '正常'
+        : '暫緩';
+    });
+  }
 
   if(granularity === 'year'){
     // 按年聚合
@@ -971,7 +1126,7 @@ function getDrillSeries(lw){
   }));
 }
 
-function renderDrillSummary(lw, series){
+function renderDrillSummary(displayName, series){
   const granularity = document.getElementById('drillGranularity').value;
   const periodSel = document.getElementById('drillPeriod').value;
   const periodLabel = (function(){
@@ -1007,7 +1162,7 @@ function renderDrillSummary(lw, series){
   const span = series.length>1 ? `${firstLabel} ~ ${lastLabel}` : firstLabel;
 
   const html = `
-    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${lw} ${periodLabel}（${series.length} ${unitLabel}：${span}）</div>
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${displayName} ${periodLabel}（${series.length} ${unitLabel}：${span}）</div>
     <div class="totals-grid">
       <div class="stat-block">
         <div class="stat-label">合計件數</div>
@@ -1058,11 +1213,14 @@ function renderDrillSummary(lw, series){
 }
 
 function renderDrill(){
-  const lw = document.getElementById('drillLawyer').value;
-  if(!lw) return;
+  const lwValue = document.getElementById('drillLawyer').value;
+  if(!lwValue) return;
+  updateSubLawyerSelector();
   initDrillPeriod();
-  const series = getDrillSeries(lw);
-  renderDrillSummary(lw, series);
+  const { names, displayName } = getDrillTargetNames();
+  if(!names.length) return;
+  const series = getDrillSeries(names);
+  renderDrillSummary(displayName, series);
   const granularity = document.getElementById('drillGranularity').value;
   const labels = series.map(r => r.label);
   const refs = series.map(r => r.referrals);
@@ -1123,7 +1281,7 @@ function renderDrill(){
     if(p.startsWith('year:')) return `${p.split(':')[1]} 全年`;
     return '';
   })();
-  document.getElementById('drillTblTitle').textContent = `${lw} ${periodLabel}明細（${series.length} ${granularity==='year'?'年':'月'}）`;
+  document.getElementById('drillTblTitle').textContent = `${displayName} ${periodLabel}明細（${series.length} ${granularity==='year'?'年':'月'}）`;
 
   const firstColLabel = granularity==='year' ? '年份' : '月份';
   const targetColLabel = granularity==='year' ? '年目標和' : '月目標';
@@ -1165,6 +1323,7 @@ document.getElementById('cmpLawyerMetric').addEventListener('change', renderComp
 document.getElementById('totalPeriod').addEventListener('change', renderTotalSummary);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
+document.getElementById('drillSubLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillGranularity').addEventListener('change', renderDrill);
 document.getElementById('drillPeriod').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
