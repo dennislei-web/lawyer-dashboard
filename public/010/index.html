@@ -261,8 +261,8 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
         </select>
         <label>期間：</label>
         <select id="drillPeriod" style="min-width:160px"></select>
-        <span id="drillStatus" style="color:var(--text-muted);font-size:12px"></span>
       </div>
+      <div id="drillSummary" style="margin-bottom:14px"></div>
       <div class="chart-grid">
         <div><h3>已轉件數（vs 月目標）</h3><canvas id="dChartRef"></canvas></div>
         <div><h3>委任率 (出席→簽約)</h3><canvas id="dChartSign"></canvas></div>
@@ -971,11 +971,98 @@ function getDrillSeries(lw){
   }));
 }
 
+function renderDrillSummary(lw, series){
+  const granularity = document.getElementById('drillGranularity').value;
+  const periodSel = document.getElementById('drillPeriod').value;
+  const periodLabel = (function(){
+    if(granularity==='year') return '全部年別';
+    if(periodSel==='all') return '全部歷史';
+    if(periodSel.startsWith('recent:')) return `最近 ${periodSel.split(':')[1]} 月`;
+    if(periodSel.startsWith('year:')) return `${periodSel.split(':')[1]} 全年`;
+    return '';
+  })();
+  const sum = k => series.reduce((s,r)=>s+(r[k]||0), 0);
+  const totRef = sum('referrals');
+  const totAtt = sum('attended');
+  const totSign = sum('signed');
+  const totTarget = sum('monthly_target');
+  const totCurrent = sum('current_month_revenue');
+  const totCross = sum('cross_month_revenue');
+  const totRev = totCurrent + totCross;
+  const attendRate = totRef ? totAtt/totRef : 0;
+  const signRate = totAtt ? totSign/totAtt : 0;
+  const overallRate = totRef ? totSign/totRef : 0;
+  const targetRate = totTarget>0 ? totRef/totTarget : null;
+  const avgUnit = totRef ? totRev/totRef/10000 : 0;
+  const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  // 狀態分布 across the period
+  const cntPrio = series.filter(r=>r.referral_status==='優先').length;
+  const cntNorm = series.filter(r=>r.referral_status==='正常').length;
+  const cntSlow = series.filter(r=>r.referral_status==='暫緩').length;
+  const cntDash = series.filter(r=>r.referral_status==='-').length;
+  const unitLabel = granularity==='year' ? '年' : '月';
+  // 期間 first / last
+  const firstLabel = series.length ? series[0].label : '-';
+  const lastLabel = series.length ? series[series.length-1].label : '-';
+  const span = series.length>1 ? `${firstLabel} ~ ${lastLabel}` : firstLabel;
+
+  const html = `
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${lw} ${periodLabel}（${series.length} ${unitLabel}：${span}）</div>
+    <div class="totals-grid">
+      <div class="stat-block">
+        <div class="stat-label">合計件數</div>
+        <div class="stat-value">${totRef.toLocaleString()}</div>
+        ${totTarget>0 ? `<div class="stat-sub">目標合計 ${totTarget} / 達標 ${(targetRate*100).toFixed(0)}%</div>` : ''}
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">出席</div>
+        <div class="stat-value">${totAtt.toLocaleString()}</div>
+        <div class="stat-sub">出席率 ${(attendRate*100).toFixed(1)}%</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">委任</div>
+        <div class="stat-value green">${totSign.toLocaleString()}</div>
+        <div class="stat-sub">委任率 ${(signRate*100).toFixed(1)}% / 整體 ${(overallRate*100).toFixed(1)}%</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">當月收款</div>
+        <div class="stat-value">${totCurrent.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">跨月收款</div>
+        <div class="stat-value">${totCross.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">總金額</div>
+        <div class="stat-value gold">${totRev.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">轉介均價</div>
+        <div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">委任均價</div>
+        <div class="stat-value">${avgSigned.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      <div class="stat-block status-block">
+        <div class="stat-label">${unitLabel}別狀態分布（共 ${series.length} ${unitLabel}）</div>
+        <div class="stat-value">
+          <span class="status status-優先">優先 ${cntPrio}</span>
+          <span class="status status-正常">正常 ${cntNorm}</span>
+          <span class="status status-暫緩">暫緩 ${cntSlow}</span>
+          ${cntDash>0?`<span class="status status-空">- ${cntDash}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('drillSummary').innerHTML = html;
+}
+
 function renderDrill(){
   const lw = document.getElementById('drillLawyer').value;
   if(!lw) return;
   initDrillPeriod();
   const series = getDrillSeries(lw);
+  renderDrillSummary(lw, series);
   const granularity = document.getElementById('drillGranularity').value;
   const labels = series.map(r => r.label);
   const refs = series.map(r => r.referrals);
@@ -1056,14 +1143,6 @@ function renderDrill(){
   html += '</tbody></table>';
   document.getElementById('drillTbl').innerHTML = html;
 
-  // status hint
-  if(series.length){
-    const latest = series[series.length-1];
-    const totalAll = series.reduce((s,r)=>s+(r.total_revenue||0), 0);
-    const refAll = series.reduce((s,r)=>s+(r.referrals||0), 0);
-    document.getElementById('drillStatus').textContent =
-      `${periodLabel}合計 件 ${refAll} / 總 ${totalAll.toLocaleString()}；最新 ${latest.label} 狀態 ${latest.referral_status}`;
-  }
 }
 
 // ═══ Render dispatch ═══
