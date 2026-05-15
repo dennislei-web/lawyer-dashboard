@@ -2083,8 +2083,7 @@
             <th class="tracker-sort" data-sort="date" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">日期<span class="sort-ind"></span></th>
             <th class="tracker-sort" data-sort="brief" style="text-align:left;padding:10px 8px;white-space:nowrap;cursor:pointer;user-select:none;">Brief<span class="sort-ind"></span></th>
             <th style="text-align:left;padding:10px 8px;min-width:240px;">個人化目標</th>
-            <th style="text-align:left;padding:10px 8px;min-width:300px;">下一步</th>
-            <th style="text-align:left;padding:10px 8px;min-width:300px;">備註</th>
+            <th style="text-align:left;padding:10px 8px;min-width:520px;">回饋</th>
           </tr>
         </thead>
         <tbody id="trackerTbody"></tbody>
@@ -6934,7 +6933,7 @@ async function renderTrackerPage() {
   if (!canViewTracker()) return;
   if (trackerLoaded) { renderTrackerTable(); return; }
   const tbody = document.getElementById('trackerTbody');
-  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">載入中…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">載入中…</td></tr>';
 
   // 1. lawyers + monthly_stats（2025 1-4 + 2026 1-4）
   const [{ data: lawyersData }, { data: statsData }, { data: trackerData }, { data: briefList }] = await Promise.all([
@@ -7010,7 +7009,7 @@ async function renderTrackerPage() {
     rows.push({
       lawyer: l,
       home: trackerHome(l),
-      kpi: { consult:c.c, signed:c.sg, collected:c.co, eff, rate, p_eff, yoy, has_prev:!!p.c, inactive: !l.is_active },
+      kpi: { consult:c.c, signed:c.sg, collected:c.co, eff, rate, eff14, p_eff, yoy, has_prev:!!p.c, inactive: !l.is_active },
       briefs: id2briefs.get(lid) || [],
       tracker: id2tracker.get(lid) || { lawyer_id: lid, pattern_group:'', target_text:'', one_on_one_date:null, one_on_one_status:'pending', next_action:'', notes:'' }
     });
@@ -7165,7 +7164,11 @@ function renderTrackerTable() {
   tbody.innerHTML = filtered.map(r => {
     const k = r.kpi, t = r.tracker;
     const yoyHtml = (k.has_prev && k.yoy !== null)
-      ? `<span style="color:${k.yoy >= 0 ? 'var(--green)':'var(--red)'};">${k.yoy >= 0 ? '+':''}${k.yoy.toFixed(0)}%</span>`
+      ? `<div style="line-height:1.3;">
+          <div style="color:${k.yoy >= 0 ? 'var(--green)':'var(--red)'};font-weight:600;">${k.yoy >= 0 ? '+':''}${k.yoy.toFixed(0)}%</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);">26: $${Math.round(k.eff14||0).toLocaleString()}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);">25: $${Math.round(k.p_eff||0).toLocaleString()}</div>
+        </div>`
       : '<span style="color:var(--text-muted);">—</span>';
     const briefHtml = r.briefs.length === 0
       ? '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>'
@@ -7193,8 +7196,7 @@ function renderTrackerTable() {
       <td style="${cellBase}white-space:nowrap;width:96px;min-width:96px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:3px 4px;border-radius:4px;font-size:0.68rem;width:92px;" ${isTrackerAdmin()?'':'readonly'}></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
       <td style="${cellBase}min-width:480px;width:480px;"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx" ${isTrackerAdmin()?'':'readonly'}>${escapeHtml(t.target_text||'')}</textarea></td>
-      <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="next_action" style="${taStyle}min-height:140px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
-      <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="notes" style="${taStyle}min-height:140px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
+      <td style="${cellBase}min-width:520px;width:520px;"><textarea data-field="next_action" style="${taStyle}min-height:160px;" placeholder="brief 抓到的 pattern 你覺得不準、目標數字想調整、執行細節想討論，直接填這裡">${escapeHtml(t.next_action||'')}</textarea></td>
     </tr>`;
   }).join('');
 
