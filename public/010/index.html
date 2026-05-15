@@ -103,6 +103,19 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
 /* Loading */
 .loading{padding:40px;text-align:center;color:var(--text-muted)}
 
+/* Totals grid */
+.totals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.stat-block{background:var(--bg-row);padding:10px 12px;border-radius:4px;border:1px solid var(--border)}
+.stat-block .stat-label{color:var(--text-muted);font-size:11px;margin-bottom:4px}
+.stat-block .stat-value{color:var(--text);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat-block .stat-value.gold{color:var(--gold)}
+.stat-block .stat-value.green{color:var(--green)}
+.stat-block .stat-sub{color:var(--text-muted);font-size:11px;margin-top:3px}
+.stat-block.status-block{grid-column:span 2}
+.stat-block.status-block .stat-value{font-size:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.wd-bar{height:6px;background:var(--bg-card);border-radius:3px;overflow:hidden;margin-top:5px}
+.wd-bar > div{height:100%;background:var(--orange)}
+
 /* Charts container */
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .chart-grid > div{background:var(--bg-row);border-radius:4px;padding:12px;height:240px}
@@ -182,6 +195,18 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
         </select>
       </div>
       <div id="cmpTeamTbl"></div>
+    </div>
+
+    <div class="card">
+      <h2>喆律在 010 平台 總計<span class="hint">對應 sheet[3] 第 75 列；月度可看工作日進度估算</span></h2>
+      <div class="controls">
+        <label>檢視範圍：</label>
+        <select id="totalMode">
+          <option value="month">月度（依截止月）</option>
+          <option value="year">年度（截止月之該年）</option>
+        </select>
+      </div>
+      <div id="totalSummary"></div>
     </div>
 
     <div class="card">
@@ -389,7 +414,141 @@ function renderCompare(){
   const [ey, em] = endYM.split('-').map(Number);
   const months = lastNMonths(ey, em, 6);  // [(y,m), (y,m), ...]
   renderCompareTeam(months);
+  renderTotalSummary(ey, em);
   renderCompareLawyer(months);
+}
+
+function workingDayProgress(year, month){
+  // 計算 (year, month) 工作日 (Mon-Fri 排除週末)
+  const today = new Date();
+  const monthLast = new Date(year, month, 0); // last day
+  let total = 0, passed = 0;
+  for(let d=1; d<=monthLast.getDate(); d++){
+    const dt = new Date(year, month-1, d);
+    const dow = dt.getDay();
+    if(dow !== 0 && dow !== 6) total++;
+  }
+  const isPast = (year < today.getFullYear()) || (year===today.getFullYear() && month-1 < today.getMonth());
+  const isFuture = (year > today.getFullYear()) || (year===today.getFullYear() && month-1 > today.getMonth());
+  if(isPast) return { passed: total, total, progress: 1, status:'past' };
+  if(isFuture) return { passed: 0, total, progress: 0, status:'future' };
+  // current month
+  for(let d=1; d<=today.getDate() && d<=monthLast.getDate(); d++){
+    const dt = new Date(year, month-1, d);
+    const dow = dt.getDay();
+    if(dow !== 0 && dow !== 6) passed++;
+  }
+  return { passed, total, progress: total ? passed/total : 0, status:'current' };
+}
+
+function renderTotalSummary(ey, em){
+  const mode = document.getElementById('totalMode').value;
+  let inScope, scopeLabel;
+  if(mode === 'month'){
+    inScope = lawyerData.filter(r => r.year === ey && r.month === em);
+    scopeLabel = `${ey}-${String(em).padStart(2,'0')}`;
+  } else {
+    inScope = lawyerData.filter(r => r.year === ey);
+    scopeLabel = `${ey} 全年（含 ${[...new Set(inScope.map(r=>r.month))].length} 個月）`;
+  }
+  const sum = (k) => inScope.reduce((s,r)=>s+(r[k]||0), 0);
+  const total_referrals = sum('referrals');
+  const total_attended = sum('attended');
+  const total_signed = sum('signed');
+  const total_current = sum('current_month_revenue');
+  const total_cross = sum('cross_month_revenue');
+  const total_revenue = total_current + total_cross;
+  const attend_rate = total_referrals ? total_attended/total_referrals : 0;
+  const sign_rate = total_attended ? total_signed/total_attended : 0;
+  const overall_rate = total_referrals ? total_signed/total_referrals : 0;
+  const avg_unit_wan = total_referrals ? total_revenue/total_referrals/10000 : 0;
+  const avg_signed_wan = total_signed ? total_revenue/total_signed/10000 : 0;
+
+  // 狀態分布
+  let statusRows;
+  if(mode === 'month') statusRows = inScope;
+  else {
+    const monthsInYr = [...new Set(inScope.map(r => r.month))].sort((a,b)=>b-a);
+    statusRows = lawyerData.filter(r => r.year === ey && r.month === monthsInYr[0]);
+  }
+  const cntPrio = statusRows.filter(r=>r.referral_status==='優先').length;
+  const cntNorm = statusRows.filter(r=>r.referral_status==='正常').length;
+  const cntSlow = statusRows.filter(r=>r.referral_status==='暫緩').length;
+  const cntTotal = cntPrio + cntNorm + cntSlow;
+  const pct = (n) => cntTotal>0 ? (n/cntTotal*100).toFixed(0)+'%' : '-';
+
+  // 工作日 (僅月度)
+  let workingDayHtml = '';
+  if(mode === 'month'){
+    const wd = workingDayProgress(ey, em);
+    if(wd.status === 'current'){
+      const projected = wd.progress > 0 ? Math.round(total_revenue / wd.progress) : 0;
+      workingDayHtml = `<div class="stat-block">
+        <div class="stat-label">本月工作日進度</div>
+        <div class="stat-value">${wd.passed} / ${wd.total} 天 <span class="stat-sub">${(wd.progress*100).toFixed(1)}%</span></div>
+        <div class="wd-bar"><div style="width:${(wd.progress*100).toFixed(1)}%"></div></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">月底預估金額（按工作日比推算）</div>
+        <div class="stat-value gold">${projected.toLocaleString()}</div>
+        <div class="stat-sub">目前已收 / 工作日比</div>
+      </div>`;
+    } else if(wd.status === 'past'){
+      workingDayHtml = `<div class="stat-block">
+        <div class="stat-label">本月工作日</div>
+        <div class="stat-value">${wd.total} 天 <span class="stat-sub">已過月</span></div>
+      </div>`;
+    }
+  }
+
+  const html = `
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">檢視範圍：${scopeLabel}</div>
+    <div class="totals-grid">
+      <div class="stat-block">
+        <div class="stat-label">合計件數</div>
+        <div class="stat-value">${total_referrals.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">諮詢出席</div>
+        <div class="stat-value">${total_attended.toLocaleString()}</div>
+        <div class="stat-sub">出席率 ${(attend_rate*100).toFixed(1)}%</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">委任件數</div>
+        <div class="stat-value green">${total_signed.toLocaleString()}</div>
+        <div class="stat-sub">委任率 ${(sign_rate*100).toFixed(1)}% / 整體 ${(overall_rate*100).toFixed(1)}%</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">當月收款</div>
+        <div class="stat-value">${total_current.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">跨月收款</div>
+        <div class="stat-value">${total_cross.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">總金額</div>
+        <div class="stat-value gold">${total_revenue.toLocaleString()}</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">轉介均價（總金額/件數）</div>
+        <div class="stat-value">${avg_unit_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">委任均價（總金額/委任件）</div>
+        <div class="stat-value">${avg_signed_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      ${workingDayHtml}
+      <div class="stat-block status-block">
+        <div class="stat-label">律師狀態分布（${mode==='month' ? '當月' : '最新月'} active ${cntTotal}）</div>
+        <div class="stat-value">
+          <span class="status status-優先">優先 ${cntPrio} (${pct(cntPrio)})</span>
+          <span class="status status-正常">正常 ${cntNorm} (${pct(cntNorm)})</span>
+          <span class="status status-暫緩">暫緩 ${cntSlow} (${pct(cntSlow)})</span>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('totalSummary').innerHTML = html;
 }
 function lastNMonths(year, month, n){
   const out=[];
@@ -721,6 +880,7 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
 document.getElementById('cmpEndMonth').addEventListener('change', renderCompare);
 document.getElementById('cmpMetric').addEventListener('change', renderCompare);
 document.getElementById('cmpLawyerMetric').addEventListener('change', renderCompare);
+document.getElementById('totalMode').addEventListener('change', renderCompare);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
