@@ -526,8 +526,8 @@ async function loadAll() {
       sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
       fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count,collected,revenue,signed_count').gte('month', ymStart).lte('month', ymEnd).order('month'); }),
       fetchByMonth(year, 'case_date', function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue'); }),
-      fetchByMonth(year, 'record_date', function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void').eq('is_void', false); }),
-      fetchByMonth(year, 'paid_at', function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid'); }),
+      fetchByMonth(year, 'record_date', function() { return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,is_void,client_name').eq('is_void', false); }),
+      fetchByMonth(year, 'paid_at', function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid,client_name'); }),
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
         .eq('fiscal_year', year - 1911).in('data_type', ['actual', 'budget']).eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded()
@@ -598,12 +598,17 @@ function aggregateConsult(monthlyStats, consultCases) {
 }
 
 function aggregateRevenue(records, advisorCases) {
-  // 拆兩組：byMonth（非合署，扣法顧 → KR1）/ partnerByMonth（合署 → KR4，對標營運頁「合署律師」tab）
+  // 拆兩組：byMonth（非合署 → KR1）/ partnerByMonth（合署 → KR4，對標營運頁「合署律師」tab）
+  // advisorOverlap：advisor_cases 與 revenue_records 非合署 paid 重疊的部分（client_name+amount 雙重 match）
+  // 才是真正要從 KR1 扣掉的雙重計算金額；其餘 advisor_cases 屬獨立顧問業務帳，不該扣。
   var byMonth = {}, partnerByMonth = {};
   for (var i=1; i<=12; i++) {
-    byMonth[i] = { paid:0, refund:0, advisorSigned:0 };
+    byMonth[i] = { paid:0, refund:0, advisorOverlap:0 };
     partnerByMonth[i] = { paid:0, refund:0 };
   }
+  // multiset：每月非合署 PaymentTransaction 的 (client_name|amount) 鍵 → 筆數
+  var revKeysByMonth = {};
+  for (var j=1; j<=12; j++) revKeysByMonth[j] = {};
   records.forEach(function(r) {
     if (!r.record_date) return;
     var m = parseInt(String(r.record_date).slice(5,7), 10);
@@ -611,13 +616,26 @@ function aggregateRevenue(records, advisorCases) {
     var amt = Number(r.amount || 0);
     var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
     var bucket = isPartner ? partnerByMonth[m] : byMonth[m];
-    if (r.transaction_type === 'PaymentTransaction') bucket.paid += amt;
-    else if (r.transaction_type === 'RefundTransaction') bucket.refund += amt;
+    if (r.transaction_type === 'PaymentTransaction') {
+      bucket.paid += amt;
+      if (!isPartner && r.client_name) {
+        var k = r.client_name + '|' + amt;
+        revKeysByMonth[m][k] = (revKeysByMonth[m][k] || 0) + 1;
+      }
+    } else if (r.transaction_type === 'RefundTransaction') {
+      bucket.refund += amt;
+    }
   });
   advisorCases.forEach(function(c) {
-    if (!c.paid_at) return;
+    if (!c.paid_at || !c.client_name) return;
     var m = parseInt(String(c.paid_at).slice(5,7), 10);
-    if (m >= 1 && m <= 12) byMonth[m].advisorSigned += Number(c.amount_paid || 0);
+    if (m < 1 || m > 12) return;
+    var amt = Number(c.amount_paid || 0);
+    var key = c.client_name + '|' + amt;
+    if ((revKeysByMonth[m][key] || 0) > 0) {
+      revKeysByMonth[m][key] -= 1;
+      byMonth[m].advisorOverlap += amt;
+    }
   });
   state.data.revenueByMonth = byMonth;
   state.data.partnerRevenueByMonth = partnerByMonth;
@@ -753,7 +771,7 @@ function actualMonth(krCode, m) {
   switch (krCode) {
     case 'kr1_revenue': {
       var r = d.revenueByMonth[m] || {};
-      return ((r.paid || 0) - (r.refund || 0) - (r.advisorSigned || 0)) / 10000;
+      return ((r.paid || 0) - (r.refund || 0) - (r.advisorOverlap || 0)) / 10000;
     }
     case 'kr1_consult_count':
       return (d.consultByMonth[m] || {}).count || 0;
