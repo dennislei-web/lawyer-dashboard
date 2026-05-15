@@ -183,6 +183,7 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
     <button class="tab-btn active" data-tab="compare">月對比</button>
     <button class="tab-btn" data-tab="team">同仁團隊</button>
     <button class="tab-btn" data-tab="lawyer">律師個人 drill</button>
+    <button class="tab-btn" data-tab="speed">回款速度</button>
   </div>
 
   <!-- View 1: 月對比 -->
@@ -302,6 +303,56 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
       <div id="drillTbl"></div>
     </div>
   </div>
+
+  <!-- View 4: 回款速度 -->
+  <div class="page" id="page-speed">
+    <div class="card">
+      <h2>進線 → 首付 速度<span class="hint">分析「進線日」到「第一次付款日」的天數。樣本限已簽約且兩日期皆有值的案件</span></h2>
+      <div style="background:var(--orange-dim);border-left:3px solid var(--orange);padding:10px 14px;border-radius:4px;margin-bottom:12px;font-size:13px;color:var(--text-muted)">
+        <strong style="color:var(--orange)">資料限制</strong>：DB 的 <code>meeting_date</code>（會議日期）欄位 010 sheet 從未填寫（全表 0%），故無法直接算「首次諮詢 → 委任付款」間距。改用 <code>intake_date</code>（進線日期）→ <code>first_payment_date</code> 近似。<br>
+        <strong>注意</strong>：intake_date 約 2025 年起才開始填，2024 以前資料不會進入此分析。
+      </div>
+      <div class="controls">
+        <label>期間：</label>
+        <select id="speedPeriod" style="min-width:160px"></select>
+        <label>案件來源：</label>
+        <select id="speedSource">
+          <option value="all">全部</option>
+          <option value="main">總表</option>
+          <option value="installment">分期付款</option>
+        </select>
+        <label>律師：</label>
+        <select id="speedLawyer" style="min-width:140px">
+          <option value="">全部律師</option>
+        </select>
+      </div>
+      <div id="speedSummary" style="margin-bottom:14px"></div>
+    </div>
+
+    <div class="card">
+      <h2>間距分桶<span class="hint">0–365 天分桶分佈；>365 / 負值（異常）單獨列出</span></h2>
+      <div style="height:280px;background:var(--bg-row);border-radius:4px;padding:12px">
+        <canvas id="speedHistChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>律師別 回款速度<span class="hint">按中位數排序；樣本 &lt; 3 不顯示；只取 0–365 天的案件</span></h2>
+      <div id="speedLawyerTbl"></div>
+    </div>
+
+    <div class="card">
+      <h2>案件類型 vs 速度<span class="hint">TOP 12 案型；看哪些案型回款最快</span></h2>
+      <div id="speedTypeTbl"></div>
+    </div>
+
+    <div class="card">
+      <h2>每月趨勢<span class="hint">按 referral_year/month 看每月中位數變化</span></h2>
+      <div style="height:280px;background:var(--bg-row);border-radius:4px;padding:12px">
+        <canvas id="speedTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -326,6 +377,8 @@ let currentUser=null, currentLawyer=null;
 
 // ═══ Cache ═══
 let teamData=[], lawyerData=[]; // 全部 fact 表
+let speedRows=[]; // 進線→首付：raw_010_case + raw_010_installment_case 合併（已過濾 signed+兩日期齊全）
+let speedHistChart=null, speedTrendChart=null;
 let currentEndYM = null;
 
 // 雙均價 stat-block helper（當月估 vs 總額估）
@@ -480,9 +533,53 @@ async function loadData(){
     alert('讀取失敗：'+e.message);
     return;
   }
+  // 速度分析：背景載入，不擋主畫面
+  loadSpeedData();
   renderFreshness();
   initMonthSelector();
   renderAll();
+}
+
+// 載入 raw_010_case + raw_010_installment_case，過濾 signed=true 且兩日期齊全
+async function loadSpeedData(){
+  try{
+    const SEL = 'handling_lawyer,intake_date,first_payment_date,case_amount,case_type,referral_year,referral_month';
+    const fetchRaw = async (table)=>{
+      const CHUNK = 1000;
+      let all=[], from=0;
+      for(let safety=0; safety<30; safety++){
+        const r = await sb.from(table).select(SEL)
+          .eq('signed', true)
+          .not('intake_date','is',null)
+          .not('first_payment_date','is',null)
+          .range(from, from+CHUNK-1);
+        if(r.error){ throw new Error(`${table}: ${r.error.message}`); }
+        const batch = r.data || [];
+        all = all.concat(batch.map(x=>({...x, _src: table==='raw_010_case'?'main':'installment'})));
+        if(batch.length < CHUNK) break;
+        from += CHUNK;
+      }
+      return all;
+    };
+    const [m, i] = await Promise.all([
+      fetchRaw('raw_010_case'),
+      fetchRaw('raw_010_installment_case'),
+    ]);
+    speedRows = m.concat(i).map(r=>{
+      const idate = new Date(r.intake_date + 'T00:00:00Z');
+      const pdate = new Date(r.first_payment_date + 'T00:00:00Z');
+      r._gap = Math.round((pdate - idate) / 86400000);
+      r._sameMonth = idate.getUTCFullYear()===pdate.getUTCFullYear() && idate.getUTCMonth()===pdate.getUTCMonth();
+      return r;
+    });
+    console.log(`speed: main ${m.length} + installment ${i.length} = ${speedRows.length} rows`);
+    initSpeedControls();
+    renderSpeed();
+  }catch(e){
+    console.error(e);
+    const el = document.getElementById('speedSummary');
+    if(el) el.innerHTML = `<div style="color:var(--red);padding:12px">讀取失敗：${e.message}</div>`;
+  }
 }
 function renderFreshness(){
   if(!teamData.length) return;
@@ -1666,6 +1763,260 @@ function renderDrill(){
 
 }
 
+// ═══ View 4: 回款速度 ═══
+function initSpeedControls(){
+  // 期間選單：依資料的 referral_year/month 動態生成
+  const ymSet = new Set();
+  speedRows.forEach(r=>{
+    if(r.referral_year && r.referral_month) ymSet.add(`${r.referral_year}-${String(r.referral_month).padStart(2,'0')}`);
+  });
+  const yms = Array.from(ymSet).sort();
+  const years = Array.from(new Set(yms.map(x=>x.slice(0,4)))).sort();
+  const sel = document.getElementById('speedPeriod');
+  let opts = '<option value="all">全部期間</option>';
+  years.forEach(y => opts += `<option value="year:${y}">${y} 全年</option>`);
+  yms.slice().reverse().forEach(ym => opts += `<option value="ym:${ym}">${ym}</option>`);
+  sel.innerHTML = opts;
+
+  // 律師下拉
+  const lwSet = new Set();
+  speedRows.forEach(r => r.handling_lawyer && lwSet.add(r.handling_lawyer));
+  const lws = Array.from(lwSet).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const lwSel = document.getElementById('speedLawyer');
+  lwSel.innerHTML = '<option value="">全部律師</option>' + lws.map(l=>`<option value="${l}">${l}</option>`).join('');
+}
+
+function filterSpeedRows(){
+  const period = document.getElementById('speedPeriod').value;
+  const src = document.getElementById('speedSource').value;
+  const lw = document.getElementById('speedLawyer').value;
+  return speedRows.filter(r=>{
+    if(src !== 'all' && r._src !== src) return false;
+    if(lw && r.handling_lawyer !== lw) return false;
+    if(period === 'all') return true;
+    if(period.startsWith('year:')){
+      return String(r.referral_year) === period.slice(5);
+    }
+    if(period.startsWith('ym:')){
+      const [y,m] = period.slice(3).split('-');
+      return String(r.referral_year)===y && String(r.referral_month).padStart(2,'0')===m;
+    }
+    return true;
+  });
+}
+
+function statMedian(arr){
+  if(!arr.length) return 0;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+function statQuantile(arr, q){
+  if(!arr.length) return 0;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const i = Math.min(s.length-1, Math.floor(s.length*q));
+  return s[i];
+}
+
+function renderSpeed(){
+  if(!speedRows.length){
+    document.getElementById('speedSummary').innerHTML = '<div class="loading">載入中...</div>';
+    return;
+  }
+  const rows = filterSpeedRows();
+  const sumEl = document.getElementById('speedSummary');
+  if(!rows.length){
+    sumEl.innerHTML = '<div class="loading">此條件下無資料</div>';
+    document.getElementById('speedLawyerTbl').innerHTML = '';
+    document.getElementById('speedTypeTbl').innerHTML = '';
+    if(speedHistChart){ speedHistChart.destroy(); speedHistChart=null; }
+    if(speedTrendChart){ speedTrendChart.destroy(); speedTrendChart=null; }
+    return;
+  }
+  const valid = rows.filter(r=>r._gap >= 0 && r._gap <= 365);
+  const gaps = valid.map(r=>r._gap);
+  const sameDay = valid.filter(r=>r._gap===0).length;
+  const wk = valid.filter(r=>r._gap<=7).length;
+  const m30 = valid.filter(r=>r._gap>30).length;
+  const sameMonth = rows.filter(r=>r._sameMonth).length;
+  const negCount = rows.filter(r=>r._gap < 0).length;
+  const overCount = rows.filter(r=>r._gap > 365).length;
+
+  sumEl.innerHTML = `<div class="totals-grid">
+    <div class="stat-block"><div class="stat-label">樣本數</div>
+      <div class="stat-value">${rows.length}</div>
+      <div class="stat-sub">0–365 天 ${valid.length}；異常 ${negCount}；&gt;365 天 ${overCount}</div></div>
+    <div class="stat-block"><div class="stat-label">中位數（天）</div>
+      <div class="stat-value gold">${statMedian(gaps).toFixed(1)}</div>
+      <div class="stat-sub">P25 ${statQuantile(gaps,0.25)} / P75 ${statQuantile(gaps,0.75)}</div></div>
+    <div class="stat-block"><div class="stat-label">平均（天）</div>
+      <div class="stat-value">${(gaps.reduce((a,b)=>a+b,0)/Math.max(1,gaps.length)).toFixed(1)}</div>
+      <div class="stat-sub">P90 ${statQuantile(gaps,0.90)} / P95 ${statQuantile(gaps,0.95)}</div></div>
+    <div class="stat-block"><div class="stat-label">當日付款</div>
+      <div class="stat-value ${sameDay/valid.length>=0.05?'green':''}">${sameDay} <span style="font-size:13px;color:var(--text-muted)">(${(sameDay/valid.length*100).toFixed(1)}%)</span></div>
+      <div class="stat-sub">進線當天就完款</div></div>
+    <div class="stat-block"><div class="stat-label">≤ 7 天</div>
+      <div class="stat-value green">${wk} <span style="font-size:13px;color:var(--text-muted)">(${(wk/valid.length*100).toFixed(1)}%)</span></div>
+      <div class="stat-sub">一週內回款</div></div>
+    <div class="stat-block"><div class="stat-label">&gt; 30 天</div>
+      <div class="stat-value" style="color:var(--orange)">${m30} <span style="font-size:13px;color:var(--text-muted)">(${(m30/valid.length*100).toFixed(1)}%)</span></div>
+      <div class="stat-sub">回款偏慢</div></div>
+    <div class="stat-block"><div class="stat-label">同月內首付</div>
+      <div class="stat-value">${sameMonth} <span style="font-size:13px;color:var(--text-muted)">(${(sameMonth/rows.length*100).toFixed(1)}%)</span></div>
+      <div class="stat-sub">進線月 = 付款月</div></div>
+  </div>`;
+
+  // 直方圖
+  const buckets = [
+    {label:'0', test:g=>g===0},
+    {label:'1-3', test:g=>g>=1&&g<=3},
+    {label:'4-7', test:g=>g>=4&&g<=7},
+    {label:'8-14', test:g=>g>=8&&g<=14},
+    {label:'15-30', test:g=>g>=15&&g<=30},
+    {label:'31-60', test:g=>g>=31&&g<=60},
+    {label:'61-90', test:g=>g>=61&&g<=90},
+    {label:'91-180', test:g=>g>=91&&g<=180},
+    {label:'181-365', test:g=>g>=181&&g<=365},
+  ];
+  const counts = buckets.map(b => valid.filter(r => b.test(r._gap)).length);
+  const ctxH = document.getElementById('speedHistChart');
+  if(speedHistChart) speedHistChart.destroy();
+  speedHistChart = new Chart(ctxH, {
+    type:'bar',
+    data:{labels: buckets.map(b=>b.label+' 天'), datasets:[{
+      label:'案件數', data:counts,
+      backgroundColor: counts.map((_,i)=> i<=2?'rgba(76,175,130,0.75)' : i<=4?'rgba(79,142,247,0.75)' : i<=6?'rgba(224,149,74,0.75)' : 'rgba(224,92,92,0.75)'),
+      borderColor: counts.map((_,i)=> i<=2?'#4caf82' : i<=4?'#4f8ef7' : i<=6?'#e0954a' : '#e05c5c'),
+      borderWidth:1,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:(ctx)=>{
+          const c = counts[ctx.dataIndex];
+          const pct = (c/valid.length*100).toFixed(1);
+          return `${c} 件 (${pct}%)`;
+        }}},
+      },
+      scales:{
+        x:{ticks:{color:'#8899aa'},grid:{color:'rgba(255,255,255,0.05)'}},
+        y:{beginAtZero:true, ticks:{color:'#8899aa'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'案件數',color:'#8899aa'}},
+      },
+    }
+  });
+
+  // 律師排行
+  const byLw = new Map();
+  valid.forEach(r=>{
+    const k = r.handling_lawyer || '(空)';
+    if(!byLw.has(k)) byLw.set(k, []);
+    byLw.get(k).push(r._gap);
+  });
+  const lwRows = [];
+  byLw.forEach((gs, ly)=>{
+    if(gs.length >= 3){
+      lwRows.push({
+        lawyer: ly,
+        n: gs.length,
+        med: statMedian(gs),
+        avg: gs.reduce((a,b)=>a+b,0)/gs.length,
+        max: Math.max(...gs),
+        sameDay: gs.filter(g=>g===0).length,
+        wk: gs.filter(g=>g<=7).length,
+      });
+    }
+  });
+  lwRows.sort((a,b)=>a.med - b.med);
+  let lwHtml = '<table class="tbl"><thead><tr>'
+    + '<th class="name-col">律師</th><th>樣本</th><th>中位數(天)</th><th>平均(天)</th><th>最大</th><th>當日</th><th>≤7天</th>'
+    + '</tr></thead><tbody>';
+  lwRows.forEach((r,i)=>{
+    const sdPct = r.sameDay/r.n*100;
+    const wkPct = r.wk/r.n*100;
+    const medCls = r.med<=7 ? 'pos' : r.med>=20 ? 'neg' : '';
+    lwHtml += `<tr>
+      <td class="name-col">${i<3?'🥇🥈🥉'[i]+' ':''}${r.lawyer}</td>
+      <td>${r.n}</td>
+      <td class="${medCls}">${r.med.toFixed(1)}</td>
+      <td>${r.avg.toFixed(1)}</td>
+      <td>${r.max}</td>
+      <td>${r.sameDay} (${sdPct.toFixed(0)}%)</td>
+      <td>${r.wk} (${wkPct.toFixed(0)}%)</td>
+    </tr>`;
+  });
+  lwHtml += '</tbody></table>';
+  document.getElementById('speedLawyerTbl').innerHTML = lwHtml;
+
+  // 案件類型表
+  const byType = new Map();
+  valid.forEach(r=>{
+    const k = r.case_type || '(空)';
+    if(!byType.has(k)) byType.set(k, []);
+    byType.get(k).push(r._gap);
+  });
+  const tRows = [];
+  byType.forEach((gs, t)=>{
+    if(gs.length >= 3){
+      tRows.push({
+        t, n: gs.length,
+        med: statMedian(gs),
+        avg: gs.reduce((a,b)=>a+b,0)/gs.length,
+        wk: gs.filter(g=>g<=7).length,
+      });
+    }
+  });
+  tRows.sort((a,b)=>b.n - a.n);
+  let tHtml = '<table class="tbl"><thead><tr>'
+    + '<th class="name-col">案型</th><th>樣本</th><th>中位數(天)</th><th>平均(天)</th><th>≤7天%</th>'
+    + '</tr></thead><tbody>';
+  tRows.slice(0,12).forEach(r=>{
+    const wkPct = r.wk/r.n*100;
+    const medCls = r.med<=7 ? 'pos' : r.med>=20 ? 'neg' : '';
+    tHtml += `<tr>
+      <td class="name-col">${r.t}</td>
+      <td>${r.n}</td>
+      <td class="${medCls}">${r.med.toFixed(1)}</td>
+      <td>${r.avg.toFixed(1)}</td>
+      <td>${wkPct.toFixed(0)}%</td>
+    </tr>`;
+  });
+  tHtml += '</tbody></table>';
+  document.getElementById('speedTypeTbl').innerHTML = tHtml;
+
+  // 月趨勢圖
+  const byYM = new Map();
+  valid.forEach(r=>{
+    if(r.referral_year && r.referral_month){
+      const k = `${r.referral_year}-${String(r.referral_month).padStart(2,'0')}`;
+      if(!byYM.has(k)) byYM.set(k, []);
+      byYM.get(k).push(r._gap);
+    }
+  });
+  const ymKeys = Array.from(byYM.keys()).sort();
+  const medSeries = ymKeys.map(k => statMedian(byYM.get(k)));
+  const nSeries = ymKeys.map(k => byYM.get(k).length);
+  const ctxT = document.getElementById('speedTrendChart');
+  if(speedTrendChart) speedTrendChart.destroy();
+  speedTrendChart = new Chart(ctxT, {
+    type:'line',
+    data:{labels: ymKeys, datasets:[
+      {label:'中位數(天)', data:medSeries, borderColor:'#c9a84c', backgroundColor:'rgba(201,168,76,0.15)', tension:0.25, yAxisID:'y'},
+      {label:'樣本數', data:nSeries, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.15)', tension:0.25, yAxisID:'y1', type:'bar'},
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{legend:{labels:{color:'#e0e0e0'}}},
+      scales:{
+        x:{ticks:{color:'#8899aa'},grid:{color:'rgba(255,255,255,0.05)'}},
+        y:{position:'left', beginAtZero:true, ticks:{color:'#c9a84c'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'中位數(天)',color:'#c9a84c'}},
+        y1:{position:'right', beginAtZero:true, ticks:{color:'#4f8ef7'}, grid:{display:false}, title:{display:true,text:'樣本數',color:'#4f8ef7'}},
+      },
+    }
+  });
+}
+
 // ═══ Render dispatch ═══
 function renderAll(){ initTotalPeriod(); renderCompare(); renderTeam(); initDrillSelector(); renderDrill(); }
 
@@ -1692,6 +2043,9 @@ document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillSubLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillGranularity').addEventListener('change', renderDrill);
 document.getElementById('drillPeriod').addEventListener('change', renderDrill);
+document.getElementById('speedPeriod').addEventListener('change', renderSpeed);
+document.getElementById('speedSource').addEventListener('change', renderSpeed);
+document.getElementById('speedLawyer').addEventListener('change', renderSpeed);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
 document.getElementById('syncSheetBtn').addEventListener('click', async function(){
   const btn = this;
