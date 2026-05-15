@@ -958,10 +958,12 @@ function getTeamPeriodKeys(){
 
 function getTeamSeriesPerMember(){
   const { granularity, keys } = getTeamPeriodKeys();
-  const members = [...new Set(teamData.map(r=>r.team_member))].sort();
+  const allMembers = [...new Set(teamData.map(r=>r.team_member))].sort();
   const { active } = getActiveTeamMembers();
   const showInactive = document.getElementById('teamShowInactive').checked;
-  const visible = showInactive ? members : members.filter(m => active.has(m));
+  const visible = showInactive ? allMembers : allMembers.filter(m => active.has(m));
+  const totalActive = allMembers.filter(m=>active.has(m)).length;
+  const totalInactive = allMembers.filter(m=>!active.has(m)).length;
   // 為每個 member 算 series values
   const byMember = {};
   visible.forEach(mem => {
@@ -992,13 +994,12 @@ function getTeamSeriesPerMember(){
       });
     }
   });
-  return { granularity, keys, byMember, active };
+  return { granularity, keys, byMember, active, totalActive, totalInactive, showInactive };
 }
 
 function renderTeamSummary(seriesData){
-  const { granularity, keys, byMember, active } = seriesData;
+  const { granularity, keys, byMember, active, totalActive, totalInactive, showInactive } = seriesData;
   const unitLabel = granularity==='year' ? '年' : '月';
-  // 期間合計 across 所有顯示的 members
   const members = Object.keys(byMember);
   const sumK = (k) => {
     let s = 0;
@@ -1016,13 +1017,13 @@ function renderTeamSummary(seriesData){
   const overallRate = totRef ? totSign/totRef : 0;
   const avgUnit = totRef ? totRev/totRef/10000 : 0;
   const avgSigned = totSign ? totRev/totSign/10000 : 0;
-  const activeCount = members.filter(m=>active.has(m)).length;
-  const inactiveCount = members.filter(m=>!active.has(m)).length;
+  const activeCount = totalActive;
+  const inactiveCount = totalInactive;
   const firstLabel = keys.length ? (granularity==='year'? keys[0] : `${keys[0][0]}-${String(keys[0][1]).padStart(2,'0')}`) : '-';
   const lastLabel = keys.length ? (granularity==='year'? keys[keys.length-1] : `${keys[keys.length-1][0]}-${String(keys[keys.length-1][1]).padStart(2,'0')}`) : '-';
   const span = keys.length>1 ? `${firstLabel} ~ ${lastLabel}` : firstLabel;
   const html = `
-    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${members.length} 位同仁（在職 ${activeCount} / 離職 ${inactiveCount}）　範圍 ${span}（${keys.length} ${unitLabel}）</div>
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${activeCount+inactiveCount} 位同仁（在職 ${activeCount} / 離職 ${inactiveCount}${!showInactive && inactiveCount>0 ? '，勾上「含離職」顯示' : ''}）　範圍 ${span}（${keys.length} ${unitLabel}）　顯示中：${members.length}</div>
     <div class="totals-grid">
       <div class="stat-block"><div class="stat-label">合計件數</div><div class="stat-value">${totRef.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">出席</div><div class="stat-value">${totAtt.toLocaleString()}</div><div class="stat-sub">出席率 ${(attendRate*100).toFixed(1)}%</div></div>
