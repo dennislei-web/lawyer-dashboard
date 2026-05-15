@@ -3943,29 +3943,33 @@ function renderTrackingPage() {
   }
 
   // YoY KPIs
-  setYoy('yoy-consults',   currT.consult_count, prevT.consult_count, false,  currT.consult_count.toLocaleString(), periodLabel);
-  setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false,  currT.signed_count.toLocaleString(), periodLabel);
-  setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, '$' + Math.round(currT.collected).toLocaleString(), periodLabel);
-  setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  currT.sign_rate.toFixed(1) + '%', periodLabel);
-  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, '$' + Math.round(currT.consult_eff).toLocaleString(), periodLabel);
+  const fmtInt   = v => Math.round(v).toLocaleString();
+  const fmtMoney = v => '$' + Math.round(v).toLocaleString();
+  const fmtPct   = v => v.toFixed(1) + '%';
+  setYoy('yoy-consults',   currT.consult_count, prevT.consult_count, false, fmtInt(currT.consult_count),   fmtInt(prevT.consult_count),   periodLabel);
+  setYoy('yoy-signed',     currT.signed_count,  prevT.signed_count,  false, fmtInt(currT.signed_count),    fmtInt(prevT.signed_count),    periodLabel);
+  setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, fmtMoney(currT.collected),     fmtMoney(prevT.collected),     periodLabel);
+  setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  fmtPct(currT.sign_rate),       fmtPct(prevT.sign_rate),       periodLabel);
+  setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, fmtMoney(currT.consult_eff),   fmtMoney(prevT.consult_eff),   periodLabel);
 
   // Month cards still show all months, including the partial current month
   renderMonthCards(currStats, currentYear, currentMonthComplete ? null : currentMonthMM);
 }
 
-function setYoy(id, curr, prev, isPercent, display, periodLabel) {
+function setYoy(id, curr, prev, isPercent, display, prevDisplay, periodLabel) {
   document.getElementById(id).textContent = display;
   const changeEl = document.getElementById(id + '-change');
   const periodSuffix = periodLabel ? '同期 (' + periodLabel + ')' : '';
+  const prevPart = '上一年' + (periodSuffix ? ' ' + periodSuffix : '') + ' ' + prevDisplay;
   if (prev === 0) {
-    changeEl.textContent = 'vs 上一年' + (periodSuffix ? ' ' + periodSuffix : '') + ' (N/A)';
+    changeEl.textContent = 'vs ' + prevPart + ' (N/A)';
     changeEl.className = 'yoy-change flat';
     return;
   }
   const diff   = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
   const sign   = diff > 0 ? '+' : '';
-  const label  = isPercent ? (sign + diff.toFixed(1) + '%') : (sign + diff.toFixed(1) + '%');
-  changeEl.textContent = 'vs 上一年' + (periodSuffix ? ' ' + periodSuffix : '') + ' ' + label;
+  const label  = sign + diff.toFixed(1) + '%';
+  changeEl.textContent = 'vs ' + prevPart + ' ' + label;
   changeEl.className   = 'yoy-change ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
 }
 
