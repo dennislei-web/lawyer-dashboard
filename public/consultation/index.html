@@ -2824,11 +2824,12 @@ function showDetailPage(lawyerId) {
 }
 
 // 🎯 1-on-1 追蹤：雷皓明看全部、一般律師看自己那行
+// 用 currentLawyer 而非 realLawyer 是為了讓 admin 的「視角預覽」也能切到律師視角
 function canViewTracker() {
-  return !!realLawyer;
+  return !!currentLawyer;
 }
 function isTrackerAdmin() {
-  return !!(realLawyer && realLawyer.email === 'dennis.lei@010.tw');
+  return !!(currentLawyer && currentLawyer.email === 'dennis.lei@010.tw');
 }
 
 function goBackFromDetail() {
@@ -6996,7 +6997,7 @@ async function renderTrackerPage() {
     const l = id2lawyer.get(lid);
     if (!l) return;
     if (!l.is_active) return; // 離職律師不列入
-    if (!isTrackerAdmin() && lid !== realLawyer.id) return; // 律師只看自己
+    if (!isTrackerAdmin() && lid !== currentLawyer.id) return; // 律師只看自己（view-as 也跟著切）
     const c   = cur[lid]    || { c:0, sg:0, co:0 };   // 2026 整年（row 顯示）
     const c14 = cur14[lid]  || { c:0, sg:0, co:0 };   // 2026 1-4（給 YoY）
     const p   = prev14[lid] || { c:0, sg:0, co:0 };   // 2025 1-4（給 YoY）
