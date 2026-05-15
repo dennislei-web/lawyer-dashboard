@@ -161,7 +161,8 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
     <div class="header-right">
       <span class="userbadge" id="userBadge"></span>
       <a href="https://docs.google.com/spreadsheets/d/1bGmKAFdCKZdfuag4tbGB7WeRxqBGFyJsvwDgbBpcZb4/edit" target="_blank" class="btn">🔗 開 Sheet</a>
-      <button class="btn" id="refreshBtn">⟳ 重新整理</button>
+      <button class="btn" id="syncSheetBtn" title="從 Google Sheet 重抓最新資料（約 3-5 分鐘）">⤵ 同步 Sheet</button>
+      <button class="btn" id="refreshBtn" title="重抓 Supabase 已存資料（秒級）">⟳ 重新整理</button>
       <button class="btn" id="logoutBtn">登出</button>
     </div>
   </div>
@@ -1615,6 +1616,36 @@ document.getElementById('drillSubLawyer').addEventListener('change', renderDrill
 document.getElementById('drillGranularity').addEventListener('change', renderDrill);
 document.getElementById('drillPeriod').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('syncSheetBtn').addEventListener('click', async function(){
+  const btn = this;
+  const orig = btn.textContent;
+  if(!confirm('確認從 Google Sheet 同步最新資料？\n\n這會觸發 GitHub Actions 跑 ETL，約 3-5 分鐘後完成。\n完成後請點「重新整理」載入新資料。')) return;
+  btn.disabled = true;
+  btn.textContent = '同步中...';
+  try{
+    const session = await sb.auth.getSession();
+    const token = session.data.session?.access_token;
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/trigger_010_sync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await r.json();
+    if(!r.ok){
+      alert('觸發失敗：' + (data.error || JSON.stringify(data)));
+    } else {
+      alert(`✓ ${data.message}\n\nActions: ${data.actions_url}`);
+    }
+  }catch(e){
+    alert('觸發失敗：' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
 document.getElementById('noAccessLogout').addEventListener('click', async ()=>{
   if(sb) await sb.auth.signOut(); location.reload();
 });

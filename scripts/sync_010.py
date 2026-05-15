@@ -20,10 +20,11 @@ from pathlib import Path
 from datetime import datetime, date
 
 ENV_PATH = Path(__file__).parent / ".env"
-for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+if ENV_PATH.exists():
+    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -37,8 +38,27 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
-creds = service_account.Credentials.from_service_account_file(
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"], scopes=SCOPES)
+
+def _load_credentials():
+    """支援兩種模式:
+    - GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: raw JSON (CI / GH Actions)
+    - GOOGLE_APPLICATION_CREDENTIALS: file path (local dev)
+    """
+    raw = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "").strip()
+    if raw:
+        info = json.loads(raw)
+        return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if path and Path(path).exists():
+        return service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
+    raise SystemExit(
+        "Google credentials missing. Set either:\n"
+        "  GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON (raw JSON; CI)\n"
+        "  GOOGLE_APPLICATION_CREDENTIALS (file path; local)"
+    )
+
+
+creds = _load_credentials()
 
 
 def sheets():
