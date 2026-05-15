@@ -426,6 +426,40 @@
           <div class="kpi-card orange"><div class="kpi-label">平均單筆金額</div><div class="kpi-value orange" id="kpiAvg">—</div><div class="kpi-sub" id="kpiAvgSub"></div></div>
         </div>
 
+        <!-- 現金口徑 reconcile（advisor_transactions + revenue_records 中屬於法顧客戶的部分） -->
+        <div class="yoy-section" id="reconcileSection" style="margin-top:14px;">
+          <div class="yoy-section-header">
+            <div class="yoy-section-title">💰 現金口徑 reconcile <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">（CRM 對帳基礎，跟成案口徑互相驗證）</span></div>
+            <div class="yoy-section-note" id="reconcilePeriodNote">—</div>
+          </div>
+          <div class="yoy-grid">
+            <div class="yoy-card">
+              <div class="yoy-label">所內法顧客戶</div>
+              <div class="yoy-value" id="reconcileInRecords">—</div>
+              <div class="yoy-prev" id="reconcileInRecordsSub">revenue_records 法顧客戶</div>
+              <div class="yoy-change flat" id="reconcileInRecordsCount">— 筆</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">法顧儲值帳本</div>
+              <div class="yoy-value" id="reconcileDeposits">—</div>
+              <div class="yoy-prev" id="reconcileDepositsSub">CRM 法顧對帳資訊（非作廢）</div>
+              <div class="yoy-change flat" id="reconcileDepositsCount">— 筆</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label"><b>現金口徑合計</b></div>
+              <div class="yoy-value" id="reconcileCashTotal">—</div>
+              <div class="yoy-prev">所內 + 儲值</div>
+              <div class="yoy-change flat" id="reconcileCashHint">—</div>
+            </div>
+            <div class="yoy-card">
+              <div class="yoy-label">成案口徑</div>
+              <div class="yoy-value" id="reconcileAccrual">—</div>
+              <div class="yoy-prev">advisor_cases（同上方 KPI）</div>
+              <div class="yoy-change flat" id="reconcileDelta">—</div>
+            </div>
+          </div>
+        </div>
+
         <!-- YoY: 與去年同期比較 -->
         <div class="yoy-section" id="yoySection">
           <div class="yoy-section-header">
@@ -860,13 +894,14 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, pn, ps, cm, cc, log] = await Promise.all([
+    const [cs, pn, ps, cm, cc, log, dep] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
       sb.from('advisor_channel_mapping').select('*'),
       sb.from('advisor_company_categories').select('*'),
-      sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1)
+      sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1),
+      sb.from('advisor_transactions').select('record_date,amount,client_name').eq('is_void', false).order('record_date')
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
@@ -878,6 +913,31 @@ async function init() {
     STATE.companyCategories = {};
     (cc.data || []).forEach(c => { STATE.companyCategories[c.company_name] = c; });
     STATE.lastSync = log.data?.[0] || null;
+    STATE.deposits = dep.data || [];
+
+    // 法顧客戶集合 = advisor_cases ∪ advisor_transactions client_name
+    const advisorClients = new Set();
+    STATE.cases.forEach(c => c.client_name && advisorClients.add(c.client_name));
+    STATE.deposits.forEach(t => t.client_name && advisorClients.add(t.client_name));
+    STATE.advisorClientSet = advisorClients;
+
+    // 撈 revenue_records 中屬法顧客戶的部分（用於 reconcile）
+    STATE.advisorInRecords = [];
+    if (advisorClients.size > 0) {
+      const clientList = [...advisorClients];
+      // PostgREST in() URL 可能過長，分批撈
+      const BATCH = 80;
+      for (let i = 0; i < clientList.length; i += BATCH) {
+        const slice = clientList.slice(i, i + BATCH);
+        const r = await sb.from('revenue_records')
+          .select('record_date,amount,transaction_type,client_name,group_name')
+          .eq('is_void', false)
+          .in('client_name', slice);
+        if (r.data) STATE.advisorInRecords.push(...r.data);
+      }
+      // 排除合署 group（合署算 KR4，不算進法顧）
+      STATE.advisorInRecords = STATE.advisorInRecords.filter(r => !(r.group_name && r.group_name.indexOf('合署') !== -1));
+    }
 
     setupYearFilter();
     setupOfficeFilter();
@@ -1113,6 +1173,9 @@ function renderOverview() {
   // 與去年同期比較
   renderYoy();
 
+  // 現金口徑 reconcile
+  renderReconcile(totalAmount);
+
   // 12 個月趨勢
   const months = [];
   for (let i = 11; i >= 0; i--) {
@@ -1213,6 +1276,58 @@ function setYoyAdvisor(id, curr, prev, displayCurr, fmtPrev, isPercent) {
     : `${sign}${diff.toFixed(1)}%`;
   changeEl.textContent = `${txt} vs 去年`;
   changeEl.className = 'yoy-change ' + (diff > 0.05 ? 'up' : diff < -0.05 ? 'down' : 'flat');
+}
+
+function renderReconcile(accrualAmount) {
+  // 跟成案口徑（advisor_cases）對照：現金口徑 = 所內法顧客戶 + 法顧儲值帳本
+  const sy = STATE.selectedYear;
+  const sm = STATE.selectedMonth;
+  const isAll = sy === 'all';
+  const monthSelected = sm !== 'all';
+
+  const dateInRange = (s) => {
+    if (!s) return false;
+    const d = new Date(s);
+    if (isAll) return true;
+    if (d.getFullYear() !== sy) return false;
+    if (monthSelected && (d.getMonth() + 1) !== sm) return false;
+    return true;
+  };
+
+  const inRec = (STATE.advisorInRecords || []).filter(r => dateInRange(r.record_date));
+  let inRecPaid = 0, inRecRefund = 0;
+  inRec.forEach(r => {
+    const a = +r.amount || 0;
+    if (r.transaction_type === 'PaymentTransaction') inRecPaid += a;
+    else if (r.transaction_type === 'RefundTransaction') inRecRefund += a;
+  });
+  const inRecordsNet = inRecPaid - inRecRefund;
+  const inRecordsCount = inRec.filter(r => r.transaction_type === 'PaymentTransaction').length;
+
+  const deps = (STATE.deposits || []).filter(t => dateInRange(t.record_date));
+  const depTotal = deps.reduce((s,t) => s + (+t.amount || 0), 0);
+  const depCount = deps.length;
+
+  const cashTotal = inRecordsNet + depTotal;
+  const delta = (accrualAmount || 0) - cashTotal;
+  const periodLabel = isAll ? '全部年度' : (monthSelected ? `${sy} 年 ${sm} 月` : `${sy} 年度`);
+
+  document.getElementById('reconcilePeriodNote').textContent = periodLabel;
+  document.getElementById('reconcileInRecords').textContent  = fmtMoneyShort(inRecordsNet);
+  document.getElementById('reconcileInRecordsCount').textContent = inRecordsCount + ' 筆收款';
+  document.getElementById('reconcileDeposits').textContent   = fmtMoneyShort(depTotal);
+  document.getElementById('reconcileDepositsCount').textContent = depCount + ' 筆儲值';
+  document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashTotal);
+  document.getElementById('reconcileAccrual').textContent    = fmtMoneyShort(accrualAmount || 0);
+
+  const cashHintEl = document.getElementById('reconcileCashHint');
+  cashHintEl.textContent = '＝ ' + fmtMoneyShort(inRecordsNet) + ' + ' + fmtMoneyShort(depTotal);
+  cashHintEl.className = 'yoy-change flat';
+
+  const deltaEl = document.getElementById('reconcileDelta');
+  const sign = delta >= 0 ? '+' : '−';
+  deltaEl.textContent = '成案 − 現金 ＝ ' + sign + fmtMoneyShort(Math.abs(delta));
+  deltaEl.className = 'yoy-change ' + (Math.abs(delta) < 50000 ? 'flat' : (delta > 0 ? 'down' : 'up'));
 }
 
 function renderYoy() {
