@@ -511,6 +511,11 @@ function initTotalPeriod(){
   opts.push({v:'recent:6', l:'最近 6 個月'});
   opts.push({v:'recent:12', l:'最近 12 個月'});
   opts.push({v:'recent:24', l:'最近 24 個月'});
+  opts.push({v:'recent:36', l:'最近 36 個月'});
+  opts.push({v:'recent:60', l:'最近 60 個月'});
+  opts.push({v:'sep3', l:'─── 分隔 ───', disabled:true});
+  // 全部歷史
+  opts.push({v:'all', l:`全部歷史（${years[years.length-1]}-${latest.y}）`});
 
   sel.innerHTML = opts.map(o => `<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
   if(!sel.value || sel.value.startsWith('sep')) sel.value = opts[0].v;
@@ -561,6 +566,18 @@ function resolvePeriod(){
     return {
       rows,
       label: `最近 ${n} 月（${first[0]}-${String(first[1]).padStart(2,'0')} 到 ${last[0]}-${String(last[1]).padStart(2,'0')}）`,
+      isSingleMonth: false, monthForWD: null,
+    };
+  }
+  if(period === 'all' || type === 'all'){
+    const rows = lawyerData;
+    const ymSet = new Set(rows.map(r=>`${r.year}-${r.month}`));
+    const sortedKeys = [...ymSet].sort();
+    const first = sortedKeys[0] || '-';
+    const last = sortedKeys[sortedKeys.length-1] || '-';
+    return {
+      rows,
+      label: `全部歷史（${first} 到 ${last}，共 ${ymSet.size} 個月）`,
       isSingleMonth: false, monthForWD: null,
     };
   }
