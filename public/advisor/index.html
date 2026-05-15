@@ -434,9 +434,9 @@
           </div>
           <div class="yoy-grid" style="grid-template-columns:repeat(5, 1fr);">
             <div class="yoy-card">
-              <div class="yoy-label">法顧客戶 CRM 收款</div>
+              <div class="yoy-label">所內法顧客戶</div>
               <div class="yoy-value" id="reconcileInRecords">—</div>
-              <div class="yoy-prev">revenue_records 法顧客戶（含合署接的，毛收）</div>
+              <div class="yoy-prev">revenue_records 法顧（非合署，毛收）</div>
               <div class="yoy-change flat" id="reconcileInRecordsCount">— 筆</div>
             </div>
             <div class="yoy-card">
@@ -952,9 +952,9 @@ async function init() {
           .in('client_name', slice);
         if (r.data) STATE.advisorInRecords.push(...r.data);
       }
-      // 客戶在 sheet (advisor_cases) 內就算法顧，不管 group。
-      // 「法顧分派給合署」的 case 也納入 reconcile（業務指示）。
+      // 律師優先：合署承接的案件一律歸 KR4，不計入法顧 reconcile（業務指示）
       STATE.advisorInRecords = STATE.advisorInRecords.filter(r => {
+        if (r.group_name && r.group_name.indexOf('合署') !== -1) return false;
         return advisorClients.has(r.client_name) || advisorClients.has(normalizeClientName(r.client_name));
       });
     }

@@ -634,10 +634,9 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
     if (m < 1 || m > 12) return;
     var amt = Number(r.amount || 0);
     var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
-    var isAdvisor = r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
-    // 客戶優先：sheet 認列的法顧客戶整筆歸法顧（含「法顧→合署」的 flow）；
-    // 合署律師自接的法顧客戶（sheet 沒登）落 KR4，業務指示不討論。
-    var bucket = isAdvisor ? advisorRevByMonth[m] : (isPartner ? partnerByMonth[m] : byMonth[m]);
+    // 律師優先：合署承接的案件整筆歸 KR4 不計入法顧 reconcile（業務指示）
+    var isAdvisor = !isPartner && r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
+    var bucket = isPartner ? partnerByMonth[m] : (isAdvisor ? advisorRevByMonth[m] : byMonth[m]);
     if (r.transaction_type === 'PaymentTransaction')      bucket.paid   += amt;
     else if (r.transaction_type === 'RefundTransaction')  bucket.refund += amt;
   });
@@ -1321,7 +1320,7 @@ function renderKR3() {
     '<span>+ 法顧儲值 ' + fmt(cashDeposit/10000) + ' 萬</span>' +
     '<span>= 合計 <b style="color:var(--text)">' + fmt(cashTotal/10000) + ' 萬</b></span>' +
     '<span style="opacity:0.7">（成案 vs 現金差 ' + fmt((actualValue('kr3_total_revenue', fm)||0) - cashTotal/10000) + ' 萬）</span>' +
-    '<span style="opacity:0.6;font-size:11px;width:100%;margin-top:4px;">法顧客戶 (sheet 認列) 的 CRM 收款都計入此處，含「法顧分派給合署」的 case；合署律師自接的法顧客戶 (sheet 沒登) 歸 KR4。</span>';
+    '<span style="opacity:0.6;font-size:11px;width:100%;margin-top:4px;">合署承接的案件 (含法顧分派給合署的) 一律歸 KR4，不計入法顧 reconcile（業務指示）。</span>';
   card.appendChild(subRow);
 
   // 12 個月堆疊柱狀圖：主動 + 介紹 + 續委任 + 月目標折線
