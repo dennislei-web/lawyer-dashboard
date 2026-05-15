@@ -1320,23 +1320,8 @@ function renderReconcile(accrualAmount) {
   };
 
   // 4 channels: CRM 所內 / 轉合署 / 法顧對帳 / 退款
+  // Per-client 聚合 + cap at sheet（業務指示：advisor 客戶的 CRM 收款超過 sheet 部分視為「非法顧 case」排除）
   const inRec = (STATE.advisorInRecords || []).filter(r => dateInRange(r.record_date));
-  let nonPaid = 0, nonRefund = 0, parPaid = 0, parRefund = 0;
-  let nonCount = 0, parCount = 0, refundCount = 0;
-  inRec.forEach(r => {
-    const a = +r.amount || 0;
-    const isP = r.group_name && r.group_name.indexOf('合署') !== -1;
-    if (r.transaction_type === 'PaymentTransaction') {
-      if (isP) { parPaid += a; parCount++; }
-      else     { nonPaid += a; nonCount++; }
-    } else if (r.transaction_type === 'RefundTransaction') {
-      if (isP) parRefund += a;
-      else     nonRefund += a;
-      refundCount++;
-    }
-  });
-
-  // 法顧對帳：advisor_set (sheet) 內客戶的儲值
   const sheetClients = STATE.advisorClientSet || new Set();
   const allDeps = (STATE.deposits || []).filter(t => {
     if (!dateInRange(t.record_date)) return false;
@@ -1345,8 +1330,59 @@ function renderReconcile(accrualAmount) {
   });
   const nonVoidDeps = allDeps.filter(t => !t.is_void);
   const voidDeps = allDeps.filter(t => t.is_void);
-  const depPaid = nonVoidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
-  const depVoid = voidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
+
+  // 計算每客戶 sheet 額度（advisor_cases.amount_paid 對應 date 範圍）
+  const sheetByClient = new Map();
+  STATE.cases.forEach(c => {
+    if (!c.client_name || !c.paid_at) return;
+    if (!dateInRange(c.paid_at)) return;
+    const n = normalizeClientName(c.client_name);
+    sheetByClient.set(n, (sheetByClient.get(n) || 0) + (+c.amount_paid || 0));
+  });
+
+  // Per-client cash 4 通道彙總
+  const cashByClient = new Map();
+  const ensure = (cn) => {
+    const n = normalizeClientName(cn);
+    if (!cashByClient.has(n)) cashByClient.set(n, {non_paid:0, non_refund:0, par_paid:0, par_refund:0, dep:0, void:0, non_count:0, par_count:0, refund_count:0});
+    return cashByClient.get(n);
+  };
+  inRec.forEach(r => {
+    const a = +r.amount || 0;
+    const c = ensure(r.client_name);
+    const isP = r.group_name && r.group_name.indexOf('合署') !== -1;
+    if (r.transaction_type === 'PaymentTransaction') {
+      if (isP) { c.par_paid += a; c.par_count++; } else { c.non_paid += a; c.non_count++; }
+    } else if (r.transaction_type === 'RefundTransaction') {
+      if (isP) c.par_refund += a; else c.non_refund += a;
+      c.refund_count++;
+    }
+  });
+  nonVoidDeps.forEach(t => { ensure(t.client_name).dep += +t.amount || 0; });
+  voidDeps.forEach(t => { ensure(t.client_name).void += +t.amount || 0; });
+
+  // 應用 cap：cash gross 收到 = NET 三通道 + 退款；超過 sheet 部分等比例縮減
+  let nonPaid = 0, nonRefund = 0, parPaid = 0, parRefund = 0, depPaid = 0, depVoid = 0;
+  let nonCount = 0, parCount = 0, refundCount = 0;
+  cashByClient.forEach((c, cn) => {
+    const sheetAmt = sheetByClient.get(cn) || 0;
+    const nn = c.non_paid - c.non_refund;
+    const pn = c.par_paid - c.par_refund;
+    const grossReceived = nn + c.dep + pn + c.non_refund + c.par_refund;  // NET + 退款
+    let scale = 1;
+    if (sheetAmt > 0 && grossReceived > sheetAmt) {
+      scale = sheetAmt / grossReceived;
+    }
+    nonPaid    += c.non_paid    * scale;
+    nonRefund  += c.non_refund  * scale;
+    parPaid    += c.par_paid    * scale;
+    parRefund  += c.par_refund  * scale;
+    depPaid    += c.dep         * scale;
+    depVoid    += c.void;  // void 不縮 (correction，不影響 reconcile)
+    nonCount   += c.non_count;
+    parCount   += c.par_count;
+    refundCount+= c.refund_count;
+  });
 
   // 退款只算 revenue_records 真退款（利衝等），advisor_transactions is_void 多是「作廢+重開」
   // correction pattern（同日同額同備註），不是真現金退回，不該加進 gross 收到。
