@@ -250,11 +250,18 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
   <!-- View 3: 律師 drill -->
   <div class="page" id="page-lawyer">
     <div class="card">
-      <h2>合作律師個人 drill<span class="hint">24 月趨勢；點月份看當月細節</span></h2>
+      <h2>合作律師個人 drill<span class="hint">可看全部歷史；月別 / 年別切換</span></h2>
       <div class="controls">
         <label>律師：</label>
         <select id="drillLawyer"></select>
-        <span id="drillStatus" style="color:var(--text-muted)"></span>
+        <label>檢視：</label>
+        <select id="drillGranularity">
+          <option value="month">月別</option>
+          <option value="year">年別</option>
+        </select>
+        <label>期間：</label>
+        <select id="drillPeriod" style="min-width:160px"></select>
+        <span id="drillStatus" style="color:var(--text-muted);font-size:12px"></span>
       </div>
       <div class="chart-grid">
         <div><h3>已轉件數（vs 月目標）</h3><canvas id="dChartRef"></canvas></div>
@@ -264,7 +271,7 @@ a{color:var(--blue);text-decoration:none} a:hover{color:var(--gold-light)}
       </div>
     </div>
     <div class="card">
-      <h2>24 月明細</h2>
+      <h2 id="drillTblTitle">明細</h2>
       <div id="drillTbl"></div>
     </div>
   </div>
@@ -872,32 +879,111 @@ function renderTeam(){
 // ═══ View 3: 律師 drill ═══
 let drillCharts={};
 function initDrillSelector(){
-  // 找最近 12 月有出現過的律師
-  const recentYM = lawyerData.reduce((m,r)=>{
-    const y = r.year*12+r.month;
-    return y>m?y:m;
-  }, 0);
-  const cutoff = recentYM - 12;
-  const active = [...new Set(lawyerData.filter(r=> r.year*12+r.month >= cutoff).map(r=>r.lawyer))].sort();
+  // 全部曾出現的律師（不限近 12 月）
+  const all = [...new Set(lawyerData.map(r=>r.lawyer))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
   const sel = document.getElementById('drillLawyer');
-  sel.innerHTML = active.map(l=>`<option value="${l}">${l}</option>`).join('');
+  const prev = sel.value;
+  sel.innerHTML = all.map(l=>`<option value="${l}">${l}</option>`).join('');
+  if(prev && all.includes(prev)) sel.value = prev;
 }
+
+function initDrillPeriod(){
+  const sel = document.getElementById('drillPeriod');
+  if(!sel) return;
+  const granularity = document.getElementById('drillGranularity').value;
+  const prev = sel.value;
+  if(granularity === 'year'){
+    sel.innerHTML = '<option value="all">全部年份</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const years = [...new Set(lawyerData.map(r=>r.year))].sort((a,b)=>b-a);
+  const opts = [
+    {v:'all', l:'全部歷史'},
+    {v:'recent:12', l:'最近 12 月'},
+    {v:'recent:24', l:'最近 24 月'},
+    {v:'recent:36', l:'最近 36 月'},
+    {v:'sep', l:'─── 分隔 ───', disabled:true},
+    ...years.map(y=>({v:`year:${y}`, l:`${y} 全年`})),
+  ];
+  sel.innerHTML = opts.map(o=>`<option value="${o.v}"${o.disabled?' disabled':''}>${o.l}</option>`).join('');
+  if(prev && opts.find(o=>o.v===prev && !o.disabled)) sel.value = prev;
+  else sel.value = 'all';
+}
+
+function getDrillSeries(lw){
+  const granularity = document.getElementById('drillGranularity').value;
+  const period = document.getElementById('drillPeriod').value;
+  const all = lawyerData.filter(r=>r.lawyer === lw)
+    .sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
+
+  if(granularity === 'year'){
+    // 按年聚合
+    const byYear = {};
+    all.forEach(r=>{
+      if(!byYear[r.year]) byYear[r.year] = {
+        label: `${r.year}`, year:r.year,
+        referrals:0, attended:0, signed:0, monthly_target:0,
+        current_month_revenue:0, cross_month_revenue:0, total_revenue:0,
+        months_active:0,
+      };
+      const y = byYear[r.year];
+      y.referrals += r.referrals||0;
+      y.attended += r.attended||0;
+      y.signed += r.signed||0;
+      y.monthly_target += r.monthly_target||0;
+      y.current_month_revenue += r.current_month_revenue||0;
+      y.cross_month_revenue += r.cross_month_revenue||0;
+      y.total_revenue += r.total_revenue||0;
+      y.months_active += 1;
+    });
+    const arr = Object.values(byYear).sort((a,b)=>a.year-b.year);
+    // compute rates
+    arr.forEach(y=>{
+      y.attend_rate = y.referrals ? (y.attended/y.referrals) : 0;
+      y.sign_rate = y.attended ? (y.signed/y.attended) : 0;
+      y.avg_unit_price_wan = y.referrals ? y.total_revenue/y.referrals/10000 : 0;
+      // 年度狀態 用整體 委任率 + 均價 重判
+      const T = y.attend_rate * y.sign_rate;
+      const U = y.avg_unit_price_wan;
+      y.referral_status = y.referrals===0 ? '-'
+        : (T > 0.35 && U > 3) ? '優先'
+        : (T >= 0.28 || U >= 2.3) ? '正常'
+        : '暫緩';
+    });
+    return arr;
+  }
+
+  // 月別
+  let filtered;
+  if(period === 'all') filtered = all;
+  else if(period.startsWith('recent:')){
+    const n = parseInt(period.split(':')[1]);
+    filtered = all.slice(-n);
+  } else if(period.startsWith('year:')){
+    const y = parseInt(period.split(':')[1]);
+    filtered = all.filter(r => r.year === y);
+  } else filtered = all;
+  return filtered.map(r => ({
+    ...r,
+    label: `${r.year}-${String(r.month).padStart(2,'0')}`,
+  }));
+}
+
 function renderDrill(){
   const lw = document.getElementById('drillLawyer').value;
   if(!lw) return;
-  const sorted = [...lawyerData].sort((a,b)=>(a.year*12+a.month)-(b.year*12+b.month));
-  const lastY = sorted[sorted.length-1].year, lastM = sorted[sorted.length-1].month;
-  const months = lastNMonths(lastY, lastM, 24);
-  const labels = months.map(([y,m])=>`${y}-${String(m).padStart(2,'0')}`);
-  const data = months.map(([y,m])=> lawyerData.find(r=>r.lawyer===lw && r.year===y && r.month===m) || null);
-
-  const refs = data.map(r=> r? r.referrals : null);
-  const tgts = data.map(r=> r? r.monthly_target : null);
-  const signRate = data.map(r=> r? (r.sign_rate||0)*100 : null);
-  const total = data.map(r=> r? r.total_revenue : null);
-  const current = data.map(r=> r? r.current_month_revenue : null);
-  const cross = data.map(r=> r? r.cross_month_revenue : null);
-  const bi = data.map(r=> r? r.avg_unit_price_wan : null);
+  initDrillPeriod();
+  const series = getDrillSeries(lw);
+  const granularity = document.getElementById('drillGranularity').value;
+  const labels = series.map(r => r.label);
+  const refs = series.map(r => r.referrals);
+  const tgts = series.map(r => r.monthly_target || null);
+  const signRate = series.map(r => (r.sign_rate||0)*100);
+  const current = series.map(r => r.current_month_revenue);
+  const cross = series.map(r => r.cross_month_revenue);
+  const bi = series.map(r => r.avg_unit_price_wan);
 
   // Charts
   ['dChartRef','dChartSign','dChartRev','dChartBI'].forEach(id=>{
@@ -907,15 +993,16 @@ function renderDrill(){
     responsive:true, maintainAspectRatio:false,
     plugins:{legend:{labels:{color:'#e0e0e0',font:{size:11}}}},
     scales:{
-      x:{ticks:{color:'#8899aa',font:{size:10},maxRotation:60,minRotation:60},grid:{color:'#1e3050'}},
+      x:{ticks:{color:'#8899aa',font:{size:10},maxRotation:60,minRotation:60,autoSkip:true,maxTicksLimit:24},grid:{color:'#1e3050'}},
       y:{title:{display:true,text:yTitle,color:'#8899aa',font:{size:11}},ticks:{color:'#8899aa'},grid:{color:'#1e3050'}}
     }
   });
+  const targetLabel = granularity==='year' ? '年目標和' : '月目標';
   drillCharts.dChartRef = new Chart(document.getElementById('dChartRef'),{
     type:'bar',
     data:{labels,datasets:[
       {label:'已轉件數',data:refs,backgroundColor:'#4f8ef7'},
-      {label:'月目標',data:tgts,type:'line',borderColor:'#e0954a',borderDash:[3,3],pointRadius:0}
+      {label:targetLabel,data:tgts,type:'line',borderColor:'#e0954a',borderDash:[3,3],pointRadius:0}
     ]},
     options:opts('件')
   });
@@ -927,8 +1014,8 @@ function renderDrill(){
   drillCharts.dChartRev = new Chart(document.getElementById('dChartRev'),{
     type:'bar',
     data:{labels,datasets:[
-      {label:'當月',data:current,backgroundColor:'#4f8ef7',stack:'s'},
-      {label:'跨月',data:cross,backgroundColor:'#c9a84c',stack:'s'},
+      {label:'當月', data:current,backgroundColor:'#4f8ef7',stack:'s'},
+      {label:'跨月', data:cross,backgroundColor:'#c9a84c',stack:'s'},
     ]},
     options:opts('NT$')
   });
@@ -941,29 +1028,41 @@ function renderDrill(){
   });
 
   // 明細表
-  let html = '<table class="tbl"><thead><tr><th class="name-col">月份</th><th>件數</th><th>目標</th><th>出席</th><th>委任</th><th>委任率</th><th>當月收款</th><th>跨月收款</th><th>總金額</th><th>BI</th><th>狀態</th></tr></thead><tbody>';
-  months.slice().reverse().forEach(([y,m])=>{
-    const r = data[months.findIndex(x=>x[0]===y && x[1]===m)];
-    if(!r){ html += `<tr><td class="name-col">${y}-${String(m).padStart(2,'0')}</td><td colspan="10" style="color:var(--text-muted);text-align:left">無資料</td></tr>`; return; }
-    html += `<tr><td class="name-col">${y}-${String(m).padStart(2,'0')}</td>`
-      + `<td class="num">${r.referrals}</td><td class="num">${r.monthly_target||'-'}</td>`
-      + `<td class="num">${r.attended}</td><td class="num">${r.signed}</td>`
-      + `<td class="num">${((r.sign_rate||0)*100).toFixed(1)}%</td>`
-      + `<td class="num">${(r.current_month_revenue||0).toLocaleString()}</td>`
-      + `<td class="num">${(r.cross_month_revenue||0).toLocaleString()}</td>`
-      + `<td class="num">${(r.total_revenue||0).toLocaleString()}</td>`
-      + `<td class="num">${(r.avg_unit_price_wan||0).toFixed(2)}</td>`
-      + `<td><span class="status status-${r.referral_status==='-'?'空':r.referral_status}">${r.referral_status||'-'}</span></td>`
+  const periodLabel = (function(){
+    if(granularity==='year') return '年別';
+    const p = document.getElementById('drillPeriod').value;
+    if(p==='all') return '全部歷史';
+    if(p.startsWith('recent:')) return `最近 ${p.split(':')[1]} 月`;
+    if(p.startsWith('year:')) return `${p.split(':')[1]} 全年`;
+    return '';
+  })();
+  document.getElementById('drillTblTitle').textContent = `${lw} ${periodLabel}明細（${series.length} ${granularity==='year'?'年':'月'}）`;
+
+  const firstColLabel = granularity==='year' ? '年份' : '月份';
+  const targetColLabel = granularity==='year' ? '年目標和' : '月目標';
+  let html = `<table class="tbl"><thead><tr><th class="name-col">${firstColLabel}</th><th>件數</th><th>${targetColLabel}</th><th>出席</th><th>委任</th><th>委任率</th><th>當月收款</th><th>跨月收款</th><th>總金額</th><th>BI</th><th class="center">狀態</th></tr></thead><tbody>`;
+  series.slice().reverse().forEach(r=>{
+    html += `<tr><td class="name-col">${r.label}</td>`
+      + `<td>${r.referrals}</td><td>${r.monthly_target || '-'}</td>`
+      + `<td>${r.attended}</td><td>${r.signed}</td>`
+      + `<td>${((r.sign_rate||0)*100).toFixed(1)}%</td>`
+      + `<td>${(r.current_month_revenue||0).toLocaleString()}</td>`
+      + `<td>${(r.cross_month_revenue||0).toLocaleString()}</td>`
+      + `<td>${(r.total_revenue||0).toLocaleString()}</td>`
+      + `<td>${(r.avg_unit_price_wan||0).toFixed(2)}</td>`
+      + `<td class="center"><span class="status status-${r.referral_status==='-'?'空':r.referral_status}">${r.referral_status||'-'}</span></td>`
       + '</tr>';
   });
   html += '</tbody></table>';
   document.getElementById('drillTbl').innerHTML = html;
 
   // status hint
-  const latestRow = data.slice().reverse().find(r=>r);
-  if(latestRow){
+  if(series.length){
+    const latest = series[series.length-1];
+    const totalAll = series.reduce((s,r)=>s+(r.total_revenue||0), 0);
+    const refAll = series.reduce((s,r)=>s+(r.referrals||0), 0);
     document.getElementById('drillStatus').textContent =
-      `最新 ${latestRow.year}-${String(latestRow.month).padStart(2,'0')}: 件 ${latestRow.referrals} / 委任 ${latestRow.signed} / 總 ${(latestRow.total_revenue||0).toLocaleString()} / 狀態 ${latestRow.referral_status}`;
+      `${periodLabel}合計 件 ${refAll} / 總 ${totalAll.toLocaleString()}；最新 ${latest.label} 狀態 ${latest.referral_status}`;
   }
 }
 
@@ -987,6 +1086,8 @@ document.getElementById('cmpLawyerMetric').addEventListener('change', renderComp
 document.getElementById('totalPeriod').addEventListener('change', renderTotalSummary);
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
+document.getElementById('drillGranularity').addEventListener('change', renderDrill);
+document.getElementById('drillPeriod').addEventListener('change', renderDrill);
 document.getElementById('refreshBtn').addEventListener('click', loadData);
 document.getElementById('noAccessLogout').addEventListener('click', async ()=>{
   if(sb) await sb.auth.signOut(); location.reload();
