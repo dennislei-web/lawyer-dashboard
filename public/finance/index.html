@@ -508,7 +508,8 @@
         <div class="kpi-card gold"><div class="kpi-label">年度預算支出</div><div class="kpi-value gold" id="kpiBudgetTotal">-</div><div class="kpi-sub" id="kpiBudgetSub"></div></div>
         <div class="kpi-card blue"><div class="kpi-label">已實際支出</div><div class="kpi-value blue" id="kpiActualTotal">-</div><div class="kpi-sub" id="kpiActualSub"></div></div>
         <div class="kpi-card green"><div class="kpi-label">預算餘額</div><div class="kpi-value green" id="kpiVariance">-</div><div class="kpi-sub" id="kpiVarianceSub"></div></div>
-        <div class="kpi-card orange"><div class="kpi-label">預估年度結算</div><div class="kpi-value orange" id="kpiProjected">-</div><div class="kpi-sub" id="kpiProjectedSub"></div></div>
+        <div class="kpi-card orange"><div class="kpi-label">預估年度結算 (滾動)</div><div class="kpi-value orange" id="kpiProjected">-</div><div class="kpi-sub" id="kpiProjectedSub"></div></div>
+        <div class="kpi-card orange" title="用 1月~當前 actual/budget 偏差比率校準剩餘月份"><div class="kpi-label">校準後預估 ⓘ</div><div class="kpi-value orange" id="kpiProjectedAdj">-</div><div class="kpi-sub" id="kpiProjectedAdjSub"></div></div>
       </div>
       <div class="chart-row">
         <div class="chart-card">
@@ -518,6 +519,15 @@
         <div class="chart-card">
           <div class="chart-title">費用佔比</div>
           <div class="chart-container"><canvas id="pieChart"></canvas></div>
+        </div>
+      </div>
+      <!-- Scope reminder -->
+      <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
+        <div style="padding:12px 16px;font-size:0.78rem;color:var(--text-muted);line-height:1.6">
+          <strong style="color:var(--text)">關於這頁的數字 scope：</strong>
+          顯示「損益表營業費用」全部科目，含薪資費用單線（1.10 億）+ 雇主負擔（保險費 + 退休金 ≈ 1,380 萬）+ 年終預估（940 萬）+ 其他費用。
+          全人事 fully-loaded（含工讀/加班/雇主負擔）約 <strong style="color:var(--gold-light)">1.31 億/年</strong>，人事佔總費用比 ~60%。
+          司法官合署受雇人員（3 人）薪資外掛，已排除。
         </div>
       </div>
     </div>
@@ -563,6 +573,23 @@
         <div class="chart-card" style="grid-column: 1 / -1">
           <div class="chart-title">科目預算 vs 實際（前 10 大費用）</div>
           <div class="chart-container" style="height:350px"><canvas id="compareBarChart"></canvas></div>
+        </div>
+      </div>
+      <!-- Scope footer: 釐清 P&L 薪資費用 vs Fully-loaded 真實人事 cost -->
+      <div class="table-card" style="margin-top:16px;border-left:3px solid var(--gold-light)">
+        <div class="table-header"><span class="table-title">ⓘ 「薪資費用」科目 vs 真實全人事成本</span></div>
+        <div style="padding:14px 20px;font-size:0.82rem;line-height:1.8;color:var(--text-muted)">
+          <strong style="color:var(--text)">本頁顯示的是損益表科目分線</strong>，「薪資費用」單線 ≈ 1.10 億（115 預算）。<br>
+          <strong style="color:var(--gold-light)">真實全人事 fully-loaded ≈ 1.31 億/年</strong>，組成：
+          <ul style="margin:6px 0 6px 24px;padding:0">
+            <li>薪資費用線（底薪 + 各類獎金）≈ 1.10 億</li>
+            <li>+ 薪資支出(年終預估) ≈ 940 萬</li>
+            <li>+ 保險費（雇主勞健保）≈ 910 萬</li>
+            <li>+ 退休金（雇主提撥）≈ 470 萬</li>
+            <li>+ 加班費、工讀（在勞務費用線）≈ 600 萬</li>
+          </ul>
+          談「人事成本」、「人均薪資」時用 1.31 億；談損益表分析、預算控管時用 1.10 億薪資費用單線。<br>
+          ⚠️ <span style="color:var(--gold-light)">司法官合署受雇 3 人（劉誠夫/曾秉浩/陳俊瑋）薪資由司法官合署負擔，已從本頁排除。</span>
         </div>
       </div>
     </div>
@@ -962,14 +989,28 @@ async function loadOverviewData() {
   var actualExpTotal = sumBySection(actualMap, 'operating_expense');
   var variance = budgetExpTotal - actualExpTotal;
 
-  // Projected: actual months + budget for remaining
+  // Projected (naive rolling): actual months + budget for remaining
   var projectedExp = 0;
+  // Variance-adjusted projected: use M1~maxActual variance ratio per category to adjust remaining months' budget
+  var projectedAdjExp = 0;
   categories.forEach(function(c) {
     if (c.section !== 'operating_expense' || c.is_subtotal) return;
     var bm = budgetMap[c.id] || {};
     var am = actualMap[c.id] || {};
+    // Compute variance ratio for this category over actual months
+    var actualSum = 0, budgetSum = 0;
+    actualMonths.forEach(function(mo) {
+      actualSum += (am[mo] || 0);
+      budgetSum += (bm[mo] || 0);
+    });
+    var ratio = budgetSum > 0 ? (actualSum / budgetSum) : 1;
+    // Bound ratio to [0.5, 2] to avoid extreme outliers from skewing forecast
+    if (ratio < 0.5) ratio = 0.5;
+    if (ratio > 2) ratio = 2;
     for (var mo = 1; mo <= 12; mo++) {
-      projectedExp += actualMonths.has(mo) ? (am[mo] || 0) : (bm[mo] || 0);
+      var isActual = actualMonths.has(mo);
+      projectedExp += isActual ? (am[mo] || 0) : (bm[mo] || 0);
+      projectedAdjExp += isActual ? (am[mo] || 0) : ((bm[mo] || 0) * ratio);
     }
   });
 
@@ -981,7 +1022,21 @@ async function loadOverviewData() {
   document.getElementById('kpiVariance').className = 'kpi-value ' + (variance >= 0 ? 'green' : 'red');
   document.getElementById('kpiVarianceSub').textContent = variance >= 0 ? '低於預算' : '超出預算';
   document.getElementById('kpiProjected').textContent = fmtCurrency(projectedExp);
-  document.getElementById('kpiProjectedSub').textContent = '實際+預算填補';
+  document.getElementById('kpiProjectedSub').textContent = maxActualMonth > 0 ? '1-' + maxActualMonth + '月實際 + 剩餘預算' : '尚無實際資料';
+  // Variance-adjusted forecast
+  var adjEl = document.getElementById('kpiProjectedAdj');
+  var adjSubEl = document.getElementById('kpiProjectedAdjSub');
+  if (maxActualMonth > 0) {
+    adjEl.textContent = fmtCurrency(projectedAdjExp);
+    var diffVsNaive = projectedAdjExp - projectedExp;
+    var diffPctVsBudget = budgetExpTotal > 0 ? ((projectedAdjExp - budgetExpTotal) / budgetExpTotal * 100) : 0;
+    var sign = diffVsNaive >= 0 ? '+' : '';
+    adjSubEl.innerHTML = '按 1-' + maxActualMonth + '月偏差校準<br>' +
+      '<span style="color:' + (diffVsNaive >= 0 ? 'var(--red)' : 'var(--green)') + '">vs 滾動 ' + sign + fmtCurrency(diffVsNaive) + '</span>';
+  } else {
+    adjEl.textContent = '-';
+    adjSubEl.textContent = '尚無實際資料';
+  }
 
   // Trend chart
   renderTrendChart(budgetMap, actualMap, histMap, maxActualMonth);
@@ -1822,7 +1877,38 @@ function renderCompareGrid(budgetMap, actualMap, monthFilter) {
     sectionCats.forEach(function(cat) {
       var bm = budgetMap[cat.id] || {};
       var am = actualMap[cat.id] || {};
-      html += '<tr><td style="padding-left:20px">' + cat.name + '</td>';
+
+      // Pre-compute cumulative for variance severity flag (YTD mode)
+      var preCumB = 0, preCumA = 0;
+      for (var pm = 1; pm <= 12; pm++) {
+        if (monthHasData[pm]) {
+          preCumB += bm[pm] || 0;
+          preCumA += am[pm] || 0;
+        }
+      }
+      var preCumD = preCumB - preCumA;  // positive=省, negative=超支
+      var preCumPct = preCumB > 0 ? (preCumD / preCumB * 100) : 0;
+      var severityFlag = '';
+      var rowStyle = '';
+      if (isYTD && preCumB > 0) {
+        // 超支警示
+        if (preCumD < 0 && Math.abs(preCumD) > 50000 && preCumPct < -10) {
+          severityFlag = '🔴 ';
+          rowStyle = ' style="background:rgba(220,38,38,0.06)"';
+        } else if (preCumD < 0 && Math.abs(preCumD) > 30000 && preCumPct < -5) {
+          severityFlag = '🟡 ';
+          rowStyle = ' style="background:rgba(234,179,8,0.05)"';
+        } else if (preCumD > 0 && preCumD > 100000 && preCumPct > 20) {
+          // 省過多也是異常（預算編列偏高）
+          severityFlag = '🟢 ';
+        }
+      }
+
+      html += '<tr' + rowStyle + '><td style="padding-left:20px" title="' +
+              (severityFlag === '🔴 ' ? '超支 >10% 且超 50K' :
+               severityFlag === '🟡 ' ? '超支 5-10% 且超 30K' :
+               severityFlag === '🟢 ' ? '省 >20% 且超 100K（預算可能編列偏高）' : '') +
+              '">' + severityFlag + cat.name + '</td>';
 
       if (isYTD) {
         var cumB = 0, cumA = 0;
