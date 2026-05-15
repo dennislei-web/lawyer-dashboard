@@ -1952,7 +1952,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="trackerSearch" placeholder="搜尋律師..." style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;width:180px;">
         <select id="trackerFilterHome" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
-          <option value="">全部所/cohort</option>
+          <option value="">全部所/合署</option>
         </select>
         <select id="trackerFilterStatus" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
           <option value="">全部狀態</option>
@@ -6824,7 +6824,7 @@ async function renderTrackerPage() {
   // 5. 填 home 篩選
   const homes = Array.from(new Set(rows.map(r => r.home))).sort();
   const sel = document.getElementById('trackerFilterHome');
-  sel.innerHTML = '<option value="">全部所/cohort</option>' + homes.map(h => `<option value="${h}">${h}</option>`).join('');
+  sel.innerHTML = '<option value="">全部所/合署</option>' + homes.map(h => `<option value="${h}">${h}</option>`).join('');
 
   // 6. 綁篩選/搜尋
   document.getElementById('trackerSearch').oninput = (e) => { trackerFilters.search = e.target.value.trim(); renderTrackerTable(); };
