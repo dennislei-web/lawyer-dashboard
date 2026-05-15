@@ -946,20 +946,31 @@ async function init() {
     STATE.advisorClientSet = advisorClients;
 
     // 撈 revenue_records 中屬法顧客戶的部分（用於 reconcile）
+    // 改成 date-range 廣抓再 client-side filter，因為 PostgREST .in() 精確比對抓不到
+    // 「新名（前名稱：舊名）」alias 變體（例：昕曜媄生醫、綠點能享、郡研）
     STATE.advisorInRecords = [];
     if (advisorClients.size > 0) {
-      const clientList = [...advisorClients];
-      const BATCH = 80;
-      for (let i = 0; i < clientList.length; i += BATCH) {
-        const slice = clientList.slice(i, i + BATCH);
+      const nowYear = new Date().getFullYear();
+      const yearStart = (nowYear - 2) + '-01-01';
+      const yearEnd   = nowYear + '-12-31';
+      const PAGE = 1000;
+      let offset = 0;
+      while (true) {
         const r = await sb.from('revenue_records')
           .select('record_date,amount,transaction_type,client_name,group_name')
           .eq('is_void', false)
-          .in('client_name', slice);
-        if (r.data) STATE.advisorInRecords.push(...r.data);
+          .gte('record_date', yearStart)
+          .lte('record_date', yearEnd)
+          .not('client_name', 'is', null)
+          .range(offset, offset + PAGE - 1);
+        if (!r.data || r.data.length === 0) break;
+        STATE.advisorInRecords.push(...r.data);
+        if (r.data.length < PAGE) break;
+        offset += PAGE;
       }
-      // 保留所有屬法顧客戶的收款（含合署 group），renderReconcile 會拆「所內」vs「轉合署」顯示
+      // client-side filter — normalize 雙向比對抓到 alias 變體
       STATE.advisorInRecords = STATE.advisorInRecords.filter(r => {
+        if (!r.client_name) return false;
         return advisorClients.has(r.client_name) || advisorClients.has(normalizeClientName(r.client_name));
       });
     }
