@@ -2040,7 +2040,11 @@
 
     <div id="trackerSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
 
-    <div class="table-card" style="overflow-x:auto;">
+    <!-- 表格上方橫向 scrollbar（與下方同步），讓中段也能拉 -->
+    <div id="trackerTopScroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:4px;">
+      <div id="trackerTopScrollSpacer" style="height:1px;"></div>
+    </div>
+    <div class="table-card" id="trackerTableCard" style="overflow-x:auto;">
       <style>
         #trackerTable tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
         #trackerTable tbody tr:hover { background: var(--bg-row); }
@@ -7051,7 +7055,43 @@ async function renderTrackerPage() {
     };
   });
 
+  // 8. 雙 scrollbar 同步（表格上方再放一條，便於中段橫拉）
+  trackerSetupDualScroll();
+
   renderTrackerTable();
+}
+
+function trackerSetupDualScroll() {
+  const top = document.getElementById('trackerTopScroll');
+  const bot = document.getElementById('trackerTableCard');
+  const spacer = document.getElementById('trackerTopScrollSpacer');
+  const tbl = document.getElementById('trackerTable');
+  if (!top || !bot || !spacer || !tbl) return;
+  if (top.dataset.bound === '1') return; // 只綁一次
+  top.dataset.bound = '1';
+
+  function syncWidth() {
+    spacer.style.width = tbl.scrollWidth + 'px';
+  }
+  // 觀察表格尺寸變化（內容增減、視窗 resize 都會觸發）
+  if (window.ResizeObserver) {
+    new ResizeObserver(syncWidth).observe(tbl);
+  }
+  window.addEventListener('resize', syncWidth);
+
+  let syncing = false;
+  top.addEventListener('scroll', () => {
+    if (syncing) return;
+    syncing = true; bot.scrollLeft = top.scrollLeft;
+    requestAnimationFrame(() => syncing = false);
+  });
+  bot.addEventListener('scroll', () => {
+    if (syncing) return;
+    syncing = true; top.scrollLeft = bot.scrollLeft;
+    requestAnimationFrame(() => syncing = false);
+  });
+
+  syncWidth();
 }
 
 function trackerSortVal(r, key) {
