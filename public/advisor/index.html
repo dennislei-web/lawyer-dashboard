@@ -927,7 +927,8 @@ async function init() {
     STATE.lastSync = log.data?.[0] || null;
     STATE.deposits = dep.data || [];
 
-    // 法顧客戶集合 = advisor_cases ∪ advisor_transactions client_name（含 alias 正規化）
+    // 法顧客戶集合 = advisor_cases.client_name 「業務 sheet 認列為法顧」
+    // 不從 advisor_transactions 撈：CRM 儲值有但 sheet 沒登的客戶不計入法顧 reconcile（業務指示）
     const advisorClients = new Set();
     const addClient = (name) => {
       if (!name) return;
@@ -936,7 +937,6 @@ async function init() {
       if (n && n !== name) advisorClients.add(n);
     };
     STATE.cases.forEach(c => addClient(c.client_name));
-    STATE.deposits.forEach(t => addClient(t.client_name));
     STATE.advisorClientSet = advisorClients;
 
     // 撈 revenue_records 中屬法顧客戶的部分（用於 reconcile）
@@ -1324,8 +1324,13 @@ function renderReconcile(accrualAmount) {
     else if (r.transaction_type === 'RefundTransaction') { inRecRefund += a; refundCount++; }
   });
 
-  // 法顧儲值：非作廢 vs 作廢
-  const allDeps = (STATE.deposits || []).filter(t => dateInRange(t.record_date));
+  // 法顧儲值：只算屬於 advisor_cases 客戶集合（sheet 沒登的客戶不計入，業務指示）
+  const sheetClients = STATE.advisorClientSet || new Set();
+  const allDeps = (STATE.deposits || []).filter(t => {
+    if (!dateInRange(t.record_date)) return false;
+    if (!t.client_name) return false;
+    return sheetClients.has(t.client_name) || sheetClients.has(normalizeClientName(t.client_name));
+  });
   const nonVoidDeps = allDeps.filter(t => !t.is_void);
   const voidDeps = allDeps.filter(t => t.is_void);
   const depPaid = nonVoidDeps.reduce((s,t) => s + (+t.amount || 0), 0);

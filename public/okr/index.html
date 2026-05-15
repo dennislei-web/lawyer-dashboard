@@ -610,6 +610,8 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
   // 3-way split：合署 / 法顧客戶 / 一般所內。三組互斥，加總 = revenue_records 全月 (paid - refund)。
   // 法顧客戶集合 = advisor_transactions ∪ advisor_cases 的 client_name 聯集（含 alias 正規化）。
   // KR1 = byMonth (一般所內) net；KR4 = partnerByMonth (合署)；法顧現金口徑見 aggregateAdvisorCash。
+  // 法顧客戶集合 = advisor_cases.client_name 「業務 sheet 認列為法顧的客戶」
+  // 不再從 advisor_transactions 撈：CRM 儲值有但 sheet 沒登的客戶不計入法顧 reconcile（業務指示）
   var advisorClients = {};
   function addClient(name) {
     if (!name) return;
@@ -617,7 +619,6 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
     var n = normalizeClientName(name);
     if (n && n !== name) advisorClients[n] = true;
   }
-  (advisorTransactions || []).forEach(function(t) { addClient(t.client_name); });
   (advisorCases || []).forEach(function(c) { addClient(c.client_name); });
   state.data.advisorClientSet = advisorClients;
 
@@ -654,8 +655,12 @@ function aggregateAdvisorCash(records, advisorTransactions, advisorCases) {
     var r = adv[m] || { paid:0, refund:0 };
     byMonth[m].inRecords = (r.paid || 0) - (r.refund || 0);
   }
+  // 只算屬於 advisor_cases 客戶集合的儲值（sheet 沒登的客戶不計入）
+  var advisorClients = state.data.advisorClientSet || {};
   (advisorTransactions || []).forEach(function(t) {
     if (!t.record_date) return;
+    if (!t.client_name) return;
+    if (!advisorClients[t.client_name] && !advisorClients[normalizeClientName(t.client_name)]) return;
     var mm = parseInt(String(t.record_date).slice(5,7), 10);
     if (mm < 1 || mm > 12) return;
     byMonth[mm].deposits += Number(t.amount || 0);
