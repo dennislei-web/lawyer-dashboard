@@ -347,12 +347,25 @@ window.__010Sort = function(table, key, isString){
 };
 
 // ═══ Auth ═══
+function hasAccess(){
+  return currentLawyer && currentLawyer.role === 'admin' && currentLawyer.is_active;
+}
+
+function showNoAccess(){
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('noAccessPage').style.display='flex';
+  const u = document.getElementById('noAccessUser');
+  if(u) u.textContent = currentLawyer ? `${currentLawyer.name}（${currentLawyer.role}）` : (currentUser?.email||'');
+}
+
 async function checkSession(){
   if(!sb) return showLogin();
   const s = await sb.auth.getSession();
   if(s.data.session){
     currentUser = s.data.session.user;
     await loadUserProfile();
+    if(!hasAccess()){ showNoAccess(); return; }
     showDashboard();
   } else showLogin();
 }
@@ -383,7 +396,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e)=>{
       password: document.getElementById('loginPassword').value
     });
     if(r.error) throw r.error;
-    currentUser = r.data.user; await loadUserProfile(); showDashboard();
+    currentUser = r.data.user; await loadUserProfile();
+    if(!hasAccess()){ showNoAccess(); return; }
+    showDashboard();
   }catch(ex){ err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
   finally{ btn.disabled=false; btn.textContent='登入'; }
 });
