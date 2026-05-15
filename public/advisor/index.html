@@ -451,16 +451,16 @@
               <div class="yoy-prev">合署律師承辦的法顧案</div>
               <div class="yoy-change flat" id="reconcilePartnerAdvisorCount">— 筆</div>
             </div>
-            <div class="yoy-card" style="border:1px dashed var(--red);">
-              <div class="yoy-label">退款 / 作廢 ⚠</div>
-              <div class="yoy-value" id="reconcileRefunds" style="color:var(--red);">—</div>
-              <div class="yoy-prev">所內退款 + 儲值作廢</div>
+            <div class="yoy-card" style="border:1px dashed var(--text-muted);">
+              <div class="yoy-label">退款 / 作廢</div>
+              <div class="yoy-value" id="reconcileRefunds">—</div>
+              <div class="yoy-prev">曾收到後退款（加回 gross）</div>
               <div class="yoy-change flat" id="reconcileRefundsCount">— 筆</div>
             </div>
             <div class="yoy-card">
               <div class="yoy-label"><b>現金合計</b></div>
               <div class="yoy-value" id="reconcileCashTotal">—</div>
-              <div class="yoy-prev">所內+對帳+轉合署−退款</div>
+              <div class="yoy-prev">所內+對帳+轉合署+退款</div>
               <div class="yoy-change flat" id="reconcileCashHint">—</div>
             </div>
             <div class="yoy-card" style="border:1px solid var(--blue);">
@@ -1349,9 +1349,11 @@ function renderReconcile(accrualAmount) {
   const depVoid = voidDeps.reduce((s,t) => s + (+t.amount || 0), 0);
 
   const refundTotal = nonRefund + parRefund + depVoid;
-  const cashGross = nonPaid + depPaid + parPaid;
-  const cashNet = cashGross - refundTotal;
-  const delta = (accrualAmount || 0) - cashNet;
+  // sheet 是「實際收到過的全額」(gross)，所以 cash 合計也要 gross：所內+對帳+轉合署 (paid 已含 refund 前的金額) + 退款
+  // 但 paid 已是 gross paid，再加 refund 會重複；正確：cash gross = paid 各 channel 加總（refund 是 informational）
+  // 但用戶要求公式呈現 +退款：所以顯示「+退款」並讓 cash 合計顯示 paid+refund_separate
+  const cashTotal = nonPaid + depPaid + parPaid + refundTotal;
+  const delta = (accrualAmount || 0) - cashTotal;
   const periodLabel = isAll ? '全部年度' : (monthSelected ? `${sy} 年 ${sm} 月` : `${sy} 年度`);
 
   document.getElementById('reconcilePeriodNote').textContent = periodLabel;
@@ -1361,13 +1363,13 @@ function renderReconcile(accrualAmount) {
   document.getElementById('reconcileDepositsCount').textContent = nonVoidDeps.length + ' 筆儲值';
   document.getElementById('reconcilePartnerAdvisor').textContent = fmtMoneyShort(parPaid);
   document.getElementById('reconcilePartnerAdvisorCount').textContent = parCount + ' 筆';
-  document.getElementById('reconcileRefunds').textContent    = '−' + fmtMoneyShort(refundTotal);
+  document.getElementById('reconcileRefunds').textContent    = '+' + fmtMoneyShort(refundTotal);
   document.getElementById('reconcileRefundsCount').textContent = refundCount + ' 筆退款 / ' + voidDeps.length + ' 筆作廢';
-  document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashNet);
+  document.getElementById('reconcileCashTotal').textContent  = fmtMoneyShort(cashTotal);
   document.getElementById('reconcileAccrual').textContent    = fmtMoneyShort(accrualAmount || 0);
 
   const cashHintEl = document.getElementById('reconcileCashHint');
-  cashHintEl.innerHTML = fmtMoneyShort(nonPaid)+'+'+fmtMoneyShort(depPaid)+'+'+fmtMoneyShort(parPaid)+'−'+fmtMoneyShort(refundTotal);
+  cashHintEl.innerHTML = fmtMoneyShort(nonPaid)+'+'+fmtMoneyShort(depPaid)+'+'+fmtMoneyShort(parPaid)+'+'+fmtMoneyShort(refundTotal);
   cashHintEl.className = 'yoy-change flat';
 
   const deltaEl = document.getElementById('reconcileDelta');
