@@ -328,6 +328,23 @@ let currentUser=null, currentLawyer=null;
 let teamData=[], lawyerData=[]; // 全部 fact 表
 let currentEndYM = null;
 
+// 雙均價 stat-block helper（當月估 vs 總額估）
+function dualAvg(label, currentWan, totalWan){
+  return `<div class="stat-block">
+    <div class="stat-label">${label}（萬/案）</div>
+    <div style="display:flex;gap:12px;margin-top:3px">
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);line-height:1">當月</div>
+        <div style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">${(currentWan||0).toFixed(2)}</div>
+      </div>
+      <div style="border-left:1px solid var(--border);padding-left:12px">
+        <div style="font-size:10px;color:var(--text-muted);line-height:1">總額</div>
+        <div style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">${(totalWan||0).toFixed(2)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // Sort state per table（key 可以是欄位名 或 'ym:YYYY-M' 表月份欄；'name' 是律師/同仁名）
 let teamSort = { key: null, dir: 'desc' };
 let lawyerSort = { key: null, dir: 'desc' };
@@ -641,9 +658,13 @@ function renderTotalSummary(){
   const attend_rate = total_referrals ? total_attended/total_referrals : 0;
   const sign_rate = total_attended ? total_signed/total_attended : 0;
   const overall_rate = total_referrals ? total_signed/total_referrals : 0;
+  // 雙版本均價：當月估 vs 總額估
+  const avg_unit_curr = total_referrals ? total_current/total_referrals/10000 : 0;
   const avg_unit_wan = total_referrals ? total_revenue/total_referrals/10000 : 0;
-  const avg_signed_wan = total_signed ? total_revenue/total_signed/10000 : 0;
+  const avg_attended_curr = total_attended ? total_current/total_attended/10000 : 0;
   const avg_attended_wan = total_attended ? total_revenue/total_attended/10000 : 0;
+  const avg_signed_curr = total_signed ? total_current/total_signed/10000 : 0;
+  const avg_signed_wan = total_signed ? total_revenue/total_signed/10000 : 0;
 
   // 狀態分布: 單月直接用；其他期間用該期間最新月
   let statusRows;
@@ -720,18 +741,9 @@ function renderTotalSummary(){
         <div class="stat-label">總金額</div>
         <div class="stat-value gold">${total_revenue.toLocaleString()}</div>
       </div>
-      <div class="stat-block">
-        <div class="stat-label">轉介均價（總金額/件數）</div>
-        <div class="stat-value">${avg_unit_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
-      <div class="stat-block">
-        <div class="stat-label">出席均價（總金額/出席）</div>
-        <div class="stat-value">${avg_attended_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
-      <div class="stat-block">
-        <div class="stat-label">委任均價（總金額/委任件）</div>
-        <div class="stat-value">${avg_signed_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
+      ${dualAvg('轉介均價（÷ 件數）', avg_unit_curr, avg_unit_wan)}
+      ${dualAvg('出席均價（÷ 出席）', avg_attended_curr, avg_attended_wan)}
+      ${dualAvg('委任均價（÷ 委任件）', avg_signed_curr, avg_signed_wan)}
       ${workingDayHtml}
       <div class="stat-block status-block">
         <div class="stat-label">律師狀態分布（${statusLabel} active ${cntTotal}）</div>
@@ -1078,9 +1090,13 @@ function renderTeamSummary(seriesData){
   const attendRate = totRef ? totAtt/totRef : 0;
   const signRate = totAtt ? totSign/totAtt : 0;
   const overallRate = totRef ? totSign/totRef : 0;
+  // 雙版本均價
+  const avgUnitCurr = totRef ? totCurrent/totRef/10000 : 0;
   const avgUnit = totRef ? totRev/totRef/10000 : 0;
-  const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  const avgAttendedCurr = totAtt ? totCurrent/totAtt/10000 : 0;
   const avgAttended = totAtt ? totRev/totAtt/10000 : 0;
+  const avgSignedCurr = totSign ? totCurrent/totSign/10000 : 0;
+  const avgSigned = totSign ? totRev/totSign/10000 : 0;
   const activeCount = totalActive;
   const inactiveCount = totalInactive;
   const firstLabel = keys.length ? (granularity==='year'? keys[0] : `${keys[0][0]}-${String(keys[0][1]).padStart(2,'0')}`) : '-';
@@ -1095,9 +1111,9 @@ function renderTeamSummary(seriesData){
       <div class="stat-block"><div class="stat-label">當月收款</div><div class="stat-value">${totCurrent.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">跨月收款</div><div class="stat-value">${totCross.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">總業績</div><div class="stat-value gold">${totRev.toLocaleString()}</div></div>
-      <div class="stat-block"><div class="stat-label">轉介均價</div><div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
-      <div class="stat-block"><div class="stat-label">出席均價</div><div class="stat-value">${avgAttended.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
-      <div class="stat-block"><div class="stat-label">委任均價</div><div class="stat-value">${avgSigned.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
+      ${dualAvg('轉介均價（÷ 件數）', avgUnitCurr, avgUnit)}
+      ${dualAvg('出席均價（÷ 出席）', avgAttendedCurr, avgAttended)}
+      ${dualAvg('委任均價（÷ 委任件）', avgSignedCurr, avgSigned)}
     </div>`;
   document.getElementById('teamSummary').innerHTML = html;
 }
@@ -1490,9 +1506,13 @@ function renderDrillSummary(displayName, series){
   const signRate = totAtt ? totSign/totAtt : 0;
   const overallRate = totRef ? totSign/totRef : 0;
   const targetRate = totTarget>0 ? totRef/totTarget : null;
+  // 雙版本均價
+  const avgUnitCurr = totRef ? totCurrent/totRef/10000 : 0;
   const avgUnit = totRef ? totRev/totRef/10000 : 0;
-  const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  const avgAttendedCurr = totAtt ? totCurrent/totAtt/10000 : 0;
   const avgAttended = totAtt ? totRev/totAtt/10000 : 0;
+  const avgSignedCurr = totSign ? totCurrent/totSign/10000 : 0;
+  const avgSigned = totSign ? totRev/totSign/10000 : 0;
   // 狀態分布 across the period
   const cntPrio = series.filter(r=>r.referral_status==='優先').length;
   const cntNorm = series.filter(r=>r.referral_status==='正常').length;
@@ -1534,18 +1554,9 @@ function renderDrillSummary(displayName, series){
         <div class="stat-label">總金額</div>
         <div class="stat-value gold">${totRev.toLocaleString()}</div>
       </div>
-      <div class="stat-block">
-        <div class="stat-label">轉介均價</div>
-        <div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
-      <div class="stat-block">
-        <div class="stat-label">出席均價</div>
-        <div class="stat-value">${avgAttended.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
-      <div class="stat-block">
-        <div class="stat-label">委任均價</div>
-        <div class="stat-value">${avgSigned.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
-      </div>
+      ${dualAvg('轉介均價（÷ 件數）', avgUnitCurr, avgUnit)}
+      ${dualAvg('出席均價（÷ 出席）', avgAttendedCurr, avgAttended)}
+      ${dualAvg('委任均價（÷ 委任件）', avgSignedCurr, avgSigned)}
       <div class="stat-block status-block">
         <div class="stat-label">${unitLabel}別狀態分布（共 ${series.length} ${unitLabel}）</div>
         <div class="stat-value">
