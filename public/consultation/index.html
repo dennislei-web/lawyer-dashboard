@@ -1908,6 +1908,37 @@
       </div>
     </div>
 
+    <!-- Lawyer breakdown table（依期間切換） -->
+    <div class="section" id="trackingLawyerSection" style="margin-top:24px;">
+      <div class="section-header" style="margin-bottom:12px;">
+        <div class="section-title" id="trackingLawyerTitle">律師明細</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">點欄位可排序</div>
+      </div>
+      <div class="year-filter-bar" id="trackingPeriodBar" style="margin-bottom:12px;">
+        <span class="filter-label">期間</span>
+      </div>
+      <div class="table-wrap">
+        <table id="trackingLawyerTable">
+          <thead>
+            <tr>
+              <th style="width:44px">#</th>
+              <th class="sortable" data-tcol="name">律師</th>
+              <th class="sortable" data-tcol="dept">所別</th>
+              <th class="sortable num" data-tcol="consult_eff">諮詢效益</th>
+              <th class="sortable num" data-tcol="consult_count">諮詢數</th>
+              <th class="sortable num" data-tcol="signed_count">簽約數</th>
+              <th class="sortable num" data-tcol="sign_rate">簽約率</th>
+              <th class="sortable num collected-only" data-tcol="collected">已收金額</th>
+              <th class="sortable num collected-only" data-tcol="avg_collected">平均簽約收款</th>
+            </tr>
+          </thead>
+          <tbody id="trackingLawyerTableBody">
+            <tr><td colspan="9" class="loading"><span class="loading-spinner"></span>載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Monthly expand cards -->
     <div class="month-cards-grid" id="monthCardsGrid">
       <div class="loading"><span class="loading-spinner"></span>載入中...</div>
@@ -3655,6 +3686,20 @@ document.querySelectorAll('#rankingTable th.sortable').forEach(th => {
   });
 });
 
+// Tracking lawyer table sort
+document.querySelectorAll('#trackingLawyerTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.tcol;
+    if (trackingSortCol === col) {
+      trackingSortDir = trackingSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      trackingSortCol = col;
+      trackingSortDir = 'desc';
+    }
+    renderTrackingPage();
+  });
+});
+
 // YoY comparison table sort
 document.querySelectorAll('#lawyerYoyTable th.sortable').forEach(th => {
   th.addEventListener('click', () => {
@@ -3958,8 +4003,97 @@ function renderTrackingPage() {
   setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, fmtMoney(currT.consult_eff),   fmtMoney(prevT.consult_eff),   periodLabel);
   setYoy('yoy-avg-collected', currT.avg_collected, prevT.avg_collected, false, fmtMoney(currT.avg_collected), fmtMoney(prevT.avg_collected), periodLabel);
 
+  // Per-lawyer breakdown table（依期間切換）
+  renderTrackingLawyerTable(currStats, completeMonths, periodLabel, currentYear);
+
   // Month cards still show all months, including the partial current month
   renderMonthCards(currStats, currentYear, currentMonthComplete ? null : currentMonthMM);
+}
+
+// ===================== TRACKING — PER-LAWYER BY PERIOD =====================
+let trackingPeriod  = 'ytd';          // 'ytd' or 'MM'
+let trackingSortCol = 'consult_eff';
+let trackingSortDir = 'desc';
+
+function renderTrackingLawyerTable(currStats, completeMonths, periodLabel, currentYear) {
+  if (!canViewAll()) {
+    const sec = document.getElementById('trackingLawyerSection');
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  const sec = document.getElementById('trackingLawyerSection');
+  if (sec) sec.style.display = '';
+
+  // Available months (only those that have data this year)
+  const monthsWithData = Array.from(new Set(currStats.map(s => s.month.slice(5, 7)))).sort();
+
+  // If saved period no longer has data, fall back to ytd
+  if (trackingPeriod !== 'ytd' && !monthsWithData.includes(trackingPeriod)) {
+    trackingPeriod = 'ytd';
+  }
+
+  // Build chip bar
+  const bar = document.getElementById('trackingPeriodBar');
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+  const ytdBtn = document.createElement('button');
+  ytdBtn.className = 'year-btn' + (trackingPeriod === 'ytd' ? ' active' : '');
+  ytdBtn.textContent = '同期' + (periodLabel ? ' ' + periodLabel : '');
+  ytdBtn.title = '已完成月份 YoY 對應期間';
+  ytdBtn.onclick = () => { trackingPeriod = 'ytd'; renderTrackingPage(); };
+  bar.appendChild(ytdBtn);
+  monthsWithData.forEach(mm => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (trackingPeriod === mm ? ' active' : '');
+    btn.textContent = parseInt(mm) + '月';
+    btn.onclick = () => { trackingPeriod = mm; renderTrackingPage(); };
+    bar.appendChild(btn);
+  });
+
+  // Filter stats and pick title suffix
+  let stats, suffix;
+  if (trackingPeriod === 'ytd') {
+    stats  = currStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
+    suffix = periodLabel ? '（' + currentYear + ' ' + periodLabel + '・YoY 同期）' : '';
+  } else {
+    stats  = currStats.filter(s => s.month.slice(5, 7) === trackingPeriod);
+    suffix = '（' + currentYear + ' ' + parseInt(trackingPeriod) + '月）';
+  }
+  document.getElementById('trackingLawyerTitle').textContent = '律師明細' + suffix;
+
+  // Build, filter resigned, sort
+  let rows = buildLawyerRows(stats).filter(r => !resignedLawyersMap[r.id]);
+  rows = sortRows(rows, trackingSortCol, trackingSortDir);
+
+  // Sort indicators
+  document.querySelectorAll('#trackingLawyerTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.tcol === trackingSortCol) {
+      th.classList.add(trackingSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  const tbody = document.getElementById('trackingLawyerTableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">該期間暫無資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const rank = i + 1;
+    const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+    const rateClass = r.sign_rate >= 45 ? 'sign-rate-green' : r.sign_rate >= 38 ? 'sign-rate-orange' : 'sign-rate-red';
+    return `<tr onclick="showDetailPage('${r.id}')">
+      <td><span class="rank-badge ${rClass}">${rank}</span></td>
+      <td><strong>${escHtml(r.name)}</strong></td>
+      <td>${escHtml(r.dept || '')}</td>
+      <td class="num">$${Math.round(r.consult_eff).toLocaleString()}</td>
+      <td class="num">${r.consult_count.toLocaleString()}</td>
+      <td class="num">${r.signed_count.toLocaleString()}</td>
+      <td class="num ${rateClass}">${r.sign_rate.toFixed(1)}%</td>
+      <td class="num collected-only">$${Math.round(r.collected).toLocaleString()}</td>
+      <td class="num collected-only">$${Math.round(r.avg_collected).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
 }
 
 function setYoy(id, curr, prev, isPercent, display, prevDisplay, periodLabel) {
