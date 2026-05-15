@@ -67,6 +67,31 @@ CONSULT_HEADERS = [
 
 
 # ═══════════════════════════════════════════════════════════
+# case_number → case_date 校正
+# CRM 端偶有跨年 typo（如 case_number 1141201xxx 民國 114 年 = 2025-12-01
+# 但 case_date 被誤登成 2023-12-02），用 case_number 解碼覆寫
+# ═══════════════════════════════════════════════════════════
+_CASENUM_RE = re.compile(r"^(\d{3})(\d{2})(\d{2})\d+$")
+
+def correct_case_date(case_number: str, original_date: str) -> str:
+    """跨年 mismatch 時用 case_number 解碼日期；同年跨月不動（諮詢登記 vs 開會 latency 屬正常）"""
+    if not case_number or not original_date:
+        return original_date
+    m = _CASENUM_RE.match(case_number.strip())
+    if not m:
+        return original_date
+    tw_y, mm, dd = m.groups()
+    expected_year = int(tw_y) + 1911
+    try:
+        orig_year = int(str(original_date)[:4])
+    except (ValueError, TypeError):
+        return original_date
+    if abs(expected_year - orig_year) >= 1:
+        return f"{expected_year}-{mm}-{dd}"
+    return original_date
+
+
+# ═══════════════════════════════════════════════════════════
 #  Step 1: 爬取 CRM 諮詢統計
 # ═══════════════════════════════════════════════════════════
 
@@ -458,9 +483,10 @@ def update_supabase(target_months):
             case_type = ""
         case_revenue = int(float(row.get("revenue", 0) or 0)) if "revenue" in df.columns else 0
         case_collected = int(float(row.get("collected", 0) or 0)) if "collected" in df.columns else 0
+        raw_date = row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10]
         case_row = {
             "lawyer_id": lawyer_id,
-            "case_date": row["諮詢日期"].strftime("%Y-%m-%d") if hasattr(row["諮詢日期"], "strftime") else str(row["諮詢日期"])[:10],
+            "case_date": correct_case_date(case_number, raw_date),
             "case_type": case_type,
             "case_number": case_number,
             "client_name": client_name,
