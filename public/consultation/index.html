@@ -1917,6 +1917,39 @@
       <div class="year-filter-bar" id="trackingPeriodBar" style="margin-bottom:12px;">
         <span class="filter-label">期間</span>
       </div>
+      <!-- 該期間 KPI（依 chip 切換；同期模式時隱藏，避免與上方重複） -->
+      <div class="yoy-grid" id="trackingPeriodKpi" style="margin-bottom:16px;display:none;">
+        <div class="yoy-card">
+          <div class="yoy-label">總諮詢數</div>
+          <div class="yoy-value" id="tlp-consults">—</div>
+          <div class="yoy-change flat" id="tlp-consults-change">vs 上一年</div>
+        </div>
+        <div class="yoy-card">
+          <div class="yoy-label">總簽約數</div>
+          <div class="yoy-value" id="tlp-signed">—</div>
+          <div class="yoy-change flat" id="tlp-signed-change">vs 上一年</div>
+        </div>
+        <div class="yoy-card collected-only">
+          <div class="yoy-label">已收金額</div>
+          <div class="yoy-value" id="tlp-collected">—</div>
+          <div class="yoy-change flat" id="tlp-collected-change">vs 上一年</div>
+        </div>
+        <div class="yoy-card">
+          <div class="yoy-label">簽約率</div>
+          <div class="yoy-value" id="tlp-rate">—</div>
+          <div class="yoy-change flat" id="tlp-rate-change">vs 上一年</div>
+        </div>
+        <div class="yoy-card">
+          <div class="yoy-label">諮詢效益</div>
+          <div class="yoy-value" id="tlp-eff">—</div>
+          <div class="yoy-change flat" id="tlp-eff-change">vs 上一年</div>
+        </div>
+        <div class="yoy-card collected-only">
+          <div class="yoy-label">平均簽約收款</div>
+          <div class="yoy-value" id="tlp-avg-collected">—</div>
+          <div class="yoy-change flat" id="tlp-avg-collected-change">vs 上一年</div>
+        </div>
+      </div>
       <div class="table-wrap">
         <table id="trackingLawyerTable">
           <thead>
@@ -4004,7 +4037,7 @@ function renderTrackingPage() {
   setYoy('yoy-avg-collected', currT.avg_collected, prevT.avg_collected, false, fmtMoney(currT.avg_collected), fmtMoney(prevT.avg_collected), periodLabel);
 
   // Per-lawyer breakdown table（依期間切換）
-  renderTrackingLawyerTable(currStats, completeMonths, periodLabel, currentYear);
+  renderTrackingLawyerTable(currStats, prevStats, completeMonths, periodLabel, currentYear, prevYear);
 
   // Month cards still show all months, including the partial current month
   renderMonthCards(currStats, currentYear, currentMonthComplete ? null : currentMonthMM);
@@ -4015,7 +4048,7 @@ let trackingPeriod  = 'ytd';          // 'ytd' or 'MM'
 let trackingSortCol = 'consult_eff';
 let trackingSortDir = 'desc';
 
-function renderTrackingLawyerTable(currStats, completeMonths, periodLabel, currentYear) {
+function renderTrackingLawyerTable(currStats, prevStats, completeMonths, periodLabel, currentYear, prevYear) {
   if (!canViewAll()) {
     const sec = document.getElementById('trackingLawyerSection');
     if (sec) sec.style.display = 'none';
@@ -4049,16 +4082,39 @@ function renderTrackingLawyerTable(currStats, completeMonths, periodLabel, curre
     bar.appendChild(btn);
   });
 
-  // Filter stats and pick title suffix
-  let stats, suffix;
+  // Filter stats and pick title suffix（同時算 prev 對應期間給 KPI 用）
+  let stats, prevPeriodStats, suffix, periodKpiLabel;
   if (trackingPeriod === 'ytd') {
-    stats  = currStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
-    suffix = periodLabel ? '（' + currentYear + ' ' + periodLabel + '・YoY 同期）' : '';
+    stats           = currStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
+    prevPeriodStats = prevStats.filter(s => completeMonths.has(s.month.slice(5, 7)));
+    suffix          = periodLabel ? '（' + currentYear + ' ' + periodLabel + '・YoY 同期）' : '';
+    periodKpiLabel  = periodLabel || '';
   } else {
-    stats  = currStats.filter(s => s.month.slice(5, 7) === trackingPeriod);
-    suffix = '（' + currentYear + ' ' + parseInt(trackingPeriod) + '月）';
+    stats           = currStats.filter(s => s.month.slice(5, 7) === trackingPeriod);
+    prevPeriodStats = prevStats.filter(s => s.month.slice(5, 7) === trackingPeriod);
+    suffix          = '（' + currentYear + ' ' + parseInt(trackingPeriod) + '月）';
+    periodKpiLabel  = parseInt(trackingPeriod) + ' 月';
   }
   document.getElementById('trackingLawyerTitle').textContent = '律師明細' + suffix;
+
+  // 該期間 KPI（只在切到單月時顯示，避免與上方年度 KPI 重複）
+  const kpiEl = document.getElementById('trackingPeriodKpi');
+  if (trackingPeriod === 'ytd') {
+    kpiEl.style.display = 'none';
+  } else {
+    kpiEl.style.display = '';
+    const cT = aggregateStats(stats);
+    const pT = aggregateStats(prevPeriodStats);
+    const fmtInt   = v => Math.round(v).toLocaleString();
+    const fmtMoney = v => '$' + Math.round(v).toLocaleString();
+    const fmtPct   = v => v.toFixed(1) + '%';
+    setYoy('tlp-consults',      cT.consult_count, pT.consult_count, false, fmtInt(cT.consult_count),     fmtInt(pT.consult_count),     periodKpiLabel);
+    setYoy('tlp-signed',        cT.signed_count,  pT.signed_count,  false, fmtInt(cT.signed_count),      fmtInt(pT.signed_count),      periodKpiLabel);
+    setYoy('tlp-collected',     cT.collected,     pT.collected,     false, fmtMoney(cT.collected),       fmtMoney(pT.collected),       periodKpiLabel);
+    setYoy('tlp-rate',          cT.sign_rate,     pT.sign_rate,     true,  fmtPct(cT.sign_rate),         fmtPct(pT.sign_rate),         periodKpiLabel);
+    setYoy('tlp-eff',           cT.consult_eff,   pT.consult_eff,   false, fmtMoney(cT.consult_eff),     fmtMoney(pT.consult_eff),     periodKpiLabel);
+    setYoy('tlp-avg-collected', cT.avg_collected, pT.avg_collected, false, fmtMoney(cT.avg_collected),   fmtMoney(pT.avg_collected),   periodKpiLabel);
+  }
 
   // Build, filter resigned, sort
   let rows = buildLawyerRows(stats).filter(r => !resignedLawyersMap[r.id]);
