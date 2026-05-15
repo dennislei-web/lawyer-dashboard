@@ -28,18 +28,27 @@ jobs:
       - name: 安裝依賴
         run: pip install -r scripts/requirements.txt
 
-      - name: 爬取 CRM 對帳 + 更新 Supabase
+      - name: 計算 ARGS
+        id: args
         run: |
-          # 排程預設抓最近 2 個月（避免月初切換後上月補登/改單漏抓）；
-          # workflow_dispatch 可帶 month 或 months 覆寫。
           if [ -n "${{ github.event.inputs.month }}" ]; then
-            ARGS="--month ${{ github.event.inputs.month }}"
+            echo "ARGS=--month ${{ github.event.inputs.month }}" >> $GITHUB_OUTPUT
           elif [ -n "${{ github.event.inputs.months }}" ]; then
-            ARGS="--months ${{ github.event.inputs.months }}"
+            echo "ARGS=--months ${{ github.event.inputs.months }}" >> $GITHUB_OUTPUT
           else
-            ARGS="--months 2"
+            echo "ARGS=--months 2" >> $GITHUB_OUTPUT
           fi
-          python scripts/scrape_reconciliation.py $ARGS
+
+      - name: 爬取 CRM 對帳資訊 → revenue_records
+        run: python scripts/scrape_reconciliation.py ${{ steps.args.outputs.ARGS }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CRM_USERNAME: ${{ secrets.CRM_USERNAME }}
+          CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
+
+      - name: 爬取 CRM 法顧對帳資訊 → advisor_transactions
+        run: python scripts/scrape_advisor_transactions.py ${{ steps.args.outputs.ARGS }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

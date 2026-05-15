@@ -297,7 +297,7 @@
     <!-- HERO -->
     <div class="hero-grid" id="heroGrid">
       <div class="hero-card">
-        <div class="hero-title">📊 喆律月營業額（營運頁不含合署 − 法顧）</div>
+        <div class="hero-title">📊 喆律所內月營業額（非合署、非法顧客戶）</div>
         <div class="hero-value" id="hero-kr1-val">—</div>
         <div class="hero-target" id="hero-kr1-target">目標 —</div>
         <div class="hero-bar"><div id="hero-kr1-bar" style="width:0"></div></div>
@@ -530,7 +530,8 @@ async function loadAll() {
       fetchByMonth(year, 'paid_at', function() { return sb.from('advisor_cases').select('paid_at,case_category,is_signed,amount_paid,client_name'); }),
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
         .eq('fiscal_year', year - 1911).in('data_type', ['actual', 'budget']).eq('finance_categories.section', 'operating_expense'),
-      fetchPartnersEmbedded()
+      fetchPartnersEmbedded(),
+      fetchByMonth(year, 'record_date', function() { return sb.from('advisor_transactions').select('record_date,amount,is_void,client_name').eq('is_void', false); })
     ]);
 
     var d = state.data;
@@ -542,9 +543,11 @@ async function loadAll() {
     var revenueRecords = results[5] || [];
     var advisorCases = results[6] || [];
     var financeData = (results[7] && results[7].data) || [];
+    var advisorTransactions = results[9] || [];
     aggregateConsult(monthlyStats, consultCases);
-    aggregateRevenue(revenueRecords, advisorCases);
+    aggregateRevenue(revenueRecords, advisorCases, advisorTransactions);
     aggregateAdvisor(advisorCases);
+    aggregateAdvisorCash(revenueRecords, advisorTransactions, advisorCases);
     aggregateFinance(financeData);
     aggregatePartners(results[8]);
 
@@ -597,48 +600,55 @@ function aggregateConsult(monthlyStats, consultCases) {
   state.data.consultByMonth = byMonth;
 }
 
-function aggregateRevenue(records, advisorCases) {
-  // 拆兩組：byMonth（非合署 → KR1）/ partnerByMonth（合署 → KR4，對標營運頁「合署律師」tab）
-  // advisorOverlap：advisor_cases 與 revenue_records 非合署 paid 重疊的部分（client_name+amount 雙重 match）
-  // 才是真正要從 KR1 扣掉的雙重計算金額；其餘 advisor_cases 屬獨立顧問業務帳，不該扣。
-  var byMonth = {}, partnerByMonth = {};
+function aggregateRevenue(records, advisorCases, advisorTransactions) {
+  // 3-way split：合署 / 法顧客戶 / 一般所內。三組互斥，加總 = revenue_records 全月 (paid - refund)。
+  // 法顧客戶集合 = advisor_transactions ∪ advisor_cases 的 client_name 聯集（authority list）。
+  // KR1 = byMonth (一般所內) net；KR4 = partnerByMonth (合署)；法顧現金口徑見 aggregateAdvisorCash。
+  var advisorClients = {};
+  (advisorTransactions || []).forEach(function(t) { if (t.client_name) advisorClients[t.client_name] = true; });
+  (advisorCases || []).forEach(function(c) { if (c.client_name) advisorClients[c.client_name] = true; });
+  state.data.advisorClientSet = advisorClients;
+
+  var byMonth = {}, partnerByMonth = {}, advisorRevByMonth = {};
   for (var i=1; i<=12; i++) {
-    byMonth[i] = { paid:0, refund:0, advisorOverlap:0 };
-    partnerByMonth[i] = { paid:0, refund:0 };
+    byMonth[i]         = { paid:0, refund:0 };
+    partnerByMonth[i]  = { paid:0, refund:0 };
+    advisorRevByMonth[i] = { paid:0, refund:0 };
   }
-  // multiset：每月非合署 PaymentTransaction 的 (client_name|amount) 鍵 → 筆數
-  var revKeysByMonth = {};
-  for (var j=1; j<=12; j++) revKeysByMonth[j] = {};
   records.forEach(function(r) {
     if (!r.record_date) return;
     var m = parseInt(String(r.record_date).slice(5,7), 10);
     if (m < 1 || m > 12) return;
     var amt = Number(r.amount || 0);
     var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
-    var bucket = isPartner ? partnerByMonth[m] : byMonth[m];
-    if (r.transaction_type === 'PaymentTransaction') {
-      bucket.paid += amt;
-      if (!isPartner && r.client_name) {
-        var k = r.client_name + '|' + amt;
-        revKeysByMonth[m][k] = (revKeysByMonth[m][k] || 0) + 1;
-      }
-    } else if (r.transaction_type === 'RefundTransaction') {
-      bucket.refund += amt;
-    }
-  });
-  advisorCases.forEach(function(c) {
-    if (!c.paid_at || !c.client_name) return;
-    var m = parseInt(String(c.paid_at).slice(5,7), 10);
-    if (m < 1 || m > 12) return;
-    var amt = Number(c.amount_paid || 0);
-    var key = c.client_name + '|' + amt;
-    if ((revKeysByMonth[m][key] || 0) > 0) {
-      revKeysByMonth[m][key] -= 1;
-      byMonth[m].advisorOverlap += amt;
-    }
+    var isAdvisor = !isPartner && r.client_name && advisorClients[r.client_name];
+    var bucket = isPartner ? partnerByMonth[m] : (isAdvisor ? advisorRevByMonth[m] : byMonth[m]);
+    if (r.transaction_type === 'PaymentTransaction')      bucket.paid   += amt;
+    else if (r.transaction_type === 'RefundTransaction')  bucket.refund += amt;
   });
   state.data.revenueByMonth = byMonth;
   state.data.partnerRevenueByMonth = partnerByMonth;
+  state.data.advisorRevByMonth = advisorRevByMonth;
+}
+
+function aggregateAdvisorCash(records, advisorTransactions, advisorCases) {
+  // 法顧「現金口徑」= revenue_records 屬法顧客戶 (paid - refund) + advisor_transactions 儲值 (paid - refund)
+  // 跟成案口徑 (advisor_cases.amount_paid) 並列，提供 reconcile 視角。
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { inRecords:0, deposits:0, total:0 };
+  var adv = state.data.advisorRevByMonth || {};
+  for (var m=1; m<=12; m++) {
+    var r = adv[m] || { paid:0, refund:0 };
+    byMonth[m].inRecords = (r.paid || 0) - (r.refund || 0);
+  }
+  (advisorTransactions || []).forEach(function(t) {
+    if (!t.record_date) return;
+    var mm = parseInt(String(t.record_date).slice(5,7), 10);
+    if (mm < 1 || mm > 12) return;
+    byMonth[mm].deposits += Number(t.amount || 0);
+  });
+  for (var m2=1; m2<=12; m2++) byMonth[m2].total = byMonth[m2].inRecords + byMonth[m2].deposits;
+  state.data.advisorCashByMonth = byMonth;
 }
 
 function aggregateAdvisor(cases) {
@@ -771,7 +781,7 @@ function actualMonth(krCode, m) {
   switch (krCode) {
     case 'kr1_revenue': {
       var r = d.revenueByMonth[m] || {};
-      return ((r.paid || 0) - (r.refund || 0) - (r.advisorOverlap || 0)) / 10000;
+      return ((r.paid || 0) - (r.refund || 0)) / 10000;
     }
     case 'kr1_consult_count':
       return (d.consultByMonth[m] || {}).count || 0;
@@ -1160,7 +1170,7 @@ function makeMonthlyChart(canvas, krCode, label, color, unit) {
 function renderKR1() {
   var fm = state.focusMonth;
   var meta = getTargetMeta('kr1_revenue');
-  var card = makeCard({ title:'KR1｜喆律月營業額（營運頁不含合署 − 法顧）', ownerKrCode:'kr1_revenue', deeplink:{label:'→ 營運頁年度追蹤', route:'revenue'} });
+  var card = makeCard({ title:'KR1｜喆律所內月營業額（非合署、非法顧客戶）', ownerKrCode:'kr1_revenue', deeplink:{label:'→ 營運頁年度追蹤', route:'revenue'} });
   var row = document.createElement('div'); row.className='kr-metric-row';
 
   var revActual = actualValue('kr1_revenue', fm), revTarget = targetValue('kr1_revenue', fm);
@@ -1260,7 +1270,7 @@ function renderKR3() {
     + (renewalPct != null ? '<div class="pct ' + renewalPctCls + '">' + pctText(renewalPct) + '</div>' : '');
   row.appendChild(renewalBox);
 
-  // 月營業額合計（advisor_cases 全部分類加總，對標 158 萬月目標）
+  // 月營業額合計（advisor_cases 全部分類加總，對標 158 萬月目標）— 成案口徑
   row.appendChild(makeMetricCell({
     label: (fm==null ? 'YTD' : fm+'月') + ' 法顧月營業額（含全部）',
     value: actualValue('kr3_total_revenue', fm),
@@ -1270,6 +1280,29 @@ function renderKR3() {
     targetMonth: fm
   }));
   card.appendChild(row);
+
+  // 現金口徑副欄：所內法顧客戶 + 法顧儲值，對得上 CRM
+  var cashByMonth = state.data.advisorCashByMonth || {};
+  var cashIn = 0, cashDeposit = 0;
+  if (fm == null) {
+    for (var mm=1; mm<=12; mm++) {
+      cashIn      += (cashByMonth[mm] || {}).inRecords || 0;
+      cashDeposit += (cashByMonth[mm] || {}).deposits  || 0;
+    }
+  } else {
+    cashIn      = (cashByMonth[fm] || {}).inRecords || 0;
+    cashDeposit = (cashByMonth[fm] || {}).deposits  || 0;
+  }
+  var cashTotal = cashIn + cashDeposit;
+  var subRow = document.createElement('div');
+  subRow.style.cssText = 'margin-top:8px; padding:8px 12px; background:rgba(255,255,255,0.03); border-left:2px solid var(--text-muted); border-radius:3px; font-size:12px; color:var(--text-muted); display:flex; gap:18px; flex-wrap:wrap;';
+  subRow.innerHTML =
+    '<span><b>現金口徑 reconcile</b>（' + (fm==null?'YTD':fm+'月') + '）：</span>' +
+    '<span>所內法顧客戶 ' + fmt(cashIn/10000) + ' 萬</span>' +
+    '<span>+ 法顧儲值 ' + fmt(cashDeposit/10000) + ' 萬</span>' +
+    '<span>= 合計 <b style="color:var(--text)">' + fmt(cashTotal/10000) + ' 萬</b></span>' +
+    '<span style="opacity:0.7">（成案 vs 現金差 ' + fmt((actualValue('kr3_total_revenue', fm)||0) - cashTotal/10000) + ' 萬）</span>';
+  card.appendChild(subRow);
 
   // 12 個月堆疊柱狀圖：主動 + 介紹 + 續委任 + 月目標折線
   var cv = document.createElement('div'); cv.className='kr-chart-wrap tall'; var cvs = document.createElement('canvas'); cv.appendChild(cvs); card.appendChild(cv);
