@@ -1901,6 +1901,11 @@
         <div class="yoy-value" id="yoy-eff">—</div>
         <div class="yoy-change flat" id="yoy-eff-change">vs 上一年</div>
       </div>
+      <div class="yoy-card collected-only">
+        <div class="yoy-label">平均簽約收款</div>
+        <div class="yoy-value" id="yoy-avg-collected">—</div>
+        <div class="yoy-change flat" id="yoy-avg-collected-change">vs 上一年</div>
+      </div>
     </div>
 
     <!-- Monthly expand cards -->
@@ -3951,6 +3956,7 @@ function renderTrackingPage() {
   setYoy('yoy-collected',  currT.collected,     prevT.collected,     false, fmtMoney(currT.collected),     fmtMoney(prevT.collected),     periodLabel);
   setYoy('yoy-rate',       currT.sign_rate,     prevT.sign_rate,     true,  fmtPct(currT.sign_rate),       fmtPct(prevT.sign_rate),       periodLabel);
   setYoy('yoy-eff',        currT.consult_eff,   prevT.consult_eff,   false, fmtMoney(currT.consult_eff),   fmtMoney(prevT.consult_eff),   periodLabel);
+  setYoy('yoy-avg-collected', currT.avg_collected, prevT.avg_collected, false, fmtMoney(currT.avg_collected), fmtMoney(prevT.avg_collected), periodLabel);
 
   // Month cards still show all months, including the partial current month
   renderMonthCards(currStats, currentYear, currentMonthComplete ? null : currentMonthMM);
