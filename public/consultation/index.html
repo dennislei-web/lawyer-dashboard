@@ -2824,8 +2824,11 @@ function showDetailPage(lawyerId) {
   renderDetailPage();
 }
 
-// 🎯 1-on-1 追蹤：僅雷皓明可見
+// 🎯 1-on-1 追蹤：雷皓明看全部、一般律師看自己那行
 function canViewTracker() {
+  return !!realLawyer;
+}
+function isTrackerAdmin() {
   return !!(realLawyer && realLawyer.email === 'dennis.lei@010.tw');
 }
 
@@ -6994,6 +6997,7 @@ async function renderTrackerPage() {
     const l = id2lawyer.get(lid);
     if (!l) return;
     if (!l.is_active) return; // 離職律師不列入
+    if (!isTrackerAdmin() && lid !== realLawyer.id) return; // 律師只看自己
     const c   = cur[lid]    || { c:0, sg:0, co:0 };   // 2026 整年（row 顯示）
     const c14 = cur14[lid]  || { c:0, sg:0, co:0 };   // 2026 1-4（給 YoY）
     const p   = prev14[lid] || { c:0, sg:0, co:0 };   // 2025 1-4（給 YoY）
@@ -7113,26 +7117,46 @@ function renderTrackerTable() {
     }
   });
 
-  // Summary — 數據用全諮詢律師 grand total（含離職、對齊年度追蹤）
+  // Summary
   const sum = document.getElementById('trackerSummary');
-  const G = trackerGrand;
-  const grandRate = G.consult ? G.signed/G.consult*100 : 0;
-  const grandEff  = G.consult ? G.collected/G.consult : 0;
-  const totalDone = trackerRows.filter(r => r.tracker.one_on_one_status === 'done').length;
-  const totalPending = trackerRows.filter(r => r.tracker.one_on_one_status === 'pending').length;
-  const totalScheduled = trackerRows.filter(r => r.tracker.one_on_one_status === 'scheduled').length;
-  const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
-  sum.innerHTML = `
-    <div class="kpi-card"><div class="kpi-label">律師數（活躍）</div><div class="kpi-value">${trackerRows.length}</div></div>
-    <div class="kpi-card"><div class="kpi-label">總諮詢 (2026)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
-    <div class="kpi-card"><div class="kpi-label">總簽約</div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
-    <div class="kpi-card"><div class="kpi-label">簽約率</div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
-    <div class="kpi-card"><div class="kpi-label">諮詢效益</div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
-    <div class="kpi-card"><div class="kpi-label">1-on-1 已完成</div><div class="kpi-value">${totalDone}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
-    <div class="kpi-card"><div class="kpi-label">已排程</div><div class="kpi-value" style="color:var(--gold);">${totalScheduled}</div></div>
-    <div class="kpi-card"><div class="kpi-label">待安排</div><div class="kpi-value" style="color:var(--red);">${totalPending}</div></div>
-    <div class="kpi-card"><div class="kpi-label">有 brief</div><div class="kpi-value">${totalWithBrief}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
-  `;
+  if (isTrackerAdmin()) {
+    // 雷皓明：全所 grand total（對齊總覽）
+    const G = trackerGrand;
+    const grandRate = G.consult ? G.signed/G.consult*100 : 0;
+    const grandEff  = G.consult ? G.collected/G.consult : 0;
+    const totalDone = trackerRows.filter(r => r.tracker.one_on_one_status === 'done').length;
+    const totalPending = trackerRows.filter(r => r.tracker.one_on_one_status === 'pending').length;
+    const totalScheduled = trackerRows.filter(r => r.tracker.one_on_one_status === 'scheduled').length;
+    const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
+    sum.innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">律師數（活躍）</div><div class="kpi-value">${trackerRows.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">總諮詢 (2026)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
+      <div class="kpi-card"><div class="kpi-label">總簽約</div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
+      <div class="kpi-card"><div class="kpi-label">簽約率</div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">諮詢效益</div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
+      <div class="kpi-card"><div class="kpi-label">1-on-1 已完成</div><div class="kpi-value">${totalDone}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">已排程</div><div class="kpi-value" style="color:var(--gold);">${totalScheduled}</div></div>
+      <div class="kpi-card"><div class="kpi-label">待安排</div><div class="kpi-value" style="color:var(--red);">${totalPending}</div></div>
+      <div class="kpi-card"><div class="kpi-label">有 brief</div><div class="kpi-value">${totalWithBrief}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
+    `;
+  } else {
+    // 律師：只看自己 KPI
+    const me = trackerRows[0];
+    if (me) {
+      const k = me.kpi;
+      sum.innerHTML = `
+        <div class="kpi-card"><div class="kpi-label">我的 2026 諮詢</div><div class="kpi-value">${k.consult.toLocaleString()}</div></div>
+        <div class="kpi-card"><div class="kpi-label">我的 2026 簽約</div><div class="kpi-value">${k.signed.toLocaleString()}</div></div>
+        <div class="kpi-card"><div class="kpi-label">我的簽約率</div><div class="kpi-value">${k.rate.toFixed(1)}%</div></div>
+        <div class="kpi-card"><div class="kpi-label">我的諮詢效益</div><div class="kpi-value">$${Math.round(k.eff).toLocaleString()}</div></div>
+      `;
+    } else {
+      sum.innerHTML = '';
+    }
+  }
+  // 隱藏律師看不到的篩選器（搜尋、所、狀態、brief 篩選對單一律師沒意義）
+  const filtersWrap = document.getElementById('trackerSearch')?.parentElement;
+  if (filtersWrap) filtersWrap.style.display = isTrackerAdmin() ? '' : 'none';
 
   // Empty
   document.getElementById('trackerEmpty').style.display = filtered.length === 0 ? '' : 'none';
@@ -7160,15 +7184,15 @@ function renderTrackerTable() {
       <td style="${cellNum}">${k.consult ? k.rate.toFixed(1)+'%' : '—'}</td>
       <td style="${cellNum}">${k.consult ? '$'+Math.round(k.eff).toLocaleString() : '—'}</td>
       <td style="${cellNum}">${yoyHtml}</td>
-      <td style="${cellBase}text-align:center;"><select data-field="one_on_one_status" class="status-dot" data-status="${t.one_on_one_status||'pending'}" title="點擊切換狀態">
+      <td style="${cellBase}text-align:center;"><select data-field="one_on_one_status" class="status-dot" data-status="${t.one_on_one_status||'pending'}" title="點擊切換狀態" ${isTrackerAdmin()?'':'disabled'}>
         <option value="pending"${t.one_on_one_status==='pending'?' selected':''}>🔴 待安排</option>
         <option value="scheduled"${t.one_on_one_status==='scheduled'?' selected':''}>🟡 已排程</option>
         <option value="done"${t.one_on_one_status==='done'?' selected':''}>🟢 已完成</option>
         <option value="followup"${t.one_on_one_status==='followup'?' selected':''}>🟠 待追蹤</option>
       </select></td>
-      <td style="${cellBase}white-space:nowrap;width:96px;min-width:96px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:3px 4px;border-radius:4px;font-size:0.68rem;width:92px;"></td>
+      <td style="${cellBase}white-space:nowrap;width:96px;min-width:96px;"><input type="date" data-field="one_on_one_date" value="${t.one_on_one_date||''}" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:3px 4px;border-radius:4px;font-size:0.68rem;width:92px;" ${isTrackerAdmin()?'':'readonly'}></td>
       <td style="${cellBase}white-space:nowrap;">${briefHtml}</td>
-      <td style="${cellBase}min-width:480px;width:480px;"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx">${escapeHtml(t.target_text||'')}</textarea></td>
+      <td style="${cellBase}min-width:480px;width:480px;"><textarea data-field="target_text" wrap="off" style="${taStyle}min-height:140px;font-family:inherit;white-space:pre;overflow:auto;" placeholder="• 主題：xxx&#10;• 根因：xxx&#10;• 行動：xxx&#10;• KPI：xxx" ${isTrackerAdmin()?'':'readonly'}>${escapeHtml(t.target_text||'')}</textarea></td>
       <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="next_action" style="${taStyle}min-height:140px;" placeholder="例：5/20 前完成 brief">${escapeHtml(t.next_action||'')}</textarea></td>
       <td style="${cellBase}min-width:360px;width:360px;"><textarea data-field="notes" style="${taStyle}min-height:140px;" placeholder="自由備註">${escapeHtml(t.notes||'')}</textarea></td>
     </tr>`;
