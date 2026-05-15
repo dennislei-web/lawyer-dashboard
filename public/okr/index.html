@@ -531,7 +531,8 @@ async function loadAll() {
       sb.from('finance_data').select('amount,month,fiscal_year,data_type,category_id,finance_categories!inner(code,section)')
         .eq('fiscal_year', year - 1911).in('data_type', ['actual', 'budget']).eq('finance_categories.section', 'operating_expense'),
       fetchPartnersEmbedded(),
-      fetchByMonth(year, 'record_date', function() { return sb.from('advisor_transactions').select('record_date,amount,is_void,client_name').eq('is_void', false); })
+      fetchByMonth(year, 'record_date', function() { return sb.from('advisor_transactions').select('record_date,amount,is_void,client_name').eq('is_void', false); }),
+      sb.from('fact_010_monthly_team').select('year,month,team_member,total_revenue,total_referrals,signed,attended').eq('year', year)
     ]);
 
     var d = state.data;
@@ -544,12 +545,23 @@ async function loadAll() {
     var advisorCases = results[6] || [];
     var financeData = (results[7] && results[7].data) || [];
     var advisorTransactions = results[9] || [];
+    var fact010Team = (results[10] && results[10].data) || [];
     aggregateConsult(monthlyStats, consultCases);
     aggregateRevenue(revenueRecords, advisorCases, advisorTransactions);
     aggregateAdvisor(advisorCases);
     aggregateAdvisorCash(revenueRecords, advisorTransactions, advisorCases);
     aggregateFinance(financeData);
     aggregatePartners(results[8]);
+    // KR5 來源：fact_010_monthly_team（按月加總所有同仁）
+    d.kr5ByMonth = {};
+    fact010Team.forEach(function(r) {
+      if (!d.kr5ByMonth[r.month]) d.kr5ByMonth[r.month] = { revenue:0, referrals:0, signed:0, attended:0 };
+      var k = d.kr5ByMonth[r.month];
+      k.revenue += r.total_revenue || 0;
+      k.referrals += r.total_referrals || 0;
+      k.signed += r.signed || 0;
+      k.attended += r.attended || 0;
+    });
 
     // log any errors
     [results[0], results[1], results[2], results[7]].forEach(function(r, i) {
@@ -782,12 +794,46 @@ function getManualActual(krCode, month) {
   });
   return found ? Number(found.actual_value) : null;
 }
+// KR5 改抓 fact_010_monthly_team（從法律010 dashboard 同源），fallback to manual
+function getKr5Actual(krCode, month) {
+  var k = state.data.kr5ByMonth && state.data.kr5ByMonth[month];
+  if (k) {
+    switch (krCode) {
+      case 'kr5_revenue':
+        if (k.revenue > 0) return k.revenue / 10000;
+        break;
+      case 'kr5_referrals':
+        if (k.referrals > 0) return k.referrals;
+        break;
+      case 'kr5_avg_referral':
+        if (k.referrals > 0 && k.revenue > 0) return k.revenue / k.referrals / 10000;
+        break;
+      case 'kr5_avg_signed':
+        if (k.signed > 0 && k.revenue > 0) return k.revenue / k.signed / 10000;
+        break;
+    }
+  }
+  return getManualActual(krCode, month);  // fallback
+}
 function sumYTD(krCode) {
   // 只加總已過完整月份
   var done = monthsElapsed();
+  var isKr5 = krCode.indexOf('kr5_') === 0;
+  // 均單類 YTD 用 SUM(revenue)/SUM(分母) 重算（不能簡單加總）
+  if (isKr5 && (krCode === 'kr5_avg_referral' || krCode === 'kr5_avg_signed')) {
+    var totRev = 0, totDenom = 0;
+    for (var m=1; m<=done; m++) {
+      var k = state.data.kr5ByMonth && state.data.kr5ByMonth[m];
+      if (k) {
+        totRev += k.revenue || 0;
+        totDenom += (krCode === 'kr5_avg_signed' ? k.signed : k.referrals) || 0;
+      }
+    }
+    return totDenom > 0 ? totRev / totDenom / 10000 : null;
+  }
   var s = 0; var has = false;
-  for (var m=1; m<=done; m++) {
-    var v = getManualActual(krCode, m);
+  for (var m2=1; m2<=done; m2++) {
+    var v = isKr5 ? getKr5Actual(krCode, m2) : getManualActual(krCode, m2);
     if (v != null) { s += Number(v); has = true; }
   }
   return has ? s : null;
@@ -839,7 +885,7 @@ function actualMonth(krCode, m) {
     case 'kr5_referrals':
     case 'kr5_avg_referral':
     case 'kr5_avg_signed':
-      return getManualActual(krCode, m);
+      return getKr5Actual(krCode, m);
     case 'kr6_monthly_cost_cap':     return (d.financeCostByMonth[m] || 0) / 10000;
     default: return null;
   }
@@ -1480,7 +1526,7 @@ function renderKR5() {
   if (state.editing) {
     hint.innerHTML = '✏️ <b>編輯模式：</b>下方矩陣請對照 Google Sheet「轉案業績查詢」逐月填寫。輸入完按右上角「💾 儲存全部」。';
   } else {
-    hint.innerHTML = '<b>提醒：</b>法律010 品牌資料尚未串接 DB。點右上「✏️ 編輯目標 / 里程碑」進入編輯模式，再依 Google Sheet「轉案業績查詢」逐月填寫月營收 / 轉諮場次 / 轉案均單 / 委任均單。';
+    hint.innerHTML = '<b>資料來源：</b>法律010 dashboard 的 <code>fact_010_monthly_team</code>（每天 09:00 自動同步 sheet）。下方四欄即時加總當月所有 010 同仁業績；若該月 fact 表沒資料，fallback 到手填 <code>okr_manual_actuals</code>。';
   }
   card.appendChild(hint);
 
@@ -1491,13 +1537,11 @@ function renderKR5() {
     var label = (fm==null ? 'YTD' : fm+'月') + ' ' + spec.label;
     // 均單類 YTD 沒意義（不能加總）→ 顯示最後填寫月份的均單
     if (spec.nonAggregable && fm == null) {
-      var lastFilled = null;
-      for (var mm=12; mm>=1; mm--) {
-        if (getManualActual(spec.code, mm) != null) { lastFilled = mm; break; }
-      }
+      // 均單 YTD = SUM(revenue) / SUM(分母)，由 sumYTD/actualYTD 回傳
+      var ytdVal = actualYTD(spec.code);
       row.appendChild(makeMetricCell({
-        label: lastFilled ? ('最近 ' + lastFilled + ' 月 ' + spec.label) : spec.label,
-        value: lastFilled ? getManualActual(spec.code, lastFilled) : null,
+        label: 'YTD ' + spec.label,
+        value: ytdVal,
         unit: spec.unit
       }));
       return;
@@ -1541,7 +1585,7 @@ function buildKR5MiniCharts() {
       var labels = [], values = [], targets = [];
       for (var m=1; m<=12; m++) {
         labels.push(m+'月');
-        values.push(getManualActual(spec.code, m));
+        values.push(getKr5Actual(spec.code, m));
         targets.push(spec.hasTarget ? getTarget(spec.code, m) : null);
       }
       var datasets = [
