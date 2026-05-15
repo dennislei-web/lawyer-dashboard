@@ -366,16 +366,38 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{
 });
 
 // ═══ Data load ═══
+// Supabase PostgREST 預設 max-rows 是 1000；用 Range header 分頁拉滿
+async function fetchAllPages(table){
+  const CHUNK = 1000;
+  let all = [];
+  let from = 0;
+  for(let safety=0; safety<20; safety++){
+    const r = await sb.from(table).select('*', { count: 'exact' })
+      .order('year',{ascending:false}).order('month',{ascending:false})
+      .range(from, from + CHUNK - 1);
+    if(r.error){ throw new Error(`${table}: ${r.error.message}`); }
+    const batch = r.data || [];
+    all = all.concat(batch);
+    if(batch.length < CHUNK) break;
+    from += CHUNK;
+  }
+  return all;
+}
+
 async function loadData(){
-  // 拉全部 fact 表 (212 team + 1517 lawyer 不大)
-  const [tm, lw] = await Promise.all([
-    sb.from('fact_010_monthly_team').select('*').order('year',{ascending:false}).order('month',{ascending:false}).limit(2000),
-    sb.from('fact_010_monthly_lawyer').select('*').order('year',{ascending:false}).order('month',{ascending:false}).limit(5000),
-  ]);
-  if(tm.error){ console.error(tm.error); alert('無權限讀 fact_010_monthly_team: '+tm.error.message); return; }
-  if(lw.error){ console.error(lw.error); alert('無權限讀 fact_010_monthly_lawyer: '+lw.error.message); return; }
-  teamData = tm.data || [];
-  lawyerData = lw.data || [];
+  try{
+    const [tm, lw] = await Promise.all([
+      fetchAllPages('fact_010_monthly_team'),
+      fetchAllPages('fact_010_monthly_lawyer'),
+    ]);
+    teamData = tm;
+    lawyerData = lw;
+    console.log(`loaded: team ${tm.length} rows, lawyer ${lw.length} rows`);
+  }catch(e){
+    console.error(e);
+    alert('讀取失敗：'+e.message);
+    return;
+  }
   renderFreshness();
   initMonthSelector();
   renderAll();
