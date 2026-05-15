@@ -267,7 +267,7 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
   <!-- View 3: 律師 drill -->
   <div class="page" id="page-lawyer">
     <div class="card">
-      <h2>合作律師個人 drill<span class="hint">可看全部歷史；月別 / 年別切換</span></h2>
+      <h2>合作律師個人 drill<span class="hint">可看全部歷史；月別 / 年別切換；BI = 平均單價(萬/案) = 總金額÷件數÷10000</span></h2>
       <div class="controls">
         <label>律師：</label>
         <select id="drillLawyer" style="min-width:200px"></select>
@@ -589,6 +589,7 @@ function renderTotalSummary(){
   const overall_rate = total_referrals ? total_signed/total_referrals : 0;
   const avg_unit_wan = total_referrals ? total_revenue/total_referrals/10000 : 0;
   const avg_signed_wan = total_signed ? total_revenue/total_signed/10000 : 0;
+  const avg_attended_wan = total_attended ? total_revenue/total_attended/10000 : 0;
 
   // 狀態分布: 單月直接用；其他期間用該期間最新月
   let statusRows;
@@ -668,6 +669,10 @@ function renderTotalSummary(){
       <div class="stat-block">
         <div class="stat-label">轉介均價（總金額/件數）</div>
         <div class="stat-value">${avg_unit_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">出席均價（總金額/出席）</div>
+        <div class="stat-value">${avg_attended_wan.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
       </div>
       <div class="stat-block">
         <div class="stat-label">委任均價（總金額/委任件）</div>
@@ -1021,6 +1026,7 @@ function renderTeamSummary(seriesData){
   const overallRate = totRef ? totSign/totRef : 0;
   const avgUnit = totRef ? totRev/totRef/10000 : 0;
   const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  const avgAttended = totAtt ? totRev/totAtt/10000 : 0;
   const activeCount = totalActive;
   const inactiveCount = totalInactive;
   const firstLabel = keys.length ? (granularity==='year'? keys[0] : `${keys[0][0]}-${String(keys[0][1]).padStart(2,'0')}`) : '-';
@@ -1036,6 +1042,7 @@ function renderTeamSummary(seriesData){
       <div class="stat-block"><div class="stat-label">跨月收款</div><div class="stat-value">${totCross.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">總業績</div><div class="stat-value gold">${totRev.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">轉介均價</div><div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
+      <div class="stat-block"><div class="stat-label">出席均價</div><div class="stat-value">${avgAttended.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
       <div class="stat-block"><div class="stat-label">委任均價</div><div class="stat-value">${avgSigned.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div></div>
     </div>`;
   document.getElementById('teamSummary').innerHTML = html;
@@ -1431,6 +1438,7 @@ function renderDrillSummary(displayName, series){
   const targetRate = totTarget>0 ? totRef/totTarget : null;
   const avgUnit = totRef ? totRev/totRef/10000 : 0;
   const avgSigned = totSign ? totRev/totSign/10000 : 0;
+  const avgAttended = totAtt ? totRev/totAtt/10000 : 0;
   // 狀態分布 across the period
   const cntPrio = series.filter(r=>r.referral_status==='優先').length;
   const cntNorm = series.filter(r=>r.referral_status==='正常').length;
@@ -1475,6 +1483,10 @@ function renderDrillSummary(displayName, series){
       <div class="stat-block">
         <div class="stat-label">轉介均價</div>
         <div class="stat-value">${avgUnit.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">出席均價</div>
+        <div class="stat-value">${avgAttended.toFixed(2)}<span class="stat-sub" style="margin-left:4px">萬/案</span></div>
       </div>
       <div class="stat-block">
         <div class="stat-label">委任均價</div>
@@ -1571,7 +1583,7 @@ function renderDrill(){
 
   const firstColLabel = granularity==='year' ? '年份' : '月份';
   const targetColLabel = granularity==='year' ? '年目標和' : '月目標';
-  let html = `<table class="tbl"><thead><tr><th class="name-col">${firstColLabel}</th><th>件數</th><th>${targetColLabel}</th><th>出席</th><th>委任</th><th>委任率</th><th>當月收款</th><th>跨月收款</th><th>總金額</th><th>BI</th><th class="center">狀態</th></tr></thead><tbody>`;
+  let html = `<table class="tbl"><thead><tr><th class="name-col">${firstColLabel}</th><th>件數</th><th>${targetColLabel}</th><th>出席</th><th>委任</th><th>委任率</th><th>當月收款</th><th>跨月收款</th><th>總金額</th><th title="BI 警示 = 總金額 ÷ 件數 ÷ 10000 = 平均單價(萬/案)；>2.1 綠底為佳，>3 + 委任率>35% 為優先，<2.3 為暫緩">BI 警示<span style="font-size:9px;color:var(--text-muted);font-weight:400"> (萬/案)</span></th><th class="center">狀態</th></tr></thead><tbody>`;
   series.slice().reverse().forEach(r=>{
     html += `<tr><td class="name-col">${r.label}</td>`
       + `<td>${r.referrals}</td><td>${r.monthly_target || '-'}</td>`
