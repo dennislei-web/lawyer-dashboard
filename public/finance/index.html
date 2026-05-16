@@ -953,6 +953,24 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 // ═══════════════════════════════════════════════════════════
 var profitState = { year: null, partnersJSON: null };
 
+// Supabase / PostgREST 預設 db-max-rows=1000 全局上限。把整年拆成 12 個月各一 query 並行抓
+async function profitFetchByMonth(year, dateField, buildBaseQuery) {
+  var months = [];
+  for (var m=1; m<=12; m++) {
+    var startISO = year + '-' + (m<10?'0':'') + m + '-01';
+    var nextM = m + 1, nextY = year;
+    if (nextM > 12) { nextM = 1; nextY = year + 1; }
+    var endISO = nextY + '-' + (nextM<10?'0':'') + nextM + '-01';
+    months.push(buildBaseQuery().gte(dateField, startISO).lt(dateField, endISO));
+  }
+  var results = await Promise.all(months);
+  var all = [];
+  results.forEach(function(r) {
+    if (r && r.data) all = all.concat(r.data);
+  });
+  return all;
+}
+
 async function fetchPartnersEmbedded() {
   if (profitState.partnersJSON) return profitState.partnersJSON;
   try {
@@ -1081,20 +1099,24 @@ async function loadProfitData() {
     var iso = west + '-01-01';
     var isoEnd = west + '-12-31';
 
-    // 並行抓資料
+    // 並行抓資料（revenue_records / advisor_transactions 用月份拆分避開 1000 筆上限）
     var results = await Promise.all([
       fetchPartnersEmbedded(),
-      sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,client_name').gte('record_date', iso).lte('record_date', isoEnd).eq('is_void', false),
+      profitFetchByMonth(west, 'record_date', function() {
+        return sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,client_name').eq('is_void', false);
+      }),
       sb.from('advisor_cases').select('client_name'),
-      sb.from('advisor_transactions').select('record_date,amount,client_name').gte('record_date', iso).lte('record_date', isoEnd).eq('is_void', false),
+      profitFetchByMonth(west, 'record_date', function() {
+        return sb.from('advisor_transactions').select('record_date,amount,client_name').eq('is_void', false);
+      }),
       sb.from('fact_010_monthly_team').select('year,month,total_revenue').eq('year', west),
       sb.from('finance_data').select('amount,month,data_type,finance_categories(section,is_subtotal)').eq('fiscal_year', year).in('data_type', ['actual','budget']),
       fetchOkrTargets(west)
     ]);
     var pjson = results[0];
-    var revRecs = (results[1].data) || [];
+    var revRecs = results[1] || [];
     var advisorCases = (results[2].data) || [];
-    var advisorTx = (results[3].data) || [];
+    var advisorTx = results[3] || [];
     var fa0Rows = (results[4].data) || [];
     var financeRows = (results[5].data) || [];
     var okrTargets = results[6] || [];
