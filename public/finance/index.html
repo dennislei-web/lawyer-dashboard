@@ -547,6 +547,19 @@
       <div id="profitLoading" class="text-muted" style="padding:24px;text-align:center">載入中⋯</div>
       <div id="profitContent" style="display:none">
 
+        <!-- 進度條 -->
+        <div class="table-card" style="margin-bottom:16px;border-left:3px solid var(--gold);padding:0">
+          <div style="padding:12px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="font-size:0.95rem;color:var(--text)">
+              📅 <strong id="profitProgress">—</strong>
+            </div>
+            <div style="flex:1;min-width:200px;height:8px;background:var(--bg-card);border-radius:4px;overflow:hidden">
+              <div id="profitProgressBar" style="height:100%;background:linear-gradient(to right,var(--gold),var(--orange));width:0%;transition:width 0.4s"></div>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text-muted)" id="profitProgressNote">—</div>
+          </div>
+        </div>
+
         <!-- 主要 KPI -->
         <div class="kpi-row">
           <div class="kpi-card blue">
@@ -568,11 +581,12 @@
 
         <!-- 收入端拆解 -->
         <div class="table-card" style="margin-top:16px">
-          <div class="table-header"><span class="table-title">收入端拆解</span></div>
+          <div class="table-header"><span class="table-title">收入端拆解</span><span class="text-muted" style="font-size:0.75rem">「預估剩餘」= 月均 × 剩餘月數</span></div>
           <table>
             <thead><tr>
               <th>項目</th>
               <th class="num">已實現</th>
+              <th class="num">月均（剩餘月份用）</th>
               <th class="num">預估剩餘</th>
               <th class="num">全年</th>
               <th>口徑說明</th>
@@ -588,12 +602,21 @@
             <thead><tr>
               <th>項目</th>
               <th class="num">已實現</th>
+              <th class="num">月均（剩餘月份用）</th>
               <th class="num">預估剩餘</th>
               <th class="num">全年</th>
               <th>口徑說明</th>
             </tr></thead>
             <tbody id="profitCostTbody"></tbody>
           </table>
+        </div>
+
+        <!-- 司法官 cohort 差額 callout -->
+        <div class="table-card" style="margin-top:16px;border-left:3px solid var(--orange)">
+          <div style="padding:12px 16px;font-size:0.82rem;color:var(--text);line-height:1.7">
+            <div style="font-weight:600;color:var(--orange);margin-bottom:4px">💡 帳外實得（未列入上方計算）</div>
+            <div id="profitJudicialNote">—</div>
+          </div>
         </div>
 
         <!-- 假設與口徑 -->
@@ -1210,13 +1233,14 @@ async function loadProfitData() {
     var KR4_SELF_TARGET = tval('kr4_partner_self_revenue') * 10000;
 
     // 已實現 (1 ~ elapsed)
-    var A = { kr1:0, advisor:0, fa0:0, partner_senior:0, cost:0 };
+    var A = { kr1:0, advisor:0, fa0:0, partner_senior:0, partner_judicial:0, cost:0 };
     for (var k=1; k<=elapsed; k++) {
       var b2 = byMonth[k];
       A.kr1      += (b2.kr1_paid - b2.kr1_refund);
       A.advisor  += (b2.adv_paid - b2.adv_refund) + b2.adv_deposit;
       A.fa0      += b2.fa0_revenue * 0.35;
       A.partner_senior   += b2.partner_z_left;
+      A.partner_judicial += b2.partner_z_judicial;  // 帳外實得（callout 用）
       // cost: actual 優先，缺月 fallback budget
       A.cost += (b2.cost_actual > 0 ? b2.cost_actual : b2.cost_budget);
     }
@@ -1244,20 +1268,28 @@ async function loadProfitData() {
 
     var total = A_profit + B_profit;
 
+    // ─── 渲染進度條 ───
+    var pct = Math.round(elapsed / 12 * 100);
+    document.getElementById('profitProgress').textContent =
+      year + ' 年目前已結算 ' + elapsed + ' 個月（1-' + elapsed + ' 月）／ 剩 ' + remain + ' 個月（' + (elapsed+1) + '-12 月）';
+    document.getElementById('profitProgressBar').style.width = pct + '%';
+    document.getElementById('profitProgressNote').textContent = pct + '% 完成';
+
     // ─── 渲染 KPI ───
     document.getElementById('profitA').textContent = fmtMoney(A_profit);
     document.getElementById('profitASub').textContent = '1-' + elapsed + ' 月實際';
     document.getElementById('profitB').textContent = fmtMoney(B_profit);
-    document.getElementById('profitBSub').textContent = (elapsed+1) + '-12 月（OKR 目標 × 歷史比例）';
+    document.getElementById('profitBSub').textContent = '剩 ' + remain + ' 個月（' + (elapsed+1) + '-12 月，假設達成 OKR 目標）';
     document.getElementById('profitTotal').textContent = fmtMoney(total);
-    document.getElementById('profitTotalSub').textContent = year + '年 預估年度獲利';
+    document.getElementById('profitTotalSub').textContent = year + ' 年預估年度獲利';
 
     // ─── 渲染收入端表 ───
+    // 月均 = 預估剩餘 ÷ remain（已實現月份用實際，剩餘月份用月目標）
     var revRows = [
-      ['KR1 喆律所內',     A.kr1,             B.kr1,             '非合署、非法顧客戶 (paid − refund)'],
-      ['法顧現金流',       A.advisor,         B.advisor,         'CRM 所內法顧 + 法顧儲值'],
-      ['法 0 (×0.35)',     A.fa0,             B.fa0,             '事務所拿毛收 35%'],
-      ['合署 senior left', A.partner_senior,  B.partner_senior,  '資深 cohort 喆律帳戶代收 ≈ Excel 合作收入'],
+      ['KR1 喆律所內',     A.kr1,             B.kr1,             KR1_TARGET,                   'KR1 月目標 1,350 萬', '非合署、非法顧客戶 (paid − refund)'],
+      ['法顧現金流',       A.advisor,         B.advisor,         KR3_TARGET,                   'KR3 月目標 158 萬', 'CRM 所內法顧 + 法顧儲值'],
+      ['法 0 (×0.35)',     A.fa0,             B.fa0,             KR5_TARGET * 0.35,            'KR5 月目標 666 萬 × 0.35', '事務所拿毛收 35%'],
+      ['合署 senior left', A.partner_senior,  B.partner_senior,  (remain > 0 ? B.partner_senior / remain : 0), 'KR4 月目標 418 萬 × 歷史比例 ' + (seniorLeftRatio*100).toFixed(1) + '%', '資深 cohort 喆律帳戶代收 ≈ Excel 合作收入'],
     ];
     var rtb = document.getElementById('profitRevTbody');
     rtb.innerHTML = '';
@@ -1267,15 +1299,17 @@ async function loadProfitData() {
       var tr = document.createElement('tr');
       tr.innerHTML = '<td>' + r[0] + '</td>' +
         '<td class="num">' + fmtMoney(r[1]) + '</td>' +
+        '<td class="num" style="font-size:0.85em;color:var(--text-muted)">' + fmtMoney(r[3]) + '<div style="font-size:0.72rem">' + r[4] + '</div></td>' +
         '<td class="num">' + fmtMoney(r[2]) + '</td>' +
         '<td class="num"><strong>' + fmtMoney(r[1]+r[2]) + '</strong></td>' +
-        '<td style="font-size:0.78rem;color:var(--text-muted)">' + r[3] + '</td>';
+        '<td style="font-size:0.78rem;color:var(--text-muted)">' + r[5] + '</td>';
       rtb.appendChild(tr);
     });
     var totRow = document.createElement('tr');
     totRow.style.borderTop = '2px solid var(--border-light)';
     totRow.innerHTML = '<td><strong>收入小計</strong></td>' +
       '<td class="num"><strong>' + fmtMoney(revTotalA) + '</strong></td>' +
+      '<td class="num"></td>' +
       '<td class="num"><strong>' + fmtMoney(revTotalB) + '</strong></td>' +
       '<td class="num"><strong style="color:var(--gold)">' + fmtMoney(revTotalA+revTotalB) + '</strong></td>' +
       '<td></td>';
@@ -1284,14 +1318,27 @@ async function loadProfitData() {
     // ─── 渲染成本端表 ───
     var ctb = document.getElementById('profitCostTbody');
     ctb.innerHTML = '';
-    var costSrc = '已過月份 actual 優先，缺月 fallback budget';
+    var costMonthlyAvg = remain > 0 ? B.cost / remain : 0;
     var costRow = document.createElement('tr');
     costRow.innerHTML = '<td>營業費用</td>' +
       '<td class="num">' + fmtMoney(A.cost) + '</td>' +
+      '<td class="num" style="font-size:0.85em;color:var(--text-muted)">' + fmtMoney(costMonthlyAvg) + '<div style="font-size:0.72rem">finance_data budget 月均</div></td>' +
       '<td class="num">' + fmtMoney(B.cost) + '</td>' +
       '<td class="num"><strong style="color:var(--red)">' + fmtMoney(A.cost+B.cost) + '</strong></td>' +
-      '<td style="font-size:0.78rem;color:var(--text-muted)">' + costSrc + '</td>';
+      '<td style="font-size:0.78rem;color:var(--text-muted)">已過月 actual 優先，缺月 fallback budget</td>';
     ctb.appendChild(costRow);
+
+    // ─── 渲染司法官 callout ───
+    // 司法官 left 歷史比例 → 預估全年
+    var judicialLeftRatio = histTotalA > 0 ? (hist.judicial_left / histTotalA) : 0;
+    var B_judicial = kr4Target * judicialLeftRatio * remain;
+    var fullYearJudicial = A.partner_judicial + B_judicial;
+    document.getElementById('profitJudicialNote').innerHTML =
+      '司法官 cohort 喆律帳戶代收 1-' + elapsed + ' 月 <strong>' + fmtMoney(A.partner_judicial) + '</strong>，' +
+      '預估全年 <strong>' + fmtMoney(fullYearJudicial) + '</strong>。<br>' +
+      '此金額屬「事務所實際分得但 Excel 損益表會計尚未列入」，未計入上方獲利。' +
+      '若會計帳補列司法官合署，全年獲利將 <strong style="color:var(--gold)">+ ' + fmtMoney(fullYearJudicial) + '</strong>。' +
+      '<span style="color:var(--text-muted)">（顯皓諮詢律師 cohort 公式複雜暫不估算，金額類似量級）</span>';
 
     document.getElementById('profitLoading').style.display = 'none';
     document.getElementById('profitContent').style.display = '';
