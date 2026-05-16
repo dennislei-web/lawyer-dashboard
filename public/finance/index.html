@@ -493,6 +493,7 @@
     <button class="tab-btn active" data-tab="overview">總覽</button>
     <button class="tab-btn" data-tab="budget">預算編列</button>
     <button class="tab-btn" data-tab="compare">實際 vs 預算</button>
+    <button class="tab-btn" data-tab="profit">預估獲利</button>
     <button class="tab-btn" data-tab="history">歷史資料</button>
   </div>
 
@@ -533,6 +534,81 @@
           全人事 fully-loaded（含工讀/加班/雇主負擔）約 <strong style="color:var(--gold-light)">1.31 億/年</strong>，人事佔總費用比 ~60%。
           司法官合署受雇人員（3 人）薪資外掛，已排除。
         </div>
+      </div>
+    </div>
+
+    <!-- ========== 預估獲利 ========== -->
+    <div class="page" id="page-profit">
+      <div class="filter-bar">
+        <div class="filter-label">年度：</div>
+        <div class="year-btns" id="profitYearBtns"></div>
+        <button class="btn-sm" id="profitReloadBtn" style="margin-left:auto" title="重新計算">↻ 重算</button>
+      </div>
+      <div id="profitLoading" class="text-muted" style="padding:24px;text-align:center">載入中⋯</div>
+      <div id="profitContent" style="display:none">
+
+        <!-- 主要 KPI -->
+        <div class="kpi-row">
+          <div class="kpi-card blue">
+            <div class="kpi-label">已實現獲利</div>
+            <div class="kpi-value blue" id="profitA">-</div>
+            <div class="kpi-sub" id="profitASub"></div>
+          </div>
+          <div class="kpi-card orange">
+            <div class="kpi-label">預估剩餘獲利</div>
+            <div class="kpi-value orange" id="profitB">-</div>
+            <div class="kpi-sub" id="profitBSub"></div>
+          </div>
+          <div class="kpi-card gold">
+            <div class="kpi-label">全年合計</div>
+            <div class="kpi-value gold" id="profitTotal">-</div>
+            <div class="kpi-sub" id="profitTotalSub"></div>
+          </div>
+        </div>
+
+        <!-- 收入端拆解 -->
+        <div class="table-card" style="margin-top:16px">
+          <div class="table-header"><span class="table-title">收入端拆解</span></div>
+          <table>
+            <thead><tr>
+              <th>項目</th>
+              <th class="num">已實現</th>
+              <th class="num">預估剩餘</th>
+              <th class="num">全年</th>
+              <th>口徑說明</th>
+            </tr></thead>
+            <tbody id="profitRevTbody"></tbody>
+          </table>
+        </div>
+
+        <!-- 成本端 -->
+        <div class="table-card" style="margin-top:16px">
+          <div class="table-header"><span class="table-title">成本端</span></div>
+          <table>
+            <thead><tr>
+              <th>項目</th>
+              <th class="num">已實現</th>
+              <th class="num">預估剩餘</th>
+              <th class="num">全年</th>
+              <th>口徑說明</th>
+            </tr></thead>
+            <tbody id="profitCostTbody"></tbody>
+          </table>
+        </div>
+
+        <!-- 假設與口徑 -->
+        <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
+          <div style="padding:12px 16px;font-size:0.78rem;color:var(--text-muted);line-height:1.7">
+            <strong style="color:var(--text)">假設與口徑：</strong><br>
+            <strong>1. 已過月份偵測</strong>：依 finance_data 最後一個 actual 月份。<br>
+            <strong>2. 收入端</strong>：已過月用實際資料；未過月用 OKR 月目標。<br>
+            <strong>3. 合署口徑</strong>：senior cohort「喆律帳戶代收」(left) + judicial cohort「喆律分得淨額」(zhelu_total − 自案)。consult cohort 公式太複雜暫不計入。<br>
+            <strong>4. 法 0 分潤</strong>：事務所拿毛收的 35%。<br>
+            <strong>5. 成本</strong>：已過月用 actual（缺月 fallback budget）；未過月用 budget。<br>
+            <strong>6. 已知偏差</strong>：senior left 對 Excel 合署合作收入差 ≈0.3%；judicial 部分 Excel 沒明確獨立科目，理論上事務所實得（不重複算入 KR1，因 group_name=合署 已排除）。
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -867,9 +943,346 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (tab === 'overview') loadOverviewData();
     else if (tab === 'budget') loadBudgetData();
     else if (tab === 'compare') loadCompareData();
+    else if (tab === 'profit') loadProfitData();
     else if (tab === 'history') loadHistoryData();
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+//  PROFIT ESTIMATION  (見「假設與口徑」說明)
+// ═══════════════════════════════════════════════════════════
+var profitState = { year: null, partnersJSON: null };
+
+async function fetchPartnersEmbedded() {
+  if (profitState.partnersJSON) return profitState.partnersJSON;
+  try {
+    var url = (location.pathname.replace(/\/finance\/?$/, '/partners/').replace(/\/finance\/index\.html$/, '/partners/')) + '?embed=1';
+    if (!url || url.indexOf('/partners/') === -1) url = '/lawyer-dashboard/partners/?embed=1';
+    var r = await fetch(url, { credentials:'same-origin' });
+    if (!r.ok) return null;
+    var html = await r.text();
+    var m = html.match(/<script id="embedded-data"[^>]*>([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    profitState.partnersJSON = JSON.parse(m[1]);
+    return profitState.partnersJSON;
+  } catch (e) { console.warn('fetch partners failed', e); return null; }
+}
+
+function normalizeClientName(n) { return (n || '').trim(); }
+
+async function fetchOkrTargets(year) {
+  if (!sb) return [];
+  var r = await sb.from('okr_targets').select('*').eq('year', year);
+  return r.data || [];
+}
+
+// SENIOR cohort 「right」tiers = 律師個人帳戶代收後撥喆律（要從 zhelu_total 扣掉得 left）
+var PROFIT_SENIOR_RIGHT_TIERS = ['自案(喆律)', '法律010轉案(喆律)', '其他-自案(喆律)'];
+// JUDICIAL cohort 「right」= 自案(喆律)
+var PROFIT_JUDICIAL_RIGHT_TIERS = ['自案(喆律)'];
+
+function partnersZheluByMonth(pjson, fiscalYear) {
+  // 回傳 { month: { senior_left, judicial_left, total_left }, hist: {...} }
+  var byMonth = {};
+  for (var i=1; i<=12; i++) byMonth[i] = { senior_left:0, judicial_left:0, total_left:0,
+                                            senior_z:0, senior_right:0,
+                                            judicial_z:0, judicial_right:0,
+                                            commission_A:0, self_A:0 };
+  if (!pjson || !pjson.cohorts) return { byMonth: byMonth };
+
+  var roc = String(fiscalYear);
+  // 統計 12 個月歷史（過去年度 + 當年度，最多 12 個月）—用於未過月份預估的歷史比例
+  var hist = { senior_left:0, judicial_left:0, commission_A:0, self_A:0, months:0 };
+  var histMonthSet = {};
+
+  ['senior','judicial'].forEach(function(cohortKey) {
+    var c = pjson.cohorts[cohortKey] || {};
+    var rightTiers = cohortKey === 'senior' ? PROFIT_SENIOR_RIGHT_TIERS : PROFIT_JUDICIAL_RIGHT_TIERS;
+    (c.monthly || []).forEach(function(rec) {
+      var y = String(rec.year);
+      var m = Number(rec.month);
+      if (m < 1 || m > 12) return;
+      var tier = rec.tier || {};
+      var z = Number(rec.zhelu_total || 0);
+      var right = 0;
+      rightTiers.forEach(function(t) { right += Number(tier[t] || 0); });
+      var left = z - right;
+      var commA = Number(rec.commission_A || 0);
+      var selfA = Number(rec.self_A || 0);
+
+      if (y === roc) {
+        if (cohortKey === 'senior') {
+          byMonth[m].senior_left += left;
+          byMonth[m].senior_z += z;
+          byMonth[m].senior_right += right;
+        } else {
+          byMonth[m].judicial_left += left;
+          byMonth[m].judicial_z += z;
+          byMonth[m].judicial_right += right;
+        }
+        byMonth[m].total_left += left;
+        byMonth[m].commission_A += commA;
+        byMonth[m].self_A += selfA;
+      }
+
+      // 歷史：當年 + 前一年 1-12 月，做 12-month rolling
+      var prevRoc = String(fiscalYear - 1);
+      var inHist = (y === prevRoc || y === roc);
+      if (inHist) {
+        hist.senior_left += (cohortKey === 'senior' ? left : 0);
+        hist.judicial_left += (cohortKey === 'judicial' ? left : 0);
+        hist.commission_A += commA;
+        hist.self_A += selfA;
+        histMonthSet[y + '-' + m] = true;
+      }
+    });
+  });
+  hist.months = Object.keys(histMonthSet).length;
+  return { byMonth: byMonth, hist: hist };
+}
+
+function fmtMoney(v) {
+  // 顯示為「萬」單位
+  if (v == null || isNaN(v)) return '—';
+  var sign = v < 0 ? '-' : '';
+  var abs = Math.abs(v);
+  return sign + '$' + Math.round(abs / 10000).toLocaleString() + ' 萬';
+}
+
+async function loadProfitData() {
+  // 年度選擇器
+  var year = profitState.year || 115;
+  profitState.year = year;
+  // 初始化 year buttons (一次性)
+  var yb = document.getElementById('profitYearBtns');
+  if (yb && !yb.dataset.init) {
+    yb.dataset.init = '1';
+    [115, 116].forEach(function(y) {
+      var b = document.createElement('button');
+      b.className = 'year-btn' + (y === year ? ' active' : '');
+      b.textContent = y + '年';
+      b.onclick = function() {
+        profitState.year = y;
+        yb.querySelectorAll('.year-btn').forEach(function(x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        loadProfitData();
+      };
+      yb.appendChild(b);
+    });
+    var reload = document.getElementById('profitReloadBtn');
+    if (reload) reload.onclick = function() { profitState.partnersJSON = null; loadProfitData(); };
+  }
+
+  document.getElementById('profitLoading').style.display = '';
+  document.getElementById('profitContent').style.display = 'none';
+
+  try {
+    var west = year + 1911;  // 民國 → 西元
+    var iso = west + '-01-01';
+    var isoEnd = west + '-12-31';
+
+    // 並行抓資料
+    var results = await Promise.all([
+      fetchPartnersEmbedded(),
+      sb.from('revenue_records').select('record_date,amount,transaction_type,group_name,client_name').gte('record_date', iso).lte('record_date', isoEnd).eq('is_void', false),
+      sb.from('advisor_cases').select('client_name'),
+      sb.from('advisor_transactions').select('record_date,amount,client_name').gte('record_date', iso).lte('record_date', isoEnd).eq('is_void', false),
+      sb.from('fact_010_monthly_team').select('year,month,total_revenue').eq('year', west),
+      sb.from('finance_data').select('amount,month,data_type,finance_categories(section,is_subtotal)').eq('fiscal_year', year).in('data_type', ['actual','budget']),
+      fetchOkrTargets(west)
+    ]);
+    var pjson = results[0];
+    var revRecs = (results[1].data) || [];
+    var advisorCases = (results[2].data) || [];
+    var advisorTx = (results[3].data) || [];
+    var fa0Rows = (results[4].data) || [];
+    var financeRows = (results[5].data) || [];
+    var okrTargets = results[6] || [];
+
+    // 法顧客戶集合
+    var advisorClients = {};
+    advisorCases.forEach(function(c) {
+      var n = normalizeClientName(c.client_name);
+      if (n) advisorClients[n] = true;
+    });
+
+    // 切月份累計（KR1, 法顧 in records, 合署 in records, 法0, 法顧儲值）
+    var byMonth = {};
+    for (var i=1; i<=12; i++) byMonth[i] = {
+      kr1_paid:0, kr1_refund:0, adv_paid:0, adv_refund:0,
+      adv_deposit:0, fa0_revenue:0, partner_z_left:0, partner_z_judicial:0,
+      cost_actual:0, cost_budget:0
+    };
+
+    revRecs.forEach(function(r) {
+      if (!r.record_date) return;
+      var m = parseInt(String(r.record_date).slice(5,7), 10);
+      if (m < 1 || m > 12) return;
+      var amt = Number(r.amount || 0);
+      var tx = r.transaction_type;
+      var isP = r.group_name && r.group_name.indexOf('合署') !== -1;
+      var cn = normalizeClientName(r.client_name);
+      var isA = !isP && cn && !!advisorClients[cn];
+      var b = byMonth[m];
+      if (isP) return;  // 合署部分用 partners JSON 算
+      if (isA) {
+        if (tx === 'PaymentTransaction') b.adv_paid += amt;
+        else if (tx === 'RefundTransaction') b.adv_refund += amt;
+      } else {
+        if (tx === 'PaymentTransaction') b.kr1_paid += amt;
+        else if (tx === 'RefundTransaction') b.kr1_refund += amt;
+      }
+    });
+
+    advisorTx.forEach(function(t) {
+      if (!t.record_date) return;
+      var cn = normalizeClientName(t.client_name);
+      if (!advisorClients[cn]) return;
+      var m = parseInt(String(t.record_date).slice(5,7), 10);
+      if (m < 1 || m > 12) return;
+      byMonth[m].adv_deposit += Number(t.amount || 0);
+    });
+
+    fa0Rows.forEach(function(r) {
+      var m = Number(r.month);
+      if (m >= 1 && m <= 12) byMonth[m].fa0_revenue += Number(r.total_revenue || 0);
+    });
+
+    // 成本
+    financeRows.forEach(function(r) {
+      var cat = r.finance_categories || {};
+      if (cat.section !== 'operating_expense' || cat.is_subtotal) return;
+      var m = Number(r.month);
+      if (m < 1 || m > 12) return;
+      var amt = Number(r.amount || 0);
+      if (r.data_type === 'actual') byMonth[m].cost_actual += amt;
+      else if (r.data_type === 'budget') byMonth[m].cost_budget += amt;
+    });
+
+    // 合署 left
+    var p = partnersZheluByMonth(pjson, year);
+    for (var mm=1; mm<=12; mm++) {
+      byMonth[mm].partner_z_left = p.byMonth[mm].senior_left;
+      byMonth[mm].partner_z_judicial = p.byMonth[mm].judicial_left;
+    }
+
+    // 偵測 elapsed = 最後一個 actual 月份
+    var elapsed = 0;
+    for (var mn=1; mn<=12; mn++) {
+      if (byMonth[mn].cost_actual > 0) elapsed = mn;
+    }
+    if (elapsed === 0) elapsed = 3; // fallback
+
+    // OKR 月目標
+    function tget(code, mo) {
+      var t = okrTargets.find(function(x) { return x.kr_code === code && x.month === mo; });
+      if (t) return Number(t.target_value);
+      var any = okrTargets.find(function(x) { return x.kr_code === code; });
+      return any ? Number(any.target_value) : 0;
+    }
+    function tval(code) { return tget(code, 1) || 0; }
+    var KR1_TARGET = tval('kr1_revenue') * 10000;        // 萬 → 元
+    var KR3_TARGET = tval('kr3_total_revenue') * 10000;
+    var KR5_TARGET = tval('kr5_revenue') * 10000;
+    var KR4_REF_TARGET = tval('kr4_referred_revenue') * 10000;
+    var KR4_SELF_TARGET = tval('kr4_partner_self_revenue') * 10000;
+
+    // 已實現 (1 ~ elapsed)
+    var A = { kr1:0, advisor:0, fa0:0, partner_senior:0, partner_judicial:0, cost:0 };
+    for (var k=1; k<=elapsed; k++) {
+      var b2 = byMonth[k];
+      A.kr1      += (b2.kr1_paid - b2.kr1_refund);
+      A.advisor  += (b2.adv_paid - b2.adv_refund) + b2.adv_deposit;
+      A.fa0      += b2.fa0_revenue * 0.35;
+      A.partner_senior   += b2.partner_z_left;
+      A.partner_judicial += b2.partner_z_judicial;
+      // cost: actual 優先，缺月 fallback budget
+      A.cost += (b2.cost_actual > 0 ? b2.cost_actual : b2.cost_budget);
+    }
+    var A_revenue = A.kr1 + A.advisor + A.fa0 + A.partner_senior + A.partner_judicial;
+    var A_profit = A_revenue - A.cost;
+
+    // 預估剩餘 (elapsed+1 ~ 12)
+    var remain = 12 - elapsed;
+    var B = { kr1:0, advisor:0, fa0:0, partner_senior:0, partner_judicial:0, cost:0 };
+    // 合署歷史比例 (用 hist)
+    var hist = p.hist || {};
+    var histTotalA = (hist.commission_A || 0) + (hist.self_A || 0);
+    // ratio：歷史 left ÷ 案件總額 → 把 KR4 目標 (案件總額) 轉成 left
+    var seniorLeftRatio = histTotalA > 0 ? (hist.senior_left / histTotalA) : 0;
+    var judicialLeftRatio = histTotalA > 0 ? (hist.judicial_left / histTotalA) : 0;
+    var kr4Target = (KR4_REF_TARGET + KR4_SELF_TARGET);
+    for (var k2=elapsed+1; k2<=12; k2++) {
+      B.kr1     += KR1_TARGET;
+      B.advisor += KR3_TARGET;
+      B.fa0     += KR5_TARGET * 0.35;
+      B.partner_senior   += kr4Target * seniorLeftRatio;
+      B.partner_judicial += kr4Target * judicialLeftRatio;
+      B.cost += (byMonth[k2].cost_budget > 0 ? byMonth[k2].cost_budget : 0);
+    }
+    var B_revenue = B.kr1 + B.advisor + B.fa0 + B.partner_senior + B.partner_judicial;
+    var B_profit = B_revenue - B.cost;
+
+    var total = A_profit + B_profit;
+
+    // ─── 渲染 KPI ───
+    document.getElementById('profitA').textContent = fmtMoney(A_profit);
+    document.getElementById('profitASub').textContent = '1-' + elapsed + ' 月實際';
+    document.getElementById('profitB').textContent = fmtMoney(B_profit);
+    document.getElementById('profitBSub').textContent = (elapsed+1) + '-12 月（OKR 目標 × 歷史比例）';
+    document.getElementById('profitTotal').textContent = fmtMoney(total);
+    document.getElementById('profitTotalSub').textContent = year + '年 預估年度獲利';
+
+    // ─── 渲染收入端表 ───
+    var revRows = [
+      ['KR1 喆律所內',     A.kr1,             B.kr1,             '非合署、非法顧客戶 (paid − refund)'],
+      ['法顧現金流',       A.advisor,         B.advisor,         'CRM 所內法顧 + 法顧儲值'],
+      ['法 0 (×0.35)',     A.fa0,             B.fa0,             '事務所拿毛收 35%'],
+      ['合署 senior left', A.partner_senior,  B.partner_senior,  '資深 cohort 喆律帳戶代收 ≈ Excel 合作收入'],
+      ['合署 judicial left', A.partner_judicial, B.partner_judicial, '司法官 cohort zhelu_total − 自案(喆律)，KR1 已排除無重複'],
+    ];
+    var rtb = document.getElementById('profitRevTbody');
+    rtb.innerHTML = '';
+    var revTotalA = 0, revTotalB = 0;
+    revRows.forEach(function(r) {
+      revTotalA += r[1]; revTotalB += r[2];
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + r[0] + '</td>' +
+        '<td class="num">' + fmtMoney(r[1]) + '</td>' +
+        '<td class="num">' + fmtMoney(r[2]) + '</td>' +
+        '<td class="num"><strong>' + fmtMoney(r[1]+r[2]) + '</strong></td>' +
+        '<td style="font-size:0.78rem;color:var(--text-muted)">' + r[3] + '</td>';
+      rtb.appendChild(tr);
+    });
+    var totRow = document.createElement('tr');
+    totRow.style.borderTop = '2px solid var(--border-light)';
+    totRow.innerHTML = '<td><strong>收入小計</strong></td>' +
+      '<td class="num"><strong>' + fmtMoney(revTotalA) + '</strong></td>' +
+      '<td class="num"><strong>' + fmtMoney(revTotalB) + '</strong></td>' +
+      '<td class="num"><strong style="color:var(--gold)">' + fmtMoney(revTotalA+revTotalB) + '</strong></td>' +
+      '<td></td>';
+    rtb.appendChild(totRow);
+
+    // ─── 渲染成本端表 ───
+    var ctb = document.getElementById('profitCostTbody');
+    ctb.innerHTML = '';
+    var costSrc = '已過月份 actual 優先，缺月 fallback budget';
+    var costRow = document.createElement('tr');
+    costRow.innerHTML = '<td>營業費用</td>' +
+      '<td class="num">' + fmtMoney(A.cost) + '</td>' +
+      '<td class="num">' + fmtMoney(B.cost) + '</td>' +
+      '<td class="num"><strong style="color:var(--red)">' + fmtMoney(A.cost+B.cost) + '</strong></td>' +
+      '<td style="font-size:0.78rem;color:var(--text-muted)">' + costSrc + '</td>';
+    ctb.appendChild(costRow);
+
+    document.getElementById('profitLoading').style.display = 'none';
+    document.getElementById('profitContent').style.display = '';
+
+  } catch (ex) {
+    console.error('loadProfitData failed', ex);
+    document.getElementById('profitLoading').innerHTML = '<div style="color:var(--red)">載入失敗：' + (ex.message || ex) + '</div>';
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 //  DATA
