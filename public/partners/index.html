@@ -1227,20 +1227,18 @@ function renderKPI() {
     ? '諮詢費 100% + 諮詢成案 + 顯皓承辦 40% + 顯皓自案 10% − 月固定費'
     : '引案費 + 利潤分成 + 其他 tier';
 
-  // 喆律總收入 拆兩條 cash flow path：
-  //   left  = 客戶款直接進喆律帳戶（≈ Excel「合署律師合作收入」）
+  // 喆律總收入 拆兩條 cash flow path（**僅 senior cohort 適用**）：
+  //   left  = 客戶款直接進喆律帳戶（≈ Excel「合署律師合作收入」, 1-3 月差 0.3%）
   //   right = 律師個人帳戶代收後撥喆律（小範圍）
-  //   senior:   right = 自案(喆律) + 法律010轉案(喆律) + 其他-自案(喆律)
-  //   judicial: right = 自案(喆律) + 介紹(喆律) + 追溯(喆律)
-  //   consult:  formula 太複雜（含月固定費），不展開
+  // judicial 司法官：left 屬 Excel「喆律收入」而非合作收入，拆解會誤導 → 不顯示
+  // consult  顯皓：含月固定費等公式太複雜 → 不顯示
   const RIGHT_TIER_BY_COHORT = {
     senior: ['自案(喆律)', '法律010轉案(喆律)', '其他-自案(喆律)'],
-    judicial: ['自案(喆律)', '介紹(喆律)', '追溯(喆律)'],
   };
   let zheluBreakdown = '';
-  if (!isConsult) {
+  if (isSenior) {
     const mono = filteredMonthly(selectedYear);
-    const keys = RIGHT_TIER_BY_COHORT[selectedCohort] || [];
+    const keys = RIGHT_TIER_BY_COHORT.senior;
     let right = 0;
     for (const m of mono) {
       if (!m.tier) continue;
