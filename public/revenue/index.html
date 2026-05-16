@@ -853,7 +853,7 @@
           <div class="kpi-card blue"><div class="kpi-label">諮詢數</div><div class="kpi-value blue" id="drillKpiConsult">-</div><div class="kpi-sub" id="drillKpiConsultSub"></div></div>
           <div class="kpi-card green"><div class="kpi-label">成案數</div><div class="kpi-value green" id="drillKpiSigned">-</div><div class="kpi-sub" id="drillKpiSignedSub"></div></div>
           <div class="kpi-card gold">
-            <div class="kpi-label kpi-label-tip" data-tooltip="真實諮詢效益值 = 每筆 consultation_case 取 max(CRM collected, 合署跨轉金額) 加總 ÷ 諮詢數&#10;= 每接一通諮詢平均帶進來的錢，含轉到合署承辦的案件&#10;&#10;為什麼要補正：跨轉到合署的案，CRM 端 collected 可能尚未填齊（多在當年 YTD），&#10;但 partner_cross_referral 表已從合署 Excel 直接抓到金額。取 max 避免重複計算。&#10;&#10;sub 行的「CRM 口徑」是原本只看 collected 的值（與下方『CRM 付款金額』口徑不同，不要直接相減）。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
+            <div class="kpi-label kpi-label-tip" data-tooltip="真實諮詢效益值 = 每筆 consultation_case 取 max(CRM collected, 合署跨轉金額) 加總 ÷ 諮詢數&#10;= 每接一通諮詢平均帶進來的錢，含轉到合署承辦的案件&#10;&#10;為什麼要補正：跨轉到合署承辦的案，錢直接進合署律師那邊，&#10;CRM 結構上看不到（collected 永遠 = 0）；&#10;但 partner_cross_referral 表已從合署 Excel 直接抓到金額。&#10;取 max 是把這部分補回來，非時間差問題，是兩套帳本的結構性差異。&#10;&#10;sub 行的「CRM 口徑」是原本只看 collected 的值（與下方『CRM 付款金額』口徑不同，不要直接相減）。">諮詢效益值<span class="tip-icon">ⓘ</span></div>
             <div class="kpi-value gold" id="drillKpiEff">-</div>
             <div class="kpi-sub" id="drillKpiEffSub"></div>
           </div>
@@ -2293,7 +2293,7 @@ async function loadDeptDrillPage() {
   var effYoY = yoyHtml(curEffReal, prevEffReal, true);
   var effCrmDiff = curEffReal - curEffCrm;
   var effCrmNote = effCrmDiff > 1
-    ? '<br><span class="text-muted" style="font-size:0.78rem" title="CRM 端 collected 尚未涵蓋合署跨轉的部分（多發生在 YTD 月份），真實值 = max(CRM collected, 合署跨轉金額) per 案">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +平均' + formatMoney(effCrmDiff) + '元</span>'
+    ? '<br><span class="text-muted" style="font-size:0.78rem" title="跨轉到合署承辦的案，錢進合署律師端，CRM 結構上看不到。真實值 = max(CRM collected, 合署跨轉金額) per 案，把合署 Excel 端金額補回來。">CRM 口徑 ' + formatMoney(curEffCrm) + '・補正 +平均' + formatMoney(effCrmDiff) + '元</span>'
     : '<br><span class="text-muted" style="font-size:0.78rem">CRM 口徑 ' + formatMoney(curEffCrm) + '（無補正）</span>';
   document.getElementById('drillKpiEffSub').innerHTML = effYoY + effCrmNote;
 
