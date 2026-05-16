@@ -258,6 +258,8 @@ select option.inactive{color:var(--text-muted);background:#0a0f1c;font-style:ita
         </select>
         <label>期間：</label>
         <select id="teamPeriod" style="min-width:160px"></select>
+        <label>同仁：</label>
+        <select id="teamMember" style="min-width:140px"><option value="all">全部同仁</option></select>
         <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="teamShowInactive"> 含離職</label>
       </div>
       <div id="teamSummary" style="margin-bottom:14px"></div>
@@ -1128,12 +1130,41 @@ function getTeamPeriodKeys(){
   };
 }
 
+function initTeamMemberSelect(){
+  const sel = document.getElementById('teamMember');
+  if(!sel) return;
+  const allMembers = [...new Set(teamData.map(r=>r.team_member))].sort();
+  const { active } = getActiveTeamMembers();
+  const prev = sel.value;
+  let html = '<option value="all">全部同仁</option>';
+  const actives = allMembers.filter(m => active.has(m));
+  const inactives = allMembers.filter(m => !active.has(m));
+  if(actives.length){
+    html += '<optgroup label="在職">';
+    actives.forEach(m => html += `<option value="${m}">${m}</option>`);
+    html += '</optgroup>';
+  }
+  if(inactives.length){
+    html += '<optgroup label="離職">';
+    inactives.forEach(m => html += `<option value="${m}">${m}（休）</option>`);
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
 function getTeamSeriesPerMember(){
   const { granularity, keys } = getTeamPeriodKeys();
   const allMembers = [...new Set(teamData.map(r=>r.team_member))].sort();
   const { active } = getActiveTeamMembers();
   const showInactive = document.getElementById('teamShowInactive').checked;
-  const visible = showInactive ? allMembers : allMembers.filter(m => active.has(m));
+  const selectedMember = document.getElementById('teamMember')?.value || 'all';
+  let visible;
+  if(selectedMember !== 'all' && allMembers.includes(selectedMember)){
+    visible = [selectedMember];
+  } else {
+    visible = showInactive ? allMembers : allMembers.filter(m => active.has(m));
+  }
   const totalActive = allMembers.filter(m=>active.has(m)).length;
   const totalInactive = allMembers.filter(m=>!active.has(m)).length;
   // 為每個 member 算 series values
@@ -1166,11 +1197,11 @@ function getTeamSeriesPerMember(){
       });
     }
   });
-  return { granularity, keys, byMember, active, totalActive, totalInactive, showInactive };
+  return { granularity, keys, byMember, active, totalActive, totalInactive, showInactive, selectedMember };
 }
 
 function renderTeamSummary(seriesData){
-  const { granularity, keys, byMember, active, totalActive, totalInactive, showInactive } = seriesData;
+  const { granularity, keys, byMember, active, totalActive, totalInactive, showInactive, selectedMember } = seriesData;
   const unitLabel = granularity==='year' ? '年' : '月';
   const members = Object.keys(byMember);
   const sumK = (k) => {
@@ -1199,8 +1230,11 @@ function renderTeamSummary(seriesData){
   const firstLabel = keys.length ? (granularity==='year'? keys[0] : `${keys[0][0]}-${String(keys[0][1]).padStart(2,'0')}`) : '-';
   const lastLabel = keys.length ? (granularity==='year'? keys[keys.length-1] : `${keys[keys.length-1][0]}-${String(keys[keys.length-1][1]).padStart(2,'0')}`) : '-';
   const span = keys.length>1 ? `${firstLabel} ~ ${lastLabel}` : firstLabel;
+  const focusLabel = (selectedMember && selectedMember !== 'all')
+    ? `　<span style="color:var(--gold)">已篩選：${selectedMember}${active.has(selectedMember)?'':'（休）'}</span>`
+    : '';
   const html = `
-    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${activeCount+inactiveCount} 位同仁（在職 ${activeCount} / 離職 ${inactiveCount}${!showInactive && inactiveCount>0 ? '，勾上「含離職」顯示' : ''}）　範圍 ${span}（${keys.length} ${unitLabel}）　顯示中：${members.length}</div>
+    <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${activeCount+inactiveCount} 位同仁（在職 ${activeCount} / 離職 ${inactiveCount}${!showInactive && inactiveCount>0 && (!selectedMember || selectedMember==='all') ? '，勾上「含離職」顯示' : ''}）　範圍 ${span}（${keys.length} ${unitLabel}）　顯示中：${members.length}${focusLabel}</div>
     <div class="totals-grid">
       <div class="stat-block"><div class="stat-label">合計件數</div><div class="stat-value">${totRef.toLocaleString()}</div></div>
       <div class="stat-block"><div class="stat-label">出席</div><div class="stat-value">${totAtt.toLocaleString()}</div><div class="stat-sub">出席率 ${(attendRate*100).toFixed(1)}%</div></div>
@@ -1294,6 +1328,7 @@ function renderTeamTable(seriesData){
 
 function renderTeam(){
   initTeamPeriod();
+  initTeamMemberSelect();
   const metric = document.getElementById('teamMetric').value;
   const seriesData = getTeamSeriesPerMember();
   const { granularity, keys, byMember, active } = seriesData;
@@ -1302,8 +1337,12 @@ function renderTeam(){
 
   const labels = keys.map(k => granularity==='year' ? String(k) : `${k[0]}-${String(k[1]).padStart(2,'0')}`);
   const palette = ['#4f8ef7','#c9a84c','#4caf82','#e0954a','#e05c5c','#9c6cff','#e8c97a','#5fb3d4'];
-  const datasets = Object.keys(byMember).map((mem,i)=>{
+  const allMembersSorted = [...new Set(teamData.map(r=>r.team_member))].sort();
+  const colorIdxOf = {};
+  allMembersSorted.forEach((m,i)=>{ colorIdxOf[m] = i; });
+  const datasets = Object.keys(byMember).map(mem=>{
     const isActive = active.has(mem);
+    const i = colorIdxOf[mem] ?? 0;
     return {
       label: mem + (isActive?'':' (休)'),
       data: byMember[mem].map(r => r? r[metric] : null),
@@ -2038,6 +2077,7 @@ document.getElementById('totalPeriod').addEventListener('change', renderTotalSum
 document.getElementById('teamMetric').addEventListener('change', renderTeam);
 document.getElementById('teamGranularity').addEventListener('change', renderTeam);
 document.getElementById('teamPeriod').addEventListener('change', renderTeam);
+document.getElementById('teamMember').addEventListener('change', renderTeam);
 document.getElementById('teamShowInactive').addEventListener('change', renderTeam);
 document.getElementById('drillLawyer').addEventListener('change', renderDrill);
 document.getElementById('drillSubLawyer').addEventListener('change', renderDrill);
