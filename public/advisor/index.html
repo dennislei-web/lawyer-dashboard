@@ -924,6 +924,7 @@ async function init() {
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
     STATE.pending = pn.data || [];
+    recomputePendingDays(STATE.pending);
     STATE.pendingState = {};
     (ps.data || []).forEach(s => { STATE.pendingState[s.client_name] = s; });
     STATE.channelMapping = {};
@@ -1516,6 +1517,109 @@ function formatLastContact(s) {
   return s;
 }
 
+function ymd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// 從備註裡掃出所有日期，回傳最新一筆 Date（或 null）
+// 支援：2026/4/29、2026-04-29、4/29、04-30、4月29日
+// 沒寫年份的當作今年，若推到未來日期則退一年
+function extractLatestDateFromNotes(text) {
+  if (!text) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dates = [];
+  let working = String(text);
+
+  // 1) YYYY/M/D 或 YYYY-M-D 或 YYYY.M.D
+  working = working.replace(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/g, (full, y, mo, da) => {
+    const month = +mo, day = +da;
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const d = new Date(+y, month - 1, day);
+      if (!isNaN(d.getTime())) dates.push(d);
+    }
+    return ' '.repeat(full.length);
+  });
+
+  // 2) M/D 或 MM-DD（無年份）— 用今年，若推到未來則退一年
+  working.replace(/(?<!\d)(\d{1,2})[\/\-](\d{1,2})(?!\d)/g, (full, mo, da) => {
+    const month = +mo, day = +da;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    let d = new Date(today.getFullYear(), month - 1, day);
+    if (d > today) d = new Date(today.getFullYear() - 1, month - 1, day);
+    dates.push(d);
+    return '';
+  });
+
+  // 3) M月D日
+  working.replace(/(\d{1,2})月(\d{1,2})日?/g, (full, mo, da) => {
+    const month = +mo, day = +da;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    let d = new Date(today.getFullYear(), month - 1, day);
+    if (d > today) d = new Date(today.getFullYear() - 1, month - 1, day);
+    dates.push(d);
+    return '';
+  });
+
+  if (!dates.length) return null;
+  return new Date(Math.max.apply(null, dates.map(d => d.getTime())));
+}
+
+function parseLastContactDate(s) {
+  if (!s) return null;
+  if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4}/.test(s)) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  const m = s.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  return null;
+}
+
+// 顯示用的「最近聯繫」：取 last_contact_text 與「備註裡最新日期」的較新者
+function getEffectiveLastContact(p) {
+  const noteDate = extractLatestDateFromNotes(p && p.lawyer_notes);
+  const origText = p && p.last_contact_text;
+  const origDate = parseLastContactDate(origText);
+  if (noteDate && (!origDate || noteDate > origDate)) return ymd(noteDate);
+  return formatLastContact(origText);
+}
+
+function parseYmd(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3]);
+}
+
+// 「真正的最近行動日」：階段日期 + last_contact_text + 備註裡的最新日 取最新一個
+function getEffectiveLastActionDate(p) {
+  const dates = [];
+  ['follow_up_2_at', 'follow_up_1_at', 'proposal_at', 'lawyer_meeting_at',
+   'cm_meeting_at', 'first_contact_at', 'assigned_at'].forEach(k => {
+    const d = parseYmd(p[k]);
+    if (d) dates.push(d);
+  });
+  const lcd = parseLastContactDate(p && p.last_contact_text);
+  if (lcd) dates.push(lcd);
+  const nd = extractLatestDateFromNotes(p && p.lawyer_notes);
+  if (nd) dates.push(nd);
+  if (!dates.length) return null;
+  return new Date(Math.max.apply(null, dates.map(d => d.getTime())));
+}
+
+// 同步完從 DB 拿回的 days_since_last_action 只看階段日期，沒看 last_contact_text / 備註，
+// 這裡用前端推算出來的最新行動日重算，讓排序/紅字/分齡圖都吃同一個基準。
+function recomputePendingDays(arr) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  arr.forEach(p => {
+    const d = getEffectiveLastActionDate(p);
+    if (d) p.days_since_last_action = Math.max(0, Math.floor((today - d) / 86400000));
+  });
+}
+
 function sortPending(arr) {
   const { field, dir } = STATE.pendingSort;
   const factor = dir === 'asc' ? 1 : -1;
@@ -1781,7 +1885,7 @@ function renderPending() {
       <td>${stageBadge}</td>
       <td class="text-right">${p.days_since_assigned != null ? p.days_since_assigned + ' 天' : '—'}</td>
       <td class="text-right ${overdueCls}">${p.days_since_last_action != null ? p.days_since_last_action + ' 天' : '—'}</td>
-      <td class="text-muted" style="font-size:0.78rem;">${formatLastContact(p.last_contact_text)}</td>
+      <td class="text-muted" style="font-size:0.78rem;">${getEffectiveLastContact(p)}</td>
       ${lineCell}
       ${noteCell}
     </tr>`;
@@ -2055,8 +2159,9 @@ function showCaseNotes(clientName) {
   if (p.case_summary && p.case_summary.trim()) {
     sections.push({ label: '案件摘要', text: p.case_summary });
   }
-  if (p.last_contact_text && p.last_contact_text.trim()) {
-    sections.push({ label: '最近聯繫', text: formatLastContact(p.last_contact_text) });
+  const effectiveContact = getEffectiveLastContact(p);
+  if (effectiveContact && effectiveContact !== '—') {
+    sections.push({ label: '最近聯繫', text: effectiveContact });
   }
   if (!sections.length) {
     bodyEl.innerHTML = '<div class="notes-empty-text">（這筆案件目前沒有備註內容）</div>';
