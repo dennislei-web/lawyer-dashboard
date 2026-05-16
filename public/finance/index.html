@@ -602,6 +602,29 @@
           </table>
         </div>
 
+        <!-- 月度獲利趨勢 -->
+        <div class="table-card" style="margin-top:16px">
+          <div class="table-header">
+            <span class="table-title">月度獲利趨勢</span>
+            <span class="text-muted" style="font-size:0.75rem">已過月用實際；未過月兩條線：OKR 目標 vs 按達成率延伸</span>
+          </div>
+          <div style="padding:16px;height:280px"><canvas id="profitMonthlyChart"></canvas></div>
+          <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>月份</th>
+              <th class="num">收入 (OKR)</th>
+              <th class="num">收入 (按達成率)</th>
+              <th class="num">成本</th>
+              <th class="num">獲利 (OKR)</th>
+              <th class="num">獲利 (按達成率)</th>
+              <th>備註</th>
+            </tr></thead>
+            <tbody id="profitMonthlyTbody"></tbody>
+          </table>
+          </div>
+        </div>
+
         <!-- 成本端 -->
         <div class="table-card" style="margin-top:16px">
           <div class="table-header"><span class="table-title">成本端</span></div>
@@ -975,7 +998,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 // ═══════════════════════════════════════════════════════════
 //  PROFIT ESTIMATION  (見「假設與口徑」說明)
 // ═══════════════════════════════════════════════════════════
-var profitState = { year: null, partnersJSON: null };
+var profitState = { year: null, partnersJSON: null, monthlyChart: null };
 
 // Supabase / PostgREST 預設 db-max-rows=1000 全局上限。把整年拆成 12 個月各一 query 並行抓
 async function profitFetchByMonth(year, dateField, buildBaseQuery) {
@@ -1348,6 +1371,115 @@ async function loadProfitData() {
       '<td class="num"><strong style="color:var(--green)">' + fmtMoney(revTotalA+revTotalByrateB) + '</strong></td>' +
       '<td></td>';
     rtb.appendChild(totRow);
+
+    // ─── 月度獲利趨勢 ───
+    // 已過月：兩種情境相同（用實際）
+    // 未過月：
+    //   OKR = 月目標 (KR1 + 法顧 + 法0×0.35 + KR4×seniorLeftRatio)
+    //   RATE = 已過月實際月均
+    var monthlyOKR = [], monthlyRate = [], monthlyCost = [], monthlyRevOKR = [], monthlyRevRate = [];
+    var actualRevMonthAvg = elapsed > 0 ? (A.kr1 + A.advisor + A.fa0 + A.partner_senior) / elapsed : 0;
+    var okrMonthlyRev = KR1_TARGET + KR3_TARGET + KR5_TARGET * 0.35 + kr4Target * seniorLeftRatio;
+    for (var mn=1; mn<=12; mn++) {
+      var bm = byMonth[mn];
+      var costM = (mn <= elapsed)
+        ? (bm.cost_actual > 0 ? bm.cost_actual : bm.cost_budget)
+        : (bm.cost_budget || 0);
+      var revActual = (bm.kr1_paid - bm.kr1_refund) + (bm.adv_paid - bm.adv_refund) + bm.adv_deposit + bm.fa0_revenue * 0.35 + bm.partner_z_left;
+      var revOKR  = (mn <= elapsed) ? revActual : okrMonthlyRev;
+      var revRate = (mn <= elapsed) ? revActual : actualRevMonthAvg;
+      monthlyRevOKR.push(revOKR);
+      monthlyRevRate.push(revRate);
+      monthlyCost.push(costM);
+      monthlyOKR.push(revOKR - costM);
+      monthlyRate.push(revRate - costM);
+    }
+
+    // 渲染表格
+    var mtb = document.getElementById('profitMonthlyTbody');
+    mtb.innerHTML = '';
+    for (var i=0; i<12; i++) {
+      var mLabel = (i+1) + ' 月';
+      var note = (i+1) <= elapsed ? '已結算' : '預估';
+      var pOkr = monthlyOKR[i], pRate = monthlyRate[i];
+      var pOkrColor = pOkr >= 0 ? 'var(--green)' : 'var(--red)';
+      var pRateColor = pRate >= 0 ? 'var(--green)' : 'var(--red)';
+      var rowStyle = (i+1) <= elapsed ? ' style="background:rgba(255,255,255,0.02)"' : '';
+      var tr = document.createElement('tr');
+      tr.setAttribute('style', rowStyle.replace(/^ style="|"$/g, ''));
+      tr.innerHTML = '<td><strong>' + mLabel + '</strong></td>' +
+        '<td class="num">' + fmtMoney(monthlyRevOKR[i]) + '</td>' +
+        '<td class="num">' + fmtMoney(monthlyRevRate[i]) + '</td>' +
+        '<td class="num" style="color:var(--text-muted)">' + fmtMoney(monthlyCost[i]) + '</td>' +
+        '<td class="num"><strong style="color:' + pOkrColor + '">' + fmtMoney(pOkr) + '</strong></td>' +
+        '<td class="num"><strong style="color:' + pRateColor + '">' + fmtMoney(pRate) + '</strong></td>' +
+        '<td style="font-size:0.78rem;color:var(--text-muted)">' + note + '</td>';
+      mtb.appendChild(tr);
+    }
+
+    // 渲染圖表
+    if (typeof Chart !== 'undefined') {
+      var ctx = document.getElementById('profitMonthlyChart');
+      if (ctx) {
+        if (profitState.monthlyChart) { try { profitState.monthlyChart.destroy(); } catch (_) {} }
+        var labels = [];
+        for (var lm=1; lm<=12; lm++) labels.push(lm + '月');
+        var toWan = function(arr) { return arr.map(function(v) { return Math.round(v / 10000); }); };
+        profitState.monthlyChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: '獲利 (OKR 達成)',
+                data: toWan(monthlyOKR),
+                borderColor: 'rgba(245, 196, 99, 1)',
+                backgroundColor: 'rgba(245, 196, 99, 0.12)',
+                tension: 0.3, fill: false,
+              },
+              {
+                label: '獲利 (按目前達成率)',
+                data: toWan(monthlyRate),
+                borderColor: 'rgba(102, 200, 130, 1)',
+                backgroundColor: 'rgba(102, 200, 130, 0.12)',
+                tension: 0.3, fill: false,
+              },
+              {
+                label: '成本',
+                data: toWan(monthlyCost).map(function(v) { return -v; }),
+                borderColor: 'rgba(220, 80, 80, 0.6)',
+                borderDash: [4,4],
+                tension: 0.0, fill: false, pointRadius: 0,
+              }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'top', labels: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#ccc' } },
+              tooltip: {
+                callbacks: {
+                  label: function(c) {
+                    return c.dataset.label + ': $' + c.parsed.y.toLocaleString() + ' 萬';
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                ticks: { color: 'rgba(180,180,180,0.7)', callback: function(v) { return '$' + v + ' 萬'; } },
+                grid: { color: 'rgba(255,255,255,0.06)' }
+              },
+              x: {
+                ticks: { color: 'rgba(180,180,180,0.7)' },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      }
+    }
 
     // ─── 渲染成本端表 ───
     var ctb = document.getElementById('profitCostTbody');
