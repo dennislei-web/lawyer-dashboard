@@ -644,12 +644,20 @@ def _first_numeric_in_range(row, start, end):
 def parse_settlement_section(rows, lawyer, year, month):
     """從 sheet 底部「結算表」抽 A / B / C / 結算金額 / 結餘。
 
+    版型：
+      1. 林昀式：喆律應支付 A / 律師應支付 B / 喆律應匯款 C=A-B
+      2. 李昭萱式：結算金額 (左/右) + 折抵 + 結餘
+      3. 柯雪莉/蕭予馨式（簡化版）：喆律應付 N + 喆律利潤 N（無 A/B/C 顯式標籤）
+         → 取最後一個「喆律應付」+數字作為 A_net；B 由右側 entries 在 main() 補
+
     回傳：
       None  若整張 sheet 找不到任何 settlement 標記
-      dict  {settle_A_raw, settle_A_net, settle_B, settle_C}
+      dict  {settle_A_raw, settle_A_net, settle_B, settle_C, firm_profit}
     """
     A_raw = A_net = B = C = None
+    firm_profit = None
 
+    # Pass 1：顯式版型 (A/B/C 或 結算金額/結餘)
     for i, row in enumerate(rows):
         if not row: continue
         for j, v in enumerate(row):
@@ -658,7 +666,6 @@ def parse_settlement_section(rows, lawyer, year, month):
             if not s: continue
 
             # Format 1 — 「喆律應支付 A」/「{lawyer}律師應支付 B」/「喆律應匯款給...C=A-B」
-            # Row 內可能左右兩段並列：「喆律應支付A」(j=0) + 數字(j=4) + 「林昀律師應支付B」(j=7) + 數字(j=12)
             if SETTLE_A_RE.search(s):
                 v_after = _first_numeric_in_range(row, j + 1, len(row))
                 if v_after is not None and A_raw is None:
@@ -673,10 +680,7 @@ def parse_settlement_section(rows, lawyer, year, month):
                     C = v_after
 
             # Format 2 — 「結算金額」/「結餘」（李昭萱）
-            #   row：「結算金額 | ... | LEFT_VAL | ... | RIGHT_VAL」 — 左右分欄
-            #   row：「結餘 | ... | NET_VAL | ...」 — 只取左欄
             if s == '結算金額':
-                # 左欄：col 1 ~ 6 之間找數字；右欄：col 7 之後找
                 left_val = _first_numeric_in_range(row, j + 1, 8)
                 right_val = _first_numeric_in_range(row, 8, len(row))
                 if left_val is not None and A_raw is None:
@@ -688,16 +692,35 @@ def parse_settlement_section(rows, lawyer, year, month):
                 if left_val is not None and A_net is None:
                     A_net = left_val
 
-    if all(x is None for x in (A_raw, A_net, B, C)):
-        return None
+    # Pass 2：簡化版「喆律應付」/「喆律利潤」(柯雪莉、蕭予馨等)
+    #   只在 Pass 1 沒抓到 A_net 也沒抓到 C 才啟用，避免覆寫顯式結算結果
+    #   取**最後一個**「喆律應付 + 數字」作為 A_net（通常 sheet 底部那個是最終結算）
+    if A_net is None and C is None:
+        for i, row in enumerate(rows):
+            if not row: continue
+            for j, v in enumerate(row):
+                if v is None: continue
+                s = str(v).strip()
+                if not s: continue
+                # 「喆律應付」精確或「喆律應付=...」(formula 字串)
+                # 排除：「喆律應付-其他」(sub-section header)、「喆律應付（費用進入...」(其他 layout)
+                if s == '喆律應付' or s.startswith('喆律應付='):
+                    v_after = _first_numeric_in_range(row, j + 1, len(row))
+                    if v_after is not None:
+                        A_net = v_after  # 後寫覆蓋，取最後一次出現
+                elif s == '喆律利潤' or s.startswith('喆律利潤'):
+                    v_after = _first_numeric_in_range(row, j + 1, len(row))
+                    if v_after is not None:
+                        firm_profit = v_after
 
     # 推導未填欄位：
-    #   若有 A_raw 但無 A_net 且有 B → A_net = A_raw - B
     if A_net is None and A_raw is not None and B is not None:
         A_net = A_raw - B
-    #   若有 A_raw / A_net / B 但無 C → C = A_net
     if C is None and A_net is not None:
         C = A_net
+
+    if all(x is None for x in (A_raw, A_net, B, C, firm_profit)):
+        return None
 
     return {
         'lawyer': lawyer, 'year': year, 'month': month,
@@ -705,6 +728,7 @@ def parse_settlement_section(rows, lawyer, year, month):
         'settle_A_net': A_net,
         'settle_B': B,
         'settle_C': C,
+        'firm_profit': firm_profit,
     }
 
 
@@ -793,6 +817,26 @@ def main():
                 else:
                     sett_rows = list(wb[sett_sheet_name].iter_rows(values_only=True))
                 sett = parse_settlement_section(sett_rows, lawyer, year, month)
+
+                # 推導 B：律師代收後撥喆律的款 = Σ zhelu_amt where side='lawyer_handled'
+                # 用於 結算表沒寫顯式 B 的版型（柯雪莉、蕭予馨）。
+                right_zhelu = sum(
+                    (e.get('zhelu_amt') or 0)
+                    for e in entries
+                    if e.get('side') == 'lawyer_handled'
+                )
+
+                if sett is None and right_zhelu > 0:
+                    # 完全沒結算表標記，但有右側 entries → 至少產 B 值供對帳
+                    sett = {
+                        'lawyer': lawyer, 'year': year, 'month': month,
+                        'settle_A_raw': None, 'settle_A_net': None,
+                        'settle_B': right_zhelu, 'settle_C': None,
+                        'firm_profit': None,
+                    }
+                elif sett is not None and sett.get('settle_B') is None and right_zhelu > 0:
+                    sett['settle_B'] = right_zhelu
+
                 if sett:
                     sett['source_sheet'] = sett_sheet_name
                     settlement_rows.append(sett)
@@ -833,6 +877,7 @@ def main():
         w = csv.DictWriter(fp, fieldnames=[
             'lawyer', 'year', 'month',
             'settle_A_raw', 'settle_A_net', 'settle_B', 'settle_C',
+            'firm_profit',
             'source_sheet',
         ])
         w.writeheader()

@@ -1225,10 +1225,12 @@ function renderKPI() {
     : '諮詢 + 咨詢 + 分成 + 其他';
   const subZhelu = isConsult
     ? '諮詢費 100% + 諮詢成案 + 顯皓承辦 40% + 顯皓自案 10% − 月固定費'
-    : '引案費 + 利潤分成 + 其他 tier';
+    : isSenior
+      ? '引案費 + 利潤分成 + 其他 tier<br><span style="color:var(--text-muted)">≈ 對應 Excel「合署律師合作收入」（含喆律帳戶代收 + 律師代收兩條路）</span>'
+      : '引案費 + 利潤分成 + 其他 tier';
 
-  // 結算表 (cash basis) — 律師當月實際撥喆律的款，對 Excel「合署律師合作收入」
-  // 只 senior cohort 才有（從各律師案件明細 xlsx 底部結算表抓的）
+  // 結算表 (cash basis) — 律師當月實際撥喆律的款，更窄概念（只記律師代收→喆律的部分）
+  // 對 Excel「合署律師合作收入」較窄一段，不是直接對等
   let cashKpi = '';
   if (isSenior) {
     const mono = filteredMonthly(selectedYear);
@@ -1240,9 +1242,9 @@ function renderKPI() {
     }
     if (nB > 0 || nC > 0) {
       cashKpi = `
-        <div class="kpi"><div class="label">律師→喆律 實際撥款</div>
+        <div class="kpi"><div class="label">律師代收→撥喆律</div>
           <div class="value" style="color:var(--orange)">$${fmt(sumB)}</div>
-          <div class="sub">結算表 B 合計 · cash basis<br>${nB} 筆月度 / ${lawyerB.size} 位律師<br>對 Excel「合署律師合作收入」</div></div>`;
+          <div class="sub">結算表 B · cash basis<br>${lawyerB.size}/${LAWYERS.length} 位律師、${nB} 筆月度<br><span style="color:var(--text-muted)">律師個人帳戶代收後撥給喆律的款（小範圍）</span></div></div>`;
     }
   }
 

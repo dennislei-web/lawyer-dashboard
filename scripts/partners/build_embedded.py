@@ -357,6 +357,7 @@ def build_senior_cohort():
         'zhelu_total': 0, 'lawyer_total': 0,
         # 結算表（cash basis） — 律師當月實際撥給喆律 / 喆律撥給律師
         'settle_A_raw': None, 'settle_A_net': None, 'settle_B': None, 'settle_C': None,
+        'settle_firm_profit': None,
         'settle_source': None,
         'tier': defaultdict(float)
     })) for l in LAWYERS}
@@ -424,6 +425,7 @@ def build_senior_cohort():
         m['settle_A_net'] = _opt_num(r.get('settle_A_net'))
         m['settle_B'] = _opt_num(r.get('settle_B'))
         m['settle_C'] = _opt_num(r.get('settle_C'))
+        m['settle_firm_profit'] = _opt_num(r.get('firm_profit'))
         m['settle_source'] = r.get('source_sheet') or None
 
     # source
@@ -505,11 +507,13 @@ def build_senior_cohort():
                     'tier': dict(m['tier']),
                 }
                 # 結算表（cash basis） — 律師當月實際撥喆律的款 B，對應 Excel 合署合作收入
-                if m.get('settle_B') is not None or m.get('settle_A_net') is not None:
+                if (m.get('settle_B') is not None or m.get('settle_A_net') is not None
+                        or m.get('settle_firm_profit') is not None):
                     entry['settle_A_raw'] = m.get('settle_A_raw')
                     entry['settle_A_net'] = m.get('settle_A_net')
                     entry['settle_B'] = m.get('settle_B')
                     entry['settle_C'] = m.get('settle_C')
+                    entry['settle_firm_profit'] = m.get('settle_firm_profit')
                     entry['settle_source'] = m.get('settle_source')
                 monthly_flat.append(entry)
     monthly_flat.sort(key=lambda x: (x['year'], int(x['month'])))
