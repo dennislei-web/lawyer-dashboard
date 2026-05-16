@@ -573,22 +573,29 @@
             <div class="kpi-sub" id="profitBSub"></div>
           </div>
           <div class="kpi-card gold">
-            <div class="kpi-label">全年合計</div>
+            <div class="kpi-label">全年合計（達成 OKR 目標）</div>
             <div class="kpi-value gold" id="profitTotal">-</div>
             <div class="kpi-sub" id="profitTotalSub"></div>
+          </div>
+          <div class="kpi-card green">
+            <div class="kpi-label">全年合計（按目前達成率）</div>
+            <div class="kpi-value green" id="profitTotalByRate">-</div>
+            <div class="kpi-sub" id="profitTotalByRateSub"></div>
           </div>
         </div>
 
         <!-- 收入端拆解 -->
         <div class="table-card" style="margin-top:16px">
-          <div class="table-header"><span class="table-title">收入端拆解</span><span class="text-muted" style="font-size:0.75rem">「預估剩餘」= 月均 × 剩餘月數</span></div>
+          <div class="table-header"><span class="table-title">收入端拆解</span><span class="text-muted" style="font-size:0.75rem">兩種情境：OKR 目標達成 vs 按目前實際月均延伸</span></div>
           <table>
             <thead><tr>
               <th>項目</th>
               <th class="num">已實現</th>
-              <th class="num">月均（剩餘月份用）</th>
-              <th class="num">預估剩餘</th>
-              <th class="num">全年</th>
+              <th class="num">OKR 月目標</th>
+              <th class="num">實際月均</th>
+              <th class="num">達成率</th>
+              <th class="num">全年 (達 OKR)</th>
+              <th class="num">全年 (按達成率)</th>
               <th>口徑說明</th>
             </tr></thead>
             <tbody id="profitRevTbody"></tbody>
@@ -609,6 +616,7 @@
             </tr></thead>
             <tbody id="profitCostTbody"></tbody>
           </table>
+          <div style="padding:8px 16px;font-size:0.75rem;color:var(--text-muted)">成本不受達成率影響，兩種情境的成本相同。</div>
         </div>
 
 
@@ -1268,34 +1276,65 @@ async function loadProfitData() {
     document.getElementById('profitProgressBar').style.width = pct + '%';
     document.getElementById('profitProgressNote').textContent = pct + '% 完成';
 
+    // ─── 「按目前達成率延伸」情境 ───
+    // 邏輯：用 1~elapsed 月實際月均 × remain 推 4-12 月，再扣相同的成本
+    var B_byrate = {
+      kr1:      (A.kr1 / elapsed) * remain,
+      advisor:  (A.advisor / elapsed) * remain,
+      fa0:      (A.fa0 / elapsed) * remain,
+      partner_senior: (A.partner_senior / elapsed) * remain,
+    };
+    var B_byrate_revenue = B_byrate.kr1 + B_byrate.advisor + B_byrate.fa0 + B_byrate.partner_senior;
+    var B_byrate_profit = B_byrate_revenue - B.cost;  // 成本相同
+    var total_byrate = A_profit + B_byrate_profit;
+
     // ─── 渲染 KPI ───
     document.getElementById('profitA').textContent = fmtMoney(A_profit);
     document.getElementById('profitASub').textContent = '1-' + elapsed + ' 月實際';
     document.getElementById('profitB').textContent = fmtMoney(B_profit);
-    document.getElementById('profitBSub').textContent = '剩 ' + remain + ' 個月（' + (elapsed+1) + '-12 月，假設達成 OKR 目標）';
+    document.getElementById('profitBSub').textContent = '剩 ' + remain + ' 個月（假設達成 OKR 目標）';
     document.getElementById('profitTotal').textContent = fmtMoney(total);
-    document.getElementById('profitTotalSub').textContent = year + ' 年預估年度獲利';
+    document.getElementById('profitTotalSub').textContent = '假設 4-12 月達成 OKR 月目標';
+    document.getElementById('profitTotalByRate').textContent = fmtMoney(total_byrate);
+    var diff = total_byrate - total;
+    var diffStr = (diff >= 0 ? '+' : '') + fmtMoney(diff).replace('$','$');
+    document.getElementById('profitTotalByRateSub').innerHTML =
+      '用 1-' + elapsed + ' 月實際月均外推 4-12 月<br>' +
+      '<span style="color:' + (diff >= 0 ? 'var(--green)' : 'var(--red)') + '">vs 目標情境 ' + diffStr + '</span>';
 
     // ─── 渲染收入端表 ───
-    // 月均 = 預估剩餘 ÷ remain（已實現月份用實際，剩餘月份用月目標）
+    // 各項：實際月均 / OKR 月目標 / 達成率 / 全年(達 OKR) / 全年(按達成率)
+    function safeRate(actual, target, n) {
+      if (!target || !n) return 0;
+      return actual / (target * n);
+    }
     var revRows = [
-      ['KR1 喆律所內',     A.kr1,             B.kr1,             KR1_TARGET,                   'KR1 月目標 1,350 萬', '非合署、非法顧客戶 (paid − refund)'],
-      ['法顧現金流',       A.advisor,         B.advisor,         KR3_TARGET,                   'KR3 月目標 158 萬', 'CRM 所內法顧 + 法顧儲值'],
-      ['法 0 (×0.35)',     A.fa0,             B.fa0,             KR5_TARGET * 0.35,            'KR5 月目標 666 萬 × 0.35', '事務所拿毛收 35%'],
-      ['合署 senior left', A.partner_senior,  B.partner_senior,  (remain > 0 ? B.partner_senior / remain : 0), 'KR4 月目標 418 萬 × 歷史比例 ' + (seniorLeftRatio*100).toFixed(1) + '%', '資深 cohort 喆律帳戶代收 ≈ Excel 合作收入'],
+      ['KR1 喆律所內',       A.kr1,            KR1_TARGET,             B.kr1,            B_byrate.kr1,            '非合署、非法顧客戶 (paid − refund)'],
+      ['法顧現金流',         A.advisor,        KR3_TARGET,             B.advisor,        B_byrate.advisor,        'CRM 所內法顧 + 法顧儲值'],
+      ['法 0 (×0.35)',       A.fa0,            KR5_TARGET * 0.35,      B.fa0,            B_byrate.fa0,            '事務所拿毛收 35%'],
+      // senior left 的 "OKR 月目標" 用 KR4 × 歷史比例 換算
+      ['合署 senior left',   A.partner_senior, (KR4_REF_TARGET + KR4_SELF_TARGET) * seniorLeftRatio, B.partner_senior, B_byrate.partner_senior, '資深 cohort 喆律帳戶代收（KR4 案件總額 × 歷史 ' + (seniorLeftRatio*100).toFixed(1) + '% left 比例）'],
     ];
     var rtb = document.getElementById('profitRevTbody');
     rtb.innerHTML = '';
-    var revTotalA = 0, revTotalB = 0;
+    var revTotalA = 0, revTotalB = 0, revTotalByrateB = 0;
     revRows.forEach(function(r) {
-      revTotalA += r[1]; revTotalB += r[2];
+      var label = r[0], a = r[1], target = r[2], b_okr = r[3], b_rate = r[4], note = r[5];
+      revTotalA += a; revTotalB += b_okr; revTotalByrateB += b_rate;
+      var actualAvg = elapsed > 0 ? a / elapsed : 0;
+      var rate = safeRate(a, target, elapsed);
+      var fullOkr = a + b_okr;
+      var fullRate = a + b_rate;
+      var rateColor = rate >= 1 ? 'var(--green)' : (rate >= 0.9 ? 'var(--gold)' : 'var(--red)');
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + r[0] + '</td>' +
-        '<td class="num">' + fmtMoney(r[1]) + '</td>' +
-        '<td class="num" style="font-size:0.85em;color:var(--text-muted)">' + fmtMoney(r[3]) + '<div style="font-size:0.72rem">' + r[4] + '</div></td>' +
-        '<td class="num">' + fmtMoney(r[2]) + '</td>' +
-        '<td class="num"><strong>' + fmtMoney(r[1]+r[2]) + '</strong></td>' +
-        '<td style="font-size:0.78rem;color:var(--text-muted)">' + r[5] + '</td>';
+      tr.innerHTML = '<td>' + label + '</td>' +
+        '<td class="num">' + fmtMoney(a) + '</td>' +
+        '<td class="num" style="color:var(--text-muted)">' + fmtMoney(target) + '</td>' +
+        '<td class="num">' + fmtMoney(actualAvg) + '</td>' +
+        '<td class="num" style="color:' + rateColor + '">' + (rate*100).toFixed(1) + '%</td>' +
+        '<td class="num"><strong style="color:var(--gold)">' + fmtMoney(fullOkr) + '</strong></td>' +
+        '<td class="num"><strong style="color:var(--green)">' + fmtMoney(fullRate) + '</strong></td>' +
+        '<td style="font-size:0.78rem;color:var(--text-muted)">' + note + '</td>';
       rtb.appendChild(tr);
     });
     var totRow = document.createElement('tr');
@@ -1303,8 +1342,10 @@ async function loadProfitData() {
     totRow.innerHTML = '<td><strong>收入小計</strong></td>' +
       '<td class="num"><strong>' + fmtMoney(revTotalA) + '</strong></td>' +
       '<td class="num"></td>' +
-      '<td class="num"><strong>' + fmtMoney(revTotalB) + '</strong></td>' +
+      '<td class="num"></td>' +
+      '<td class="num"></td>' +
       '<td class="num"><strong style="color:var(--gold)">' + fmtMoney(revTotalA+revTotalB) + '</strong></td>' +
+      '<td class="num"><strong style="color:var(--green)">' + fmtMoney(revTotalA+revTotalByrateB) + '</strong></td>' +
       '<td></td>';
     rtb.appendChild(totRow);
 
@@ -1312,13 +1353,14 @@ async function loadProfitData() {
     var ctb = document.getElementById('profitCostTbody');
     ctb.innerHTML = '';
     var costMonthlyAvg = remain > 0 ? B.cost / remain : 0;
+    var actualCostMonthlyAvg = elapsed > 0 ? A.cost / elapsed : 0;
     var costRow = document.createElement('tr');
     costRow.innerHTML = '<td>營業費用</td>' +
       '<td class="num">' + fmtMoney(A.cost) + '</td>' +
-      '<td class="num" style="font-size:0.85em;color:var(--text-muted)">' + fmtMoney(costMonthlyAvg) + '<div style="font-size:0.72rem">finance_data budget 月均</div></td>' +
+      '<td class="num" style="font-size:0.85em;color:var(--text-muted)">' + fmtMoney(costMonthlyAvg) + '<div style="font-size:0.72rem">budget 月均（已過 actual 月均 ' + fmtMoney(actualCostMonthlyAvg) + '）</div></td>' +
       '<td class="num">' + fmtMoney(B.cost) + '</td>' +
       '<td class="num"><strong style="color:var(--red)">' + fmtMoney(A.cost+B.cost) + '</strong></td>' +
-      '<td style="font-size:0.78rem;color:var(--text-muted)">已過月 actual 優先，缺月 fallback budget</td>';
+      '<td style="font-size:0.78rem;color:var(--text-muted)">已過月 actual 優先，缺月 fallback budget；未過月 budget</td>';
     ctb.appendChild(costRow);
 
 
