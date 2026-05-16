@@ -1225,52 +1225,35 @@ function renderKPI() {
     : '諮詢 + 咨詢 + 分成 + 其他';
   const subZhelu = isConsult
     ? '諮詢費 100% + 諮詢成案 + 顯皓承辦 40% + 顯皓自案 10% − 月固定費'
-    : isSenior
-      ? '引案費 + 利潤分成 + 其他 tier<br><span style="color:var(--text-muted)">≈ 對應 Excel「合署律師合作收入」（含喆律帳戶代收 + 律師代收兩條路）</span>'
-      : '引案費 + 利潤分成 + 其他 tier';
+    : '引案費 + 利潤分成 + 其他 tier';
 
-  // 律師代收→撥喆律（cash basis）— 律師個人帳戶代收後撥給喆律的款
-  //   senior:   優先用結算表抓的 settle_B；缺則 fallback 右側 tier 推導
-  //   judicial: 推導自 自案(喆律) + 介紹(喆律) + 追溯(喆律)（律師代收，喆律抽成）
-  //   consult:  推導自 顯皓自案(喆律)
+  // 喆律總收入 拆兩條 cash flow path：
+  //   left  = 客戶款直接進喆律帳戶（≈ Excel「合署律師合作收入」）
+  //   right = 律師個人帳戶代收後撥喆律（小範圍）
+  //   senior:   right = 自案(喆律) + 法律010轉案(喆律) + 其他-自案(喆律)
+  //   judicial: right = 自案(喆律) + 介紹(喆律) + 追溯(喆律)
+  //   consult:  formula 太複雜（含月固定費），不展開
   const RIGHT_TIER_BY_COHORT = {
     senior: ['自案(喆律)', '法律010轉案(喆律)', '其他-自案(喆律)'],
     judicial: ['自案(喆律)', '介紹(喆律)', '追溯(喆律)'],
-    consult: ['顯皓自案(喆律)'],
   };
-  function settleBForRow(m) {
-    // senior 優先用 explicit settle_B（律師結算表抓的）
-    if (isSenior && m.settle_B != null) return +m.settle_B;
-    // 否則從 cohort 對應的右側 tier 加總推導
-    const keys = RIGHT_TIER_BY_COHORT[selectedCohort] || [];
-    if (!m.tier || keys.length === 0) return null;
-    let s = 0, has = false;
-    for (const k of keys) {
-      if (m.tier[k] != null) { s += m.tier[k]; has = true; }
-    }
-    return has ? s : null;
-  }
-
-  let cashKpi = '';
-  {
+  let zheluBreakdown = '';
+  if (!isConsult) {
     const mono = filteredMonthly(selectedYear);
-    let sumB = 0, nB = 0;
-    const lawyerB = new Set();
+    const keys = RIGHT_TIER_BY_COHORT[selectedCohort] || [];
+    let right = 0;
     for (const m of mono) {
-      const b = settleBForRow(m);
-      if (b != null) { sumB += b; nB++; lawyerB.add(m.lawyer); }
+      if (!m.tier) continue;
+      for (const k of keys) {
+        if (m.tier[k] != null) right += m.tier[k];
+      }
     }
-    if (nB > 0 && sumB !== 0) {
-      const sourceLabel = isSenior
-        ? '結算表 B（cash basis）'
-        : isJudicial
-          ? '自案 + 介紹 + 追溯（喆律抽成）'
-          : '顯皓自案（喆律 10%）';
-      cashKpi = `
-        <div class="kpi"><div class="label">律師代收→撥喆律</div>
-          <div class="value" style="color:var(--orange)">$${fmt(sumB)}</div>
-          <div class="sub">${sourceLabel}<br>${lawyerB.size}/${LAWYERS.length} 位律師、${nB} 筆月度<br><span style="color:var(--text-muted)">律師個人帳戶代收後撥喆律（小範圍）</span></div></div>`;
-    }
+    const left = totalZ - right;
+    zheluBreakdown = `
+      <div style="margin-top:8px; padding-top:6px; border-top:1px solid var(--border); font-size:0.85em;">
+        <div>↳ 喆律帳戶代收 <span style="color:var(--gold); font-weight:600;">$${fmt(left)}</span> <span style="color:var(--text-muted);">≈ Excel「合署律師合作收入」</span></div>
+        <div>↳ 律師代收→撥喆律 <span style="color:var(--orange); font-weight:600;">$${fmt(right)}</span> <span style="color:var(--text-muted);">（律師個人帳戶代收後撥喆律）</span></div>
+      </div>`;
   }
 
   const el = document.getElementById('kpi-cards');
@@ -1280,14 +1263,13 @@ function renderKPI() {
       <div class="sub">委任案 + 自案的總額${dSub}</div></div>
     <div class="kpi"><div class="label">喆律總收入</div>
       <div class="value" style="color:var(--gold)">$${fmt(totalZ)}</div>
-      <div class="sub">${subZhelu}</div></div>
+      <div class="sub">${subZhelu}${zheluBreakdown}</div></div>
     <div class="kpi"><div class="label">律師總收入</div>
       <div class="value" style="color:var(--blue)">$${fmt(totalL)}</div>
       <div class="sub">${subLawyer}</div></div>
     <div class="kpi"><div class="label">喆律 / 律師 收入比</div>
       <div class="value">${totalL>0 ? (totalZ/totalL).toFixed(2) : '—'}</div>
-      <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>
-    ${cashKpi}`;
+      <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>`;
 }
 
 function renderConsultBreakdown() {
