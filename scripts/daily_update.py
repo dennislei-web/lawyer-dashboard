@@ -340,6 +340,23 @@ def update_supabase(target_months):
 
     df["諮詢日期"] = pd.to_datetime(df["諮詢日期"], errors="coerce")
     df = df.dropna(subset=["諮詢日期"])
+
+    # 用 case_number 校正跨年 typo（在分月與 groupby 之前），確保 monthly_stats
+    # 與 consultation_cases 兩邊的月份/日期一致
+    if "案件編號" in df.columns:
+        _corrected = df.apply(
+            lambda r: correct_case_date(
+                str(r.get("案件編號", "")).strip(),
+                r["諮詢日期"].strftime("%Y-%m-%d"),
+            ),
+            axis=1,
+        )
+        new_dates = pd.to_datetime(_corrected, errors="coerce")
+        n_fixed = int((new_dates != df["諮詢日期"]).sum())
+        if n_fixed > 0:
+            print(f"  case_number 校正跨年 typo：{n_fixed} 筆")
+        df["諮詢日期"] = new_dates.fillna(df["諮詢日期"])
+
     df["month"] = df["諮詢日期"].dt.strftime("%Y-%m")
 
     # 只處理目標月份
