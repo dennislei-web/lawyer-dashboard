@@ -302,6 +302,7 @@ def build_senior_cohort():
     profit_path = OUT / 'senior_profit_share.csv'
     cases_path = OUT / 'senior_cases.csv'
     totals_path = OUT / 'senior_monthly_totals.csv'
+    settlements_path = OUT / 'senior_settlements.csv'
     if not profit_path.exists():
         return None  # senior data not yet generated
 
@@ -311,6 +312,10 @@ def build_senior_cohort():
         cases = list(csv.DictReader(f))
     with open(totals_path, encoding='utf-8-sig') as f:
         totals = list(csv.DictReader(f))
+    settlements = []
+    if settlements_path.exists():
+        with open(settlements_path, encoding='utf-8-sig') as f:
+            settlements = list(csv.DictReader(f))
 
     LAWYERS = SENIOR_LAWYERS
 
@@ -350,6 +355,9 @@ def build_senior_cohort():
     monthly = {l: defaultdict(lambda: defaultdict(lambda: {
         'commission_A': 0, 'self_A': 0, 'consult_a': 0,
         'zhelu_total': 0, 'lawyer_total': 0,
+        # 結算表（cash basis） — 律師當月實際撥給喆律 / 喆律撥給律師
+        'settle_A_raw': None, 'settle_A_net': None, 'settle_B': None, 'settle_C': None,
+        'settle_source': None,
         'tier': defaultdict(float)
     })) for l in LAWYERS}
 
@@ -384,6 +392,11 @@ def build_senior_cohort():
             # 諮詢律師諮詢成案、由他人承辦：律師抽 5% 獎金、剩餘歸喆律
             m['tier']['成案獎金(喆律)'] += Z
             m['tier']['成案獎金(律師)'] += L
+        elif tier == '顧問收入':
+            # 顧問收入：firm 100% 服務費收入，律師抽勞務報酬另計
+            # 不計入 commission_A / self_A（不是案件業績）
+            m['tier']['顧問收入(喆律)'] += Z
+            m['tier']['顧問收入(律師)'] += L
         else:  # 其他 / 其他-自案
             if tier == '其他-自案':
                 m['self_A'] += case_amount
@@ -397,6 +410,21 @@ def build_senior_cohort():
         if lawyer not in LAWYERS: continue
         monthly[lawyer][year][month]['zhelu_total'] = num(r['zhelu_total'])
         monthly[lawyer][year][month]['lawyer_total'] = num(r['lawyer_total'])
+
+    # settlement totals — cash basis（律師當月實際撥給喆律 = B，對 Excel 合署合作收入）
+    def _opt_num(v):
+        if v is None or v == '': return None
+        try: return float(v)
+        except: return None
+    for r in settlements:
+        lawyer, year, month = r['lawyer'], r['year'], r['month']
+        if lawyer not in LAWYERS: continue
+        m = monthly[lawyer][year][month]
+        m['settle_A_raw'] = _opt_num(r.get('settle_A_raw'))
+        m['settle_A_net'] = _opt_num(r.get('settle_A_net'))
+        m['settle_B'] = _opt_num(r.get('settle_B'))
+        m['settle_C'] = _opt_num(r.get('settle_C'))
+        m['settle_source'] = r.get('source_sheet') or None
 
     # source
     source_by_lawyer = defaultdict(lambda: defaultdict(lambda: {'count': 0, 'amount': 0}))
@@ -466,7 +494,7 @@ def build_senior_cohort():
     for lawyer in LAWYERS:
         for year, months in monthly[lawyer].items():
             for month, m in months.items():
-                monthly_flat.append({
+                entry = {
                     'lawyer': lawyer, 'year': year, 'month': month,
                     'commission_A': m['commission_A'],
                     'self_A': m['self_A'],
@@ -475,7 +503,15 @@ def build_senior_cohort():
                     'zhelu_total': m['zhelu_total'],
                     'lawyer_total': m['lawyer_total'],
                     'tier': dict(m['tier']),
-                })
+                }
+                # 結算表（cash basis） — 律師當月實際撥喆律的款 B，對應 Excel 合署合作收入
+                if m.get('settle_B') is not None or m.get('settle_A_net') is not None:
+                    entry['settle_A_raw'] = m.get('settle_A_raw')
+                    entry['settle_A_net'] = m.get('settle_A_net')
+                    entry['settle_B'] = m.get('settle_B')
+                    entry['settle_C'] = m.get('settle_C')
+                    entry['settle_source'] = m.get('settle_source')
+                monthly_flat.append(entry)
     monthly_flat.sort(key=lambda x: (x['year'], int(x['month'])))
 
     source_flat = {l: dict(srcs) for l, srcs in source_by_lawyer.items()}

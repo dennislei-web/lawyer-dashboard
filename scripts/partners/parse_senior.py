@@ -54,15 +54,28 @@ def find_input_files():
     return sorted(results, key=lambda x: (x[2], x[1]))
 
 # ---------- sheet 分類 ----------
-# YYMM 後面允許接任何非數字後綴（容錯「11501收入」「11501分潤」等命名）
+# YYMM 後面允許接任何非數字後綴（容錯「11501收入」「11501分潤」「11503-修正」等命名）
 YYMM_RE = re.compile(r'^(\d{3})(\d{2})(?!\d)')
 MONTH_ONLY_RE = re.compile(r'^(\d{1,2})月')
+
+REVISED_MARKERS = ('修正', '更正', '訂正')
+
+
+def is_revised_sheet(sn: str) -> bool:
+    """Return True if sheet name contains 修正/更正/訂正 etc.
+
+    Used to dedup same (year, month) — `XXXXX-修正` is the corrected version
+    of `XXXXX`. We keep `XXXXX` for case+profit parsing (main has full layout)
+    but prefer 修正 for settlement totals (corrections live there).
+    """
+    return any(m in sn for m in REVISED_MARKERS)
+
 
 def classify_sheet(sn, fallback_roc_year=None):
     sn = sn.strip()
     if sn == '綜合': return (None, None, 'summary')
     if sn == '總匯': return (None, None, 'summary')
-    # 版型 A：YYMM 例如 11501
+    # 版型 A：YYMM 例如 11501（含「11503-修正」「11501收入」等後綴）
     m = YYMM_RE.match(sn)
     if m:
         y, mo = int(m.group(1)), int(m.group(2))
@@ -87,7 +100,12 @@ def to_num(x, default=0.0):
     try: return float(str(x).replace(',', ''))
     except: return default
 
-SECTION_END_KEYWORDS = ('合計', '結算金額', '折抵', '結餘', '備註', '喆律利潤')
+SECTION_END_KEYWORDS = (
+    '合計', '結算金額', '折抵', '結餘', '備註', '喆律利潤',
+    # 結算表的標頭：「喆律支付給XX律師的勞務報酬」、「XX律師支付給喆律的報酬」
+    # — 出現後不該再被當成分潤資料解析（11502 等 sheet 把同樣 6 筆顧問列兩次）
+    '勞務報酬', '應匯款', '應支付A', '應支付B', '應支付 A', '應支付 B',
+)
 
 def is_row_blank(row, end=12):
     return all(v is None or (isinstance(v, str) and not v.strip()) for v in row[:end])
@@ -151,11 +169,55 @@ def find_case_header(rows):
             return (i, idx)
     return None
 
+def _detect_case_amount_shift(rows, header_idx, amt_col):
+    """Header 標記的「金額」欄位可能與 data 行錯位（如李昭萱：header col 4=金額，但 data
+    col 3=主管、col 4=付款方式、col 5=才是金額）。掃前幾筆 data row 偵測 shift。
+    """
+    if amt_col is None: return 0
+    correct = 0
+    shift_votes = {1: 0, 2: 0, 3: 0}
+    sampled = 0
+    for r_idx in range(header_idx + 1, min(header_idx + 12, len(rows))):
+        row = rows[r_idx]
+        if not row or all(v is None for v in row): continue
+        # 客戶端為空的 row 跳過（小計 / 空白）
+        client_v = row[1] if len(row) > 1 else None
+        if client_v is None or str(client_v).strip() in ('', '小計', '合計', '結算金額', '結餘', '折抵'):
+            continue
+        # 命中 numeric at amt_col → 標準排版
+        if amt_col < len(row) and is_num(row[amt_col]):
+            correct += 1
+        else:
+            for s in (1, 2, 3):
+                if amt_col + s < len(row) and is_num(row[amt_col + s]):
+                    shift_votes[s] += 1
+                    break
+        sampled += 1
+        if sampled >= 6: break
+    if correct >= max(2, sampled // 2):
+        return 0
+    # 取得票數最多的 shift
+    best_shift = 0
+    best_votes = 0
+    for s, v in shift_votes.items():
+        if v > best_votes:
+            best_votes = v
+            best_shift = s
+    return best_shift if best_votes >= 2 else 0
+
+
 def parse_case_section(rows, lawyer, year, month):
     out = []
     found = find_case_header(rows)
     if not found: return out
     header_idx, idx = found
+    # 修正 header 與 data 欄位錯位（李昭萱 xlsx 等）
+    amt_col = idx.get('amount')
+    shift = _detect_case_amount_shift(rows, header_idx, amt_col) if amt_col is not None else 0
+    if shift:
+        for k in list(idx.keys()):
+            if idx[k] >= amt_col:
+                idx[k] = idx[k] + shift
     for i in range(header_idx + 1, len(rows)):
         row = rows[i]
         if is_row_blank(row): break
@@ -350,6 +412,32 @@ def parse_profit_section(rows, lawyer, year, month):
                 'zhelu_amt': zhelu_amt,
                 'note': None,
             })
+        # 顧問收入：amt cell 是字串（「4.5小時」「咨詢」等），但 c4(林律)+c5(喆律) 是數字。
+        # 例：林昀 11503 R32 「瑞星管理 | 4.5小時 | 1.0 | 9000 | 9000」 — 喆律取 9000。
+        # 出現在「喆律應付-其他」區段，比例固定 1.0。
+        elif (in_other_section
+                and not (in_other_section and other_layout == 'consult')
+                and client_str and client_str not in ('姓名', '客戶名稱', '小計', '合計', '喆律應付')
+                and isinstance(amt_cell, str) and amt_cell.strip()
+                and is_num(ratio_cell) and abs(float(ratio_cell) - 1.0) < 0.01):
+            c2 = row[2] if len(row) > 2 else None
+            c3 = row[3] if len(row) > 3 else None
+            c4 = row[4] if len(row) > 4 else None
+            c5 = row[5] if len(row) > 5 else None
+            if is_num(c5):
+                zhelu_amt = to_num(c5)
+                lawyer_amt = to_num(c4) if is_num(c4) else 0.0
+                entries.append({
+                    'lawyer': lawyer, 'year': year, 'month': month,
+                    'side': 'zhelu_handled',
+                    'tier': '顧問收入',
+                    'client': client_str,
+                    'case_amount': zhelu_amt,  # 從喆律觀點：顧問收入金額 = 喆律端 amount
+                    'ratio': 1.0,
+                    'lawyer_amt': lawyer_amt,
+                    'zhelu_amt': zhelu_amt,
+                    'note': str(amt_cell)[:40],  # 保留小時數/類型字串
+                })
 
         # right-table data (律師自案，付給喆律)
         if right_col is not None:
@@ -529,6 +617,97 @@ def parse_alt_profit_sections(rows, lawyer, year, month):
             i += 1
     return out
 
+# ---------- 結算表（cash basis settlement totals）----------
+# 兩種版型：
+#   林昀 / 多數 senior：
+#     「喆律應支付A」 {A}             — firm owes lawyer (gross)
+#     「林昀律師應支付B」 {B}          — lawyer owes firm  ← 對應 Excel「合署律師合作收入」
+#     「喆律應匯款給林昀律師C=A-B」 {C} — 淨額
+#   李昭萱（兩欄式）：
+#     「結算金額」(left col, right col)
+#     「折抵」 / 「結餘」
+#       → left 結算金額 = A_raw, right 結算金額 = B
+#       → 結餘 left = A_net = A_raw - B（折抵相同金額）
+
+SETTLE_A_RE = re.compile(r'喆律應支付\s*A')
+SETTLE_B_RE = re.compile(r'律師應支付\s*B')
+SETTLE_C_RE = re.compile(r'喆律應匯款.*[CＣ]')
+
+
+def _first_numeric_in_range(row, start, end):
+    for k in range(start, min(end, len(row))):
+        if is_num(row[k]):
+            return to_num(row[k])
+    return None
+
+
+def parse_settlement_section(rows, lawyer, year, month):
+    """從 sheet 底部「結算表」抽 A / B / C / 結算金額 / 結餘。
+
+    回傳：
+      None  若整張 sheet 找不到任何 settlement 標記
+      dict  {settle_A_raw, settle_A_net, settle_B, settle_C}
+    """
+    A_raw = A_net = B = C = None
+
+    for i, row in enumerate(rows):
+        if not row: continue
+        for j, v in enumerate(row):
+            if v is None: continue
+            s = str(v).strip()
+            if not s: continue
+
+            # Format 1 — 「喆律應支付 A」/「{lawyer}律師應支付 B」/「喆律應匯款給...C=A-B」
+            # Row 內可能左右兩段並列：「喆律應支付A」(j=0) + 數字(j=4) + 「林昀律師應支付B」(j=7) + 數字(j=12)
+            if SETTLE_A_RE.search(s):
+                v_after = _first_numeric_in_range(row, j + 1, len(row))
+                if v_after is not None and A_raw is None:
+                    A_raw = v_after
+            if SETTLE_B_RE.search(s):
+                v_after = _first_numeric_in_range(row, j + 1, len(row))
+                if v_after is not None and B is None:
+                    B = v_after
+            if SETTLE_C_RE.search(s):
+                v_after = _first_numeric_in_range(row, j + 1, len(row))
+                if v_after is not None and C is None:
+                    C = v_after
+
+            # Format 2 — 「結算金額」/「結餘」（李昭萱）
+            #   row：「結算金額 | ... | LEFT_VAL | ... | RIGHT_VAL」 — 左右分欄
+            #   row：「結餘 | ... | NET_VAL | ...」 — 只取左欄
+            if s == '結算金額':
+                # 左欄：col 1 ~ 6 之間找數字；右欄：col 7 之後找
+                left_val = _first_numeric_in_range(row, j + 1, 8)
+                right_val = _first_numeric_in_range(row, 8, len(row))
+                if left_val is not None and A_raw is None:
+                    A_raw = left_val
+                if right_val is not None and B is None:
+                    B = right_val
+            elif s == '結餘':
+                left_val = _first_numeric_in_range(row, j + 1, 8)
+                if left_val is not None and A_net is None:
+                    A_net = left_val
+
+    if all(x is None for x in (A_raw, A_net, B, C)):
+        return None
+
+    # 推導未填欄位：
+    #   若有 A_raw 但無 A_net 且有 B → A_net = A_raw - B
+    if A_net is None and A_raw is not None and B is not None:
+        A_net = A_raw - B
+    #   若有 A_raw / A_net / B 但無 C → C = A_net
+    if C is None and A_net is not None:
+        C = A_net
+
+    return {
+        'lawyer': lawyer, 'year': year, 'month': month,
+        'settle_A_raw': A_raw,
+        'settle_A_net': A_net,
+        'settle_B': B,
+        'settle_C': C,
+    }
+
+
 # ---------- main ----------
 def main():
     files = find_input_files()
@@ -540,6 +719,7 @@ def main():
     profit_rows = []
     cases_rows = []
     month_totals = []
+    settlement_rows = []
     issues = []
 
     for fpath, roc_year, lawyer in files:
@@ -549,34 +729,53 @@ def main():
             issues.append(f'CANNOT OPEN {fpath.name}: {e}')
             continue
 
-        for sheet_name in wb.sheetnames:
-            year, month, note = classify_sheet(sheet_name, fallback_roc_year=roc_year)
-            if year is None:
+        # Group sheets by (year, month) → {'main': name, 'revised': name}
+        # 「XXXXX-修正」與「XXXXX」是同月份兩版（修正版只更新結算表，案件/分潤 在 main）
+        sheet_groups = {}
+        for sn in wb.sheetnames:
+            y, mo, note = classify_sheet(sn, fallback_roc_year=roc_year)
+            if y is None:
                 if note and 'summary' not in note:
-                    issues.append(f'{fpath.name} :: {sheet_name}  -  skipped ({note})')
+                    issues.append(f'{fpath.name} :: {sn}  -  skipped ({note})')
                 continue
-            if year != roc_year:
-                # tolerate — some files bundle 114 and 115 data
-                pass
+            entry = sheet_groups.setdefault((y, mo), {'main': None, 'revised': None})
+            if is_revised_sheet(sn):
+                if entry['revised'] is not None:
+                    issues.append(f'{fpath.name} :: {sn}  -  dup revised (also {entry["revised"]}); keep first')
+                else:
+                    entry['revised'] = sn
+            else:
+                if entry['main'] is not None:
+                    issues.append(f'{fpath.name} :: {sn}  -  dup main (also {entry["main"]}); keep first')
+                else:
+                    entry['main'] = sn
 
-            ws = wb[sheet_name]
-            rows = list(ws.iter_rows(values_only=True))
+        for (year, month), pair in sheet_groups.items():
+            main_sn = pair['main']
+            revised_sn = pair['revised']
+            # case + profit 用 main（main 才有完整分潤主表）；若沒有 main → 用 revised
+            cp_sheet_name = main_sn or revised_sn
+            # settlement 優先用 revised（修正版才是律師事後校正過的數字）
+            sett_sheet_name = revised_sn or main_sn
+            if cp_sheet_name is None:
+                continue
+
+            cp_rows = list(wb[cp_sheet_name].iter_rows(values_only=True))
 
             # cases
             try:
-                cases = parse_case_section(rows, lawyer, year, month)
+                cases = parse_case_section(cp_rows, lawyer, year, month)
                 cases_rows.extend(cases)
             except Exception as e:
-                issues.append(f'{fpath.name} :: {sheet_name}  case-parse failed: {e}')
+                issues.append(f'{fpath.name} :: {cp_sheet_name}  case-parse failed: {e}')
 
             # profit
             try:
-                entries = parse_profit_section(rows, lawyer, year, month)
+                entries = parse_profit_section(cp_rows, lawyer, year, month)
                 if not entries:
                     # fallback：11504-style「勞務 + 案件報酬分配」版型
-                    entries = parse_alt_profit_sections(rows, lawyer, year, month)
+                    entries = parse_alt_profit_sections(cp_rows, lawyer, year, month)
                 profit_rows.extend(entries)
-                # monthly total from entries
                 z = sum(e['zhelu_amt'] for e in entries)
                 l = sum(e['lawyer_amt'] for e in entries)
                 if entries:
@@ -585,7 +784,20 @@ def main():
                         'zhelu_total': z, 'lawyer_total': l,
                     })
             except Exception as e:
-                issues.append(f'{fpath.name} :: {sheet_name}  profit-parse failed: {e}')
+                issues.append(f'{fpath.name} :: {cp_sheet_name}  profit-parse failed: {e}')
+
+            # settlement totals (cash basis) — 從 settlement sheet 抓 A/B/C
+            try:
+                if sett_sheet_name == cp_sheet_name:
+                    sett_rows = cp_rows
+                else:
+                    sett_rows = list(wb[sett_sheet_name].iter_rows(values_only=True))
+                sett = parse_settlement_section(sett_rows, lawyer, year, month)
+                if sett:
+                    sett['source_sheet'] = sett_sheet_name
+                    settlement_rows.append(sett)
+            except Exception as e:
+                issues.append(f'{fpath.name} :: {sett_sheet_name}  settlement-parse failed: {e}')
 
         wb.close()
 
@@ -616,6 +828,16 @@ def main():
         w.writeheader()
         for r in month_totals: w.writerow(r)
 
+    # senior_settlements.csv — cash basis 結算表 totals
+    with open(OUTPUT_DIR / 'senior_settlements.csv', 'w', encoding='utf-8-sig', newline='') as fp:
+        w = csv.DictWriter(fp, fieldnames=[
+            'lawyer', 'year', 'month',
+            'settle_A_raw', 'settle_A_net', 'settle_B', 'settle_C',
+            'source_sheet',
+        ])
+        w.writeheader()
+        for r in settlement_rows: w.writerow(r)
+
     # issues
     with open(OUTPUT_DIR / '_senior_parse_issues.txt', 'w', encoding='utf-8') as fp:
         fp.write('\n'.join(issues) if issues else 'no issues')
@@ -623,6 +845,7 @@ def main():
     print(f'\nwrote {len(profit_rows)} profit entries')
     print(f'wrote {len(cases_rows)} case rows')
     print(f'wrote {len(month_totals)} monthly totals')
+    print(f'wrote {len(settlement_rows)} settlement rows')
     print(f'issues: {len(issues)}')
     print(f'\noutput -> {OUTPUT_DIR}')
 

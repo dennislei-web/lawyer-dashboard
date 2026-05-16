@@ -1212,6 +1212,7 @@ function renderKPI() {
   const lawyerCount = LAWYERS.length;
   const isJudicial = selectedCohort === 'judicial';
   const isConsult = selectedCohort === 'consult';
+  const isSenior = selectedCohort === 'senior';
   const dSub = isJudicial && totalD > 0
     ? `<br><span style="color:var(--orange)">內扣處理費 D $${fmt(totalD)}（人事等共擔成本）</span>`
     : '';
@@ -1226,6 +1227,25 @@ function renderKPI() {
     ? '諮詢費 100% + 諮詢成案 + 顯皓承辦 40% + 顯皓自案 10% − 月固定費'
     : '引案費 + 利潤分成 + 其他 tier';
 
+  // 結算表 (cash basis) — 律師當月實際撥喆律的款，對 Excel「合署律師合作收入」
+  // 只 senior cohort 才有（從各律師案件明細 xlsx 底部結算表抓的）
+  let cashKpi = '';
+  if (isSenior) {
+    const mono = filteredMonthly(selectedYear);
+    let sumB = 0, sumC = 0, nB = 0, nC = 0;
+    const lawyerB = new Set();
+    for (const m of mono) {
+      if (m.settle_B != null) { sumB += +m.settle_B; nB++; lawyerB.add(m.lawyer); }
+      if (m.settle_C != null) { sumC += +m.settle_C; nC++; }
+    }
+    if (nB > 0 || nC > 0) {
+      cashKpi = `
+        <div class="kpi"><div class="label">律師→喆律 實際撥款</div>
+          <div class="value" style="color:var(--orange)">$${fmt(sumB)}</div>
+          <div class="sub">結算表 B 合計 · cash basis<br>${nB} 筆月度 / ${lawyerB.size} 位律師<br>對 Excel「合署律師合作收入」</div></div>`;
+    }
+  }
+
   const el = document.getElementById('kpi-cards');
   el.innerHTML = `
     <div class="kpi"><div class="label">總案件金額（${lawyerCount} 位律師合計）</div>
@@ -1239,7 +1259,8 @@ function renderKPI() {
       <div class="sub">${subLawyer}</div></div>
     <div class="kpi"><div class="label">喆律 / 律師 收入比</div>
       <div class="value">${totalL>0 ? (totalZ/totalL).toFixed(2) : '—'}</div>
-      <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>`;
+      <div class="sub">= 1.0 代表平分；&lt; 1 律師拿大頭；&gt; 1 喆律吃較多</div></div>
+    ${cashKpi}`;
 }
 
 function renderConsultBreakdown() {
