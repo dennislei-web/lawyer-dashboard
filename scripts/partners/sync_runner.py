@@ -99,11 +99,25 @@ def diff_embedded(current: dict, fresh: dict) -> dict:
                 report[cohort].append((*key, "NEW"))
                 continue
             c, f = cur[key], fre[key]
+            changed = False
             for fld in ["commission_A", "self_A", "consult_a", "proc_D",
-                        "zhelu_total", "lawyer_total"]:
-                if abs(float(c.get(fld) or 0) - float(f.get(fld) or 0)) > 1.0:
-                    report[cohort].append((*key, f"{fld} {c.get(fld)}→{f.get(fld)}"))
-                    break
+                        "zhelu_total", "lawyer_total",
+                        # 結算表 cash basis 欄位 — 新加入需偵測
+                        "settle_A_raw", "settle_A_net", "settle_B", "settle_C",
+                        "settle_firm_profit"]:
+                cv = c.get(fld); fv = f.get(fld)
+                # None vs number 也算變動
+                if cv is None and fv is not None:
+                    report[cohort].append((*key, f"{fld} —→{fv}"))
+                    changed = True; break
+                if cv is not None and fv is None:
+                    report[cohort].append((*key, f"{fld} {cv}→—"))
+                    changed = True; break
+                if cv is not None and fv is not None:
+                    if abs(float(cv) - float(fv)) > 1.0:
+                        report[cohort].append((*key, f"{fld} {cv}→{fv}"))
+                        changed = True; break
+            if changed: continue
     return report
 
 
