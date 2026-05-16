@@ -946,33 +946,17 @@ async function init() {
     STATE.advisorClientSet = advisorClients;
 
     // 撈 revenue_records 中屬法顧客戶的部分（用於 reconcile）
-    // 改成 date-range 廣抓再 client-side filter，因為 PostgREST .in() 精確比對抓不到
-    // 「新名（前名稱：舊名）」alias 變體（例：昕曜媄生醫、綠點能享、郡研）
+    // alias normalize + 比對都在 server side（get_advisor_reconcile_records RPC），
+    // 跟 normalizeClientName() 規則對齊；單次 round-trip 取代序列分頁。
     STATE.advisorInRecords = [];
     if (advisorClients.size > 0) {
       const nowYear = new Date().getFullYear();
-      const yearStart = (nowYear - 2) + '-01-01';
-      const yearEnd   = nowYear + '-12-31';
-      const PAGE = 1000;
-      let offset = 0;
-      while (true) {
-        const r = await sb.from('revenue_records')
-          .select('record_date,amount,transaction_type,client_name,group_name')
-          .eq('is_void', false)
-          .gte('record_date', yearStart)
-          .lte('record_date', yearEnd)
-          .not('client_name', 'is', null)
-          .range(offset, offset + PAGE - 1);
-        if (!r.data || r.data.length === 0) break;
-        STATE.advisorInRecords.push(...r.data);
-        if (r.data.length < PAGE) break;
-        offset += PAGE;
-      }
-      // client-side filter — normalize 雙向比對抓到 alias 變體
-      STATE.advisorInRecords = STATE.advisorInRecords.filter(r => {
-        if (!r.client_name) return false;
-        return advisorClients.has(r.client_name) || advisorClients.has(normalizeClientName(r.client_name));
+      const { data: recData, error: recErr } = await sb.rpc('get_advisor_reconcile_records', {
+        p_start_date: (nowYear - 2) + '-01-01',
+        p_end_date:   nowYear + '-12-31'
       });
+      if (recErr) throw recErr;
+      STATE.advisorInRecords = recData || [];
     }
 
     setupYearFilter();
