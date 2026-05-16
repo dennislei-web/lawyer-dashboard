@@ -431,7 +431,6 @@ var state = {
   focusMonth: null,           // null = YTD; 1-12 = 該月
   data: {
     targets: [],
-    manualActuals: [],
     milestones: [],
     consultStats: [],         // monthly consult_count + signed metrics aggregated
     revenueByMonth: [],       // {month, paid, refund, advisor_signed}
@@ -443,7 +442,6 @@ var state = {
   },
   editing: false,
   pendingTargets: {},   // key = year|kr|month → value
-  pendingActuals: {},   // key = year|kr|month → value
   pendingMilestones: {}, // key = id → {title, target_date, status, owner, sort_order}
   pendingOwners: {}     // key = kr_code → owner string
 };
@@ -522,7 +520,6 @@ async function loadAll() {
   try {
     var results = await Promise.all([
       sb.from('okr_targets').select('*').eq('year', year),
-      sb.from('okr_manual_actuals').select('*').eq('year', year),
       sb.from('okr_milestones').select('*').eq('year', year).order('sort_order'),
       fetchAll(function() { return sb.from('monthly_stats').select('month,consult_count,collected,revenue,signed_count').gte('month', ymStart).lte('month', ymEnd).order('month'); }),
       fetchByMonth(year, 'case_date', function() { return sb.from('consultation_cases').select('case_date,is_signed,revenue'); }),
@@ -537,21 +534,20 @@ async function loadAll() {
 
     var d = state.data;
     d.targets       = results[0].data || [];
-    d.manualActuals = results[1].data || [];
-    d.milestones    = results[2].data || [];
-    var monthlyStats = results[3] || [];
-    var consultCases = results[4] || [];
-    var revenueRecords = results[5] || [];
-    var advisorCases = results[6] || [];
-    var financeData = (results[7] && results[7].data) || [];
-    var advisorTransactions = results[9] || [];
-    var fact010Team = (results[10] && results[10].data) || [];
+    d.milestones    = results[1].data || [];
+    var monthlyStats = results[2] || [];
+    var consultCases = results[3] || [];
+    var revenueRecords = results[4] || [];
+    var advisorCases = results[5] || [];
+    var financeData = (results[6] && results[6].data) || [];
+    var advisorTransactions = results[8] || [];
+    var fact010Team = (results[9] && results[9].data) || [];
     aggregateConsult(monthlyStats, consultCases);
     aggregateRevenue(revenueRecords, advisorCases, advisorTransactions);
     aggregateAdvisor(advisorCases);
     aggregateAdvisorCash(revenueRecords, advisorTransactions, advisorCases);
     aggregateFinance(financeData);
-    aggregatePartners(results[8]);
+    aggregatePartners(results[7]);
     // KR5 來源：fact_010_monthly_team（按月加總所有同仁）
     d.kr5ByMonth = {};
     fact010Team.forEach(function(r) {
@@ -565,7 +561,7 @@ async function loadAll() {
     });
 
     // log any errors
-    [results[0], results[1], results[2], results[7]].forEach(function(r, i) {
+    [results[0], results[1], results[6]].forEach(function(r, i) {
       if (r && r.error) console.warn('OKR load error #' + i, r.error);
     });
     // 月份分佈（debug 用）
@@ -787,41 +783,27 @@ function getTargetMeta(krCode) {
   var found = state.data.targets.find(function(t) { return t.kr_code === krCode; });
   return found ? { unit: found.unit || '', owner: found.owner || '' } : { unit:'', owner:'' };
 }
-function getManualActual(krCode, month) {
-  var key = state.year + '|' + krCode + '|' + month;
-  if (state.pendingActuals[key] !== undefined) return state.pendingActuals[key];
-  var found = state.data.manualActuals.find(function(a) {
-    return a.kr_code === krCode && a.month === month;
-  });
-  return found ? Number(found.actual_value) : null;
-}
-// KR5 改抓 fact_010_monthly_team（從法律010 dashboard 同源），fallback to manual
+// KR5 抓 fact_010_monthly_team（從法律010 dashboard 同源）
 function getKr5Actual(krCode, month) {
   var k = state.data.kr5ByMonth && state.data.kr5ByMonth[month];
-  if (k) {
-    switch (krCode) {
-      case 'kr5_revenue':
-        if (k.revenue > 0) return k.revenue / 10000;
-        break;
-      case 'kr5_referrals':
-        if (k.referrals > 0) return k.referrals;
-        break;
-      case 'kr5_avg_referral':
-        if (k.referrals > 0 && k.revenue > 0) return k.revenue / k.referrals / 10000;
-        break;
-      case 'kr5_avg_signed':
-        if (k.signed > 0 && k.revenue > 0) return k.revenue / k.signed / 10000;
-        break;
-    }
+  if (!k) return null;
+  switch (krCode) {
+    case 'kr5_revenue':
+      return k.revenue > 0 ? k.revenue / 10000 : null;
+    case 'kr5_referrals':
+      return k.referrals > 0 ? k.referrals : null;
+    case 'kr5_avg_referral':
+      return (k.referrals > 0 && k.revenue > 0) ? k.revenue / k.referrals / 10000 : null;
+    case 'kr5_avg_signed':
+      return (k.signed > 0 && k.revenue > 0) ? k.revenue / k.signed / 10000 : null;
   }
-  return getManualActual(krCode, month);  // fallback
+  return null;
 }
 function sumYTD(krCode) {
-  // 只加總已過完整月份
+  // 只加總已過完整月份；只給 KR5 用
   var done = monthsElapsed();
-  var isKr5 = krCode.indexOf('kr5_') === 0;
   // 均單類 YTD 用 SUM(revenue)/SUM(分母) 重算（不能簡單加總）
-  if (isKr5 && (krCode === 'kr5_avg_referral' || krCode === 'kr5_avg_signed')) {
+  if (krCode === 'kr5_avg_referral' || krCode === 'kr5_avg_signed') {
     var totRev = 0, totDenom = 0;
     for (var m=1; m<=done; m++) {
       var k = state.data.kr5ByMonth && state.data.kr5ByMonth[m];
@@ -834,7 +816,7 @@ function sumYTD(krCode) {
   }
   var s = 0; var has = false;
   for (var m2=1; m2<=done; m2++) {
-    var v = isKr5 ? getKr5Actual(krCode, m2) : getManualActual(krCode, m2);
+    var v = getKr5Actual(krCode, m2);
     if (v != null) { s += Number(v); has = true; }
   }
   return has ? s : null;
@@ -1574,11 +1556,7 @@ var KR5_METRICS = [
 function renderKR5() {
   var card = makeCard({ title:'KR5｜法0（法律010）', ownerKrCode:'kr5_revenue', full:true });
   var hint = document.createElement('div'); hint.className='info-hint';
-  if (state.editing) {
-    hint.innerHTML = '✏️ <b>編輯模式：</b>下方矩陣請對照 Google Sheet「轉案業績查詢」逐月填寫。輸入完按右上角「💾 儲存全部」。';
-  } else {
-    hint.innerHTML = '<b>資料來源：</b>法律010 dashboard 的 <code>fact_010_monthly_team</code>（每天 09:00 自動同步 sheet）。下方四欄即時加總當月所有 010 同仁業績；若該月 fact 表沒資料，fallback 到手填 <code>okr_manual_actuals</code>。';
-  }
+  hint.innerHTML = '<b>資料來源：</b>法律010 dashboard 的 <code>fact_010_monthly_team</code>（每天 09:00 自動同步 sheet）。下方四欄即時加總當月所有 010 同仁業績。';
   card.appendChild(hint);
 
   var fm = state.focusMonth;
@@ -1603,10 +1581,8 @@ function renderKR5() {
   });
   card.appendChild(row);
 
-  // 編輯模式：4 列 × 12 月矩陣 / YTD 模式：3 個迷你趨勢圖 / 月份模式：不額外顯示
-  if (state.editing) {
-    card.appendChild(buildKR5Matrix());
-  } else if (fm == null) {
+  // YTD 模式：4 個迷你趨勢圖 / 月份模式：不額外顯示
+  if (fm == null) {
     card.appendChild(buildKR5MiniCharts());
   }
   return card;
@@ -1668,49 +1644,6 @@ function buildKR5MiniCharts() {
       });
     }, 0);
   });
-  return wrap;
-}
-
-function buildKR5Matrix() {
-  // 整合矩陣：4 列指標 × 13 欄（指標名 + 12 月），用 grid 直接堆出來
-  var wrap = document.createElement('div'); wrap.style.marginTop = '12px';
-  var title = document.createElement('div'); title.className='small-note'; title.style.fontWeight='600'; title.style.marginBottom='4px';
-  title.textContent = '🗒️ 月度實績矩陣（從 Google Sheet 轉案業績查詢逐月填入）';
-  wrap.appendChild(title);
-
-  var matrix = document.createElement('div');
-  matrix.style.cssText = 'display:grid; grid-template-columns:90px repeat(12, 1fr); gap:3px; font-size:0.78rem;';
-
-  // 標頭列：「指標」+ 1月..12月
-  var hLabel = document.createElement('div'); hLabel.style.cssText='font-size:0.7rem;color:var(--text-muted);padding:4px 2px;'; hLabel.textContent = '指標 ＼ 月';
-  matrix.appendChild(hLabel);
-  for (var m=1; m<=12; m++) {
-    var h = document.createElement('div'); h.style.cssText='font-size:0.7rem;text-align:center;color:var(--text-muted);padding:2px 0;';
-    h.textContent = m+'月';
-    matrix.appendChild(h);
-  }
-  // 4 列
-  KR5_METRICS.forEach(function(spec) {
-    var rowLabel = document.createElement('div'); rowLabel.style.cssText='font-size:0.78rem;color:var(--text);padding:6px 2px;';
-    rowLabel.innerHTML = '<b>' + spec.label + '</b><br><span style="font-size:0.7rem;color:var(--text-muted);">(' + spec.unit + ')</span>';
-    matrix.appendChild(rowLabel);
-    for (var mn=1; mn<=12; mn++) {
-      var inp = document.createElement('input'); inp.type='number'; inp.step='any';
-      inp.style.cssText='width:100%; padding:4px; font-size:0.78rem; background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:4px; text-align:right;';
-      var existing = getManualActual(spec.code, mn);
-      if (existing != null) inp.value = existing;
-      (function(code, monthN, el) {
-        el.addEventListener('input', function() {
-          var key = state.year + '|' + code + '|' + monthN;
-          state.pendingActuals[key] = el.value === '' ? null : Number(el.value);
-          updatePendingBadge();
-        });
-        el.addEventListener('focus', function() { el.select(); });
-      })(spec.code, mn, inp);
-      matrix.appendChild(inp);
-    }
-  });
-  wrap.appendChild(matrix);
   return wrap;
 }
 
@@ -1860,11 +1793,11 @@ function toggleEdit() {
   var bar = document.getElementById('editBar');
   var btn = document.getElementById('editToggleBtn');
   if (state.editing) { bar.style.display = 'flex'; btn.textContent = '✕ 退出編輯'; }
-  else { bar.style.display = 'none'; btn.textContent = '✏️ 編輯目標 / 里程碑'; state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {}; updatePendingBadge(); }
+  else { bar.style.display = 'none'; btn.textContent = '✏️ 編輯目標 / 里程碑'; state.pendingTargets = {}; state.pendingMilestones = {}; state.pendingOwners = {}; updatePendingBadge(); }
   render();
 }
 function cancelEdits() {
-  state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {};
+  state.pendingTargets = {}; state.pendingMilestones = {}; state.pendingOwners = {};
   state.editing = false;
   document.getElementById('editBar').style.display = 'none';
   document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
@@ -1873,7 +1806,6 @@ function cancelEdits() {
 }
 function updatePendingBadge() {
   var n = Object.keys(state.pendingTargets).length
-        + Object.keys(state.pendingActuals).length
         + Object.keys(state.pendingMilestones).length
         + Object.keys(state.pendingOwners).length;
   document.getElementById('pendingBadge').textContent = '未儲存：' + n;
@@ -1893,18 +1825,7 @@ async function saveAllEdits() {
       var rt = await sb.from('okr_targets').upsert(targetUpserts, { onConflict:'year,kr_code,month' });
       if (rt.error) throw rt.error;
     }
-    // 2. manual actuals
-    var actUpserts = [];
-    Object.keys(state.pendingActuals).forEach(function(k) {
-      var parts = k.split('|'); var year = Number(parts[0]); var kr = parts[1]; var month = Number(parts[2]);
-      var v = state.pendingActuals[k];
-      actUpserts.push({ year:year, kr_code:kr, month:month, actual_value:v, updated_by: currentLawyer ? currentLawyer.id : null });
-    });
-    if (actUpserts.length) {
-      var ra = await sb.from('okr_manual_actuals').upsert(actUpserts, { onConflict:'year,kr_code,month' });
-      if (ra.error) throw ra.error;
-    }
-    // 3. milestones
+    // 2. milestones
     var msUpdates = Object.keys(state.pendingMilestones);
     for (var i=0; i<msUpdates.length; i++) {
       var id = msUpdates[i]; var p = state.pendingMilestones[id];
@@ -1914,7 +1835,7 @@ async function saveAllEdits() {
       }).eq('id', id);
       if (rm.error) throw rm.error;
     }
-    // 4. owners — 對該 kr_code 全年所有 row 都更新負責人
+    // 3. owners — 對該 kr_code 全年所有 row 都更新負責人
     var ownerUpdates = Object.keys(state.pendingOwners);
     for (var j=0; j<ownerUpdates.length; j++) {
       var kr = ownerUpdates[j];
@@ -1925,7 +1846,7 @@ async function saveAllEdits() {
       }).eq('year', state.year).eq('kr_code', kr);
       if (ru.error) throw ru.error;
     }
-    state.pendingTargets = {}; state.pendingActuals = {}; state.pendingMilestones = {}; state.pendingOwners = {};
+    state.pendingTargets = {}; state.pendingMilestones = {}; state.pendingOwners = {};
     state.editing = false;
     document.getElementById('editBar').style.display = 'none';
     document.getElementById('editToggleBtn').textContent = '✏️ 編輯目標 / 里程碑';
