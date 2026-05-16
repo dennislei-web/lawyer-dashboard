@@ -799,29 +799,6 @@ def main():
                 if not entries:
                     # fallback：11504-style「勞務 + 案件報酬分配」版型
                     entries = parse_alt_profit_sections(cp_rows, lawyer, year, month)
-                # Intra-sheet dedup：同 sheet 內若有 (client, case_amount, ratio, tier, side)
-                # 完全相同的兩列，視為律師手誤重複輸入，只留第一筆。
-                # 例：柯雪莉 11502 sheet「劉禮建等人 成案獎金 20000 0.05 1000」連續輸入兩次。
-                # 不跨 sheet 去重 — 跨月同金額同客戶可能是合法分期/續委。
-                seen_keys = set()
-                deduped = []
-                for e in entries:
-                    k = (
-                        e['client'],
-                        round(float(e['case_amount'] or 0), 2),
-                        round(float(e.get('ratio') or 0), 4),
-                        e['tier'],
-                        e['side'],
-                    )
-                    if k in seen_keys:
-                        issues.append(
-                            f'{fpath.name} :: {cp_sheet_name}  duplicate row dropped: '
-                            f"{e['client']} {e['tier']} amt={e['case_amount']} ratio={e['ratio']}"
-                        )
-                        continue
-                    seen_keys.add(k)
-                    deduped.append(e)
-                entries = deduped
                 profit_rows.extend(entries)
                 z = sum(e['zhelu_amt'] for e in entries)
                 l = sum(e['lawyer_amt'] for e in entries)
