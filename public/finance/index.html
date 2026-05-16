@@ -602,10 +602,10 @@
             <strong style="color:var(--text)">假設與口徑：</strong><br>
             <strong>1. 已過月份偵測</strong>：依 finance_data 最後一個 actual 月份。<br>
             <strong>2. 收入端</strong>：已過月用實際資料；未過月用 OKR 月目標。<br>
-            <strong>3. 合署口徑</strong>：senior cohort「喆律帳戶代收」(left) + judicial cohort「喆律分得淨額」(zhelu_total − 自案)。consult cohort 公式太複雜暫不計入。<br>
-            <strong>4. 法 0 分潤</strong>：事務所拿毛收的 35%。<br>
-            <strong>5. 成本</strong>：已過月用 actual（缺月 fallback budget）；未過月用 budget。<br>
-            <strong>6. 已知偏差</strong>：senior left 對 Excel 合署合作收入差 ≈0.3%；judicial 部分 Excel 沒明確獨立科目，理論上事務所實得（不重複算入 KR1，因 group_name=合署 已排除）。
+            <strong>3. 合署口徑</strong>：只算 senior cohort「喆律帳戶代收」(left = zhelu_total − 自案 − 法律010轉案 − 其他-自案)，對 Excel「合署律師合作收入」差 ≈0.3%。<br>
+            <strong>4. 司法官 / 顯皓 cohort 不另計</strong>：Excel 會計帳沒有獨立科目，但事務所實際有分得（1-3 月 ~212 萬）。會計帳未列入則此處也不列入，以對齊 Excel 視角。<br>
+            <strong>5. 法 0 分潤</strong>：事務所拿毛收的 35%。<br>
+            <strong>6. 成本</strong>：已過月用 actual（缺月 fallback budget）；未過月用 budget。對齊 Excel 1-3 月支出總計差 ≈0.15%。
           </div>
         </div>
 
@@ -1210,39 +1210,36 @@ async function loadProfitData() {
     var KR4_SELF_TARGET = tval('kr4_partner_self_revenue') * 10000;
 
     // 已實現 (1 ~ elapsed)
-    var A = { kr1:0, advisor:0, fa0:0, partner_senior:0, partner_judicial:0, cost:0 };
+    var A = { kr1:0, advisor:0, fa0:0, partner_senior:0, cost:0 };
     for (var k=1; k<=elapsed; k++) {
       var b2 = byMonth[k];
       A.kr1      += (b2.kr1_paid - b2.kr1_refund);
       A.advisor  += (b2.adv_paid - b2.adv_refund) + b2.adv_deposit;
       A.fa0      += b2.fa0_revenue * 0.35;
       A.partner_senior   += b2.partner_z_left;
-      A.partner_judicial += b2.partner_z_judicial;
       // cost: actual 優先，缺月 fallback budget
       A.cost += (b2.cost_actual > 0 ? b2.cost_actual : b2.cost_budget);
     }
-    var A_revenue = A.kr1 + A.advisor + A.fa0 + A.partner_senior + A.partner_judicial;
+    var A_revenue = A.kr1 + A.advisor + A.fa0 + A.partner_senior;
     var A_profit = A_revenue - A.cost;
 
     // 預估剩餘 (elapsed+1 ~ 12)
     var remain = 12 - elapsed;
-    var B = { kr1:0, advisor:0, fa0:0, partner_senior:0, partner_judicial:0, cost:0 };
+    var B = { kr1:0, advisor:0, fa0:0, partner_senior:0, cost:0 };
     // 合署歷史比例 (用 hist)
     var hist = p.hist || {};
     var histTotalA = (hist.commission_A || 0) + (hist.self_A || 0);
-    // ratio：歷史 left ÷ 案件總額 → 把 KR4 目標 (案件總額) 轉成 left
+    // ratio：歷史 senior left ÷ 案件總額 → 把 KR4 目標 (案件總額) 轉成 left
     var seniorLeftRatio = histTotalA > 0 ? (hist.senior_left / histTotalA) : 0;
-    var judicialLeftRatio = histTotalA > 0 ? (hist.judicial_left / histTotalA) : 0;
     var kr4Target = (KR4_REF_TARGET + KR4_SELF_TARGET);
     for (var k2=elapsed+1; k2<=12; k2++) {
       B.kr1     += KR1_TARGET;
       B.advisor += KR3_TARGET;
       B.fa0     += KR5_TARGET * 0.35;
       B.partner_senior   += kr4Target * seniorLeftRatio;
-      B.partner_judicial += kr4Target * judicialLeftRatio;
       B.cost += (byMonth[k2].cost_budget > 0 ? byMonth[k2].cost_budget : 0);
     }
-    var B_revenue = B.kr1 + B.advisor + B.fa0 + B.partner_senior + B.partner_judicial;
+    var B_revenue = B.kr1 + B.advisor + B.fa0 + B.partner_senior;
     var B_profit = B_revenue - B.cost;
 
     var total = A_profit + B_profit;
@@ -1261,7 +1258,6 @@ async function loadProfitData() {
       ['法顧現金流',       A.advisor,         B.advisor,         'CRM 所內法顧 + 法顧儲值'],
       ['法 0 (×0.35)',     A.fa0,             B.fa0,             '事務所拿毛收 35%'],
       ['合署 senior left', A.partner_senior,  B.partner_senior,  '資深 cohort 喆律帳戶代收 ≈ Excel 合作收入'],
-      ['合署 judicial left', A.partner_judicial, B.partner_judicial, '司法官 cohort zhelu_total − 自案(喆律)，KR1 已排除無重複'],
     ];
     var rtb = document.getElementById('profitRevTbody');
     rtb.innerHTML = '';
