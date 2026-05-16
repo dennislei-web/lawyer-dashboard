@@ -286,8 +286,22 @@ def main() -> int:
         commit_msg = "sync(partners): refresh embedded-data\n\n" + "\n".join(msg_lines)
         subprocess.run(["git", "add", str(PARTNERS_HTML)], cwd=REPO_ROOT, check=True)
         subprocess.run(["git", "commit", "-m", commit_msg], cwd=REPO_ROOT, check=True)
+        # 同步期間若 origin 被其他 commit 推進（例如別的 fix push 到 main），
+        # 直接 push 會 non-fast-forward 失敗。先 pull --rebase 把我們的 commit
+        # 移到最新 main 之上。sync 只動 partners/index.html，rebase 通常無衝突。
+        subprocess.run(["git", "fetch", "origin", "main"], cwd=REPO_ROOT, check=True)
+        try:
+            subprocess.run(
+                ["git", "rebase", "origin/main"],
+                cwd=REPO_ROOT, check=True,
+            )
+        except subprocess.CalledProcessError:
+            # 衝突 → abort，讓 push 失敗暴露問題
+            subprocess.run(["git", "rebase", "--abort"], cwd=REPO_ROOT, check=False)
+            print("  ✗ rebase failed — origin/main has conflicting changes on partners/index.html")
+            raise
         subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=REPO_ROOT, check=True)
-        print("  ✓ pushed to main")
+        print("  ✓ pushed to main (rebased on origin/main)")
 
     if not args.workdir:
         shutil.rmtree(workdir, ignore_errors=True)
