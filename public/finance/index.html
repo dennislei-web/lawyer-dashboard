@@ -643,6 +643,23 @@
         </div>
 
 
+        <!-- 資料完整度 -->
+        <div class="table-card" style="margin-top:16px">
+          <div class="table-header">
+            <span class="table-title">📡 資料完整度</span>
+            <span class="text-muted" style="font-size:0.75rem">每月新資料進來後預估會自動修正</span>
+          </div>
+          <table>
+            <thead><tr>
+              <th>資料源</th>
+              <th>最新涵蓋</th>
+              <th class="num">狀態</th>
+              <th>影響</th>
+            </tr></thead>
+            <tbody id="profitFreshness"></tbody>
+          </table>
+        </div>
+
         <!-- 假設與口徑 -->
         <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
           <div style="padding:12px 16px;font-size:0.78rem;color:var(--text-muted);line-height:1.7">
@@ -1371,6 +1388,98 @@ async function loadProfitData() {
       '<td class="num"><strong style="color:var(--green)">' + fmtMoney(revTotalA+revTotalByrateB) + '</strong></td>' +
       '<td></td>';
     rtb.appendChild(totRow);
+
+    // ─── 資料完整度 ───
+    var today = new Date();
+    var curMonth = (today.getFullYear() === west) ? (today.getMonth() + 1) : 12;
+    // 預期 elapsed = 上個完整月份
+    var expectedElapsed = Math.max(curMonth - 1, 0);
+
+    // finance_data actual / budget 覆蓋
+    var actualMonths = [], budgetMonths = [];
+    for (var fm=1; fm<=12; fm++) {
+      if (byMonth[fm].cost_actual > 0) actualMonths.push(fm);
+      if (byMonth[fm].cost_budget > 0) budgetMonths.push(fm);
+    }
+    var financeMaxActual = actualMonths.length > 0 ? Math.max.apply(null, actualMonths) : 0;
+    var financeMaxBudget = budgetMonths.length > 0 ? Math.max.apply(null, budgetMonths) : 0;
+    var financeStatus = financeMaxActual >= expectedElapsed ? '✓ 完整' : (financeMaxActual >= expectedElapsed - 1 ? '⚠ 落後 1 月' : '❌ 落後 ' + (expectedElapsed - financeMaxActual) + ' 月');
+    var financeStatusColor = financeMaxActual >= expectedElapsed ? 'var(--green)' : (financeMaxActual >= expectedElapsed - 1 ? 'var(--gold)' : 'var(--red)');
+
+    // revenue_records 最新 date
+    var revMaxDate = '';
+    revRecs.forEach(function(r) {
+      if (r.record_date && r.record_date > revMaxDate) revMaxDate = r.record_date;
+    });
+    var revMaxMonth = revMaxDate ? parseInt(revMaxDate.slice(5,7), 10) : 0;
+    var revStatus = revMaxMonth >= expectedElapsed ? '✓ 完整' : '⚠ 同步落後';
+    var revStatusColor = revMaxMonth >= expectedElapsed ? 'var(--green)' : 'var(--gold)';
+
+    // fact_010_monthly_team 最新月份
+    var fa0Months = fa0Rows.map(function(r) { return Number(r.month); }).filter(function(x) { return x; });
+    var fa0Max = fa0Months.length > 0 ? Math.max.apply(null, fa0Months) : 0;
+    var fa0Status = fa0Max >= expectedElapsed ? '✓ 完整' : '⚠ 同步落後';
+    var fa0StatusColor = fa0Max >= expectedElapsed ? 'var(--green)' : 'var(--gold)';
+
+    // advisor_transactions 最新 date
+    var advMaxDate = '';
+    advisorTx.forEach(function(t) {
+      if (t.record_date && t.record_date > advMaxDate) advMaxDate = t.record_date;
+    });
+    var advMaxMonth = advMaxDate ? parseInt(advMaxDate.slice(5,7), 10) : 0;
+    var advStatus = advMaxMonth >= expectedElapsed ? '✓ 完整' : '⚠ 同步落後';
+    var advStatusColor = advMaxMonth >= expectedElapsed ? 'var(--green)' : 'var(--gold)';
+
+    // partners JSON 最新月份
+    var partnersMax = 0, partnersLawyersCount = 0;
+    if (pjson && pjson.cohorts) {
+      ['judicial','senior','consult'].forEach(function(ck) {
+        var c = pjson.cohorts[ck] || {};
+        (c.monthly || []).forEach(function(rec) {
+          if (String(rec.year) === String(year) && Number(rec.month) > partnersMax) {
+            partnersMax = Number(rec.month);
+          }
+        });
+        partnersLawyersCount += (c.lawyers || []).length;
+      });
+    }
+    var partnersStatus = partnersMax >= expectedElapsed ? '✓ 完整' : '⚠ 律師端尚未回報';
+    var partnersStatusColor = partnersMax >= expectedElapsed ? 'var(--green)' : 'var(--gold)';
+
+    // advisor_cases 客戶數
+    var advisorCasesCount = advisorCases.length;
+    var advisorCasesStatus = advisorCasesCount > 0 ? '✓ ' + advisorCasesCount + ' 客戶' : '❌ 0 客戶';
+    var advisorCasesColor = advisorCasesCount > 0 ? 'var(--green)' : 'var(--red)';
+
+    var freshRows = [
+      ['finance_data (actual)', financeMaxActual ? (financeMaxActual + ' 月') : '無', financeStatus, financeStatusColor,
+        '影響 elapsed 偵測 + 成本實際。預期到 ' + expectedElapsed + ' 月'],
+      ['finance_data (budget)', financeMaxBudget ? ('1-' + financeMaxBudget + ' 月') : '無',
+        financeMaxBudget === 12 ? '✓ 全年' : '⚠ 部分', financeMaxBudget === 12 ? 'var(--green)' : 'var(--gold)',
+        '未過月份成本估算用'],
+      ['revenue_records', revMaxDate || '無', revStatus, revStatusColor,
+        'KR1 + 法顧 (record 部分) 來源；每日同步'],
+      ['fact_010_monthly_team', fa0Max ? (fa0Max + ' 月') : '無', fa0Status, fa0StatusColor,
+        '法 0 來源；每日同步'],
+      ['advisor_transactions', advMaxDate || '無', advStatus, advStatusColor,
+        '法顧儲值來源；每日同步'],
+      ['advisor_cases (sheet)', '客戶集合', advisorCasesStatus, advisorCasesColor,
+        '定義「法顧客戶」範圍；業務手動 sheet 維護'],
+      ['partners JSON (合署律師回報)',
+        partnersMax ? (year + ' 年到 ' + partnersMax + ' 月') : '無',
+        partnersStatus, partnersStatusColor,
+        '合署 senior left 來源；律師手動回報後 sync'],
+    ];
+    var ftb = document.getElementById('profitFreshness');
+    ftb.innerHTML = '';
+    freshRows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><strong>' + r[0] + '</strong></td>' +
+        '<td>' + r[1] + '</td>' +
+        '<td class="num" style="color:' + r[3] + ';font-weight:600">' + r[2] + '</td>' +
+        '<td style="font-size:0.78rem;color:var(--text-muted)">' + r[4] + '</td>';
+      ftb.appendChild(tr);
+    });
 
     // ─── 月度獲利趨勢 ───
     // 已過月：兩種情境相同（用實際）
