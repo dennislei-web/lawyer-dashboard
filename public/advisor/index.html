@@ -1610,11 +1610,14 @@ function getEffectiveLastActionDate(p) {
   return new Date(Math.max.apply(null, dates.map(d => d.getTime())));
 }
 
-// 同步完從 DB 拿回的 days_since_last_action 只看階段日期，沒看 last_contact_text / 備註，
-// 這裡用前端推算出來的最新行動日重算，讓排序/紅字/分齡圖都吃同一個基準。
+// 同步完從 DB 拿回的 days_since_assigned / days_since_last_action 是 Apps Script
+// 在同步當下算的，每天 02:00 才更新一次，所以離上次同步越久就越 stale。
+// 這裡用「今天」即時重算，讓兩個欄位 baseline 對齊、排序/紅字/分齡圖也跟著對。
 function recomputePendingDays(arr) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   arr.forEach(p => {
+    const a = parseYmd(p.assigned_at);
+    if (a) p.days_since_assigned = Math.max(0, Math.floor((today - a) / 86400000));
     const d = getEffectiveLastActionDate(p);
     if (d) p.days_since_last_action = Math.max(0, Math.floor((today - d) / 86400000));
   });
