@@ -1511,8 +1511,10 @@ function filterPending() {
       if (!ind.includes(STATE.pendingSales)) return false;
     }
     if (cutoff) {
-      const a = parseYmd(p.assigned_at);
-      if (!a || a < cutoff) return false;
+      // 用「有效最近日期」判定：階段日期 / last_contact_text / 備註內日期 / assigned_at
+      // 取最新者，只要任一個在 cutoff 之後就保留；不會因為交辦日很舊就被擋掉。
+      const latest = getEffectiveLastActionDate(p);
+      if (!latest || latest < cutoff) return false;
     }
     return true;
   });
