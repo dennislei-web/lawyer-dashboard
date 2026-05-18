@@ -562,15 +562,8 @@
 
       <!-- ===== TAB: 跟進中案件 ===== -->
       <div class="page" id="page-pending">
-        <div class="filter-bar" id="pendingFilterBar">
-          <span class="filter-label">時間範圍：</span>
-          <div class="year-btns">
-            <button class="year-btn" data-range="1" onclick="setPendingRange(1)">近1個月</button>
-            <button class="year-btn" data-range="3" onclick="setPendingRange(3)">近3個月</button>
-            <button class="year-btn" data-range="6" onclick="setPendingRange(6)">近6個月</button>
-            <button class="year-btn active" data-range="all" onclick="setPendingRange('all')">全部歷史資料</button>
-          </div>
-          <span class="filter-label" style="margin-left:12px;">業務：</span>
+        <div class="filter-bar">
+          <span class="filter-label">業務：</span>
           <select class="filter-select" id="pendingSalesFilter">
             <option value="">全部</option>
           </select>
@@ -614,6 +607,16 @@
         </div>
 
         <div class="table-card">
+          <div class="filter-bar" id="pendingFilterBar" style="margin-bottom:12px;">
+            <span class="filter-label">時間範圍：</span>
+            <div class="year-btns">
+              <button class="year-btn" data-range="1" onclick="setPendingRange(1)">近1個月</button>
+              <button class="year-btn" data-range="3" onclick="setPendingRange(3)">近3個月</button>
+              <button class="year-btn" data-range="6" onclick="setPendingRange(6)">近6個月</button>
+              <button class="year-btn active" data-range="all" onclick="setPendingRange('all')">全部歷史資料</button>
+            </div>
+            <span class="text-muted" style="font-size:0.75rem;margin-left:8px;">（只影響下方表格）</span>
+          </div>
           <div class="table-header">
             <div class="table-title">案件清單（依「距上次行動」遞減排序）</div>
             <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">紅 = 逾期 &gt; 14 天</span></div>
@@ -1493,15 +1496,21 @@ function isPendingActive(p) {
   return !p.is_paid && !p.is_signed && p.current_stage !== '已成案';
 }
 
-function filterPending() {
-  // 時間範圍 cutoff（assigned_at 距今幾個月內）
+// filter 跟進中案件
+//   opts.range:
+//     true  / 省略 → 套用 STATE.pendingRange 時間範圍（給表格用）
+//     false        → 只套 isPendingActive + 業務 filter，不切時間（給圖表用）
+function filterPending(opts) {
+  const applyRange = !opts || opts.range !== false;
   let cutoff = null;
-  const r = STATE.pendingRange;
-  if (r !== 'all' && r != null) {
-    const months = Number(r) || 0;
-    if (months > 0) {
-      cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
-      cutoff.setMonth(cutoff.getMonth() - months);
+  if (applyRange) {
+    const r = STATE.pendingRange;
+    if (r !== 'all' && r != null) {
+      const months = Number(r) || 0;
+      if (months > 0) {
+        cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
+        cutoff.setMonth(cutoff.getMonth() - months);
+      }
     }
   }
   return STATE.pending.filter(p => {
@@ -1813,7 +1822,8 @@ async function onFollowupChange(clientName, status, sel) {
 
 function renderPending() {
   const all = STATE.pending.filter(isPendingActive);  // 跟進中（不論 filter）
-  const fp  = filterPending();  // 適用 filter 的清單
+  const fp  = filterPending({ range: false });        // 圖表：只套業務 filter，不切時間
+  const fpTable = filterPending();                    // 表格：業務 filter + 時間範圍
 
   // KPI（用 all 算大盤；filter 只影響圖表跟下方表格）
   document.getElementById('kpiPendingTotal').textContent = fmtNum(all.length);
@@ -1890,8 +1900,8 @@ function renderPending() {
     datasets: [{ label: '案件數', data: bucketCounts, backgroundColor: ['#4caf82','#c9a84c','#e0954a','#e05c5c','#b22222'], borderWidth: 0 }]
   });
 
-  // 表格 — 依使用者選的排序欄位
-  const sorted = sortPending(fp);
+  // 表格 — 依使用者選的排序欄位（用 fpTable，含時間範圍 filter）
+  const sorted = sortPending(fpTable);
   // 表頭箭頭
   document.querySelectorAll('#pendingHeader .sortable').forEach(th => {
     const arrow = th.querySelector('.sort-arrow');
