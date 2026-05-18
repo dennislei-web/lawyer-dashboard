@@ -695,6 +695,36 @@
         </div>
         <div class="finance-grid" id="budgetGrid"></div>
       </div>
+
+      <!-- 年終預估口徑說明 -->
+      <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
+        <div class="table-header"><span class="table-title">ⓘ 「薪資支出(年終預估)」科目兩種口徑說明</span></div>
+        <div style="padding:14px 20px;font-size:0.82rem;line-height:1.8;color:var(--text-muted)">
+          <strong style="color:var(--text)">本表預算用「實際發放金額」編列，跟 114 historical 帳本顯示的金額不同口徑：</strong><br><br>
+          <table style="width:100%;border-collapse:collapse;margin:8px 0">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:6px 8px">114 年數字</th>
+              <th style="text-align:right;padding:6px 8px">全年金額</th>
+              <th style="text-align:left;padding:6px 8px">意義</th>
+            </tr></thead>
+            <tbody>
+              <tr><td style="padding:6px 8px">會計帳本提撥（finance_data historical）</td>
+                  <td style="text-align:right;padding:6px 8px;color:var(--gold-light)">29,399,340</td>
+                  <td style="padding:6px 8px">1-11 月按月認列 + 12 月實際發放當月認列總和</td></tr>
+              <tr><td style="padding:6px 8px">實際發放（員工+雇主負擔）</td>
+                  <td style="text-align:right;padding:6px 8px;color:var(--gold-light)">9,491,489</td>
+                  <td style="padding:6px 8px">員工實領 782 萬 + 勞健保等 167 萬</td></tr>
+              <tr><td style="padding:6px 8px">差額（會計「多提撥」未發放）</td>
+                  <td style="text-align:right;padding:6px 8px">19,907,851</td>
+                  <td style="padding:6px 8px">掛在資產負債表「應付未付年終」</td></tr>
+            </tbody>
+          </table>
+          <strong style="color:var(--gold-light)">115 預算 = 114 實際發放金額（949 萬）</strong>，跟去年現金支出規模 1:1 對等。<br>
+          finance_adjustments 中有一筆 one-time 調整「依114年實際年終發放數修正」(-19,538,768) 套用在 12 月，讓 12 月變成負數沖回。<br><br>
+          ⚠️ <span style="color:var(--gold-light)">解讀「實際 vs 預算」時注意：</span>若 115 年底實際走 114 的會計流程（12 月認列 1,900+ 萬），帳上會出現「實際多花 ~1,990 萬」的視覺差距，但現金支出規模仍是 949 萬，跟預算對齊。<br>
+          1,990 萬「多提撥」是會計性質（負債科目調整），不是真實現金支出。
+        </div>
+      </div>
     </div>
 
     <!-- ========== 實際 vs 預算 ========== -->
@@ -739,6 +769,21 @@
           </ul>
           談「人事成本」、「人均薪資」時用 1.31 億；談損益表分析、預算控管時用 1.10 億薪資費用單線。<br>
           ⚠️ <span style="color:var(--gold-light)">司法官合署受雇 3 人（劉誠夫/曾秉浩/陳俊瑋）薪資由司法官合署負擔，已從本頁排除。</span>
+        </div>
+      </div>
+
+      <!-- 年終預估口徑提醒 -->
+      <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
+        <div class="table-header"><span class="table-title">ⓘ 「薪資支出(年終預估)」預算 vs 實際 解讀注意</span></div>
+        <div style="padding:14px 20px;font-size:0.82rem;line-height:1.8;color:var(--text-muted)">
+          <strong style="color:var(--text)">本頁「薪資支出(年終預估)」會出現預算 vs 實際的視覺差距，</strong>但實際現金支出規模兩年是 1:1 對等的：<br><br>
+          <ul style="margin:6px 0 6px 24px;padding:0">
+            <li>114 年「實際發放」= 949 萬（員工實領 782 萬 + 雇主負擔 167 萬）</li>
+            <li>115 年「預算」= 949 萬（跟去年實際發放規模完全一樣）</li>
+            <li>但若 115 actual 走跟 114 一樣的會計流程（1-11 月按月提撥 + 12 月認列實際發放），帳上會記入 ~2,940 萬 — <strong>等於預算的 3 倍</strong></li>
+          </ul>
+          → 12 月「實際 vs 預算」會出現 +1,990 萬的視覺超支，但這是會計性質的「多提撥」（負債科目），不是真實現金流出。<br>
+          詳細口徑說明請看「預算編列」分頁底部。
         </div>
       </div>
     </div>
@@ -2869,13 +2914,47 @@ function renderCompareChart(budgetMap, actualMap) {
   items.sort(function(a,b) { return b.budget - a.budget; });
   items = items.slice(0, 10);
 
+  // Pre-compute 達成率 (實際/預算)
+  items.forEach(function(i) {
+    i.pct = i.budget > 0 ? (i.actual / i.budget * 100) : 0;
+    // Y 軸 label 加上達成率
+    i.labelWithPct = i.name + ' (' + i.pct.toFixed(1) + '%)';
+  });
+
   var ctx = document.getElementById('compareBarChart');
   if (charts.compareBar) charts.compareBar.destroy();
   var cs = getComputedStyle(document.documentElement);
+
+  // Plugin: 在「實際」bar 末端標註達成率百分比
+  var pctLabelPlugin = {
+    id: 'pctLabel',
+    afterDatasetsDraw: function(chart) {
+      var ctx2 = chart.ctx;
+      var actualDs = chart.data.datasets[1]; // 「實際」是第二個 dataset
+      var meta = chart.getDatasetMeta(1);
+      ctx2.save();
+      ctx2.font = 'bold 11px sans-serif';
+      ctx2.textAlign = 'left';
+      ctx2.textBaseline = 'middle';
+      meta.data.forEach(function(bar, i) {
+        var pct = items[i].pct;
+        // 顏色依達成率：>100% 紅色, 80-100% 金, <80% 綠
+        var color = pct > 100 ? cs.getPropertyValue('--red').trim()
+                  : pct >= 80 ? cs.getPropertyValue('--gold-light').trim()
+                  : cs.getPropertyValue('--green').trim();
+        ctx2.fillStyle = color || '#ccc';
+        var x = bar.x + 6;
+        var y = bar.y;
+        ctx2.fillText(pct.toFixed(1) + '%', x, y);
+      });
+      ctx2.restore();
+    }
+  };
+
   charts.compareBar = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: items.map(function(i) { return i.name; }),
+      labels: items.map(function(i) { return i.labelWithPct; }),
       datasets: [
         { label: '預算', data: items.map(function(i) { return i.budget; }), backgroundColor: cs.getPropertyValue('--gold').trim() + '99' },
         { label: '實際', data: items.map(function(i) { return i.actual; }), backgroundColor: cs.getPropertyValue('--blue').trim() + '99' }
@@ -2883,12 +2962,34 @@ function renderCompareChart(budgetMap, actualMap) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-      plugins: { legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } } },
+      layout: { padding: { right: 60 } }, // 右側留空間給 % 標籤
+      plugins: {
+        legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              var item = items[c.dataIndex];
+              var val = c.parsed.x;
+              if (c.dataset.label === '實際') {
+                return '實際: $' + val.toLocaleString() + '（達成預算 ' + item.pct.toFixed(1) + '%）';
+              }
+              return c.dataset.label + ': $' + val.toLocaleString();
+            },
+            afterBody: function(ctxs) {
+              var item = items[ctxs[0].dataIndex];
+              var diff = item.actual - item.budget;
+              var sign = diff >= 0 ? '+' : '';
+              return ['差額: ' + sign + '$' + diff.toLocaleString()];
+            }
+          }
+        }
+      },
       scales: {
         x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), callback: function(v) { return (v/1000000).toFixed(1)+'M'; } }, grid: { color: 'rgba(255,255,255,0.05)' } },
         y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 } }, grid: { display: false } }
       }
-    }
+    },
+    plugins: [pctLabelPlugin]
   });
 }
 
