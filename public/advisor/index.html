@@ -562,8 +562,15 @@
 
       <!-- ===== TAB: 跟進中案件 ===== -->
       <div class="page" id="page-pending">
-        <div class="filter-bar">
-          <span class="filter-label">業務：</span>
+        <div class="filter-bar" id="pendingFilterBar">
+          <span class="filter-label">時間範圍：</span>
+          <div class="year-btns">
+            <button class="year-btn" data-range="1" onclick="setPendingRange(1)">近1個月</button>
+            <button class="year-btn" data-range="3" onclick="setPendingRange(3)">近3個月</button>
+            <button class="year-btn" data-range="6" onclick="setPendingRange(6)">近6個月</button>
+            <button class="year-btn active" data-range="all" onclick="setPendingRange('all')">全部歷史資料</button>
+          </div>
+          <span class="filter-label" style="margin-left:12px;">業務：</span>
           <select class="filter-select" id="pendingSalesFilter">
             <option value="">全部</option>
           </select>
@@ -878,6 +885,7 @@ let STATE = {
   cases: [], pending: [], pendingState: {}, channelMapping: {}, companyCategories: {}, lastSync: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
+  pendingRange: 'all',   // 'all' | 1 | 3 | 6（月份）
   pendingSort: { field: 'assigned_at', dir: 'desc' },
   clientsFilter: 'all', clientsCategory: '', clientsPageSize: 50, clientsPage: 1,
   clientsSort: { field: 'amount', dir: 'desc' },
@@ -1486,14 +1494,36 @@ function isPendingActive(p) {
 }
 
 function filterPending() {
+  // 時間範圍 cutoff（assigned_at 距今幾個月內）
+  let cutoff = null;
+  const r = STATE.pendingRange;
+  if (r !== 'all' && r != null) {
+    const months = Number(r) || 0;
+    if (months > 0) {
+      cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
+      cutoff.setMonth(cutoff.getMonth() - months);
+    }
+  }
   return STATE.pending.filter(p => {
     if (!isPendingActive(p)) return false;
     if (STATE.pendingSales) {
       const ind = parseSalespeople(p.salesperson);
       if (!ind.includes(STATE.pendingSales)) return false;
     }
+    if (cutoff) {
+      const a = parseYmd(p.assigned_at);
+      if (!a || a < cutoff) return false;
+    }
     return true;
   });
+}
+
+function setPendingRange(range) {
+  STATE.pendingRange = range;
+  document.querySelectorAll('#pendingFilterBar .year-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.range === String(range));
+  });
+  renderPending();
 }
 
 const STAGE_ORDER = ['尚未啟動','初次接觸','客戶經理會議','律師會議','提報方案','提報追蹤','第二次追蹤','已成案'];
