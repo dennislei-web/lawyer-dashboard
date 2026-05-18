@@ -1578,9 +1578,16 @@ function parseLastContactDate(s) {
   return null;
 }
 
-// 顯示用的「最近聯繫」：取 last_contact_text 與「備註裡最新日期」的較新者
+// 兌懷泰橋雋這種 row 把跟進日誌寫在「簡述案件」(case_summary) 不在「備註」(lawyer_notes)，
+// 抽日期時要兩欄合掃，不然 5/15 會漏掉。
+function getCombinedNoteText(p) {
+  if (!p) return '';
+  return [p.lawyer_notes, p.case_summary].filter(Boolean).join('\n');
+}
+
+// 顯示用的「最近聯繫」：取 last_contact_text 與「備註/簡述案件裡最新日期」的較新者
 function getEffectiveLastContact(p) {
-  const noteDate = extractLatestDateFromNotes(p && p.lawyer_notes);
+  const noteDate = extractLatestDateFromNotes(getCombinedNoteText(p));
   const origText = p && p.last_contact_text;
   const origDate = parseLastContactDate(origText);
   if (noteDate && (!origDate || noteDate > origDate)) return ymd(noteDate);
@@ -1604,7 +1611,7 @@ function getEffectiveLastActionDate(p) {
   });
   const lcd = parseLastContactDate(p && p.last_contact_text);
   if (lcd) dates.push(lcd);
-  const nd = extractLatestDateFromNotes(p && p.lawyer_notes);
+  const nd = extractLatestDateFromNotes(getCombinedNoteText(p));
   if (nd) dates.push(nd);
   if (!dates.length) return null;
   return new Date(Math.max.apply(null, dates.map(d => d.getTime())));
