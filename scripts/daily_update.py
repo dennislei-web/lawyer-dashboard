@@ -22,6 +22,7 @@ import os
 import re
 import sys
 import time
+from collections import defaultdict
 from datetime import datetime
 
 # Windows 終端 UTF-8 輸出
@@ -477,6 +478,7 @@ def update_supabase(target_months):
     # 使用原始 df（多律師案件指派給第一位律師）
     # 處理重複案件編號：同一案件可能被不同律師諮詢，保留已簽約/金額最高的
     case_map = {}  # case_number -> best row
+    dup_log = defaultdict(list)  # case_number -> [(諮詢日期, 律師, 當事人, 簽約, collected), ...]
     auto_idx = 0
     for _, row in df_original.iterrows():
         # 多律師時取第一位
@@ -512,6 +514,10 @@ def update_supabase(target_months):
             "collected": case_collected,
         }
         # 重複案件編號：優先保留已簽約、金額最高的
+        dup_log[case_number].append({
+            "date": raw_date, "lawyer": lawyer_name, "client": client_name,
+            "signed": is_signed, "collected": case_collected, "month": raw_date[:7],
+        })
         if case_number in case_map:
             existing = case_map[case_number]
             if case_row["is_signed"] and not existing["is_signed"]:
@@ -521,6 +527,25 @@ def update_supabase(target_months):
                     case_map[case_number] = case_row
         else:
             case_map[case_number] = case_row
+
+    # 重複 case_number 統計（按月切）
+    dup_only = {cn: lst for cn, lst in dup_log.items() if len(lst) > 1}
+    if dup_only:
+        from collections import Counter
+        by_month = Counter()
+        for cn, lst in dup_only.items():
+            # 每多一筆就算 1 個「monthly_stats vs consultation_cases」差異
+            by_month[lst[0]["month"]] += len(lst) - 1
+        print(f"\n  ── 重複 case_number {len(dup_only)} 個（影響 monthly_stats vs consultation_cases 差異）──")
+        for m, n in sorted(by_month.items()):
+            print(f"    {m}: 多出 {n} 列 (monthly_stats > cases)")
+        print(f"  詳細清單：")
+        for cn in sorted(dup_only):
+            entries = dup_only[cn]
+            print(f"    {cn} ({len(entries)} 筆):")
+            for e in entries:
+                signed_str = "已簽約" if e["signed"] else "未簽約"
+                print(f"      {e['date']} | 律師={e['lawyer']:<12} | 當事人={e['client'][:18]:<18} | {signed_str} | ${e['collected']:>8,}")
 
     case_rows = list(case_map.values())
 
