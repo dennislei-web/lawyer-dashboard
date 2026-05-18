@@ -122,19 +122,41 @@ def load_xlsx_index():
     return idx
 
 
+def fetch_real_candidates(lawyer_id: str, case_date: str, window_days: int = 14):
+    """從 Supabase consultation_cases 找 (lawyer_id, case_date ±N 天) 的非 GEN_ rows"""
+    from datetime import datetime, timedelta
+    d = datetime.strptime(case_date, "%Y-%m-%d")
+    lo = (d - timedelta(days=window_days)).strftime("%Y-%m-%d")
+    hi = (d + timedelta(days=window_days)).strftime("%Y-%m-%d")
+    r = httpx.get(f"{URL}/rest/v1/consultation_cases",
+        params=[("select","id,case_number,case_date,client_name,case_type,revenue,collected"),
+                ("lawyer_id", f"eq.{lawyer_id}"),
+                ("case_date", f"gte.{lo}"),
+                ("case_date", f"lte.{hi}"),
+                ("case_number", "not.like.GEN_*")],
+        headers=HDR, timeout=30)
+    return r.json() if r.status_code == 200 else []
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="實際 patch（預設 dry-run）")
+    ap.add_argument("--source", choices=["xlsx","supabase"], default="supabase",
+                    help="對照來源（預設 supabase，xlsx 只有最近 6 個月）")
+    ap.add_argument("--window", type=int, default=14,
+                    help="日期容忍視窗 ±N 天（supabase 模式）")
     args = ap.parse_args()
 
-    print(f"=== GEN_ 案件對帳 ({'APPLY' if args.apply else 'DRY-RUN'}) ===\n")
+    print(f"=== GEN_ 案件對帳 ({'APPLY' if args.apply else 'DRY-RUN'}, source={args.source}) ===\n")
 
     lmap = fetch_lawyer_map()
     rows = fetch_gen_rows()
     print(f"GEN_ 案件：{len(rows)} 筆")
 
-    xlsx_idx = load_xlsx_index()
-    print(f"xlsx 索引：{len(xlsx_idx)} 個 (lawyer, date) 鍵\n")
+    xlsx_idx = None
+    if args.source == "xlsx":
+        xlsx_idx = load_xlsx_index()
+        print(f"xlsx 索引：{len(xlsx_idx)} 個 (lawyer, date) 鍵\n")
 
     stats = defaultdict(int)
     patches = []
@@ -148,25 +170,43 @@ def main():
             unmatched.append((r, nm, None, "無法抽出當事人姓名"))
             continue
 
-        candidates = xlsx_idx.get((nm, r["case_date"]), [])
+        if args.source == "xlsx":
+            candidates = xlsx_idx.get((nm, r["case_date"]), [])
+            cand_name = lambda c: c["當事人"]
+            cand_type = lambda c: c["服務項目"]
+            cand_pack = lambda c: {
+                "case_number": c["案件編號"] or r["case_number"],
+                "client_name": c["當事人"],
+                "revenue":     c["revenue"],
+                "collected":   c["collected"],
+            }
+        else:
+            candidates = fetch_real_candidates(r["lawyer_id"], r["case_date"], args.window)
+            cand_name = lambda c: c.get("client_name","") or ""
+            cand_type = lambda c: c.get("case_type","") or ""
+            cand_pack = lambda c: {
+                "case_number": c["case_number"],
+                "client_name": c.get("client_name") or "",
+                "revenue":     c.get("revenue") or 0,
+                "collected":   c.get("collected") or 0,
+            }
+
         if not candidates:
-            stats["xlsx_no_date"] += 1
-            unmatched.append((r, nm, client, f"xlsx 無 ({nm}, {r['case_date']}) 該日期"))
+            stats["src_no_candidates"] += 1
+            unmatched.append((r, nm, client, f"{args.source} 無 ({nm}, {r['case_date']}±{args.window}d) 候選"))
             continue
 
-        # 找當事人姓名 substring 匹配的
-        matches = [c for c in candidates if client in c["當事人"] or c["當事人"] in client]
+        matches = [c for c in candidates if (client in cand_name(c)) or (cand_name(c) and cand_name(c) in client)]
         if len(matches) == 0:
-            stats["xlsx_name_mismatch"] += 1
-            avail = ", ".join(f"{c['當事人']}" for c in candidates[:5])
-            unmatched.append((r, nm, client, f"當天 xlsx {nm} 有 {len(candidates)} 筆但都不含「{client}」: [{avail}]"))
+            stats["src_name_mismatch"] += 1
+            avail = ", ".join(cand_name(c) for c in candidates[:5])
+            unmatched.append((r, nm, client, f"窗內 {len(candidates)} 筆但都不含「{client}」: [{avail}]"))
             continue
         if len(matches) > 1:
-            # 同人同日多案 → 用 case_type 二次篩
-            matches2 = [c for c in matches if r["case_type"] and r["case_type"] in c["服務項目"]] or matches
+            matches2 = [c for c in matches if r["case_type"] and r["case_type"] in cand_type(c)] or matches
             if len(matches2) > 1:
-                stats["xlsx_ambiguous"] += 1
-                avail = ", ".join(f"{c['當事人']}/{c['服務項目']}/{c['案件編號']}" for c in matches2[:5])
+                stats["src_ambiguous"] += 1
+                avail = ", ".join(f"{cand_name(c)}/{cand_type(c)}" for c in matches2[:5])
                 unmatched.append((r, nm, client, f"多筆 candidate 無法定唯一: [{avail}]"))
                 continue
             matches = matches2
@@ -175,12 +215,7 @@ def main():
         patches.append({
             "id": r["id"],
             "old_case_number": r["case_number"],
-            "new": {
-                "case_number": m["案件編號"] or r["case_number"],
-                "client_name": m["當事人"],
-                "revenue":   m["revenue"],
-                "collected": m["collected"],
-            },
+            "new": cand_pack(m),
             "_dbg": {"lawyer": nm, "date": r["case_date"], "extracted": client}
         })
         stats["matched"] += 1
