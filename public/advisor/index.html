@@ -2167,7 +2167,7 @@ function showCaseNotes(clientName) {
     sections.push({ label: '備註', text: p.lawyer_notes });
   }
   if (p.case_summary && p.case_summary.trim()) {
-    sections.push({ label: '案件摘要', text: p.case_summary });
+    sections.push({ label: '跟進紀錄', text: p.case_summary });
   }
   const effectiveContact = getEffectiveLastContact(p);
   if (effectiveContact && effectiveContact !== '—') {
