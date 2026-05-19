@@ -3074,9 +3074,11 @@ function isTrackerAdmin() {
   return !!(currentLawyer && currentLawyer.email === 'dennis.lei@010.tw');
 }
 // 📊 資料健康度：dennis 觀察 AI 品質 + 客戶關係部（CRM@zhelu.tw）統一帳號讓接案法務跟著做
+// 用 realLawyer（真實登入帳號）而非 currentLawyer（會被 View-As 切換）— 與 tab 顯示條件一致
 function isHealthAdmin() {
-  if (!currentLawyer) return false;
-  const e = (currentLawyer.email || '').toLowerCase();
+  const who = realLawyer || currentLawyer;
+  if (!who) return false;
+  const e = (who.email || '').toLowerCase();
   return e === 'dennis.lei@010.tw' || e === 'crm@zhelu.tw';
 }
 
@@ -8687,7 +8689,16 @@ function healthAllStaffs() {
 }
 
 async function loadHealthPage() {
-  if (!isHealthAdmin()) return;
+  const realE = (realLawyer && realLawyer.email) || '(none)';
+  const currE = (currentLawyer && currentLawyer.email) || '(none)';
+  console.log('[health load] called  real=', realE, ' current=', currE, ' isHealthAdmin=', isHealthAdmin());
+  if (!isHealthAdmin()) {
+    document.getElementById('healthKpis').innerHTML = `
+      <div style="grid-column:1/-1;padding:20px;color:var(--red);background:rgba(255,80,80,0.06);border:1px solid var(--red);border-radius:6px;">
+        ⚠️ 權限檢查失敗（real=${escHtml(realE)} / current=${escHtml(currE)}）— 此頁僅 dennis.lei / crm@zhelu.tw 可見
+      </div>`;
+    return;
+  }
   const dayRange = parseInt(document.getElementById('healthDayRange').value || '30', 10);
   const cutoff = new Date(Date.now() - dayRange * 86400000).toISOString().slice(0, 10);
 
