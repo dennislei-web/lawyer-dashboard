@@ -7234,7 +7234,7 @@ function renderUnsignedPage() {
   // Width allocation: left columns tight, notes get remaining space
   const colW = { case_date:'86px', client_name:'5em', case_type:'3em',
     lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em', line_chat_url:'7em',
-    followup_day:'9em', followup_week:'9em', followup_final:'9em',
+    followup_day:'4.5em', followup_week:'4.5em', followup_final:'4.5em',
     no_track_reason:'10em' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
@@ -7674,60 +7674,52 @@ async function saveLawyerNote(caseId, note, cellEl) {
   }
 }
 
-// ---- 三段 follow-up 欄位（當天/一週/最後追蹤）inline edit ----
+// ---- 三段 follow-up 勾選欄位（當天/一週/最後追蹤）----
 const FOLLOWUP_FIELDS = new Set(['followup_day', 'followup_week', 'followup_final']);
 
 function followupCellHtml(caseId, field, value) {
-  const v = value || '';
-  const placeholder = '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
-  return `<td style="overflow-wrap:break-word;">
-    <div class="followup-cell" data-case-id="${caseId}" data-field="${field}"
-         onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
-      <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(v) || placeholder}</span>
-      <textarea style="display:none;width:100%;min-height:60px;background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:0.78rem;font-family:inherit;resize:vertical;"
-                onblur="saveFollowupField('${caseId}', '${field}', this.value, this.parentElement)"
-                onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
-      >${escHtml(v)}</textarea>
-      <div class="note-hint" style="display:none;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">按 Enter 儲存 · Shift+Enter 換行 · Esc 取消</div>
-    </div>
+  const checked = value ? 'checked' : '';
+  return `<td style="text-align:center;vertical-align:middle;">
+    <label class="followup-cell" data-case-id="${caseId}" data-field="${field}"
+           style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:6px;">
+      <input type="checkbox" ${checked}
+             onchange="saveFollowupField('${caseId}', '${field}', this.checked, this.parentElement)"
+             style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);">
+    </label>
   </td>`;
 }
 
-async function saveFollowupField(caseId, field, value, cellEl) {
+async function saveFollowupField(caseId, field, checked, cellEl) {
   if (!FOLLOWUP_FIELDS.has(field)) { console.error('invalid follow-up field:', field); return; }
-  const span = cellEl.querySelector('span');
-  const ta = cellEl.querySelector('textarea');
-  const hint = cellEl.querySelector('.note-hint');
-  const placeholder = '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
-  span.innerHTML = escHtml(value) || placeholder;
-  span.style.display = 'block';
-  ta.style.display = 'none';
-  if (hint) hint.style.display = 'none';
-
+  const input = cellEl.querySelector('input[type="checkbox"]');
+  // Optimistic UI — input 已是新值
   try {
-    const payload = {}; payload[field] = value || null;
+    const payload = {}; payload[field] = !!checked;
     const { error } = await sb.from('consultation_cases').update(payload).eq('id', caseId);
     if (error) {
+      // 回復原狀
+      if (input) input.checked = !checked;
       const msg = document.createElement('div');
       msg.textContent = '✗ 儲存失敗';
-      msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+      msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.7rem;margin-top:2px;';
       cellEl.appendChild(msg);
       setTimeout(() => msg.remove(), 3000);
       console.error('saveFollowupField error:', field, error);
       return;
     }
     const c = allCases.find(c => c.id === caseId);
-    if (c) c[field] = value || null;
-    const saved = document.createElement('div');
-    saved.textContent = '✓ 已儲存';
-    saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
-    cellEl.appendChild(saved);
-    setTimeout(() => saved.remove(), 2000);
+    if (c) c[field] = !!checked;
+    // 輕量反饋：閃一下綠框
+    if (input) {
+      input.style.outline = '2px solid var(--green)';
+      setTimeout(() => { input.style.outline = ''; }, 600);
+    }
   } catch (e) {
+    if (input) input.checked = !checked;
     console.error('saveFollowupField exception:', field, e);
     const msg = document.createElement('div');
     msg.textContent = '✗ 網路錯誤';
-    msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+    msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.7rem;margin-top:2px;';
     cellEl.appendChild(msg);
     setTimeout(() => msg.remove(), 3000);
   }
