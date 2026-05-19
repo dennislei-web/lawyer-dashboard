@@ -2160,10 +2160,13 @@
   <div id="pageHealth" class="page">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
       <div>
-        <h1 class="page-title" style="margin:0;">📊 未成案資料健康度</h1>
-        <div style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">資料缺漏統計 + AI 追單建議品質觀察（僅雷皓明可見）</div>
+        <h1 class="page-title" style="margin:0;">📊 未成案追單工作台</h1>
+        <div style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">每件未成案的 AI 建議話術 + 一鍵複製去 LINE 客戶（雷皓明 + 客戶關係部可見）</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="healthStaffFilter" onchange="renderHealthPage()" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;min-width:140px;">
+          <option value="">全部接案同仁</option>
+        </select>
         <select id="healthDayRange" onchange="loadHealthPage()" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.85rem;">
           <option value="14">近 14 天</option>
           <option value="30" selected>近 30 天</option>
@@ -2200,22 +2203,22 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="healthAiFilter" onchange="renderHealthAiList()" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
+            <option value="unrated" selected>⏳ 待處理</option>
             <option value="all">全部</option>
-            <option value="unrated">未評分</option>
-            <option value="adopted">已採用</option>
-            <option value="edited">已編輯</option>
-            <option value="rejected">已拒絕</option>
+            <option value="adopted">✓ 已傳</option>
+            <option value="edited">✏️ 改後傳</option>
+            <option value="rejected">✗ 不傳</option>
           </select>
           <select id="healthAiUrgency" onchange="renderHealthAiList()" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
             <option value="all">所有急迫度</option>
-            <option value="high">🔴 高</option>
+            <option value="high">🔴 急</option>
             <option value="medium">🟡 中</option>
-            <option value="low">🟢 低</option>
+            <option value="low">🟢 緩</option>
           </select>
           <select id="healthAiSort" onchange="renderHealthAiList()" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.82rem;">
-            <option value="urgency">急迫度排序</option>
-            <option value="recent">最新生成</option>
+            <option value="urgency">待處理 + 急迫先</option>
             <option value="case_date">諮詢日近</option>
+            <option value="recent">最新生成</option>
           </select>
         </div>
       </div>
@@ -3028,7 +3031,7 @@ function showTab(tab) {
     renderTrackerPage();
   }
   if (tab === 'health') {
-    if (!isTrackerAdmin()) return;
+    if (!isHealthAdmin()) return;
     loadHealthPage();
   }
   if (tab === 'daily') {
@@ -3066,6 +3069,12 @@ function canViewTracker() {
 }
 function isTrackerAdmin() {
   return !!(currentLawyer && currentLawyer.email === 'dennis.lei@010.tw');
+}
+// 📊 資料健康度：dennis 觀察 AI 品質 + 客戶關係部（CRM@zhelu.tw）統一帳號讓接案法務跟著做
+function isHealthAdmin() {
+  if (!currentLawyer) return false;
+  const e = (currentLawyer.email || '').toLowerCase();
+  return e === 'dennis.lei@010.tw' || e === 'crm@zhelu.tw';
 }
 
 // ===================== 📊 每日累積（僅 dennis） =====================
@@ -3693,9 +3702,12 @@ function refreshRoleDependentUI() {
   // 📊 每日累積 tab — 僅 dennis.lei@010.tw 可見
   const dailyTab = document.getElementById('tab-daily');
   if (dailyTab) dailyTab.style.display = isTrackerAdmin() ? '' : 'none';
-  // 📊 資料健康度 tab — 僅 dennis.lei@010.tw
+  // 📊 資料健康度 tab — dennis（觀察 AI 品質）+ CRM@zhelu.tw（接案法務統一帳號）
   const healthTab = document.getElementById('tab-health');
-  if (healthTab) healthTab.style.display = (realLawyer && realLawyer.email === 'dennis.lei@010.tw') ? '' : 'none';
+  if (healthTab) {
+    const e = (realLawyer && realLawyer.email || '').toLowerCase();
+    healthTab.style.display = (e === 'dennis.lei@010.tw' || e === 'crm@zhelu.tw') ? '' : 'none';
+  }
 }
 
 function showDashboard() {
@@ -8630,25 +8642,50 @@ function reaskFromDetail(scenario) {
 // 📊 未成案資料健康度（僅雷皓明可見）
 // ============================================================
 const healthState = {
-  cases: [],          // unsigned, no_track_reason empty, within day range
+  cases: [],          // 全部 (未 staff filter)
   suggMap: new Map(), // case_id -> suggestion row
   lawyerMap: new Map(),
   loadedAt: null,
 };
 
+// 取得目前 staff filter 過濾後的 cases。空 staff = 全部
+function healthFilteredCases() {
+  const staff = (document.getElementById('healthStaffFilter') || {}).value || '';
+  if (!staff) return healthState.cases;
+  return healthState.cases.filter(c => {
+    const arr = (c.tracking_staff || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (arr.length === 0) return staff === '(未指派)';
+    return arr.includes(staff);
+  });
+}
+
+// 從 cases 計算 staff 名單（含「(未指派)」）
+function healthAllStaffs() {
+  const set = new Set();
+  let hasUnassigned = false;
+  healthState.cases.forEach(c => {
+    const arr = (c.tracking_staff || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (arr.length === 0) hasUnassigned = true;
+    arr.forEach(s => set.add(s));
+  });
+  const out = [...set].sort();
+  if (hasUnassigned) out.push('(未指派)');
+  return out;
+}
+
 async function loadHealthPage() {
-  if (!isTrackerAdmin()) return;
+  if (!isHealthAdmin()) return;
   const dayRange = parseInt(document.getElementById('healthDayRange').value || '30', 10);
   const cutoff = new Date(Date.now() - dayRange * 86400000).toISOString().slice(0, 10);
 
   document.getElementById('healthKpis').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>';
   document.getElementById('healthAiList').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>';
 
-  // 並行抓三個 source
+  // 並行抓三個 source（含 lawyer_tracking_notes 讓法務可 inline 補資料）
   const [{ data: lawyersData }, { data: casesData, error: casesErr }, { data: suggData, error: suggErr }] = await Promise.all([
     sb.from('lawyers').select('id,name'),
     sb.from('consultation_cases')
-      .select('id,lawyer_id,case_date,case_type,client_name,is_signed,tracking_staff,tracking_notes,tracking_status,lawyer_notes,line_chat_url,no_track_reason')
+      .select('id,lawyer_id,case_date,case_type,client_name,is_signed,tracking_staff,tracking_notes,tracking_status,lawyer_notes,lawyer_tracking_notes,line_chat_url,no_track_reason')
       .eq('is_signed', false)
       .gte('case_date', cutoff),
     sb.from('consultation_ai_suggestions').select('*'),
@@ -8658,31 +8695,51 @@ async function loadHealthPage() {
     document.getElementById('healthAiList').innerHTML = '<div style="color:var(--red);padding:24px;">無法載入案件資料：' + escHtml(casesErr.message || '') + '</div>';
     return;
   }
-  // suggData 可能失敗（migration 還沒跑） — 不要中斷頁面
   const suggList = suggErr ? [] : (suggData || []);
   if (suggErr) {
     console.warn('consultation_ai_suggestions 表還沒建好，AI 建議區會顯示為空：', suggErr.message);
   }
 
   healthState.lawyerMap = new Map((lawyersData || []).map(l => [l.id, l.name]));
-  // 過濾掉「主動放棄追蹤」的
   healthState.cases = (casesData || []).filter(c => !((c.no_track_reason || '').trim()));
   healthState.suggMap = new Map(suggList.map(s => [s.case_id, s]));
   healthState.loadedAt = new Date();
 
+  // 重建 staff filter dropdown options（保留現選）
+  const sel = document.getElementById('healthStaffFilter');
+  if (sel) {
+    const prev = sel.value;
+    const staffs = healthAllStaffs();
+    sel.innerHTML = '<option value="">全部接案同仁</option>' +
+      staffs.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  }
+
+  renderHealthPage();
+}
+
+// staff filter / 排序 change 時用，不重抓
+function renderHealthPage() {
   renderHealthKpis();
   renderHealthDistribution();
   renderHealthAiList();
 }
 
 function renderHealthKpis() {
-  const cs = healthState.cases;
+  const cs = healthFilteredCases();
+  const staffFilter = (document.getElementById('healthStaffFilter') || {}).value || '';
   const total = cs.length;
   const noLine = cs.filter(c => !(c.line_chat_url || '').trim()).length;
   const noNotes = cs.filter(c => !(c.tracking_notes || '').trim()).length;
   const noLawyerNotes = cs.filter(c => !(c.lawyer_notes || '').trim()).length;
-  const bothMissing = cs.filter(c => !(c.line_chat_url || '').trim() && !(c.tracking_notes || '').trim()).length;
   const hasSugg = cs.filter(c => healthState.suggMap.has(c.id)).length;
+  // 已處理 = AI 建議有 rating（adopted/edited/rejected 都算「已決定」）
+  const handled = cs.filter(c => {
+    const s = healthState.suggMap.get(c.id);
+    return s && s.rating;
+  }).length;
+  // 待處理 = 已有 AI 建議但 rating 為空
+  const pendingAction = hasSugg - handled;
 
   const pct = (n) => total ? ` (${(n / total * 100).toFixed(0)}%)` : '';
   const card = (label, value, sub, color) => `
@@ -8692,31 +8749,39 @@ function renderHealthKpis() {
       <div style="color:var(--text-muted);font-size:0.72rem;margin-top:2px;">${sub || '&nbsp;'}</div>
     </div>`;
 
+  const scope = staffFilter ? `${staffFilter} 手上` : '全部接案';
   document.getElementById('healthKpis').innerHTML = [
-    card('仍需追蹤總數', total, `已排除主動放棄`, 'var(--gold)'),
-    card('缺 LINE 連結', noLine + pct(noLine), '接案同仁未貼', noLine > total * 0.5 ? 'var(--red)' : 'var(--text)'),
+    card(`${scope}未成案`, total, `已排除主動放棄`, 'var(--gold)'),
+    card('待你處理', pendingAction, `${pendingAction > 0 ? '👆 下方點「已傳/不傳」' : '✓ 全部已決定'}`, pendingAction > 0 ? 'var(--gold)' : 'var(--green)'),
+    card('已處理', handled + ` / ${hasSugg}`, `已傳 / 改後傳 / 不傳`, 'var(--text)'),
+    card('缺 LINE 連結', noLine + pct(noLine), '無法直接聯絡', noLine > total * 0.5 ? 'var(--red)' : 'var(--text)'),
     card('缺接案速記', noNotes + pct(noNotes), 'tracking_notes 空', noNotes > total * 0.3 ? 'var(--red)' : 'var(--text)'),
-    card('缺律師建議', noLawyerNotes + pct(noLawyerNotes), 'lawyer_notes 空', noLawyerNotes > total * 0.5 ? 'var(--red)' : 'var(--text)'),
-    card('兩個都缺', bothMissing + pct(bothMissing), 'LINE + 速記皆無', bothMissing > 0 ? 'var(--red)' : 'var(--green)'),
-    card('AI 建議已生成', hasSugg + ` / ${total}`, hasSugg === total ? '✓ 全跑完' : '待補跑', hasSugg === total ? 'var(--green)' : 'var(--gold)'),
+    card('AI 建議覆蓋', hasSugg + ` / ${total}`, hasSugg === total ? '✓ 全跑完' : '待補跑', hasSugg === total ? 'var(--green)' : 'var(--gold)'),
   ].join('');
 }
 
 function renderHealthDistribution() {
+  // 分布表「無視」staff filter — 永遠是全景，這樣使用者切自己 filter 還能看到其他人狀況
   const cs = healthState.cases;
+  const currentStaff = (document.getElementById('healthStaffFilter') || {}).value || '';
 
-  // 接案同仁切片（一案多接案以 split 計）
+  // 接案同仁切片
   const byStaff = new Map();
   cs.forEach(c => {
     const staffs = (c.tracking_staff || '').trim();
     const arr = staffs ? staffs.split(',').map(s => s.trim()).filter(Boolean) : ['(未指派)'];
-    arr.forEach(s => {
-      if (!byStaff.has(s)) byStaff.set(s, { n: 0, noLine: 0, noNotes: 0, hasSugg: 0 });
-      const d = byStaff.get(s);
+    const s = healthState.suggMap.get(c.id);
+    arr.forEach(staff => {
+      if (!byStaff.has(staff)) byStaff.set(staff, { n: 0, noLine: 0, noNotes: 0, hasSugg: 0, pendingAction: 0, handled: 0 });
+      const d = byStaff.get(staff);
       d.n++;
       if (!(c.line_chat_url || '').trim()) d.noLine++;
       if (!(c.tracking_notes || '').trim()) d.noNotes++;
-      if (healthState.suggMap.has(c.id)) d.hasSugg++;
+      if (s) {
+        d.hasSugg++;
+        if (s.rating) d.handled++;
+        else d.pendingAction++;
+      }
     });
   });
 
@@ -8732,25 +8797,30 @@ function renderHealthDistribution() {
     if (!(c.lawyer_notes || '').trim()) d.noLawyerNotes++;
   });
 
-  // 渲染接案
+  // 渲染接案（點 row 自動帶入 staff filter）
   const staffRows = [...byStaff.entries()].sort((a, b) => b[1].n - a[1].n);
   const staffTbl = document.getElementById('healthByStaff');
   staffTbl.innerHTML = `
     <thead><tr>
       <th style="text-align:left;">接案同仁</th>
-      <th style="text-align:right;">手上案件</th>
+      <th style="text-align:right;">手上</th>
+      <th style="text-align:right;" title="AI 已生建議但你還沒點「已傳/不傳」">待你處理</th>
+      <th style="text-align:right;">已處理</th>
       <th style="text-align:right;">缺 LINE</th>
       <th style="text-align:right;">缺速記</th>
-      <th style="text-align:right;">AI 已跑</th>
     </tr></thead>
-    <tbody>${staffRows.map(([s, d]) => `
-      <tr>
-        <td>${escHtml(s)}</td>
+    <tbody>${staffRows.map(([s, d]) => {
+      const isActive = s === currentStaff;
+      return `
+      <tr style="cursor:pointer;${isActive ? 'background:rgba(201,168,76,0.1);' : ''}" onclick="setHealthStaff('${escHtml(s).replace(/'/g, "\\'")}')">
+        <td>${isActive ? '▸ ' : ''}<strong>${escHtml(s)}</strong></td>
         <td style="text-align:right;">${d.n}</td>
+        <td style="text-align:right;font-weight:600;color:${d.pendingAction > 0 ? 'var(--gold)' : 'var(--text-muted)'};">${d.pendingAction}</td>
+        <td style="text-align:right;color:${d.handled > 0 ? 'var(--green)' : 'var(--text-muted)'};">${d.handled}/${d.hasSugg}</td>
         <td style="text-align:right;color:${d.noLine > d.n * 0.5 ? 'var(--red)' : 'var(--text)'};">${d.noLine}</td>
         <td style="text-align:right;color:${d.noNotes > d.n * 0.3 ? 'var(--red)' : 'var(--text)'};">${d.noNotes}</td>
-        <td style="text-align:right;color:var(--text-muted);">${d.hasSugg}/${d.n}</td>
-      </tr>`).join('')}</tbody>`;
+      </tr>`;
+    }).join('')}</tbody>`;
 
   // 渲染律師
   const lawyerRows = [...byLawyer.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -8773,122 +8843,192 @@ function renderHealthDistribution() {
       </tr>`).join('')}</tbody>`;
 }
 
+function setHealthStaff(name) {
+  const sel = document.getElementById('healthStaffFilter');
+  if (!sel) return;
+  sel.value = (sel.value === name) ? '' : name;  // 再點同一個 = 清掉
+  renderHealthPage();
+}
+
 function renderHealthAiList() {
   const filter = document.getElementById('healthAiFilter').value;
   const urgFilter = document.getElementById('healthAiUrgency').value;
   const sortBy = document.getElementById('healthAiSort').value;
+  const filteredCases = healthFilteredCases();
 
-  // 把每件案 join 對應的 suggestion (可能沒有)
-  let rows = healthState.cases.map(c => ({
+  // 把每件案 join 對應的 suggestion
+  let rows = filteredCases.map(c => ({
     case: c,
     sugg: healthState.suggMap.get(c.id) || null,
     lawyerName: healthState.lawyerMap.get(c.lawyer_id) || '?',
   }));
 
-  // 篩選：只看有 AI 建議的，再依 rating 過濾
   rows = rows.filter(r => r.sugg);
   if (filter === 'unrated') rows = rows.filter(r => !r.sugg.rating);
   else if (filter !== 'all') rows = rows.filter(r => r.sugg.rating === filter);
   if (urgFilter !== 'all') rows = rows.filter(r => r.sugg.urgency === urgFilter);
 
-  // 排序
+  // 預設 sort：未處理高急迫先，已處理沉底
   const urgOrder = { high: 0, medium: 1, low: 2, none: 3 };
   if (sortBy === 'urgency') {
-    rows.sort((a, b) => (urgOrder[a.sugg.urgency] ?? 9) - (urgOrder[b.sugg.urgency] ?? 9));
+    rows.sort((a, b) => {
+      // 未處理優先
+      const ah = a.sugg.rating ? 1 : 0, bh = b.sugg.rating ? 1 : 0;
+      if (ah !== bh) return ah - bh;
+      return (urgOrder[a.sugg.urgency] ?? 9) - (urgOrder[b.sugg.urgency] ?? 9);
+    });
   } else if (sortBy === 'recent') {
     rows.sort((a, b) => new Date(b.sugg.generated_at) - new Date(a.sugg.generated_at));
   } else if (sortBy === 'case_date') {
     rows.sort((a, b) => b.case.case_date.localeCompare(a.case.case_date));
   }
 
-  // 摘要：已採用 / 編輯 / 拒絕 / 未評分
-  const allSugg = [...healthState.suggMap.values()];
+  // 摘要（只算 filter 後 case 範圍）
+  const filteredSugg = filteredCases.map(c => healthState.suggMap.get(c.id)).filter(Boolean);
   const cnt = { adopted: 0, edited: 0, rejected: 0, unrated: 0 };
-  allSugg.forEach(s => {
+  filteredSugg.forEach(s => {
     if (!s.rating) cnt.unrated++;
     else if (cnt[s.rating] !== undefined) cnt[s.rating]++;
   });
-  const adopted = cnt.adopted + cnt.edited;
-  const rated = allSugg.length - cnt.unrated;
-  const adoptRate = rated ? ((adopted / rated) * 100).toFixed(0) + '%' : '—';
+  const handled = cnt.adopted + cnt.edited + cnt.rejected;
+  const handleRate = filteredSugg.length ? ((handled / filteredSugg.length) * 100).toFixed(0) + '%' : '—';
   document.getElementById('healthAiSummary').innerHTML =
-    `共 ${allSugg.length} 件已生成 · 採用率 ${adoptRate}（${adopted}/${rated} 已評分）· 未評分 ${cnt.unrated} · 顯示 ${rows.length} 件`;
+    `共 ${filteredSugg.length} 件 AI 建議 · 處理率 ${handleRate}（${handled} 已決定 / ${cnt.unrated} 待你動）· 顯示 ${rows.length} 件`;
 
   if (rows.length === 0) {
     document.getElementById('healthAiList').innerHTML = `
       <div style="text-align:center;padding:32px;color:var(--text-muted);">
-        ${allSugg.length === 0 ? '尚無 AI 建議。請先跑批次（python scripts/prepare_pending_prompts.py）。' : '沒有符合篩選條件的建議'}
+        ${filteredSugg.length === 0 ? '此範圍尚無 AI 建議。' : '沒有符合篩選條件的建議'}
       </div>`;
     return;
   }
 
   const urgBadge = (u) => {
-    const map = { high: ['🔴 高', 'var(--red)'], medium: ['🟡 中', 'var(--gold)'], low: ['🟢 低', 'var(--green)'] };
+    const map = { high: ['🔴 急', 'var(--red)'], medium: ['🟡 中', 'var(--gold)'], low: ['🟢 緩', 'var(--green)'] };
     const [label, color] = map[u] || ['—', 'var(--text-muted)'];
     return `<span style="color:${color};font-weight:600;">${label}</span>`;
   };
   const ratingBadge = (r) => {
-    const map = { adopted: ['✓ 已採用', 'var(--green)'], edited: ['✏️ 已編輯', 'var(--blue)'], rejected: ['✗ 已拒絕', 'var(--red)'] };
-    if (!r) return '<span style="color:var(--text-muted);font-size:0.75rem;">未評分</span>';
+    const map = {
+      adopted: ['✓ 已傳', 'var(--green)'],
+      edited: ['✏️ 改後傳', 'var(--blue)'],
+      rejected: ['✗ 不傳', 'var(--text-muted)'],
+    };
+    if (!r) return '<span style="color:var(--gold);font-size:0.75rem;font-weight:600;">⏳ 待你處理</span>';
     const [label, color] = map[r] || ['—', 'var(--text-muted)'];
-    return `<span style="color:${color};font-size:0.75rem;">${label}</span>`;
-  };
-  const dsBadge = (ds) => {
-    if (!ds) return '';
-    const parts = [];
-    parts.push(ds.has_lawyer_notes ? '<span style="color:var(--green);">律師建議✓</span>' : '<span style="color:var(--text-muted);">律師建議✗</span>');
-    parts.push(ds.has_tracking_notes ? '<span style="color:var(--green);">接案速記✓</span>' : '<span style="color:var(--text-muted);">接案速記✗</span>');
-    if (ds.has_line_url) {
-      parts.push(ds.line_msg_count > 0 ? `<span style="color:var(--green);">LINE✓ (${ds.line_msg_count} 則)</span>` : '<span style="color:var(--gold);">LINE 連結✓ 對話待爬</span>');
-    } else {
-      parts.push('<span style="color:var(--text-muted);">LINE✗</span>');
-    }
-    return parts.join(' · ');
+    return `<span style="color:${color};font-size:0.75rem;font-weight:600;">${label}</span>`;
   };
 
   document.getElementById('healthAiList').innerHTML = rows.map(r => {
     const c = r.case, s = r.sugg;
     const daysAgo = Math.floor((Date.now() - new Date(c.case_date).getTime()) / 86400000);
-    const lineLink = (c.line_chat_url || '').trim()
-      ? `<a href="${escHtml(c.line_chat_url)}" target="_blank" style="color:var(--blue);font-size:0.78rem;">🔗 開 LINE</a>`
-      : '<span style="color:var(--text-muted);font-size:0.78rem;">無 LINE</span>';
+    const hasLine = !!(c.line_chat_url || '').trim();
+    const hasTracking = !!(c.tracking_notes || '').trim();
+    const messageToCopy = s.edited_message || s.suggested_message || '';
+
+    // LINE 區塊：有連結直接給開連結 + 複製話術；沒連結給「貼連結」inline 輸入
+    const lineBox = hasLine
+      ? `<a href="${escHtml(c.line_chat_url)}" target="_blank" class="btn btn-sm" style="background:#00B900;color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">💬 開 LINE</a>`
+      : `<button class="btn btn-sm btn-ghost" onclick="promptLineUrl('${s.case_id}')" style="border:1px dashed var(--gold);color:var(--gold);">+ 貼 LINE 連結</button>`;
+
     const editBox = `
       <div id="sugg-edit-${s.case_id}" style="display:none;margin-top:8px;">
-        <textarea id="sugg-edit-ta-${s.case_id}" style="width:100%;min-height:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:0.85rem;font-family:inherit;">${escHtml(s.edited_message || s.suggested_message || '')}</textarea>
+        <textarea id="sugg-edit-ta-${s.case_id}" style="width:100%;min-height:120px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:0.88rem;font-family:inherit;line-height:1.55;">${escHtml(s.edited_message || s.suggested_message || '')}</textarea>
+        <div style="margin-top:6px;font-size:0.72rem;color:var(--text-muted);">改完按「儲存」會自動標成「改後傳」</div>
         <div style="margin-top:6px;display:flex;gap:6px;">
-          <button class="btn btn-primary btn-sm" onclick="saveAiSuggEdit('${s.case_id}')">儲存編輯</button>
+          <button class="btn btn-primary btn-sm" onclick="saveAiSuggEdit('${s.case_id}')">儲存 + 標已處理</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sugg-edit-${s.case_id}').style.display='none'">取消</button>
         </div>
       </div>`;
+
+    // 「補速記」inline 區（用 lawyer_tracking_notes 欄位，不會被 CRM 蓋掉）
+    const trackingBox = !hasTracking ? `
+      <div style="margin-top:8px;font-size:0.78rem;">
+        <details>
+          <summary style="cursor:pointer;color:var(--gold);">⚠ 此案 tracking_notes 空 — 點此補諮詢速記</summary>
+          <textarea id="track-edit-ta-${c.id}" placeholder="例：客戶說回去考慮、想跟先生討論；報價 8 萬覺得稍高..." style="margin-top:6px;width:100%;min-height:60px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:0.82rem;font-family:inherit;">${escHtml(c.lawyer_tracking_notes || '')}</textarea>
+          <button class="btn btn-sm btn-primary" style="margin-top:4px;" onclick="saveLawyerTrackingNotes('${c.id}')">儲存</button>
+          <span style="margin-left:6px;color:var(--text-muted);font-size:0.72rem;">存到 lawyer_tracking_notes，CRM 不會覆蓋</span>
+        </details>
+      </div>` : '';
+
+    // 已處理沉底時降低 opacity
+    const dimStyle = s.rating ? 'opacity:0.6;' : '';
+
     return `
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;${dimStyle}">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap;">
-          <div>
-            <span style="font-weight:600;font-size:1.0rem;">${urgBadge(s.urgency)} ${escHtml(c.client_name || '?')}</span>
-            <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px;">${c.case_date} (${daysAgo} 天前)</span>
+          <div style="flex:1;min-width:280px;">
+            <span style="font-weight:600;font-size:1.05rem;">${urgBadge(s.urgency)} ${escHtml(c.client_name || '?')}</span>
+            <span style="color:var(--text-muted);font-size:0.78rem;margin-left:8px;">${c.case_date} (${daysAgo} 天前) · ${escHtml(c.case_type || '')}</span>
+            <div style="margin-top:3px;font-size:0.78rem;color:var(--text-muted);">
+              律師：${escHtml(r.lawyerName)} · 接案：<strong style="color:var(--text);">${escHtml(c.tracking_staff || '(未指派)')}</strong>
+            </div>
           </div>
-          <div style="font-size:0.78rem;color:var(--text-muted);">
-            律師：${escHtml(r.lawyerName)} · 接案：${escHtml(c.tracking_staff || '—')} · ${lineLink} · ${ratingBadge(s.rating)}
-          </div>
+          <div style="text-align:right;">${ratingBadge(s.rating)}</div>
         </div>
         <div style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);">
-          時機：<span style="color:var(--text);">${escHtml(s.timing || '—')}</span>
+          ⏰ 建議時機：<span style="color:var(--text);">${escHtml(s.timing || '—')}</span>
         </div>
-        <div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-left:3px solid var(--blue);border-radius:4px;font-size:0.88rem;white-space:pre-wrap;line-height:1.55;">
-${escHtml(s.suggested_message || '(無建議話術)')}
-        </div>
-        ${s.emphasis_points ? `<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);">🎯 強調點：<span style="color:var(--text);">${escHtml(s.emphasis_points)}</span></div>` : ''}
-        ${s.reasoning ? `<div style="margin-top:4px;font-size:0.8rem;color:var(--text-muted);">💡 理由：${escHtml(s.reasoning)}</div>` : ''}
-        <div style="margin-top:8px;font-size:0.72rem;color:var(--text-muted);">📂 ${dsBadge(s.data_sources)} · 生成時間 ${(s.generated_at || '').slice(0, 16).replace('T', ' ')}</div>
-        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="rateAiSugg('${s.case_id}', 'adopted')">👍 採用</button>
-          <button class="btn btn-sm btn-ghost" onclick="toggleAiSuggEdit('${s.case_id}')">✏️ 編輯</button>
-          <button class="btn btn-sm" style="background:var(--red);color:#fff;" onclick="rateAiSugg('${s.case_id}', 'rejected')">👎 不採用</button>
-          <button class="btn btn-sm btn-ghost" onclick="rateAiSugg('${s.case_id}', null)">清除評分</button>
+        <div id="sugg-msg-${s.case_id}" style="margin-top:10px;padding:10px 12px;background:var(--bg);border-left:3px solid var(--blue);border-radius:4px;font-size:0.9rem;white-space:pre-wrap;line-height:1.6;">${escHtml(s.edited_message || s.suggested_message || '(無建議話術)')}${s.edited_message ? '<div style="font-size:0.7rem;color:var(--blue);margin-top:6px;">（已被編輯，原 AI 建議：點下方"看原版"）</div>' : ''}</div>
+        ${s.emphasis_points ? `<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);">🎯 重點：<span style="color:var(--text);">${escHtml(s.emphasis_points)}</span></div>` : ''}
+        ${s.reasoning ? `<div style="margin-top:4px;font-size:0.78rem;color:var(--text-muted);">💡 理由：${escHtml(s.reasoning)}</div>` : ''}
+
+        ${trackingBox}
+
+        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-sm btn-primary" onclick="copyAiSuggMessage('${s.case_id}', this)" title="複製話術到剪貼簿">📋 複製話術</button>
+          ${lineBox}
+          <span style="flex:1;"></span>
+          <button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="rateAiSugg('${s.case_id}', 'adopted')" title="話術直接用了，已傳給客戶">✓ 已傳</button>
+          <button class="btn btn-sm btn-ghost" onclick="toggleAiSuggEdit('${s.case_id}')" title="改完話術再傳">✏️ 改後傳</button>
+          <button class="btn btn-sm" style="background:rgba(255,80,80,0.15);color:var(--red);" onclick="rateAiSugg('${s.case_id}', 'rejected')" title="不適合，不傳">✗ 不傳</button>
+          ${s.rating ? `<button class="btn btn-sm btn-ghost" onclick="rateAiSugg('${s.case_id}', null)" style="color:var(--text-muted);">↺ 重新處理</button>` : ''}
         </div>
         ${editBox}
       </div>`;
   }).join('');
+}
+
+// 一鍵複製 — 鈕會閃綠勾秒回
+function copyAiSuggMessage(caseId, btn) {
+  const s = healthState.suggMap.get(caseId);
+  if (!s) return;
+  const text = s.edited_message || s.suggested_message || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ 已複製';
+    btn.style.background = 'var(--green)';
+    btn.style.color = '#fff';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.background = ''; btn.style.color = ''; }, 1200);
+  }).catch(e => alert('複製失敗：' + e.message));
+}
+
+// 法務補 LINE 連結
+async function promptLineUrl(caseId) {
+  const url = prompt('貼上這位客戶的 LINE 對話連結：\n(line://nv/chat?id=... 或 https://line.me/...)');
+  if (!url || !url.trim()) return;
+  const { error } = await sb.from('consultation_cases')
+    .update({ line_chat_url: url.trim() })
+    .eq('id', caseId);
+  if (error) { alert('儲存失敗：' + error.message); return; }
+  const c = healthState.cases.find(x => x.id === caseId);
+  if (c) c.line_chat_url = url.trim();
+  renderHealthPage();
+}
+
+// 法務補諮詢速記（存到 lawyer_tracking_notes，不會被 CRM 覆蓋）
+async function saveLawyerTrackingNotes(caseId) {
+  const ta = document.getElementById('track-edit-ta-' + caseId);
+  if (!ta) return;
+  const val = ta.value.trim();
+  const { error } = await sb.from('consultation_cases')
+    .update({ lawyer_tracking_notes: val })
+    .eq('id', caseId);
+  if (error) { alert('儲存失敗：' + error.message); return; }
+  const c = healthState.cases.find(x => x.id === caseId);
+  if (c) c.lawyer_tracking_notes = val;
+  ta.parentElement.querySelector('summary').innerHTML = '✓ 已補速記（點此修改）';
 }
 
 async function rateAiSugg(caseId, rating) {

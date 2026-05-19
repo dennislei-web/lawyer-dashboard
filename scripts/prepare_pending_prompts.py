@@ -8,21 +8,23 @@
     python prepare_pending_prompts.py --lawyer 雷皓明  # 只跑單一律師
 - 輸出：/tmp/pending_prompts.jsonl
 """
-import os, io, sys, json, argparse
+import os, io, sys, json, argparse, tempfile
+from pathlib import Path
 from datetime import date, timedelta
 import httpx
 from dotenv import load_dotenv
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-load_dotenv("/Users/dennislei/projects/lawyer-dashboard/scripts/.env")
+SCRIPT_DIR = Path(__file__).parent.resolve()
+load_dotenv(SCRIPT_DIR / ".env", override=True)
 
 URL = os.environ["SUPABASE_URL"]
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
 HDR = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
-TODAY = date(2026, 5, 19)
+TODAY = date.today()
 CUTOFF = (TODAY - timedelta(days=30)).isoformat()
-OUT_PATH = "/tmp/pending_prompts.jsonl"
+OUT_PATH = str(Path(tempfile.gettempdir()) / "pending_prompts.jsonl")
 
 
 def fetch_all(table, select, extra=None):
