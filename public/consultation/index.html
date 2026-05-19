@@ -2177,6 +2177,9 @@
       </div>
     </div>
 
+    <!-- 合署自接提示（諮詢律師為合署且未指派接案 → 律師自己追，不需法務介入） -->
+    <div id="healthCohortBanner" style="margin-bottom:12px;"></div>
+
     <!-- KPI 卡片區 -->
     <div id="healthKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:24px;">
       <div style="text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>
@@ -8644,11 +8647,19 @@ function reaskFromDetail(scenario) {
 // 📊 未成案資料健康度（僅雷皓明可見）
 // ============================================================
 const healthState = {
-  cases: [],          // 全部 (未 staff filter)
-  suggMap: new Map(), // case_id -> suggestion row
-  lawyerMap: new Map(),
+  cases: [],            // 「需要法務追單」的 case（已排合署自接）
+  cohortSelfCases: [],  // 合署自接（諮詢律師在合署且未指派 tracking_staff）— 不需法務介入
+  suggMap: new Map(),   // case_id -> suggestion row
+  lawyerMap: new Map(), // lawyer_id -> name
+  lawyerOfficeMap: new Map(), // lawyer_id -> office (含「合署」字串者視為合署律師)
   loadedAt: null,
 };
+
+// 合署律師判斷（office 欄位含「合署」即視為合署，含司法官合署）
+function healthIsCohortLawyer(lawyerId) {
+  const off = healthState.lawyerOfficeMap.get(lawyerId) || '';
+  return off.includes('合署');
+}
 
 // 取得目前 staff filter 過濾後的 cases。空 staff = 全部
 function healthFilteredCases() {
@@ -8684,8 +8695,9 @@ async function loadHealthPage() {
   document.getElementById('healthAiList').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>';
 
   // 並行抓三個 source（含 lawyer_tracking_notes 讓法務可 inline 補資料）
+  // lawyers 加抓 office，用來識別合署律師自接案
   const [{ data: lawyersData }, { data: casesData, error: casesErr }, { data: suggData, error: suggErr }] = await Promise.all([
-    sb.from('lawyers').select('id,name'),
+    sb.from('lawyers').select('id,name,office'),
     sb.from('consultation_cases')
       .select('id,lawyer_id,case_date,case_type,client_name,is_signed,tracking_staff,tracking_notes,tracking_status,lawyer_notes,lawyer_tracking_notes,line_chat_url,no_track_reason')
       .eq('is_signed', false)
@@ -8703,7 +8715,15 @@ async function loadHealthPage() {
   }
 
   healthState.lawyerMap = new Map((lawyersData || []).map(l => [l.id, l.name]));
-  healthState.cases = (casesData || []).filter(c => !((c.no_track_reason || '').trim()));
+  healthState.lawyerOfficeMap = new Map((lawyersData || []).map(l => [l.id, l.office || '']));
+  // 拿掉「主動放棄追蹤」(no_track_reason)
+  const activeUnsigned = (casesData || []).filter(c => !((c.no_track_reason || '').trim()));
+  // 合署自接：諮詢律師在合署 + 沒指派 tracking_staff → 律師自己接、自己追，不需法務介入
+  healthState.cohortSelfCases = activeUnsigned.filter(c =>
+    healthIsCohortLawyer(c.lawyer_id) && !((c.tracking_staff || '').trim())
+  );
+  const cohortSelfIds = new Set(healthState.cohortSelfCases.map(c => c.id));
+  healthState.cases = activeUnsigned.filter(c => !cohortSelfIds.has(c.id));
   healthState.suggMap = new Map(suggList.map(s => [s.case_id, s]));
   healthState.loadedAt = new Date();
 
@@ -8722,9 +8742,34 @@ async function loadHealthPage() {
 
 // staff filter / 排序 change 時用，不重抓
 function renderHealthPage() {
+  renderHealthCohortBanner();
   renderHealthKpis();
   renderHealthDistribution();
   renderHealthAiList();
+}
+
+// 合署自接 banner — 點開展開律師清單
+function renderHealthCohortBanner() {
+  const el = document.getElementById('healthCohortBanner');
+  if (!el) return;
+  const cohort = healthState.cohortSelfCases;
+  if (!cohort.length) { el.innerHTML = ''; return; }
+  // 按律師分組
+  const byLawyer = new Map();
+  cohort.forEach(c => {
+    const name = healthState.lawyerMap.get(c.lawyer_id) || '?';
+    if (!byLawyer.has(name)) byLawyer.set(name, []);
+    byLawyer.get(name).push(c);
+  });
+  const lawyerCounts = [...byLawyer.entries()].sort((a, b) => b[1].length - a[1].length);
+  const summary = lawyerCounts.map(([name, arr]) => `${escHtml(name)} ${arr.length}`).join(' · ');
+  el.innerHTML = `
+    <details style="background:rgba(120,120,120,0.06);border:1px solid var(--border);border-radius:6px;padding:8px 12px;">
+      <summary style="cursor:pointer;color:var(--text-muted);font-size:0.82rem;">
+        ℹ️ 另有 <strong style="color:var(--text);">${cohort.length}</strong> 件合署律師自接案（未指派接案 = 律師自己追，不在法務工作台範圍）— 點此展開
+      </summary>
+      <div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);">${summary}</div>
+    </details>`;
 }
 
 function renderHealthKpis() {
