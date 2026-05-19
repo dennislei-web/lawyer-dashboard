@@ -486,9 +486,16 @@
     .daily-matrix tbody tr:hover { background: transparent; cursor: default; }
     .daily-matrix tbody tr:hover td { background: var(--bg-row); }
     .daily-matrix td.dm-empty { color: var(--text-muted); opacity: 0.35; }
-    .daily-matrix td.dm-weekend { color: var(--red); }
-    .daily-matrix td.dm-up { background: var(--green-dim); color: var(--green); }
-    .daily-matrix td.dm-down { background: var(--red-dim); color: var(--red); }
+    .daily-matrix td.dm-weekend {
+      font-style: italic;
+      background-image: repeating-linear-gradient(
+        45deg,
+        transparent, transparent 5px,
+        rgba(160,170,200,0.18) 5px, rgba(160,170,200,0.18) 7px
+      );
+    }
+    .daily-matrix td.dm-up { background-color: var(--green-dim); color: var(--green); }
+    .daily-matrix td.dm-down { background-color: var(--red-dim); color: var(--red); }
     .daily-matrix td.dm-today {
       outline: 2px solid var(--gold);
       outline-offset: -2px;
@@ -2069,7 +2076,7 @@
         <input type="checkbox" id="dailyColorToggle" checked> 顯示優劣染色
       </label>
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);cursor:pointer;">
-        <input type="checkbox" id="dailyWeekendToggle" checked> 週末紅字
+        <input type="checkbox" id="dailyWeekendToggle" checked> 週末標示
       </label>
     </div>
 
