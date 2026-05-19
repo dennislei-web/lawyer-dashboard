@@ -8694,24 +8694,50 @@ async function loadHealthPage() {
   document.getElementById('healthKpis').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>';
   document.getElementById('healthAiList').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);">載入中…</div>';
 
-  // 並行抓三個 source（含 lawyer_tracking_notes 讓法務可 inline 補資料）
+  // 各表獨立 try，即使某個失敗仍能繼續走 + 把 error 顯示到畫面
   // lawyers 加抓 office，用來識別合署律師自接案
-  const [{ data: lawyersData }, { data: casesData, error: casesErr }, { data: suggData, error: suggErr }] = await Promise.all([
-    sb.from('lawyers').select('id,name,office'),
-    sb.from('consultation_cases')
+  let lawyersData = [], casesData = [], suggData = [];
+  let lawErr = null, casesErr = null, suggErr = null;
+  try {
+    const r = await sb.from('lawyers').select('id,name,office');
+    lawErr = r.error; lawyersData = r.data || [];
+  } catch (e) { lawErr = e; }
+  try {
+    const r = await sb.from('consultation_cases')
       .select('id,lawyer_id,case_date,case_type,client_name,is_signed,tracking_staff,tracking_notes,tracking_status,lawyer_notes,lawyer_tracking_notes,line_chat_url,no_track_reason')
       .eq('is_signed', false)
-      .gte('case_date', cutoff),
-    sb.from('consultation_ai_suggestions').select('*'),
-  ]);
+      .gte('case_date', cutoff);
+    casesErr = r.error; casesData = r.data || [];
+  } catch (e) { casesErr = e; }
+  try {
+    const r = await sb.from('consultation_ai_suggestions').select('*');
+    suggErr = r.error; suggData = r.data || [];
+  } catch (e) { suggErr = e; }
 
-  if (casesErr) {
-    document.getElementById('healthAiList').innerHTML = '<div style="color:var(--red);padding:24px;">無法載入案件資料：' + escHtml(casesErr.message || '') + '</div>';
+  // 把 error / count 一起顯示，方便診斷 RLS / 權限問題
+  const diag = [];
+  diag.push(`lawyers: ${lawErr ? '❌ ' + (lawErr.message || lawErr) : '✓ ' + lawyersData.length + ' 筆'}`);
+  diag.push(`cases: ${casesErr ? '❌ ' + (casesErr.message || casesErr) : '✓ ' + casesData.length + ' 筆'}`);
+  diag.push(`sugg: ${suggErr ? '❌ ' + (suggErr.message || suggErr) : '✓ ' + suggData.length + ' 筆'}`);
+  console.log('[health load]', diag.join(' | '));
+
+  if (lawErr || casesErr) {
+    const userEmail = currentLawyer ? currentLawyer.email : '(未登入)';
+    document.getElementById('healthAiList').innerHTML = `
+      <div style="color:var(--red);padding:20px;background:rgba(255,80,80,0.06);border:1px solid var(--red);border-radius:6px;">
+        <div style="font-weight:600;margin-bottom:6px;">⚠️ 載入資料失敗（${escHtml(userEmail)}）</div>
+        <div style="font-size:0.82rem;line-height:1.6;">
+          • lawyers 表：${lawErr ? escHtml(lawErr.message || String(lawErr)) : '✓ ' + lawyersData.length + ' 筆'}<br>
+          • cases 表：${casesErr ? escHtml(casesErr.message || String(casesErr)) : '✓ ' + casesData.length + ' 筆'}<br>
+          • ai_sugg 表：${suggErr ? escHtml(suggErr.message || String(suggErr)) : '✓ ' + suggData.length + ' 筆'}
+        </div>
+        <div style="margin-top:8px;font-size:0.78rem;color:var(--text-muted);">把這段訊息截圖回傳給 dennis 即可診斷。</div>
+      </div>`;
     return;
   }
-  const suggList = suggErr ? [] : (suggData || []);
+  const suggList = suggData || [];
   if (suggErr) {
-    console.warn('consultation_ai_suggestions 表還沒建好，AI 建議區會顯示為空：', suggErr.message);
+    console.warn('consultation_ai_suggestions 載入失敗，AI 建議區會空：', suggErr.message);
   }
 
   healthState.lawyerMap = new Map((lawyersData || []).map(l => [l.id, l.name]));
