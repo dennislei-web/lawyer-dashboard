@@ -2068,9 +2068,8 @@
         <option value="all">全所</option>
       </select>
       <span class="filter-label" style="margin-left:8px;">對照</span>
-      <select id="dailyCompareSelect" class="year-btn" style="min-width:120px;padding:6px 10px;">
-        <option value="prev">與去年同月同日</option>
-        <option value="none">不對照</option>
+      <select id="dailyCompareSelect" class="year-btn" style="min-width:140px;padding:6px 10px;">
+        <!-- 動態填入：今年（預設）/ 各歷史年度 / 不對照 -->
       </select>
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);margin-left:8px;cursor:pointer;">
         <input type="checkbox" id="dailyColorToggle" checked> 顯示優劣染色
@@ -2996,7 +2995,7 @@ const DAILY_STATE = {
   metric: 'consults',     // consults | signed | collected | rate
   year: null,             // 西元年；null = 預設今年
   lawyerId: 'all',
-  compare: 'prev',        // prev | none
+  compare: 'today',       // 'today'（今年）| 'none'（不對照）| '<year>'（指定年度，例：'2024'）
   showColor: true,
   showWeekend: true,
   initialized: false,
@@ -3071,6 +3070,51 @@ function dailyAvailableYears() {
     if (y) years.add(y);
   }
   return Array.from(years).sort((a,b) => b - a); // 新到舊
+}
+
+// 把 DAILY_STATE.compare 解析成實際年度數字；'none' 或對照年==當前年 → null（不對照）
+function resolveCompareYear() {
+  if (DAILY_STATE.compare === 'none') return null;
+  const cy = (DAILY_STATE.compare === 'today')
+    ? new Date().getFullYear()
+    : parseInt(DAILY_STATE.compare, 10);
+  if (!cy || cy === DAILY_STATE.year) return null;
+  return cy;
+}
+
+// 依現有資料的年份重建「對照」下拉
+function buildDailyCompareOptions() {
+  const sel = document.getElementById('dailyCompareSelect');
+  if (!sel) return;
+  const currentYear = new Date().getFullYear();
+  const years = dailyAvailableYears(); // 新到舊
+  const prevValue = DAILY_STATE.compare || 'today';
+  sel.innerHTML = '';
+
+  // 今年（預設）
+  const optToday = document.createElement('option');
+  optToday.value = 'today';
+  optToday.textContent = `今年（${currentYear}）`;
+  sel.appendChild(optToday);
+
+  // 各歷史年度（排除當年——已用「今年」表示）
+  for (const y of years) {
+    if (y === currentYear) continue;
+    const o = document.createElement('option');
+    o.value = String(y);
+    o.textContent = `${y} 年`;
+    sel.appendChild(o);
+  }
+
+  // 不對照
+  const optNone = document.createElement('option');
+  optNone.value = 'none';
+  optNone.textContent = '不對照';
+  sel.appendChild(optNone);
+
+  // 還原既有選擇
+  if ([...sel.options].some(o => o.value === prevValue)) sel.value = prevValue;
+  else sel.value = 'today';
 }
 
 function dailyFormatValue(v, metric) {
@@ -3155,10 +3199,12 @@ function initDailyControls() {
     renderDailySummary();
   });
 
-  // 比較對象
+  // 比較對象（年度頁籤切換時也要重建：available years 可能變）
+  buildDailyCompareOptions();
   document.getElementById('dailyCompareSelect').addEventListener('change', (e) => {
     DAILY_STATE.compare = e.target.value;
     renderDailyMatrix();
+    renderDailySummary();
   });
 
   // 染色 toggle
@@ -3176,8 +3222,7 @@ function renderDailyMatrix() {
   const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
   const year = DAILY_STATE.year;
   const metric = DAILY_STATE.metric;
-  const compare = DAILY_STATE.compare;
-  const prevYear = year - 1;
+  const compareYear = resolveCompareYear();   // null 表示不對照
   const today = new Date();
   const isCurrentYear = (year === today.getFullYear());
   const todayMonth = today.getMonth() + 1;
@@ -3185,11 +3230,11 @@ function renderDailyMatrix() {
 
   // 預先把每個月的累積算出來
   const monthData = {};      // monthData[m] = { values: [...], daysInMonth }
-  const prevMonthData = {};
+  const cmpMonthData = {};
   for (let m = 1; m <= 12; m++) {
     monthData[m] = cumulativeForMonth(byYMD, year, m, metric);
-    if (compare === 'prev') {
-      prevMonthData[m] = cumulativeForMonth(byYMD, prevYear, m, metric);
+    if (compareYear != null) {
+      cmpMonthData[m] = cumulativeForMonth(byYMD, compareYear, m, metric);
     }
   }
 
@@ -3225,9 +3270,9 @@ function renderDailyMatrix() {
       }
       // 今日
       if (isCurrentYear && m === todayMonth && d === todayDate) classes.push('dm-today');
-      // 與去年同月同日比較
-      if (DAILY_STATE.showColor && compare === 'prev') {
-        const pv = prevMonthData[m].values[d];
+      // 與對照年度同月同日比較
+      if (DAILY_STATE.showColor && compareYear != null) {
+        const pv = cmpMonthData[m].values[d];
         if (pv != null && v != null) {
           if (v > pv) classes.push('dm-up');
           else if (v < pv) classes.push('dm-down');
@@ -3272,7 +3317,7 @@ function renderDailySummary() {
   const metric = DAILY_STATE.metric;
   const today = new Date();
   const useYear = DAILY_STATE.year;
-  const prevYear = useYear - 1;
+  const compareYear = resolveCompareYear();   // null 表示不對照
   const yearIsCurrent = (useYear === today.getFullYear());
 
   // 比較用的「今日」：如果切到的不是今年，就用該年度該月最後一天當錨點
@@ -3281,57 +3326,84 @@ function renderDailySummary() {
 
   // 本日累積（本月）
   const curMonth = cumulativeForMonth(byYMD, useYear, anchorMonth, metric);
-  const prevMonthSame = cumulativeForMonth(byYMD, prevYear, anchorMonth, metric);
   const curToday = curMonth.values[anchorDate];
-  const prevToday = prevMonthSame.values[anchorDate];
 
   // 本月日均（用累積到 anchor 那天 / anchor）
   const avg = (curToday != null && anchorDate > 0) ? (curToday / anchorDate) : null;
-  const prevAvg = (prevToday != null && anchorDate > 0) ? (prevToday / anchorDate) : null;
+
+  // 對照年度的相同錨點
+  let cmpToday = null, cmpAvg = null, cmpYtd = null;
+  if (compareYear != null) {
+    const cmpMonth = cumulativeForMonth(byYMD, compareYear, anchorMonth, metric);
+    cmpToday = cmpMonth.values[anchorDate];
+    cmpAvg = (cmpToday != null && anchorDate > 0) ? (cmpToday / anchorDate) : null;
+  }
 
   // 本年累積到 anchor 日（把 1..anchorMonth-1 月底 + 當月 anchorDate 都加總；rate 特殊）
-  let ytd = null, prevYtd = null;
+  let ytd = null;
   if (metric === 'rate') {
-    // 對 rate 來說，累積到 anchor 日的「全年率」= 全年累積 consults / signed
-    let cConsults = 0, cSigned = 0, pConsults = 0, pSigned = 0;
+    let cConsults = 0, cSigned = 0;
     for (let m = 1; m <= anchorMonth; m++) {
       const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
       for (let d = 1; d <= lastD; d++) {
         const slot = (byYMD[useYear]?.[m]?.[d]);
         if (slot) { cConsults += slot.consults; cSigned += slot.signed; }
-        const pslot = (byYMD[prevYear]?.[m]?.[d]);
-        if (pslot) { pConsults += pslot.consults; pSigned += pslot.signed; }
       }
     }
     ytd = cConsults > 0 ? (cSigned / cConsults * 100) : null;
-    prevYtd = pConsults > 0 ? (pSigned / pConsults * 100) : null;
+
+    if (compareYear != null) {
+      let pConsults = 0, pSigned = 0;
+      for (let m = 1; m <= anchorMonth; m++) {
+        const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+        for (let d = 1; d <= lastD; d++) {
+          const pslot = (byYMD[compareYear]?.[m]?.[d]);
+          if (pslot) { pConsults += pslot.consults; pSigned += pslot.signed; }
+        }
+      }
+      cmpYtd = pConsults > 0 ? (pSigned / pConsults * 100) : null;
+    }
   } else {
-    ytd = 0; prevYtd = 0;
+    ytd = 0;
     for (let m = 1; m <= anchorMonth; m++) {
       const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
       const cm = cumulativeForMonth(byYMD, useYear, m, metric);
-      const pm = cumulativeForMonth(byYMD, prevYear, m, metric);
-      // cumulativeForMonth 對今年未來月份會切斷 → 改成直接從 byYMD 抓
-      // 用「該月到 lastD 的累積值」
       const cv = cm.values[lastD];
-      const pv = pm.values[lastD];
       if (cv != null) ytd += cv;
-      if (pv != null) prevYtd += pv;
+    }
+    if (compareYear != null) {
+      cmpYtd = 0;
+      for (let m = 1; m <= anchorMonth; m++) {
+        const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+        const pm = cumulativeForMonth(byYMD, compareYear, m, metric);
+        const pv = pm.values[lastD];
+        if (pv != null) cmpYtd += pv;
+      }
     }
   }
 
   // 寫入 DOM
+  const labelToday = compareYear ? `${compareYear} 同月同日` : null;
+  const labelAvg = compareYear ? `${compareYear} 同期日均` : null;
+  const labelYtd = compareYear ? `${compareYear} 同期` : null;
+
   document.getElementById('dailyKpiToday').textContent =
     curToday == null ? '—' : dailyFormatValue(curToday, metric);
-  document.getElementById('dailyKpiTodayCompare').innerHTML = formatCompare(curToday, prevToday, metric, `${prevYear} 同月同日`);
+  document.getElementById('dailyKpiTodayCompare').innerHTML = labelToday
+    ? formatCompare(curToday, cmpToday, metric, labelToday)
+    : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiAvg').textContent =
     avg == null ? '—' : dailyFormatValue(avg, metric);
-  document.getElementById('dailyKpiAvgCompare').innerHTML = formatCompare(avg, prevAvg, metric, `${prevYear} 同期日均`);
+  document.getElementById('dailyKpiAvgCompare').innerHTML = labelAvg
+    ? formatCompare(avg, cmpAvg, metric, labelAvg)
+    : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiYtd').textContent =
     ytd == null ? '—' : dailyFormatValue(ytd, metric);
-  document.getElementById('dailyKpiYtdCompare').innerHTML = formatCompare(ytd, prevYtd, metric, `${prevYear} 同期`);
+  document.getElementById('dailyKpiYtdCompare').innerHTML = labelYtd
+    ? formatCompare(ytd, cmpYtd, metric, labelYtd)
+    : '<span style="color:var(--text-muted);">未對照</span>';
 }
 
 function formatCompare(cur, prev, metric, label) {
