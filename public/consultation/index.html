@@ -2767,7 +2767,7 @@ function getChartColors() {
 }
 
 // consultation_cases SELECT 欄位清單（全域共用：loadDashboard 全量載入 + priority 小批載入）
-const CASE_COLS = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis,line_chat_url,no_track_reason';
+const CASE_COLS = 'id,lawyer_id,case_date,case_type,case_number,client_name,is_signed,revenue,collected,meeting_record,transcript,tracking_staff,tracking_notes,tracking_status,lawyer_notes,doc_uploaded_at,llm_analyzed_at,llm_analysis,line_chat_url,no_track_reason,followup_day,followup_week,followup_final';
 
 let allCases      = [];      // all consultation_cases rows visible to this user
 let casesLoadState = 'pending'; // 'pending' | 'loaded' | 'error' — tracks the background allCases fetch
@@ -7222,6 +7222,9 @@ function renderUnsignedPage() {
   cols.push({ key: 'lawyer_notes', label: '追蹤建議' });
   cols.push({ key: 'tracking_notes', label: '備註' });
   cols.push({ key: 'line_chat_url', label: 'LINE 對話' });
+  cols.push({ key: 'followup_day', label: '當天追蹤' });
+  cols.push({ key: 'followup_week', label: '一週追蹤' });
+  cols.push({ key: 'followup_final', label: '最後追蹤' });
   cols.push({ key: 'no_track_reason', label: '暫不追蹤原因' });
 
   const tbl = document.getElementById('unsignedTable');
@@ -7231,6 +7234,7 @@ function renderUnsignedPage() {
   // Width allocation: left columns tight, notes get remaining space
   const colW = { case_date:'86px', client_name:'5em', case_type:'3em',
     lawyer_name:'5em', tracking_staff:'5em', tracking_status:'5em', line_chat_url:'7em',
+    followup_day:'9em', followup_week:'9em', followup_final:'9em',
     no_track_reason:'10em' };
   headRow.innerHTML = cols.map(c => {
     const arrow = unsignedSortCol === c.key ? (unsignedSortDir === 'asc' ? ' ▲' : ' ▼') : '';
@@ -7289,6 +7293,9 @@ function renderUnsignedPage() {
           ${notes.length > 60 ? `title="點擊展開" data-short="${escHtml(shortNotes)}" data-full="${escHtml(notes)}" data-collapsed="1" onclick="var d=this.dataset;if(d.collapsed==='1'){this.textContent=d.full;d.collapsed='0';}else{this.textContent=d.short;d.collapsed='1';}"` : ''}
           >${escHtml(shortNotes) || '—'}</td>
       <td class="line-chat-cell" data-case-id="${c.id}" data-url="${escHtml(c.line_chat_url || '')}" style="font-size:0.78rem;text-align:center;vertical-align:middle;">${lineChatInnerHtml(c.line_chat_url || '')}</td>
+      ${followupCellHtml(c.id, 'followup_day', c.followup_day)}
+      ${followupCellHtml(c.id, 'followup_week', c.followup_week)}
+      ${followupCellHtml(c.id, 'followup_final', c.followup_final)}
       <td style="overflow-wrap:break-word;">
         <div class="no-track-reason-cell" data-case-id="${c.id}"
              onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
@@ -7659,6 +7666,65 @@ async function saveLawyerNote(caseId, note, cellEl) {
     setTimeout(() => saved.remove(), 2000);
   } catch (e) {
     console.error('saveLawyerNote exception:', e);
+    const msg = document.createElement('div');
+    msg.textContent = '✗ 網路錯誤';
+    msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }
+}
+
+// ---- 三段 follow-up 欄位（當天/一週/最後追蹤）inline edit ----
+const FOLLOWUP_FIELDS = new Set(['followup_day', 'followup_week', 'followup_final']);
+
+function followupCellHtml(caseId, field, value) {
+  const v = value || '';
+  const placeholder = '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
+  return `<td style="overflow-wrap:break-word;">
+    <div class="followup-cell" data-case-id="${caseId}" data-field="${field}"
+         onclick="this.querySelector('textarea').style.display='block';this.querySelector('.note-hint').style.display='block';this.querySelector('span').style.display='none';this.querySelector('textarea').focus();">
+      <span style="font-size:0.78rem;color:var(--text-muted);white-space:pre-wrap;cursor:pointer;display:block;min-height:24px;" title="點擊編輯">${escHtml(v) || placeholder}</span>
+      <textarea style="display:none;width:100%;min-height:60px;background:var(--bg-row);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:0.78rem;font-family:inherit;resize:vertical;"
+                onblur="saveFollowupField('${caseId}', '${field}', this.value, this.parentElement)"
+                onkeydown="if(event.key==='Escape'){this.style.display='none';this.parentElement.querySelector('span').style.display='block';}if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
+      >${escHtml(v)}</textarea>
+      <div class="note-hint" style="display:none;font-size:0.65rem;color:var(--text-muted);margin-top:2px;">按 Enter 儲存 · Shift+Enter 換行 · Esc 取消</div>
+    </div>
+  </td>`;
+}
+
+async function saveFollowupField(caseId, field, value, cellEl) {
+  if (!FOLLOWUP_FIELDS.has(field)) { console.error('invalid follow-up field:', field); return; }
+  const span = cellEl.querySelector('span');
+  const ta = cellEl.querySelector('textarea');
+  const hint = cellEl.querySelector('.note-hint');
+  const placeholder = '<span style=\'color:var(--text-muted);opacity:0.4;\'>點擊輸入...</span>';
+  span.innerHTML = escHtml(value) || placeholder;
+  span.style.display = 'block';
+  ta.style.display = 'none';
+  if (hint) hint.style.display = 'none';
+
+  try {
+    const payload = {}; payload[field] = value || null;
+    const { error } = await sb.from('consultation_cases').update(payload).eq('id', caseId);
+    if (error) {
+      const msg = document.createElement('div');
+      msg.textContent = '✗ 儲存失敗';
+      msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
+      cellEl.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+      console.error('saveFollowupField error:', field, error);
+      return;
+    }
+    const c = allCases.find(c => c.id === caseId);
+    if (c) c[field] = value || null;
+    const saved = document.createElement('div');
+    saved.textContent = '✓ 已儲存';
+    saved.style.cssText = 'color:var(--green);font-size:0.72rem;margin-top:2px;';
+    cellEl.appendChild(saved);
+    setTimeout(() => saved.remove(), 2000);
+  } catch (e) {
+    console.error('saveFollowupField exception:', field, e);
     const msg = document.createElement('div');
     msg.textContent = '✗ 網路錯誤';
     msg.style.cssText = 'color:var(--red,#ef4444);font-size:0.72rem;margin-top:2px;';
