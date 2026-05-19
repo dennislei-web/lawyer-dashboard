@@ -451,6 +451,58 @@
       letter-spacing: 0.5px;
     }
 
+    /* ===================== DAILY MATRIX ===================== */
+    .daily-matrix { font-variant-numeric: tabular-nums; }
+    .daily-matrix th, .daily-matrix td {
+      text-align: right;
+      padding: 5px 7px;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+    .daily-matrix thead th {
+      text-transform: none;
+      letter-spacing: 0;
+      background: var(--bg-row);
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .daily-matrix thead th:hover { color: var(--gold); background: var(--bg-hover); }
+    .daily-matrix tbody td.day-label,
+    .daily-matrix tbody th.day-label {
+      text-align: center;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-row);
+      cursor: pointer;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+    }
+    .daily-matrix tbody th.day-label:hover { color: var(--gold); }
+    .daily-matrix tbody tr:nth-child(even) { background: transparent; }
+    .daily-matrix tbody tr:hover { background: transparent; cursor: default; }
+    .daily-matrix tbody tr:hover td { background: var(--bg-row); }
+    .daily-matrix td.dm-empty { color: var(--text-muted); opacity: 0.35; }
+    .daily-matrix td.dm-weekend { color: var(--red); }
+    .daily-matrix td.dm-up { background: var(--green-dim); color: var(--green); }
+    .daily-matrix td.dm-down { background: var(--red-dim); color: var(--red); }
+    .daily-matrix td.dm-today {
+      outline: 2px solid var(--gold);
+      outline-offset: -2px;
+      font-weight: 700;
+    }
+    .daily-matrix tfoot td {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: var(--bg-row);
+      border-top: 1px solid var(--border);
+      text-align: right;
+    }
+    .daily-matrix tfoot td.foot-label { text-align: center; }
+
     /* ===================== TABLES ===================== */
     .table-wrap { overflow-x: auto; }
     #unsignedTable td, #unsignedTable th { padding: 8px 6px; }
@@ -1557,6 +1609,7 @@
       <div class="tab-nav" id="tabNav">
         <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">總覽</button>
         <button class="tab-btn" onclick="showTab('tracking')" id="tab-tracking">年度追蹤</button>
+        <button class="tab-btn" onclick="showTab('daily')" id="tab-daily" style="display:none;">📊 每日累積</button>
         <button class="tab-btn" onclick="showTab('unsigned')" id="tab-unsigned">未成案追蹤</button>
         <button class="tab-btn" onclick="showTab('qa')" id="tab-qa">🤖 AI 問答</button>
         <button class="tab-btn" onclick="showTab('tracker')" id="tab-tracker" style="display:none;">🎯 1-on-1 追蹤</button>
@@ -1975,6 +2028,92 @@
     <!-- Monthly expand cards -->
     <div class="month-cards-grid" id="monthCardsGrid">
       <div class="loading"><span class="loading-spinner"></span>載入中...</div>
+    </div>
+  </div>
+
+  <!-- ===== DAILY CUMULATIVE PAGE (Dennis only) ===== -->
+  <div class="page" id="pageDaily">
+    <div class="section-header" style="margin-bottom:16px;">
+      <div class="section-title" style="font-size:1.1rem;">📊 每日累積追蹤</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">
+        橫向看跨月（每月同日的累積差異）、縱向看跨年（切換年度頁籤）。點月份欄標題可看該月跨年曲線，點日期列標題可看該日跨月長條。
+      </div>
+    </div>
+
+    <!-- 指標 chip -->
+    <div class="year-filter-bar" id="dailyMetricBar" style="margin-bottom:8px;">
+      <span class="filter-label">指標</span>
+      <button class="year-btn active" data-daily-metric="consults">諮詢數</button>
+      <button class="year-btn" data-daily-metric="signed">成案數</button>
+      <button class="year-btn" data-daily-metric="collected">已收金額</button>
+      <button class="year-btn" data-daily-metric="rate">簽約率 %</button>
+    </div>
+
+    <!-- 年度頁籤 -->
+    <div class="year-filter-bar" id="dailyYearBar" style="margin-bottom:8px;">
+      <span class="filter-label">年度</span>
+    </div>
+
+    <!-- 律師篩選 + 比較對象 + 條件格式 -->
+    <div class="year-filter-bar" id="dailyControlBar" style="margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+      <span class="filter-label">律師</span>
+      <select id="dailyLawyerSelect" class="year-btn" style="min-width:140px;padding:6px 10px;">
+        <option value="all">全所</option>
+      </select>
+      <span class="filter-label" style="margin-left:8px;">對照</span>
+      <select id="dailyCompareSelect" class="year-btn" style="min-width:120px;padding:6px 10px;">
+        <option value="prev">與去年同月同日</option>
+        <option value="none">不對照</option>
+      </select>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);margin-left:8px;cursor:pointer;">
+        <input type="checkbox" id="dailyColorToggle" checked> 顯示優劣染色
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" id="dailyWeekendToggle" checked> 週末紅字
+      </label>
+    </div>
+
+    <!-- 摘要卡 -->
+    <div class="kpi-grid" id="dailyKpiGrid" style="margin-bottom:18px;">
+      <div class="kpi-card">
+        <div class="kpi-label">本日累積（本月）</div>
+        <div class="kpi-value blue" id="dailyKpiToday">—</div>
+        <div class="kpi-sub" id="dailyKpiTodayCompare" style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">本月日均</div>
+        <div class="kpi-value blue" id="dailyKpiAvg">—</div>
+        <div class="kpi-sub" id="dailyKpiAvgCompare" style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">本年累積到今日</div>
+        <div class="kpi-value blue" id="dailyKpiYtd">—</div>
+        <div class="kpi-sub" id="dailyKpiYtdCompare" style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">—</div>
+      </div>
+    </div>
+
+    <!-- 矩陣表 -->
+    <div class="table-card">
+      <div style="overflow-x:auto;">
+        <table class="data-table daily-matrix" id="dailyMatrixTable">
+          <thead id="dailyMatrixHead"></thead>
+          <tbody id="dailyMatrixBody"></tbody>
+          <tfoot id="dailyMatrixFoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 跨年/跨月 popup chart modal -->
+  <div id="dailyChartModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:900px;width:100%;max-height:90vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div id="dailyChartTitle" style="font-size:1rem;font-weight:600;">—</div>
+        <button onclick="closeDailyChart()" class="year-btn" style="padding:4px 10px;">關閉</button>
+      </div>
+      <div style="position:relative;height:400px;">
+        <canvas id="dailyChartCanvas"></canvas>
+      </div>
     </div>
   </div>
 
@@ -2767,13 +2906,14 @@ function reRenderActivePage() {
     case 'pageDetail':    renderDetailPage();   break;
     case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
     case 'pageQa':        renderQaPage(); break;
+    case 'pageDaily':     renderDailyPage(); break;
     // pageAdmin does not depend on allCases
   }
 }
 
 // ===================== TAB NAVIGATION =====================
 function showTab(tab) {
-  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker', 'daily'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -2787,6 +2927,8 @@ function showTab(tab) {
   document.getElementById('pageAdmin').classList.toggle('active', tab === 'admin');
   const pt = document.getElementById('pageTracker');
   if (pt) pt.classList.toggle('active', tab === 'tracker');
+  const pd = document.getElementById('pageDaily');
+  if (pd) pd.classList.toggle('active', tab === 'daily');
 
   if (tab === 'overview')  renderOverviewPage();
   if (tab === 'tracking')  renderTrackingPage();
@@ -2807,11 +2949,15 @@ function showTab(tab) {
     if (!canViewTracker()) return;
     renderTrackerPage();
   }
+  if (tab === 'daily') {
+    if (!isTrackerAdmin()) return;
+    renderDailyPage();
+  }
 }
 
 function showDetailPage(lawyerId) {
   detailLawyerId = lawyerId;
-  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker'].forEach(t => {
+  ['overview', 'tracking', 'upload', 'unsigned', 'qa', 'admin', 'tracker', 'daily'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.remove('active');
   });
@@ -2823,6 +2969,8 @@ function showDetailPage(lawyerId) {
   document.getElementById('pageAdmin').classList.remove('active');
   const pt2 = document.getElementById('pageTracker');
   if (pt2) pt2.classList.remove('active');
+  const pd2 = document.getElementById('pageDaily');
+  if (pd2) pd2.classList.remove('active');
   document.getElementById('pageDetail').classList.add('active');
   renderDetailPage();
 }
@@ -2834,6 +2982,464 @@ function canViewTracker() {
 }
 function isTrackerAdmin() {
   return !!(currentLawyer && currentLawyer.email === 'dennis.lei@010.tw');
+}
+
+// ===================== 📊 每日累積（僅 dennis） =====================
+const DAILY_STATE = {
+  metric: 'consults',     // consults | signed | collected | rate
+  year: null,             // 西元年；null = 預設今年
+  lawyerId: 'all',
+  compare: 'prev',        // prev | none
+  showColor: true,
+  showWeekend: true,
+  initialized: false,
+  popupChart: null,
+};
+
+// 把所有可見 cases 預聚合成 byYMD：byYMD[year][month][day] = {consults, signed, collected}
+// month/day 都是 1-based；lawyerId='all' 或具體 id 兩種模式都走同一個 cache key
+function buildDailyAggregate(lawyerId) {
+  const key = lawyerId || 'all';
+  if (!DAILY_STATE._aggCache) DAILY_STATE._aggCache = {};
+  if (DAILY_STATE._aggCache[key]) return DAILY_STATE._aggCache[key];
+
+  const byYMD = {};
+  for (const c of allCases) {
+    if (!c.case_date) continue;
+    if (lawyerId && lawyerId !== 'all' && c.lawyer_id !== lawyerId) continue;
+    // case_date 是 YYYY-MM-DD
+    const y = parseInt(c.case_date.substring(0,4), 10);
+    const m = parseInt(c.case_date.substring(5,7), 10);
+    const d = parseInt(c.case_date.substring(8,10), 10);
+    if (!y || !m || !d) continue;
+    if (!byYMD[y]) byYMD[y] = {};
+    if (!byYMD[y][m]) byYMD[y][m] = {};
+    if (!byYMD[y][m][d]) byYMD[y][m][d] = { consults: 0, signed: 0, collected: 0 };
+    const slot = byYMD[y][m][d];
+    slot.consults += 1;
+    if (c.is_signed) slot.signed += 1;
+    slot.collected += Number(c.collected) || 0;
+  }
+  DAILY_STATE._aggCache[key] = byYMD;
+  return byYMD;
+}
+
+function dailyInvalidateCache() {
+  DAILY_STATE._aggCache = null;
+}
+
+// 取「年/月 累積值」陣列（index 1..31），未到月底的日子用 null 表示
+function cumulativeForMonth(byYMD, year, month, metric) {
+  const yearObj = (byYMD[year] || {});
+  const monthObj = (yearObj[month] || {});
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const out = new Array(32).fill(null);
+  let cConsults = 0, cSigned = 0, cCollected = 0;
+  // 對於還沒到的日子（今年的未來日子）保留 null
+  const today = new Date();
+  const isCurrentMonth = (year === today.getFullYear() && month === today.getMonth() + 1);
+  const todayDate = today.getDate();
+  for (let d = 1; d <= daysInMonth; d++) {
+    // 未來日子（今年本月今天之後）→ null
+    if (isCurrentMonth && d > todayDate) break;
+    const slot = monthObj[d];
+    if (slot) {
+      cConsults += slot.consults;
+      cSigned += slot.signed;
+      cCollected += slot.collected;
+    }
+    if (metric === 'consults') out[d] = cConsults;
+    else if (metric === 'signed') out[d] = cSigned;
+    else if (metric === 'collected') out[d] = cCollected;
+    else if (metric === 'rate') out[d] = cConsults > 0 ? (cSigned / cConsults * 100) : null;
+  }
+  return { values: out, daysInMonth };
+}
+
+function dailyAvailableYears() {
+  const years = new Set();
+  for (const c of allCases) {
+    if (!c.case_date) continue;
+    const y = parseInt(c.case_date.substring(0,4), 10);
+    if (y) years.add(y);
+  }
+  return Array.from(years).sort((a,b) => b - a); // 新到舊
+}
+
+function dailyFormatValue(v, metric) {
+  if (v == null || isNaN(v)) return '';
+  if (metric === 'collected') {
+    // 縮寫：>=1萬 顯 1.2萬，>=1億 顯 1.2億
+    if (Math.abs(v) >= 1e8) return (v / 1e8).toFixed(2) + '億';
+    if (Math.abs(v) >= 1e4) return (v / 1e4).toFixed(1) + '萬';
+    return Math.round(v).toLocaleString();
+  }
+  if (metric === 'rate') return v.toFixed(1) + '%';
+  return Math.round(v).toLocaleString();
+}
+
+function renderDailyPage() {
+  if (!isTrackerAdmin()) return;
+  if (casesLoadState !== 'loaded') {
+    document.getElementById('dailyMatrixBody').innerHTML =
+      '<tr><td colspan="13" class="loading"><span class="loading-spinner"></span>載入案件資料中...</td></tr>';
+    return;
+  }
+
+  // 首次初始化：年度頁籤、律師下拉、事件綁定
+  if (!DAILY_STATE.initialized) {
+    initDailyControls();
+    DAILY_STATE.initialized = true;
+  }
+
+  renderDailyMatrix();
+  renderDailySummary();
+}
+
+function initDailyControls() {
+  // 指標 chip
+  document.querySelectorAll('#dailyMetricBar [data-daily-metric]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      DAILY_STATE.metric = btn.dataset.dailyMetric;
+      document.querySelectorAll('#dailyMetricBar [data-daily-metric]').forEach(b => b.classList.toggle('active', b === btn));
+      renderDailyMatrix();
+      renderDailySummary();
+    });
+  });
+
+  // 年度頁籤
+  const years = dailyAvailableYears();
+  const yearBar = document.getElementById('dailyYearBar');
+  // 清掉原本 except label
+  yearBar.querySelectorAll('.year-btn').forEach(b => b.remove());
+  const today = new Date();
+  const defaultYear = years.includes(today.getFullYear()) ? today.getFullYear() : (years[0] || today.getFullYear());
+  DAILY_STATE.year = defaultYear;
+  for (const y of years) {
+    const b = document.createElement('button');
+    b.className = 'year-btn' + (y === defaultYear ? ' active' : '');
+    b.textContent = y;
+    b.addEventListener('click', () => {
+      DAILY_STATE.year = y;
+      yearBar.querySelectorAll('.year-btn').forEach(btn => btn.classList.toggle('active', btn === b));
+      renderDailyMatrix();
+      renderDailySummary();
+    });
+    yearBar.appendChild(b);
+  }
+
+  // 律師下拉
+  const sel = document.getElementById('dailyLawyerSelect');
+  // 確保 allLawyersMap 有資料
+  const lawyers = Object.values(allLawyersMap || {})
+    .filter(l => l && l.role !== 'legal_staff')
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-TW'));
+  while (sel.options.length > 1) sel.remove(1);
+  for (const l of lawyers) {
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = l.name;
+    sel.appendChild(opt);
+  }
+  sel.value = 'all';
+  sel.addEventListener('change', () => {
+    DAILY_STATE.lawyerId = sel.value;
+    renderDailyMatrix();
+    renderDailySummary();
+  });
+
+  // 比較對象
+  document.getElementById('dailyCompareSelect').addEventListener('change', (e) => {
+    DAILY_STATE.compare = e.target.value;
+    renderDailyMatrix();
+  });
+
+  // 染色 toggle
+  document.getElementById('dailyColorToggle').addEventListener('change', (e) => {
+    DAILY_STATE.showColor = e.target.checked;
+    renderDailyMatrix();
+  });
+  document.getElementById('dailyWeekendToggle').addEventListener('change', (e) => {
+    DAILY_STATE.showWeekend = e.target.checked;
+    renderDailyMatrix();
+  });
+}
+
+function renderDailyMatrix() {
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const year = DAILY_STATE.year;
+  const metric = DAILY_STATE.metric;
+  const compare = DAILY_STATE.compare;
+  const prevYear = year - 1;
+  const today = new Date();
+  const isCurrentYear = (year === today.getFullYear());
+  const todayMonth = today.getMonth() + 1;
+  const todayDate = today.getDate();
+
+  // 預先把每個月的累積算出來
+  const monthData = {};      // monthData[m] = { values: [...], daysInMonth }
+  const prevMonthData = {};
+  for (let m = 1; m <= 12; m++) {
+    monthData[m] = cumulativeForMonth(byYMD, year, m, metric);
+    if (compare === 'prev') {
+      prevMonthData[m] = cumulativeForMonth(byYMD, prevYear, m, metric);
+    }
+  }
+
+  // thead
+  let head = '<tr><th class="day-label">日 \\ 月</th>';
+  for (let m = 1; m <= 12; m++) {
+    head += `<th data-daily-month="${m}" title="點擊看 ${m} 月跨年比較">${m}月</th>`;
+  }
+  head += '</tr>';
+  document.getElementById('dailyMatrixHead').innerHTML = head;
+
+  // tbody — 1..31
+  let body = '';
+  for (let d = 1; d <= 31; d++) {
+    body += `<tr><th class="day-label" data-daily-day="${d}" title="點擊看每月 ${d} 號跨月比較">${d}</th>`;
+    for (let m = 1; m <= 12; m++) {
+      const md = monthData[m];
+      if (d > md.daysInMonth) {
+        body += '<td class="dm-empty"></td>';
+        continue;
+      }
+      const v = md.values[d];
+      if (v == null) {
+        body += '<td class="dm-empty"></td>';
+        continue;
+      }
+      // 條件樣式
+      const classes = [];
+      // 週末
+      if (DAILY_STATE.showWeekend) {
+        const wd = new Date(year, m - 1, d).getDay();
+        if (wd === 0 || wd === 6) classes.push('dm-weekend');
+      }
+      // 今日
+      if (isCurrentYear && m === todayMonth && d === todayDate) classes.push('dm-today');
+      // 與去年同月同日比較
+      if (DAILY_STATE.showColor && compare === 'prev') {
+        const pv = prevMonthData[m].values[d];
+        if (pv != null && v != null) {
+          if (v > pv) classes.push('dm-up');
+          else if (v < pv) classes.push('dm-down');
+        }
+      }
+      const cls = classes.length ? ` class="${classes.join(' ')}"` : '';
+      body += `<td${cls}>${dailyFormatValue(v, metric)}</td>`;
+    }
+    body += '</tr>';
+  }
+  document.getElementById('dailyMatrixBody').innerHTML = body;
+
+  // tfoot — 月底累積
+  let foot = '<tr><td class="foot-label">月底累積</td>';
+  for (let m = 1; m <= 12; m++) {
+    const md = monthData[m];
+    // 找最後一個非 null 值
+    let last = null;
+    for (let d = md.daysInMonth; d >= 1; d--) {
+      if (md.values[d] != null) { last = md.values[d]; break; }
+    }
+    foot += `<td>${last == null ? '' : dailyFormatValue(last, metric)}</td>`;
+  }
+  foot += '</tr>';
+  document.getElementById('dailyMatrixFoot').innerHTML = foot;
+
+  // 綁定 header / day-label 點擊
+  document.querySelectorAll('#dailyMatrixHead [data-daily-month]').forEach(th => {
+    th.addEventListener('click', () => openDailyMonthChart(parseInt(th.dataset.dailyMonth, 10)));
+  });
+  document.querySelectorAll('#dailyMatrixBody [data-daily-day]').forEach(th => {
+    th.addEventListener('click', () => openDailyDayChart(parseInt(th.dataset.dailyDay, 10)));
+  });
+}
+
+function metricLabel(metric) {
+  return { consults: '諮詢數', signed: '成案數', collected: '已收金額', rate: '簽約率 %' }[metric] || metric;
+}
+
+function renderDailySummary() {
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const metric = DAILY_STATE.metric;
+  const today = new Date();
+  const useYear = DAILY_STATE.year;
+  const prevYear = useYear - 1;
+  const yearIsCurrent = (useYear === today.getFullYear());
+
+  // 比較用的「今日」：如果切到的不是今年，就用該年度該月最後一天當錨點
+  const anchorMonth = yearIsCurrent ? today.getMonth() + 1 : 12;
+  const anchorDate = yearIsCurrent ? today.getDate() : new Date(useYear, anchorMonth, 0).getDate();
+
+  // 本日累積（本月）
+  const curMonth = cumulativeForMonth(byYMD, useYear, anchorMonth, metric);
+  const prevMonthSame = cumulativeForMonth(byYMD, prevYear, anchorMonth, metric);
+  const curToday = curMonth.values[anchorDate];
+  const prevToday = prevMonthSame.values[anchorDate];
+
+  // 本月日均（用累積到 anchor 那天 / anchor）
+  const avg = (curToday != null && anchorDate > 0) ? (curToday / anchorDate) : null;
+  const prevAvg = (prevToday != null && anchorDate > 0) ? (prevToday / anchorDate) : null;
+
+  // 本年累積到 anchor 日（把 1..anchorMonth-1 月底 + 當月 anchorDate 都加總；rate 特殊）
+  let ytd = null, prevYtd = null;
+  if (metric === 'rate') {
+    // 對 rate 來說，累積到 anchor 日的「全年率」= 全年累積 consults / signed
+    let cConsults = 0, cSigned = 0, pConsults = 0, pSigned = 0;
+    for (let m = 1; m <= anchorMonth; m++) {
+      const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+      for (let d = 1; d <= lastD; d++) {
+        const slot = (byYMD[useYear]?.[m]?.[d]);
+        if (slot) { cConsults += slot.consults; cSigned += slot.signed; }
+        const pslot = (byYMD[prevYear]?.[m]?.[d]);
+        if (pslot) { pConsults += pslot.consults; pSigned += pslot.signed; }
+      }
+    }
+    ytd = cConsults > 0 ? (cSigned / cConsults * 100) : null;
+    prevYtd = pConsults > 0 ? (pSigned / pConsults * 100) : null;
+  } else {
+    ytd = 0; prevYtd = 0;
+    for (let m = 1; m <= anchorMonth; m++) {
+      const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+      const cm = cumulativeForMonth(byYMD, useYear, m, metric);
+      const pm = cumulativeForMonth(byYMD, prevYear, m, metric);
+      // cumulativeForMonth 對今年未來月份會切斷 → 改成直接從 byYMD 抓
+      // 用「該月到 lastD 的累積值」
+      const cv = cm.values[lastD];
+      const pv = pm.values[lastD];
+      if (cv != null) ytd += cv;
+      if (pv != null) prevYtd += pv;
+    }
+  }
+
+  // 寫入 DOM
+  document.getElementById('dailyKpiToday').textContent =
+    curToday == null ? '—' : dailyFormatValue(curToday, metric);
+  document.getElementById('dailyKpiTodayCompare').innerHTML = formatCompare(curToday, prevToday, metric, `${prevYear} 同月同日`);
+
+  document.getElementById('dailyKpiAvg').textContent =
+    avg == null ? '—' : dailyFormatValue(avg, metric);
+  document.getElementById('dailyKpiAvgCompare').innerHTML = formatCompare(avg, prevAvg, metric, `${prevYear} 同期日均`);
+
+  document.getElementById('dailyKpiYtd').textContent =
+    ytd == null ? '—' : dailyFormatValue(ytd, metric);
+  document.getElementById('dailyKpiYtdCompare').innerHTML = formatCompare(ytd, prevYtd, metric, `${prevYear} 同期`);
+}
+
+function formatCompare(cur, prev, metric, label) {
+  if (cur == null || prev == null) return `<span style="color:var(--text-muted);">${label}：—</span>`;
+  const diff = cur - prev;
+  let pct = '';
+  if (metric === 'rate') {
+    pct = ` (${(diff >= 0 ? '+' : '')}${diff.toFixed(1)}pp)`;
+  } else {
+    if (prev !== 0) pct = ` (${diff >= 0 ? '+' : ''}${(diff / prev * 100).toFixed(1)}%)`;
+  }
+  const color = diff > 0 ? 'var(--green)' : (diff < 0 ? 'var(--red)' : 'var(--text-muted)');
+  return `<span style="color:${color};">vs ${label}：${dailyFormatValue(prev, metric)} → ${diff >= 0 ? '▲' : '▼'}${dailyFormatValue(Math.abs(diff), metric)}${pct}</span>`;
+}
+
+// ----- popup chart -----
+function openDailyMonthChart(month) {
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const metric = DAILY_STATE.metric;
+  const years = dailyAvailableYears();
+  const daysInMonth = new Date(2024, month, 0).getDate(); // 用平年最大；2 月用 29 也 OK
+  const labels = [];
+  for (let d = 1; d <= 31; d++) labels.push(`${d}`);
+
+  // 顏色板：今年金、其他依新到舊變淡
+  const palette = ['#c9a84c', '#4f8ef7', '#8899aa', '#6c7a8e', '#4f5a6d', '#383e4a'];
+  const datasets = [];
+  years.forEach((y, idx) => {
+    const md = cumulativeForMonth(byYMD, y, month, metric);
+    const data = [];
+    for (let d = 1; d <= 31; d++) {
+      if (d > md.daysInMonth) data.push(null);
+      else data.push(md.values[d]);
+    }
+    datasets.push({
+      label: `${y}`,
+      data,
+      borderColor: palette[idx] || '#888',
+      backgroundColor: (palette[idx] || '#888') + '22',
+      tension: 0.2,
+      spanGaps: false,
+      pointRadius: 2,
+      borderWidth: idx === 0 ? 2.5 : 1.5,
+    });
+  });
+
+  document.getElementById('dailyChartTitle').textContent = `📅 ${month} 月跨年比較 — ${metricLabel(metric)}`;
+  renderDailyPopupChart(labels, datasets, '日');
+  document.getElementById('dailyChartModal').style.display = 'flex';
+}
+
+function openDailyDayChart(day) {
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const metric = DAILY_STATE.metric;
+  const years = dailyAvailableYears();
+  const labels = [];
+  for (let m = 1; m <= 12; m++) labels.push(`${m}月`);
+
+  const palette = ['#c9a84c', '#4f8ef7', '#8899aa', '#6c7a8e', '#4f5a6d', '#383e4a'];
+  const datasets = [];
+  years.forEach((y, idx) => {
+    const data = [];
+    for (let m = 1; m <= 12; m++) {
+      const md = cumulativeForMonth(byYMD, y, m, metric);
+      if (day > md.daysInMonth) data.push(null);
+      else data.push(md.values[day]);
+    }
+    datasets.push({
+      label: `${y}`,
+      data,
+      borderColor: palette[idx] || '#888',
+      backgroundColor: (palette[idx] || '#888') + '66',
+      borderWidth: 1,
+    });
+  });
+
+  document.getElementById('dailyChartTitle').textContent = `📅 每月 ${day} 號跨月比較 — ${metricLabel(metric)}`;
+  renderDailyPopupChart(labels, datasets, '月', 'bar');
+  document.getElementById('dailyChartModal').style.display = 'flex';
+}
+
+function renderDailyPopupChart(labels, datasets, xLabel, type = 'line') {
+  const canvas = document.getElementById('dailyChartCanvas');
+  if (DAILY_STATE.popupChart) {
+    DAILY_STATE.popupChart.destroy();
+    DAILY_STATE.popupChart = null;
+  }
+  const isDark = !(document.documentElement.dataset.theme === 'light');
+  const textColor = isDark ? '#e0e0e0' : '#1a1a2e';
+  const gridColor = isDark ? 'rgba(30,48,80,0.5)' : 'rgba(0,0,0,0.08)';
+  DAILY_STATE.popupChart = new Chart(canvas, {
+    type,
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${dailyFormatValue(ctx.parsed.y, DAILY_STATE.metric)}`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor }, grid: { color: gridColor }, title: { display: true, text: xLabel, color: textColor } },
+        y: { ticks: { color: textColor, callback: (v) => dailyFormatValue(v, DAILY_STATE.metric) }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+function closeDailyChart() {
+  document.getElementById('dailyChartModal').style.display = 'none';
+  if (DAILY_STATE.popupChart) { DAILY_STATE.popupChart.destroy(); DAILY_STATE.popupChart = null; }
 }
 
 function goBackFromDetail() {
@@ -2872,6 +3478,9 @@ function refreshRoleDependentUI() {
   // 🎯 1-on-1 追蹤 tab — 永遠用 realLawyer.email 判斷（不受 View-As 影響）
   const trackerTab = document.getElementById('tab-tracker');
   if (trackerTab) trackerTab.style.display = canViewTracker() ? '' : 'none';
+  // 📊 每日累積 tab — 僅 dennis.lei@010.tw 可見
+  const dailyTab = document.getElementById('tab-daily');
+  if (dailyTab) dailyTab.style.display = isTrackerAdmin() ? '' : 'none';
 }
 
 function showDashboard() {
