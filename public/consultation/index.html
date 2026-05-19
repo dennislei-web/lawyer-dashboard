@@ -2134,6 +2134,14 @@
       <button class="year-btn active" onclick="setUnsignedRange(1)">近1個月</button>
       <button class="year-btn" onclick="setUnsignedRange(3)">近3個月</button>
       <button class="year-btn" onclick="setUnsignedRange(6)">近6個月</button>
+      <button class="year-btn" id="unsignedCustomToggle" onclick="toggleUnsignedCustomRange()">📅 自訂日期</button>
+      <span id="unsignedCustomRangeBox" style="display:none;align-items:center;gap:6px;margin-left:8px;">
+        <input type="date" id="unsignedCustomFrom" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;">
+        <span style="color:var(--text-muted);">~</span>
+        <input type="date" id="unsignedCustomTo" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;">
+        <button class="year-btn" style="padding:4px 12px;" onclick="applyUnsignedCustomRange()">套用</button>
+        <button class="year-btn" style="padding:4px 8px;color:var(--text-muted);" onclick="clearUnsignedCustomRange()" title="清除自訂、回近1個月">✗</button>
+      </span>
       <span class="filter-label" id="unsignedLawyerFilterLabel" style="margin-left:20px;display:none;">律師</span>
       <select id="unsignedLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderUnsignedPage()">
       </select>
@@ -6872,6 +6880,7 @@ document.getElementById('passwordModal').addEventListener('click', (e) => {
 
 // ===================== UNSIGNED CASES TRACKING =====================
 var unsignedRange = 1;
+var unsignedCustomRange = null;  // null = 用按鈕；{from:'YYYY-MM-DD', to:'YYYY-MM-DD'} = 自訂
 var unsignedSortCol = 'case_date';
 var unsignedSortDir = 'desc';
 // 預設律師：lawyer 帳號=自己、非 lawyer 帳號=雷皓明（只在 select 第一次填好後套用一次）
@@ -6879,10 +6888,55 @@ var unsignedDefaultLawyerApplied = false;
 
 function setUnsignedRange(months) {
   unsignedRange = months;
+  unsignedCustomRange = null;  // 切回月份預設 → 清掉自訂
+  // 隱藏 custom box
+  const box = document.getElementById('unsignedCustomRangeBox');
+  if (box) box.style.display = 'none';
   document.querySelectorAll('#unsignedFilterBar .year-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent.includes(months + '個月'));
+    btn.classList.remove('active');
+    if (btn.textContent.includes(months + '個月')) btn.classList.add('active');
   });
   renderUnsignedPage();
+}
+
+function toggleUnsignedCustomRange() {
+  const box = document.getElementById('unsignedCustomRangeBox');
+  if (!box) return;
+  const show = box.style.display === 'none' || box.style.display === '';
+  box.style.display = show ? 'inline-flex' : 'none';
+  if (show) {
+    // 預設帶現在 range 對應的 from / 今天
+    const today = new Date();
+    const from = new Date(today); from.setMonth(from.getMonth() - unsignedRange);
+    const fromEl = document.getElementById('unsignedCustomFrom');
+    const toEl = document.getElementById('unsignedCustomTo');
+    if (fromEl && !fromEl.value) fromEl.value = from.toISOString().slice(0, 10);
+    if (toEl && !toEl.value) toEl.value = today.toISOString().slice(0, 10);
+  }
+}
+
+function applyUnsignedCustomRange() {
+  const from = (document.getElementById('unsignedCustomFrom') || {}).value || '';
+  const to = (document.getElementById('unsignedCustomTo') || {}).value || '';
+  if (!from || !to) { alert('請選起訖日'); return; }
+  if (from > to) { alert('起日不能大於迄日'); return; }
+  unsignedCustomRange = { from, to };
+  // 取消所有 month 按鈕 active、把自訂按鈕標 active
+  document.querySelectorAll('#unsignedFilterBar .year-btn').forEach(btn => btn.classList.remove('active'));
+  const toggleBtn = document.getElementById('unsignedCustomToggle');
+  if (toggleBtn) toggleBtn.classList.add('active');
+  renderUnsignedPage();
+}
+
+function clearUnsignedCustomRange() {
+  unsignedCustomRange = null;
+  const fromEl = document.getElementById('unsignedCustomFrom');
+  const toEl = document.getElementById('unsignedCustomTo');
+  if (fromEl) fromEl.value = '';
+  if (toEl) toEl.value = '';
+  const box = document.getElementById('unsignedCustomRangeBox');
+  if (box) box.style.display = 'none';
+  setUnsignedRange(1);  // 回近 1 個月
 }
 
 // ===================== ADMIN PAGE =====================
@@ -7122,14 +7176,19 @@ function renderUnsignedPage() {
   }
 
   const now = new Date();
-  const cutoff = new Date(now);
-  // priority 模式下 fetched data 只有近 1 個月，即使按鈕選 3/6 月也只能顯示 1 個月範圍
-  const effectiveRange = isPriorityMode ? 1 : unsignedRange;
-  cutoff.setMonth(cutoff.getMonth() - effectiveRange);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-  // Filter unsigned cases within date range
-  let cases = sourceCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+  // priority 模式下 fetched data 只有近 1 個月，即使按鈕選 3/6 月或自訂也只能顯示 1 個月範圍
+  // 非 priority 模式下：unsignedCustomRange 優先；否則用 unsignedRange 月份
+  let cases;
+  if (!isPriorityMode && unsignedCustomRange) {
+    const { from, to } = unsignedCustomRange;
+    cases = sourceCases.filter(c => !c.is_signed && c.case_date >= from && c.case_date <= to);
+  } else {
+    const effectiveRange = isPriorityMode ? 1 : unsignedRange;
+    const cutoff = new Date(now);
+    cutoff.setMonth(cutoff.getMonth() - effectiveRange);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    cases = sourceCases.filter(c => !c.is_signed && c.case_date >= cutoffStr);
+  }
 
   // Admin: show lawyer filter（priority 模式下隱藏，因為資料已被 lawyer 過濾）
   const showAllData = !isPriorityMode && canViewAll();
