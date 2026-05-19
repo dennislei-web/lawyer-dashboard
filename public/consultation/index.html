@@ -3409,11 +3409,11 @@ function renderDailySummary() {
 function formatCompare(cur, prev, metric, label) {
   if (cur == null || prev == null) return `<span style="color:var(--text-muted);">${label}：—</span>`;
   const diff = cur - prev;
+  // rate 本身就是 %，diff 直接顯示「▼X.X%」即可（不重複加相對 % 也不用 pp）。
+  // 其他指標 append 相對 %（例：348 萬 → ▼43 萬 (-45.7%)）
   let pct = '';
-  if (metric === 'rate') {
-    pct = ` (${(diff >= 0 ? '+' : '')}${diff.toFixed(1)}pp)`;
-  } else {
-    if (prev !== 0) pct = ` (${diff >= 0 ? '+' : ''}${(diff / prev * 100).toFixed(1)}%)`;
+  if (metric !== 'rate' && prev !== 0) {
+    pct = ` (${diff >= 0 ? '+' : ''}${(diff / prev * 100).toFixed(1)}%)`;
   }
   const color = diff > 0 ? 'var(--green)' : (diff < 0 ? 'var(--red)' : 'var(--text-muted)');
   return `<span style="color:${color};">vs ${label}：${dailyFormatValue(prev, metric)} → ${diff >= 0 ? '▲' : '▼'}${dailyFormatValue(Math.abs(diff), metric)}${pct}</span>`;
