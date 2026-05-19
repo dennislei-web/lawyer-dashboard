@@ -3214,7 +3214,7 @@ function buildDailyCompareOptions() {
   else sel.value = 'today';
 }
 
-function dailyFormatValue(v, metric) {
+function dailyFormatValue(v, metric, precise) {
   if (v == null || isNaN(v)) return '';
   if (metric === 'collected') {
     // 縮寫：>=1萬 顯 1.2萬，>=1億 顯 1.2億
@@ -3223,6 +3223,8 @@ function dailyFormatValue(v, metric) {
     return Math.round(v).toLocaleString();
   }
   if (metric === 'rate') return v.toFixed(1) + '%';
+  // 計件 metric：日均之類分數值傳 precise=true，保留一位小數避免被 round 成 0
+  if (precise) return v.toFixed(1);
   return Math.round(v).toLocaleString();
 }
 
@@ -3536,9 +3538,9 @@ function renderDailySummary() {
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiAvg').textContent =
-    headlineAvg == null ? '—' : dailyFormatValue(headlineAvg, metric);
+    headlineAvg == null ? '—' : dailyFormatValue(headlineAvg, metric, true);
   document.getElementById('dailyKpiAvgCompare').innerHTML = labelAvg
-    ? formatCompare(headlineAvg, subAvg, metric, labelAvg)
+    ? formatCompare(headlineAvg, subAvg, metric, labelAvg, true)
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiYtd').textContent =
@@ -3548,7 +3550,7 @@ function renderDailySummary() {
     : '<span style="color:var(--text-muted);">未對照</span>';
 }
 
-function formatCompare(cur, prev, metric, label) {
+function formatCompare(cur, prev, metric, label, precise) {
   if (cur == null || prev == null) return `<span style="color:var(--text-muted);">${label}：—</span>`;
   const diff = cur - prev;
   // rate 本身就是 %，diff 直接顯示「▼X.X%」即可（不重複加相對 % 也不用 pp）。
@@ -3558,7 +3560,7 @@ function formatCompare(cur, prev, metric, label) {
     pct = ` (${diff >= 0 ? '+' : ''}${(diff / prev * 100).toFixed(1)}%)`;
   }
   const color = diff > 0 ? 'var(--green)' : (diff < 0 ? 'var(--red)' : 'var(--text-muted)');
-  return `<span style="color:${color};">vs ${label}：${dailyFormatValue(prev, metric)} → ${diff >= 0 ? '▲' : '▼'}${dailyFormatValue(Math.abs(diff), metric)}${pct}</span>`;
+  return `<span style="color:${color};">vs ${label}：${dailyFormatValue(prev, metric, precise)} → ${diff >= 0 ? '▲' : '▼'}${dailyFormatValue(Math.abs(diff), metric, precise)}${pct}</span>`;
 }
 
 // ----- popup chart -----
