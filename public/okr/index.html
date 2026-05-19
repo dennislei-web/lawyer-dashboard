@@ -221,6 +221,158 @@
 
     .small-note { font-size:0.72rem; color:var(--text-muted); margin-top:6px; }
     .loading-text { padding:60px 20px; text-align:center; color:var(--text-muted); }
+
+    /* ═══ MEETING TRACKER ═══ */
+    .page-tabs { display:flex; gap:4px; padding:0 0 0 4px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+    .page-tabs button { background:transparent; border:none; color:var(--text-muted); cursor:pointer;
+      padding:10px 18px; font-size:0.9rem; font-weight:500; border-bottom:2px solid transparent;
+      white-space:nowrap; font-family:inherit; margin-bottom:-1px; }
+    .page-tabs button:hover { color:var(--text); }
+    .page-tabs button.active { color:var(--gold-light); border-bottom-color:var(--gold); }
+    .page-tabs button .count { background:var(--ghost-bg); border-radius:8px; padding:1px 6px; font-size:0.7rem; margin-left:6px; }
+    .page-tabs button.active .count { background:rgba(201,168,76,0.2); color:var(--gold-light); }
+
+    .mt-subtabs { display:flex; gap:2px; margin-bottom:14px; }
+    .mt-subtabs button { background:var(--ghost-bg); color:var(--text-muted); border:1px solid var(--border);
+      border-radius:6px; padding:6px 12px; font-size:0.83rem; cursor:pointer; font-family:inherit;
+      margin-right:4px; }
+    .mt-subtabs button:hover { background:var(--bg-hover); color:var(--text); }
+    .mt-subtabs button.active { background:var(--gold); color:#0a0a0a; border-color:var(--gold); font-weight:600; }
+
+    .mt-filter-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 14px;
+      background:var(--bg-card); border:1px solid var(--border); border-radius:10px; margin-bottom:14px; }
+    .mt-filter-row label { font-size:0.75rem; color:var(--text-muted); }
+    .mt-filter-row select, .mt-filter-row input {
+      background:var(--bg-row); color:var(--text); border:1px solid var(--border); border-radius:6px;
+      padding:5px 10px; font-size:0.83rem; font-family:inherit; }
+    .mt-filter-row .spacer { flex:1; }
+    .mt-filter-row button.primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a;
+      font-weight:600; border:none; border-radius:6px; padding:6px 14px; font-size:0.83rem; cursor:pointer; }
+
+    .action-table { width:100%; background:var(--bg-card); border:1px solid var(--border);
+      border-radius:10px; overflow:hidden; border-collapse:collapse; }
+    .action-table th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;
+      color:var(--text-muted); font-weight:500; text-align:left; padding:10px 12px;
+      border-bottom:1px solid var(--border); background:var(--bg-row); }
+    .action-table td { padding:11px 12px; border-bottom:1px solid var(--border-light); font-size:0.85rem; vertical-align:top; }
+    .action-table tr:last-child td { border-bottom:none; }
+    .action-table tr.action-row:hover { background:var(--bg-hover); }
+    .action-table .col-title { font-weight:500; color:var(--text); }
+    .action-table .col-title .resolution { display:block; font-size:0.74rem; color:var(--text-muted);
+      margin-top:4px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.4; }
+    .action-table .col-owner { white-space:nowrap; }
+    .action-table .col-due { white-space:nowrap; color:var(--text-muted); font-size:0.78rem; }
+    .action-table .col-due.overdue { color:var(--red); font-weight:600; }
+    .action-table .col-actions { white-space:nowrap; text-align:right; }
+
+    .badge-status { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+    .badge-status.pending     { background:var(--blue-dim);   color:var(--blue); }
+    .badge-status.in_progress { background:var(--orange-dim); color:var(--orange); }
+    .badge-status.blocked     { background:var(--red-dim);    color:var(--red); }
+    .badge-status.done        { background:var(--green-dim);  color:var(--green); }
+    .badge-status.dropped     { background:var(--ghost-bg);   color:var(--text-muted); }
+
+    .badge-kr { display:inline-block; padding:2px 7px; border-radius:10px; font-size:0.7rem; font-weight:600; }
+    .badge-kr.kr1 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
+    .badge-kr.kr2 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
+    .badge-kr.kr3 { background:var(--blue-dim); color:var(--blue); }
+    .badge-kr.kr4 { background:var(--orange-dim); color:var(--orange); }
+    .badge-kr.kr5 { background:var(--purple-dim); color:var(--purple); }
+    .badge-kr.kr6 { background:var(--green-dim); color:var(--green); }
+    .badge-kr.kr7 { background:var(--purple-dim); color:var(--purple); }
+    .badge-kr.org { background:var(--ghost-bg); color:var(--text-muted); }
+
+    .carry-badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:10px;
+      font-size:0.7rem; font-weight:700; }
+    .carry-badge.lv0 { background:var(--ghost-bg); color:var(--text-muted); }
+    .carry-badge.lv1 { background:rgba(255,255,255,0.08); color:var(--text); }
+    .carry-badge.lv2 { background:var(--orange-dim); color:var(--orange); }
+    .carry-badge.lv3 { background:var(--red-dim); color:var(--red); animation:mt-pulse 2s infinite; }
+    @keyframes mt-pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+    .btn-mini { background:var(--ghost-bg); color:var(--text); border:1px solid var(--border);
+      border-radius:5px; padding:3px 8px; font-size:0.72rem; cursor:pointer; font-family:inherit;
+      margin-left:3px; }
+    .btn-mini:hover { background:var(--bg-hover); }
+    .btn-mini.green { color:var(--green); border-color:var(--green); }
+    .btn-mini.orange { color:var(--orange); border-color:var(--orange); }
+    .btn-mini.red { color:var(--red); border-color:var(--red); }
+    .btn-mini.blue { color:var(--blue); border-color:var(--blue); }
+
+    /* Carry board */
+    .carry-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:14px; }
+    .carry-card { background:var(--bg-card); border:1px solid var(--red); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; }
+    .carry-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red); }
+    .carry-card.lv2 { border-color:var(--orange); }
+    .carry-card.lv2::before { background:var(--orange); }
+    .carry-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
+    .carry-card-head .title { font-size:0.95rem; font-weight:600; color:var(--text); }
+    .carry-card-meta { font-size:0.74rem; color:var(--text-muted); display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+    .carry-timeline { font-size:0.78rem; color:var(--text-muted); margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+    .carry-timeline .row { padding:3px 0; display:flex; gap:8px; }
+    .carry-timeline .row .date { color:var(--text-muted); font-family:monospace; min-width:50px; }
+    .carry-timeline .row .what { color:var(--text); }
+    .carry-card-foot { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+
+    /* Meeting list / timeline */
+    .timeline-grid { display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:flex-start; }
+    @media (max-width:900px) { .timeline-grid { grid-template-columns:1fr; } }
+    .meeting-list { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .meeting-list h4 { padding:10px 14px; font-size:0.78rem; color:var(--text-muted); border-bottom:1px solid var(--border);
+      background:var(--bg-row); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; }
+    .meeting-list .m-item { padding:11px 14px; border-bottom:1px solid var(--border-light); cursor:pointer; }
+    .meeting-list .m-item:last-child { border-bottom:none; }
+    .meeting-list .m-item:hover { background:var(--bg-hover); }
+    .meeting-list .m-item.on { background:var(--bg-hover); border-left:3px solid var(--gold); padding-left:11px; }
+    .meeting-list .m-item .date { font-size:0.85rem; color:var(--text); font-weight:600; }
+    .meeting-list .m-item .meta { font-size:0.72rem; color:var(--text-muted); margin-top:3px; }
+    .meeting-detail { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+    .meeting-detail h3 { font-size:1rem; color:var(--gold-light); margin-bottom:4px; }
+    .meeting-detail .meta-line { font-size:0.78rem; color:var(--text-muted); margin-bottom:14px; display:flex; gap:14px; flex-wrap:wrap; }
+    .meeting-detail .meta-line a { color:var(--blue); text-decoration:none; }
+    .meeting-detail .group-label { font-size:0.76rem; color:var(--text-muted); margin-top:14px; margin-bottom:6px;
+      text-transform:uppercase; letter-spacing:0.5px; font-weight:500; }
+    .meeting-detail .item-row { display:flex; gap:8px; padding:8px 10px; background:var(--bg-row);
+      border-radius:6px; margin-bottom:5px; font-size:0.83rem; align-items:center; }
+    .meeting-detail .item-row .text { flex:1; }
+
+    /* KR card embedded actions block */
+    .kr-actions-block { margin-top:14px; padding-top:14px; border-top:1px dashed var(--border); }
+    .kr-actions-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .kr-actions-head h4 { font-size:0.85rem; color:var(--text); font-weight:600; }
+    .kr-actions-head .stat { font-size:0.74rem; color:var(--text-muted); }
+    .kr-actions-head .stat a { color:var(--blue); text-decoration:none; cursor:pointer; }
+    .kr-action-row { display:grid; grid-template-columns:1fr auto auto auto; gap:10px; align-items:center;
+      padding:8px 10px; border-radius:6px; font-size:0.83rem; }
+    .kr-action-row:nth-child(odd) { background:var(--bg-row); }
+    .kr-action-row .ka-title { color:var(--text); }
+    .kr-action-row .ka-title .resolution { display:block; font-size:0.72rem; color:var(--text-muted); margin-top:3px; }
+    .kr-action-row .ka-owner { color:var(--text-muted); font-size:0.75rem; }
+
+    /* Modal */
+    .mt-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+    .mt-modal-backdrop.show { display:flex; }
+    .mt-modal { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px 22px;
+      max-width:680px; width:100%; max-height:90vh; overflow:auto; }
+    .mt-modal h3 { font-size:1rem; color:var(--gold-light); margin-bottom:14px; }
+    .mt-modal .form-row { display:grid; grid-template-columns:130px 1fr; gap:12px; margin-bottom:12px; align-items:center; }
+    .mt-modal .form-row.tall { align-items:flex-start; }
+    .mt-modal .form-row label { font-size:0.83rem; color:var(--text-muted); }
+    .mt-modal .form-row input, .mt-modal .form-row select, .mt-modal .form-row textarea {
+      background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:6px;
+      padding:7px 11px; font-size:0.88rem; font-family:inherit; width:100%; }
+    .mt-modal .form-row textarea { min-height:70px; resize:vertical; }
+    .mt-modal .form-actions { display:flex; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:14px; }
+    .mt-modal .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600;
+      border:none; border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
+    .mt-modal .btn-ghost { background:var(--ghost-bg); color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
+
+    .mt-note { background:var(--blue-dim); border-left:3px solid var(--blue); padding:10px 14px; border-radius:6px;
+      font-size:0.82rem; color:var(--text); margin:12px 0; line-height:1.5; }
+    .mt-note b { color:var(--blue); }
+    .mt-note.warn { background:var(--orange-dim); border-color:var(--orange); }
+    .mt-note.warn b { color:var(--orange); }
   </style>
 </head>
 <body>
@@ -273,6 +425,12 @@
   </div>
 
   <div class="main">
+    <div class="page-tabs" id="pageTabs">
+      <button class="active" data-panel="okr">📊 OKR 指標</button>
+      <button data-panel="meetings">📋 會議追蹤 <span class="count" id="mtPageCount"></span></button>
+    </div>
+
+    <div class="page-panel" id="pagePanel-okr">
     <div class="filter-bar">
       <label>年度</label>
       <select id="yearSelect"><option value="2026">2026</option></select>
@@ -337,7 +495,26 @@
     <div id="krContainer">
       <div class="loading-text">載入中⋯</div>
     </div>
+    </div><!-- /pagePanel-okr -->
+
+    <div class="page-panel" id="pagePanel-meetings" style="display:none;">
+      <div class="mt-subtabs" id="mtSubtabs">
+        <button class="active" data-sub="open">📋 Open Actions <span class="count" id="mtOpenCount"></span></button>
+        <button data-sub="carry">🚨 老掛單 <span class="count" id="mtCarryCount"></span></button>
+        <button data-sub="meetings">📅 會議列表</button>
+        <button data-sub="add" style="margin-left:auto;">➕ 新增 Action</button>
+        <button data-sub="addmeeting">📝 新增會議</button>
+      </div>
+      <div id="mt-content">
+        <div class="loading-text">載入中⋯</div>
+      </div>
+    </div><!-- /pagePanel-meetings -->
   </div>
+</div>
+
+<!-- Modal for action edit / follow-up -->
+<div class="mt-modal-backdrop" id="mtModalBackdrop">
+  <div class="mt-modal" id="mtModalContent"></div>
 </div>
 
 <script>
@@ -1859,6 +2036,589 @@ async function saveAllEdits() {
     btn.disabled = false; btn.textContent = '💾 儲存全部';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  MEETING TRACKER ─ 會議追蹤
+// ═══════════════════════════════════════════════════════════════
+state.mt = {
+  subtab: 'open',
+  filters: { owner:'', kr:'', category:'', search:'', showDone:false },
+  selectedMeetingId: null,
+  meetings: [], actions: [], followups: []
+};
+var KR_LABEL = { kr1:'KR1 諮詢營收', kr2:'KR2 諮詢轉化', kr3:'KR3 法顧', kr4:'KR4 合署', kr5:'KR5 法0', kr6:'KR6 成本', kr7:'KR7 AI' };
+var STATUS_LABEL = { pending:'Pending', in_progress:'In Progress', blocked:'Blocked', done:'Done', dropped:'Dropped' };
+var CATEGORIES = ['法律010','工程','合署','客戶關係','法顧','人資','財務','其他'];
+var OWNER_CHOICES = ['雷皓明','何泓儒','吳泰儀','黃杰','偉志','飛宇','思蓓','其他'];
+var MEETING_TYPE_LABEL = { op_weekly:'營運週會', shareholder:'股東會', monthly_all:'月會', partner_consult:'合署/北所諮詢', one_on_one:'1-on-1', other:'其他' };
+
+async function loadMeetingTracker() {
+  if (!sb) return;
+  try {
+    var r = await Promise.all([
+      sb.from('meetings').select('*').order('meeting_date', { ascending:false }),
+      sb.from('meeting_action_items').select('*').order('carry_count', { ascending:false }).order('title'),
+      sb.from('action_followups').select('*').order('followup_date', { ascending:false })
+    ]);
+    state.mt.meetings  = r[0].data || [];
+    state.mt.actions   = r[1].data || [];
+    state.mt.followups = r[2].data || [];
+    updateMtCounts();
+  } catch (ex) { console.error('loadMeetingTracker', ex); }
+}
+
+function updateMtCounts() {
+  var open = state.mt.actions.filter(function(a){ return ['pending','in_progress','blocked'].indexOf(a.status) >= 0; });
+  var carry = open.filter(function(a){ return a.carry_count >= 3; });
+  setText('mtPageCount', open.length);
+  setText('mtOpenCount', open.length);
+  setText('mtCarryCount', carry.length);
+}
+function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+
+// ─── Page tab switching ───
+function bindPageTabs() {
+  document.querySelectorAll('#pageTabs button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#pageTabs button').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      var p = btn.dataset.panel;
+      document.getElementById('pagePanel-okr').style.display      = (p === 'okr')      ? '' : 'none';
+      document.getElementById('pagePanel-meetings').style.display = (p === 'meetings') ? '' : 'none';
+      if (p === 'meetings') renderMeetingTracker();
+    });
+  });
+  document.querySelectorAll('#mtSubtabs button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var sub = btn.dataset.sub;
+      if (sub === 'add') { showActionModal(null); return; }
+      if (sub === 'addmeeting') { showMeetingModal(null); return; }
+      document.querySelectorAll('#mtSubtabs button').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      state.mt.subtab = sub;
+      renderMeetingTracker();
+    });
+  });
+}
+
+function renderMeetingTracker() {
+  var c = document.getElementById('mt-content');
+  c.innerHTML = '';
+  var sub = state.mt.subtab;
+  if (sub === 'open')    renderOpenActions(c);
+  else if (sub === 'carry') renderCarryBoard(c);
+  else if (sub === 'meetings') renderMeetingList(c);
+}
+
+// ─── Open Actions table ───
+function renderOpenActions(container) {
+  // Filter bar
+  var bar = document.createElement('div'); bar.className = 'mt-filter-row';
+  bar.innerHTML =
+    '<label>Owner</label><select id="mtFOwner"><option value="">全部</option>' + OWNER_CHOICES.map(function(o){return '<option>'+o+'</option>';}).join('') + '</select>' +
+    '<label>KR</label><select id="mtFKr"><option value="">全部</option>' +
+      Object.keys(KR_LABEL).map(function(k){return '<option value="'+k+'">'+KR_LABEL[k]+'</option>';}).join('') +
+      '<option value="org">非 OKR (純營運)</option></select>' +
+    '<label>類別</label><select id="mtFCat"><option value="">全部</option>' +
+      CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('') + '</select>' +
+    '<label><input type="checkbox" id="mtFDone" style="margin-right:4px;">含已結案</label>' +
+    '<div class="spacer"></div>' +
+    '<input id="mtFSearch" placeholder="🔍 搜尋..." style="width:180px;">' +
+    '<button class="primary" id="mtBtnAdd">➕ 新增 Action</button>';
+  container.appendChild(bar);
+
+  // Apply existing filter state
+  document.getElementById('mtFOwner').value = state.mt.filters.owner;
+  document.getElementById('mtFKr').value = state.mt.filters.kr;
+  document.getElementById('mtFCat').value = state.mt.filters.category;
+  document.getElementById('mtFDone').checked = state.mt.filters.showDone;
+  document.getElementById('mtFSearch').value = state.mt.filters.search;
+
+  ['mtFOwner','mtFKr','mtFCat','mtFSearch','mtFDone'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.addEventListener(id === 'mtFSearch' ? 'input' : 'change', function() {
+      state.mt.filters.owner = document.getElementById('mtFOwner').value;
+      state.mt.filters.kr    = document.getElementById('mtFKr').value;
+      state.mt.filters.category = document.getElementById('mtFCat').value;
+      state.mt.filters.search = document.getElementById('mtFSearch').value;
+      state.mt.filters.showDone = document.getElementById('mtFDone').checked;
+      renderActionTable();
+    });
+  });
+  document.getElementById('mtBtnAdd').addEventListener('click', function(){ showActionModal(null); });
+
+  // Table container
+  var wrap = document.createElement('div'); wrap.id = 'mtTableWrap';
+  container.appendChild(wrap);
+  renderActionTable();
+
+  var note = document.createElement('div'); note.className = 'mt-note';
+  note.innerHTML = '<b>用法：</b>每週開完會掃這張表，按「✓ 結案」「↻ Carry」「📝 follow-up」「⛔ 放棄」處理。Carry 自動 +1，紅色脈動 = carry≥3 老掛單。';
+  container.appendChild(note);
+}
+
+function renderActionTable() {
+  var wrap = document.getElementById('mtTableWrap');
+  if (!wrap) return;
+  var f = state.mt.filters;
+  var rows = state.mt.actions.filter(function(a) {
+    if (!f.showDone && ['done','dropped'].indexOf(a.status) >= 0) return false;
+    if (f.owner && a.owner !== f.owner) return false;
+    if (f.kr === 'org' && a.kr_code) return false;
+    if (f.kr && f.kr !== 'org' && a.kr_code !== f.kr) return false;
+    if (f.category && a.category !== f.category) return false;
+    if (f.search) {
+      var s = f.search.toLowerCase();
+      if ((a.title||'').toLowerCase().indexOf(s) < 0 &&
+          (a.latest_resolution||'').toLowerCase().indexOf(s) < 0) return false;
+    }
+    return true;
+  });
+  if (rows.length === 0) {
+    wrap.innerHTML = '<div class="loading-text">沒有符合條件的 actions</div>';
+    return;
+  }
+  var todayISO = new Date().toISOString().slice(0,10);
+  var html = '<table class="action-table"><thead><tr>' +
+    '<th style="width:38%;">行動項目</th><th>類別</th><th>KR</th><th>Owner</th><th>狀態</th><th>Carry</th><th>下次 Review</th><th></th>' +
+    '</tr></thead><tbody>';
+  rows.forEach(function(a) {
+    var carryLv = a.carry_count >= 3 ? 'lv3' : a.carry_count === 2 ? 'lv2' : a.carry_count === 1 ? 'lv1' : 'lv0';
+    var overdueCls = (a.next_review_date && a.next_review_date < todayISO && ['done','dropped'].indexOf(a.status) < 0) ? ' overdue' : '';
+    html += '<tr class="action-row" data-id="' + a.id + '">' +
+      '<td class="col-title">' + escHtml(a.title) +
+        (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
+      '</td>' +
+      '<td>' + (a.category ? '<span class="badge-kr org">'+escHtml(a.category)+'</span>' : '') + '</td>' +
+      '<td>' + (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">非 OKR</span>') + '</td>' +
+      '<td class="col-owner">' + escHtml(a.owner || '—') + '</td>' +
+      '<td><span class="badge-status '+a.status+'">'+STATUS_LABEL[a.status]+'</span></td>' +
+      '<td><span class="carry-badge '+carryLv+'">↻'+a.carry_count+'</span></td>' +
+      '<td class="col-due'+overdueCls+'">' + (a.next_review_date || '—') + '</td>' +
+      '<td class="col-actions">' +
+        '<button class="btn-mini green" data-act="done">✓</button>' +
+        '<button class="btn-mini orange" data-act="carry">↻</button>' +
+        '<button class="btn-mini blue" data-act="edit">📝</button>' +
+        '<button class="btn-mini red" data-act="drop">⛔</button>' +
+      '</td></tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  // Bind row buttons
+  wrap.querySelectorAll('button[data-act]').forEach(function(btn) {
+    btn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      var id = btn.closest('tr').dataset.id;
+      var act = btn.dataset.act;
+      handleQuickAction(id, act);
+    });
+  });
+  wrap.querySelectorAll('tr.action-row').forEach(function(tr) {
+    tr.addEventListener('click', function() { showActionModal(tr.dataset.id); });
+  });
+}
+
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+// ─── Quick action handlers (button clicks on table rows) ───
+async function handleQuickAction(actionId, kind) {
+  var a = state.mt.actions.find(function(x){return x.id === actionId;});
+  if (!a) return;
+  var newStatus = a.status, msg = '';
+  if (kind === 'done') {
+    msg = prompt('結案說明（選填）：', '') || '';
+    newStatus = 'done';
+  } else if (kind === 'drop') {
+    if (!confirm('確定放棄此 action「' + a.title + '」？')) return;
+    msg = prompt('放棄原因（選填）：', '') || '';
+    newStatus = 'dropped';
+  } else if (kind === 'carry') {
+    msg = prompt('Carry-over 說明（這次會議的進展）：', '') || '';
+  } else if (kind === 'edit') {
+    showActionModal(actionId);
+    return;
+  }
+  // Find latest meeting (today's) — for MVP, use most recent meeting in DB
+  var latestMeeting = state.mt.meetings[0];
+  var updates = {
+    status: newStatus,
+    latest_resolution: msg || a.latest_resolution,
+    carry_count: (kind === 'carry') ? (a.carry_count + 1) : a.carry_count,
+    closed_at: (newStatus === 'done' || newStatus === 'dropped') ? new Date().toISOString() : null
+  };
+  try {
+    var r = await sb.from('meeting_action_items').update(updates).eq('id', actionId);
+    if (r.error) throw r.error;
+    // Insert followup
+    await sb.from('action_followups').insert({
+      action_item_id: actionId,
+      meeting_id: latestMeeting ? latestMeeting.id : null,
+      followup_date: new Date().toISOString().slice(0,10),
+      status_before: a.status,
+      status_after: newStatus,
+      resolution: msg || null
+    });
+    await loadMeetingTracker();
+    renderMeetingTracker();
+    injectKrActionsIntoCards();
+  } catch (ex) {
+    alert('更新失敗：' + (ex.message || ex));
+  }
+}
+
+// ─── Carry-over board ───
+function renderCarryBoard(container) {
+  var carry = state.mt.actions.filter(function(a) {
+    return a.carry_count >= 3 && ['done','dropped'].indexOf(a.status) < 0;
+  });
+  carry.sort(function(a,b){ return b.carry_count - a.carry_count; });
+
+  var note = document.createElement('div'); note.className = 'mt-note warn';
+  note.innerHTML = '<b>視圖目的：</b>所有 <b>carry≥3</b> 的「老掛單」— 已被同個議題 carry over 3 次以上，代表「卡住」「責任不明」或「該放棄」。<br><b>看到紅色脈動 = 必須處理</b>。';
+  container.appendChild(note);
+
+  if (carry.length === 0) {
+    var ok = document.createElement('div'); ok.className = 'loading-text';
+    ok.style.color = 'var(--green)';
+    ok.textContent = '✓ 太好了！目前沒有 carry≥3 的老掛單';
+    container.appendChild(ok);
+    return;
+  }
+
+  var grid = document.createElement('div'); grid.className = 'carry-grid';
+  carry.forEach(function(a) {
+    var card = document.createElement('div'); card.className = 'carry-card' + (a.carry_count === 2 ? ' lv2' : '');
+    var lvl = a.carry_count >= 3 ? 'lv3' : 'lv2';
+    var fups = state.mt.followups.filter(function(f){return f.action_item_id === a.id;});
+    fups.sort(function(x,y){ return x.followup_date.localeCompare(y.followup_date); });
+    var sourceMeeting = state.mt.meetings.find(function(m){return m.id === a.source_meeting_id;});
+    var sourceDate = sourceMeeting ? sourceMeeting.meeting_date : '—';
+    card.innerHTML =
+      '<div class="carry-card-head"><span class="title">'+escHtml(a.title)+'</span><span class="carry-badge '+lvl+'">↻'+a.carry_count+'</span></div>' +
+      '<div class="carry-card-meta">' +
+        '<span>👤 '+escHtml(a.owner||'—')+'</span>' +
+        (a.kr_code ? '<span><span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code)+'</span></span>' : '<span><span class="badge-kr org">非 OKR</span></span>') +
+        '<span>首見 '+sourceDate+'</span>' +
+        '<span><span class="badge-status '+a.status+'">'+STATUS_LABEL[a.status]+'</span></span>' +
+      '</div>' +
+      '<div class="carry-timeline">' +
+        '<div class="row"><span class="date">'+(sourceDate||'').slice(5)+'</span><span class="what">新增 — '+escHtml((sourceMeeting&&sourceMeeting.title)||'')+'</span></div>' +
+        fups.map(function(f) {
+          return '<div class="row"><span class="date">'+f.followup_date.slice(5)+'</span><span class="what">'+escHtml(f.resolution || (f.status_before+' → '+f.status_after))+'</span></div>';
+        }).join('') +
+      '</div>' +
+      '<div class="carry-card-foot">' +
+        '<button class="btn-mini green" data-act="done">✓ 結案</button>' +
+        '<button class="btn-mini orange" data-act="carry">↻ Carry</button>' +
+        '<button class="btn-mini blue" data-act="edit">📝 編輯</button>' +
+        '<button class="btn-mini red" data-act="drop">⛔ 放棄</button>' +
+      '</div>';
+    card.querySelectorAll('button[data-act]').forEach(function(btn) {
+      btn.addEventListener('click', function(){ handleQuickAction(a.id, btn.dataset.act); });
+    });
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
+}
+
+// ─── Meeting list / timeline ───
+function renderMeetingList(container) {
+  var meetings = state.mt.meetings.slice();
+  if (!state.mt.selectedMeetingId && meetings.length > 0) state.mt.selectedMeetingId = meetings[0].id;
+
+  var grid = document.createElement('div'); grid.className = 'timeline-grid';
+  // List
+  var list = document.createElement('div'); list.className = 'meeting-list';
+  var html = '<h4>📅 會議紀錄</h4>';
+  meetings.forEach(function(m) {
+    var fups = state.mt.followups.filter(function(f){return f.meeting_id === m.id;});
+    var newCount = state.mt.actions.filter(function(a){return a.source_meeting_id === m.id;}).length;
+    var carryCount = fups.length;
+    var doneCount = fups.filter(function(f){return f.status_after === 'done';}).length;
+    var on = (m.id === state.mt.selectedMeetingId) ? ' on' : '';
+    html += '<div class="m-item'+on+'" data-id="'+m.id+'">' +
+      '<div class="date">'+m.meeting_date+'</div>' +
+      '<div class="meta">'+MEETING_TYPE_LABEL[m.meeting_type]+' ｜ +'+newCount+' 新 / '+carryCount+' carry / '+doneCount+' 結</div>' +
+      '</div>';
+  });
+  html += '<div class="m-item" id="mtAddMeeting"><div class="date" style="color:var(--blue);">+ 新增會議</div></div>';
+  list.innerHTML = html;
+  list.querySelectorAll('.m-item[data-id]').forEach(function(it) {
+    it.addEventListener('click', function() {
+      state.mt.selectedMeetingId = it.dataset.id;
+      renderMeetingList(container);
+    });
+  });
+  list.querySelector('#mtAddMeeting').addEventListener('click', function(){ showMeetingModal(null); });
+
+  // Detail
+  var sel = meetings.find(function(m){return m.id === state.mt.selectedMeetingId;});
+  var detail = document.createElement('div'); detail.className = 'meeting-detail';
+  if (!sel) {
+    detail.innerHTML = '<div class="loading-text">尚無會議資料</div>';
+  } else {
+    var newActions = state.mt.actions.filter(function(a){return a.source_meeting_id === sel.id;});
+    var fups = state.mt.followups.filter(function(f){return f.meeting_id === sel.id;});
+    var dh = '<h3>'+sel.meeting_date+' ─ '+escHtml(sel.title || MEETING_TYPE_LABEL[sel.meeting_type])+'</h3>' +
+      '<div class="meta-line">' +
+        '<span>👥 '+((sel.attendees||[]).join('、') || '—')+'</span>' +
+        '<span>類型：'+MEETING_TYPE_LABEL[sel.meeting_type]+'</span>' +
+        (sel.source_url ? '<span><a href="'+escHtml(sel.source_url)+'" target="_blank">📄 原文件</a></span>' : '') +
+      '</div>';
+    if (sel.summary) {
+      dh += '<div class="mt-note">'+escHtml(sel.summary)+'</div>';
+    }
+    if (newActions.length > 0) {
+      dh += '<div class="group-label">🆕 新增 Action ('+newActions.length+')</div>';
+      newActions.forEach(function(a) {
+        dh += '<div class="item-row">' +
+          (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">'+(a.category||'')+'</span>') +
+          '<span class="text">'+escHtml(a.title)+' — '+escHtml(a.owner||'—')+
+            ' <span class="badge-status '+a.status+'">'+STATUS_LABEL[a.status]+'</span></span>' +
+          '</div>';
+      });
+    }
+    if (fups.length > 0) {
+      dh += '<div class="group-label">↻ Follow-up ('+fups.length+')</div>';
+      fups.forEach(function(f) {
+        var a = state.mt.actions.find(function(x){return x.id === f.action_item_id;});
+        if (!a) return;
+        dh += '<div class="item-row">' +
+          (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">'+(a.category||'')+'</span>') +
+          '<span class="text">'+escHtml(a.title)+' — '+(f.status_before||'?')+' → '+(f.status_after||'?')+
+            (f.resolution ? '<br><span style="font-size:0.75rem;color:var(--text-muted);">'+escHtml(f.resolution)+'</span>' : '')+'</span>' +
+          '</div>';
+      });
+    }
+    dh += '<div style="margin-top:14px;"><button class="btn-mini blue" id="mtEditMeeting">編輯會議</button></div>';
+    detail.innerHTML = dh;
+    setTimeout(function() {
+      var b = document.getElementById('mtEditMeeting');
+      if (b) b.addEventListener('click', function(){ showMeetingModal(sel.id); });
+    }, 0);
+  }
+
+  grid.appendChild(list);
+  grid.appendChild(detail);
+  container.innerHTML = '';
+  container.appendChild(grid);
+}
+
+// ─── Modal: action create / edit ───
+function showActionModal(actionId) {
+  var a = actionId ? state.mt.actions.find(function(x){return x.id === actionId;}) : null;
+  var isNew = !a;
+  if (!a) a = { title:'', category:'其他', kr_code:'', owner:'', status:'pending',
+    source_meeting_id:(state.mt.meetings[0]||{}).id || '',
+    next_review_date: nextWeekISO(), notes:'', latest_resolution:'' };
+
+  var html = '<h3>'+(isNew?'➕ 新增 Action':'📝 編輯 Action')+'</h3>' +
+    '<div class="form-row"><label>標題 *</label><input id="afTitle" value="'+escHtml(a.title)+'" placeholder="例：林杰妹／里長線下諮詢"></div>' +
+    '<div class="form-row"><label>類別 *</label><select id="afCat">' + CATEGORIES.map(function(c){return '<option '+(c===a.category?'selected':'')+'>'+c+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>對應 KR</label><select id="afKr"><option value="">— 純營運</option>' +
+      Object.keys(KR_LABEL).map(function(k){return '<option value="'+k+'" '+(k===a.kr_code?'selected':'')+'>'+KR_LABEL[k]+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>Owner *</label><select id="afOwner">' + OWNER_CHOICES.map(function(o){return '<option '+(o===a.owner?'selected':'')+'>'+o+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>狀態</label><select id="afStatus">' + Object.keys(STATUS_LABEL).map(function(s){return '<option value="'+s+'" '+(s===a.status?'selected':'')+'>'+STATUS_LABEL[s]+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>來源會議</label><select id="afMeeting"><option value="">—</option>' +
+      state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===a.source_meeting_id?'selected':'')+'>'+m.meeting_date+' '+MEETING_TYPE_LABEL[m.meeting_type]+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>下次 Review</label><input type="date" id="afReview" value="'+(a.next_review_date||'')+'"></div>' +
+    '<div class="form-row tall"><label>最新進度</label><textarea id="afResolution" placeholder="一句話最新狀況">'+escHtml(a.latest_resolution||'')+'</textarea></div>' +
+    '<div class="form-row tall"><label>備註</label><textarea id="afNotes" placeholder="脈絡、相關連結...">'+escHtml(a.notes||'')+'</textarea></div>' +
+    '<div class="form-actions">' +
+      '<button class="btn-primary" id="afSave">儲存</button>' +
+      '<button class="btn-ghost" id="afCancel">取消</button>' +
+      (isNew ? '' : '<button class="btn-ghost" id="afDelete" style="margin-left:auto; color:var(--red);">🗑 刪除</button>') +
+    '</div>';
+  openModal(html);
+  document.getElementById('afCancel').addEventListener('click', closeModal);
+  document.getElementById('afSave').addEventListener('click', async function() {
+    var payload = {
+      title: document.getElementById('afTitle').value.trim(),
+      category: document.getElementById('afCat').value,
+      kr_code: document.getElementById('afKr').value || null,
+      owner: document.getElementById('afOwner').value,
+      status: document.getElementById('afStatus').value,
+      source_meeting_id: document.getElementById('afMeeting').value || null,
+      next_review_date: document.getElementById('afReview').value || null,
+      latest_resolution: document.getElementById('afResolution').value || null,
+      notes: document.getElementById('afNotes').value || null
+    };
+    if (!payload.title) { alert('請填標題'); return; }
+    try {
+      var r;
+      if (isNew) { r = await sb.from('meeting_action_items').insert(payload); }
+      else       { r = await sb.from('meeting_action_items').update(payload).eq('id', actionId); }
+      if (r.error) throw r.error;
+      closeModal();
+      await loadMeetingTracker();
+      renderMeetingTracker();
+      injectKrActionsIntoCards();
+    } catch (ex) { alert('儲存失敗：' + (ex.message || ex)); }
+  });
+  if (!isNew) {
+    document.getElementById('afDelete').addEventListener('click', async function() {
+      if (!confirm('確定刪除？這會一併刪除所有 follow-up 紀錄。')) return;
+      var r = await sb.from('meeting_action_items').delete().eq('id', actionId);
+      if (r.error) { alert('刪除失敗：' + r.error.message); return; }
+      closeModal();
+      await loadMeetingTracker();
+      renderMeetingTracker();
+      injectKrActionsIntoCards();
+    });
+  }
+}
+
+// ─── Modal: meeting create / edit ───
+function showMeetingModal(meetingId) {
+  var m = meetingId ? state.mt.meetings.find(function(x){return x.id === meetingId;}) : null;
+  var isNew = !m;
+  if (!m) m = { meeting_date: new Date().toISOString().slice(0,10), meeting_type:'op_weekly',
+    title:'', attendees:['雷皓明','何泓儒','吳泰儀','黃杰'], source_url:'', summary:'' };
+
+  var html = '<h3>'+(isNew?'📝 新增會議':'📝 編輯會議')+'</h3>' +
+    '<div class="form-row"><label>日期 *</label><input type="date" id="mfDate" value="'+m.meeting_date+'"></div>' +
+    '<div class="form-row"><label>類型 *</label><select id="mfType">' + Object.keys(MEETING_TYPE_LABEL).map(function(t){return '<option value="'+t+'" '+(t===m.meeting_type?'selected':'')+'>'+MEETING_TYPE_LABEL[t]+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>標題</label><input id="mfTitle" value="'+escHtml(m.title||'')+'" placeholder="例：事務所營運討論 / Q2 股東會"></div>' +
+    '<div class="form-row"><label>參與者</label><input id="mfAttendees" value="'+escHtml((m.attendees||[]).join('、'))+'" placeholder="頓號分隔"></div>' +
+    '<div class="form-row"><label>原文件 URL</label><input id="mfUrl" value="'+escHtml(m.source_url||'')+'" placeholder="Google Doc / NotebookLM"></div>' +
+    '<div class="form-row tall"><label>會議摘要</label><textarea id="mfSummary" placeholder="一段話總結今天討論的重點">'+escHtml(m.summary||'')+'</textarea></div>' +
+    '<div class="form-actions">' +
+      '<button class="btn-primary" id="mfSave">儲存</button>' +
+      '<button class="btn-ghost" id="mfCancel">取消</button>' +
+      (isNew ? '' : '<button class="btn-ghost" id="mfDelete" style="margin-left:auto; color:var(--red);">🗑 刪除</button>') +
+    '</div>';
+  openModal(html);
+  document.getElementById('mfCancel').addEventListener('click', closeModal);
+  document.getElementById('mfSave').addEventListener('click', async function() {
+    var att = document.getElementById('mfAttendees').value.split(/[、,，]/).map(function(s){return s.trim();}).filter(Boolean);
+    var payload = {
+      meeting_date: document.getElementById('mfDate').value,
+      meeting_type: document.getElementById('mfType').value,
+      title: document.getElementById('mfTitle').value || null,
+      attendees: att,
+      source_url: document.getElementById('mfUrl').value || null,
+      summary: document.getElementById('mfSummary').value || null
+    };
+    try {
+      var r;
+      if (isNew) { r = await sb.from('meetings').insert(payload); }
+      else       { r = await sb.from('meetings').update(payload).eq('id', meetingId); }
+      if (r.error) throw r.error;
+      closeModal();
+      await loadMeetingTracker();
+      renderMeetingTracker();
+    } catch (ex) { alert('儲存失敗：' + (ex.message || ex)); }
+  });
+  if (!isNew) {
+    document.getElementById('mfDelete').addEventListener('click', async function() {
+      if (!confirm('確定刪除？相關 follow-up 會保留但取消會議關聯。')) return;
+      var r = await sb.from('meetings').delete().eq('id', meetingId);
+      if (r.error) { alert('刪除失敗：' + r.error.message); return; }
+      closeModal();
+      await loadMeetingTracker();
+      renderMeetingTracker();
+    });
+  }
+}
+
+function openModal(html) {
+  document.getElementById('mtModalContent').innerHTML = html;
+  document.getElementById('mtModalBackdrop').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('mtModalBackdrop').classList.remove('show');
+  document.getElementById('mtModalContent').innerHTML = '';
+}
+document.getElementById('mtModalBackdrop').addEventListener('click', function(e) {
+  if (e.target.id === 'mtModalBackdrop') closeModal();
+});
+
+function nextWeekISO() {
+  var d = new Date(); d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0,10);
+}
+
+// ─── Inject "相關行動" block into each KR card ───
+function injectKrActionsIntoCards() {
+  var cards = document.querySelectorAll('#krContainer .kr-card');
+  var krOrder = ['kr1','kr2','kr3','kr4','kr5','kr6'];
+  cards.forEach(function(card, i) {
+    if (i >= krOrder.length) return;
+    var krCode = krOrder[i];
+    var actions = state.mt.actions.filter(function(a) {
+      return a.kr_code === krCode && ['done','dropped'].indexOf(a.status) < 0;
+    });
+    // remove existing
+    var existing = card.querySelector('.kr-actions-block');
+    if (existing) existing.remove();
+    if (actions.length === 0) return;
+    actions.sort(function(a,b){ return b.carry_count - a.carry_count; });
+    var carryHigh = actions.filter(function(a){return a.carry_count >= 3;}).length;
+    var blockedCount = actions.filter(function(a){return a.status === 'blocked';}).length;
+    var block = document.createElement('div'); block.className = 'kr-actions-block';
+    var headHtml = '<div class="kr-actions-head">' +
+      '<h4>📌 相關行動 (' + actions.length + ')' + (blockedCount > 0 ? ' <span style="color:var(--red); font-size:0.75rem;">⚠ '+blockedCount+' blocked</span>' : '') + '</h4>' +
+      '<span class="stat">' + (carryHigh > 0 ? '⚠ '+carryHigh+' 項 carry≥3 ｜ ' : '') +
+        '<a class="mt-add-link">+ 新增 →</a></span>' +
+      '</div>';
+    block.innerHTML = headHtml;
+    actions.slice(0, 5).forEach(function(a) {
+      var carryLv = a.carry_count >= 3 ? 'lv3' : a.carry_count === 2 ? 'lv2' : 'lv1';
+      var row = document.createElement('div'); row.className = 'kr-action-row';
+      row.dataset.id = a.id;
+      row.innerHTML = '<div class="ka-title">' + escHtml(a.title) +
+        (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') + '</div>' +
+        '<span class="badge-status ' + a.status + '">' + STATUS_LABEL[a.status] + '</span>' +
+        '<span class="carry-badge ' + carryLv + '">↻' + a.carry_count + '</span>' +
+        '<span class="ka-owner">' + escHtml(a.owner || '') + '</span>';
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', function() {
+        // Switch to meeting tab + open modal
+        document.querySelector('#pageTabs button[data-panel="meetings"]').click();
+        showActionModal(a.id);
+      });
+      block.appendChild(row);
+    });
+    if (actions.length > 5) {
+      var more = document.createElement('div'); more.style.cssText = 'font-size:0.75rem; color:var(--blue); padding:8px 10px; cursor:pointer;';
+      more.textContent = '+ 還有 ' + (actions.length - 5) + ' 項，點此到會議追蹤頁 →';
+      more.addEventListener('click', function() {
+        state.mt.filters.kr = krCode;
+        document.querySelector('#pageTabs button[data-panel="meetings"]').click();
+      });
+      block.appendChild(more);
+    }
+    var addLink = block.querySelector('.mt-add-link');
+    if (addLink) addLink.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      showActionModal(null);
+      // Pre-fill kr_code after modal renders
+      setTimeout(function(){ var sel = document.getElementById('afKr'); if (sel) sel.value = krCode; }, 0);
+    });
+    card.appendChild(block);
+  });
+}
+
+// ─── Wire to existing lifecycle ───
+// Patch render() to also load + inject KR actions
+var _origRender = render;
+render = function() {
+  _origRender();
+  injectKrActionsIntoCards();
+};
+
+// Patch loadAll to also load meeting tracker data
+var _origLoadAll = loadAll;
+loadAll = async function() {
+  await Promise.all([_origLoadAll(), loadMeetingTracker()]);
+  injectKrActionsIntoCards();
+  if (state.mt.subtab && document.getElementById('pagePanel-meetings').style.display !== 'none') {
+    renderMeetingTracker();
+  }
+};
+
+// Bind page tab clicks (must run after DOM is built)
+bindPageTabs();
 
 // ═══ INIT ═══
 checkSession();
