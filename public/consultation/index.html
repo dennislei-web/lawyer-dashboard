@@ -3318,25 +3318,32 @@ function renderDailySummary() {
   const today = new Date();
   const useYear = DAILY_STATE.year;
   const compareYear = resolveCompareYear();   // null 表示不對照
-  const yearIsCurrent = (useYear === today.getFullYear());
 
-  // 比較用的「今日」：如果切到的不是今年，就用該年度該月最後一天當錨點
-  const anchorMonth = yearIsCurrent ? today.getMonth() + 1 : 12;
-  const anchorDate = yearIsCurrent ? today.getDate() : new Date(useYear, anchorMonth, 0).getDate();
+  // 錨點：永遠是「今天的月/日」，套到 useYear 與 compareYear 上做 to-date vs to-date 的公平比較。
+  // 例如今天 5/19，看 2025 頁面就比 2025/5/19 vs 2026/5/19，而不是比 2025/12/31 vs 2026/12/31。
+  const anchorMonth = today.getMonth() + 1;
+  const anchorDateRaw = today.getDate();
+  // 月底天數 clamp（例如 today=5/31 + useYear 是看 2024 → 2024/5 有 31 天 OK；
+  // 真正會 clamp 的是 Feb 29 對照非閏年的情境）
+  const useAnchorDate = Math.min(anchorDateRaw, new Date(useYear, anchorMonth, 0).getDate());
+  const cmpAnchorDate = compareYear != null
+    ? Math.min(anchorDateRaw, new Date(compareYear, anchorMonth, 0).getDate())
+    : 0;
+  const anchorDate = useAnchorDate;   // 後續 YTD 迴圈用
 
   // 本日累積（本月）
   const curMonth = cumulativeForMonth(byYMD, useYear, anchorMonth, metric);
-  const curToday = curMonth.values[anchorDate];
+  const curToday = curMonth.values[useAnchorDate];
 
   // 本月日均（用累積到 anchor 那天 / anchor）
-  const avg = (curToday != null && anchorDate > 0) ? (curToday / anchorDate) : null;
+  const avg = (curToday != null && useAnchorDate > 0) ? (curToday / useAnchorDate) : null;
 
   // 對照年度的相同錨點
   let cmpToday = null, cmpAvg = null, cmpYtd = null;
   if (compareYear != null) {
     const cmpMonth = cumulativeForMonth(byYMD, compareYear, anchorMonth, metric);
-    cmpToday = cmpMonth.values[anchorDate];
-    cmpAvg = (cmpToday != null && anchorDate > 0) ? (cmpToday / anchorDate) : null;
+    cmpToday = cmpMonth.values[cmpAnchorDate];
+    cmpAvg = (cmpToday != null && cmpAnchorDate > 0) ? (cmpToday / cmpAnchorDate) : null;
   }
 
   // 本年累積到 anchor 日（把 1..anchorMonth-1 月底 + 當月 anchorDate 都加總；rate 特殊）
@@ -3344,7 +3351,7 @@ function renderDailySummary() {
   if (metric === 'rate') {
     let cConsults = 0, cSigned = 0;
     for (let m = 1; m <= anchorMonth; m++) {
-      const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+      const lastD = (m === anchorMonth) ? useAnchorDate : new Date(useYear, m, 0).getDate();
       for (let d = 1; d <= lastD; d++) {
         const slot = (byYMD[useYear]?.[m]?.[d]);
         if (slot) { cConsults += slot.consults; cSigned += slot.signed; }
@@ -3355,7 +3362,7 @@ function renderDailySummary() {
     if (compareYear != null) {
       let pConsults = 0, pSigned = 0;
       for (let m = 1; m <= anchorMonth; m++) {
-        const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+        const lastD = (m === anchorMonth) ? cmpAnchorDate : new Date(compareYear, m, 0).getDate();
         for (let d = 1; d <= lastD; d++) {
           const pslot = (byYMD[compareYear]?.[m]?.[d]);
           if (pslot) { pConsults += pslot.consults; pSigned += pslot.signed; }
@@ -3366,7 +3373,7 @@ function renderDailySummary() {
   } else {
     ytd = 0;
     for (let m = 1; m <= anchorMonth; m++) {
-      const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+      const lastD = (m === anchorMonth) ? useAnchorDate : new Date(useYear, m, 0).getDate();
       const cm = cumulativeForMonth(byYMD, useYear, m, metric);
       const cv = cm.values[lastD];
       if (cv != null) ytd += cv;
@@ -3374,7 +3381,7 @@ function renderDailySummary() {
     if (compareYear != null) {
       cmpYtd = 0;
       for (let m = 1; m <= anchorMonth; m++) {
-        const lastD = (m === anchorMonth) ? anchorDate : new Date(useYear, m, 0).getDate();
+        const lastD = (m === anchorMonth) ? cmpAnchorDate : new Date(compareYear, m, 0).getDate();
         const pm = cumulativeForMonth(byYMD, compareYear, m, metric);
         const pv = pm.values[lastD];
         if (pv != null) cmpYtd += pv;
