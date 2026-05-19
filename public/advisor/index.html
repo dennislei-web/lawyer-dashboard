@@ -427,12 +427,12 @@
         </div>
 
         <!-- 現金口徑 reconcile（advisor_transactions + revenue_records 中屬於法顧客戶的部分） -->
-        <div class="yoy-section" id="reconcileSection" style="margin-top:14px;">
-          <div class="yoy-section-header">
-            <div class="yoy-section-title">💰 現金口徑 reconcile <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">（CRM 對帳基礎，跟成案口徑互相驗證）</span></div>
+        <div class="yoy-section" id="reconcileSection" style="margin-top:14px;" data-collapsed="true">
+          <div class="yoy-section-header" style="cursor:pointer;user-select:none;" onclick="(function(s){var c=s.getAttribute('data-collapsed')==='true';s.setAttribute('data-collapsed', c?'false':'true');s.querySelector('.reconcile-toggle-icon').textContent=c?'▼':'▶';s.querySelector('.reconcile-body').style.display=c?'grid':'none';})(document.getElementById('reconcileSection'))">
+            <div class="yoy-section-title"><span class="reconcile-toggle-icon" style="display:inline-block;width:1em;font-size:0.85em;color:var(--text-muted);">▶</span> 💰 現金口徑 reconcile <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">（CRM 對帳基礎，跟成案口徑互相驗證 — 點擊展開）</span></div>
             <div class="yoy-section-note" id="reconcilePeriodNote">—</div>
           </div>
-          <div class="yoy-grid" style="grid-template-columns:repeat(6, 1fr);">
+          <div class="yoy-grid reconcile-body" style="grid-template-columns:repeat(6, 1fr);display:none;">
             <div class="yoy-card">
               <div class="yoy-label">CRM 所內</div>
               <div class="yoy-value" id="reconcileInRecords">—</div>
