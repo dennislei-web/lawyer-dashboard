@@ -128,3 +128,15 @@ cd scripts && python create_auth_users.py
 - **薪資表格式差異**：114 和 115 年 Excel 欄位順序可能不同 → 解析時自動偵測 header 而非寫死欄位位置
 - **銷貨退回**：在損益表中是減項，subtotal 計算要用 `DEDUCTION_CODES` 處理
 - **iframe X-Frame-Options**：`netlify.toml` 有設 DENY，但 GitHub Pages 不受影響；若要切回 Netlify 部署需拿掉該設定
+
+## inline 諮詢案分析（llm_analysis）兩條歸因規則
+
+跑 `consultation_cases.llm_analysis` inline 重新分析時必須遵守：
+
+1. **視訊 / 電話 / 線上諮詢不要把「沒當場讓客戶簽紙本委任契約」當失敗根因** — 線上諮詢律師本來就是會後傳契約給客戶。判斷訊號：transcript 出現「線上諮詢」「視訊」「電話」「我傳契約給你」「請客戶經理轉介到 LINE」等。視訊情境改歸因為「律師沒在 LINE / 視訊結束時鎖下次互動 commitment」。
+
+2. **結論「follow-up 通道死掉」/「客戶不敢留聯絡管道」前必須先檢查 `consultation_cases.line_chat_url`** — 有值代表後續確實有 LINE 對話建立，不能把失敗歸因為「客戶當場不敢加 LINE」。即使 transcript 客戶當下說「不敢加」，也要交叉驗證 line_chat_url、lawyer_notes、tracking_notes 看後續是否有加上 / 再約。
+
+歷史錯誤範例（已用 `_prompt_version: v1.2-inline-feedback-fix` 修正）：
+- 林軒緯 (8a415c91)：原歸「沒當場簽委任」失敗，實際本案是視訊 + 客戶預算極度緊繃
+- 李明富 (887b1252)：原歸「不敢加 LINE → 通道死掉」，實際後續有加 LINE + 再約二諮

@@ -313,6 +313,59 @@ def scrape_crm(target_months, email, password):
 #  Step 2: 更新 Supabase
 # ═══════════════════════════════════════════════════════════
 
+def _adjust_for_lichong_cases(rows, headers):
+    """從 monthly_stats rows 扣掉 consultation_cases.no_track_reason ILIKE '%利衝%' 的案件。
+
+    利衝案件 = 律師沒實際諮詢（利益衝突直接退）；不應計入 consult_count / signed_count /
+    revenue / collected。XLSX 沒有此欄位，必須事後從 consultation_cases 拉。
+    """
+    import httpx
+
+    months = sorted({r["month"] for r in rows})
+    if not months:
+        return rows
+
+    min_month = min(months)
+    with httpx.Client(timeout=30) as c:
+        resp = c.get(
+            f"{SUPABASE_URL}/rest/v1/consultation_cases",
+            params={
+                "select": "lawyer_id,case_date,is_signed,revenue,collected",
+                "no_track_reason": "ilike.*利衝*",
+                "case_date": f"gte.{min_month}-01",
+            },
+            headers={**headers, "Prefer": ""},
+        )
+        resp.raise_for_status()
+        li_cases = resp.json()
+
+    if not li_cases:
+        return rows
+
+    adj = {}
+    for x in li_cases:
+        key = (x["lawyer_id"], x["case_date"][:7])
+        a = adj.setdefault(key, {"count": 0, "signed": 0, "revenue": 0, "collected": 0})
+        a["count"]     += 1
+        a["signed"]    += 1 if x.get("is_signed") else 0
+        a["revenue"]   += int(x.get("revenue") or 0)
+        a["collected"] += int(x.get("collected") or 0)
+
+    n_adjusted = 0
+    for r in rows:
+        key = (r["lawyer_id"], r["month"])
+        if key in adj:
+            a = adj[key]
+            r["consult_count"] = max(0, r["consult_count"] - a["count"])
+            r["signed_count"]  = max(0, r["signed_count"]  - a["signed"])
+            r["revenue"]       = max(0, r["revenue"]       - a["revenue"])
+            r["collected"]     = max(0, r["collected"]     - a["collected"])
+            r["sign_rate"] = round(r["signed_count"] / r["consult_count"] * 100, 2) if r["consult_count"] > 0 else 0.0
+            n_adjusted += 1
+    print(f"  排除 利衝 案件：{len(li_cases)} 筆案件，{n_adjusted} 個月度區段已扣除")
+    return rows
+
+
 def update_supabase(target_months):
     """讀取 xlsx 並更新 Supabase monthly_stats。"""
     print(f"\n{'='*50}")
@@ -450,6 +503,11 @@ def update_supabase(target_months):
     if not rows:
         print("  沒有資料需要更新")
         return 0
+
+    # ── 排除 利衝 案件 ──
+    # consultation_cases.no_track_reason ILIKE '%利衝%' 的案件不算實際諮詢，
+    # 從 consult_count / signed_count / revenue / collected 扣掉。
+    rows = _adjust_for_lichong_cases(rows, headers)
 
     # Upsert (分批 50 筆)
     with httpx.Client(timeout=30) as client:

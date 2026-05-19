@@ -8008,10 +8008,10 @@ function renderTrackerTable() {
     const totalWithBrief = trackerRows.filter(r => r.briefs.length > 0).length;
     sum.innerHTML = `
       <div class="kpi-card"><div class="kpi-label">律師數（活躍）</div><div class="kpi-value">${trackerRows.length}</div></div>
-      <div class="kpi-card"><div class="kpi-label">總諮詢 (2026)</div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
-      <div class="kpi-card"><div class="kpi-label">總簽約</div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
-      <div class="kpi-card"><div class="kpi-label">簽約率</div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
-      <div class="kpi-card"><div class="kpi-label">諮詢效益</div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
+      <div class="kpi-card" title="諮詢場次 = 諮詢日報筆數，扣除 no_track_reason 標為利衝的案件"><div class="kpi-label">總諮詢 (2026) <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${G.consult.toLocaleString()}</div></div>
+      <div class="kpi-card" title="成案 = 已收款；簽約但未付款不計入（業務定義）"><div class="kpi-label">總簽約 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${G.signed.toLocaleString()}</div></div>
+      <div class="kpi-card" title="成案數 ÷ 諮詢場次（成案 = 已收款；簽約但未付款不計入）"><div class="kpi-label">簽約率 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${grandRate.toFixed(1)}%</div></div>
+      <div class="kpi-card" title="已收款金額 ÷ 諮詢場次（簽約但未付款的金額不計入）"><div class="kpi-label">諮詢效益 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">$${Math.round(grandEff).toLocaleString()}</div></div>
       <div class="kpi-card"><div class="kpi-label">1-on-1 已完成</div><div class="kpi-value">${totalDone}<span style="font-size:0.7rem;color:var(--text-muted);">/${trackerRows.length}</span></div></div>
       <div class="kpi-card"><div class="kpi-label">已排程</div><div class="kpi-value" style="color:var(--gold);">${totalScheduled}</div></div>
       <div class="kpi-card"><div class="kpi-label">待安排</div><div class="kpi-value" style="color:var(--red);">${totalPending}</div></div>
@@ -8023,10 +8023,10 @@ function renderTrackerTable() {
     if (me) {
       const k = me.kpi;
       sum.innerHTML = `
-        <div class="kpi-card"><div class="kpi-label">我的 2026 諮詢</div><div class="kpi-value">${k.consult.toLocaleString()}</div></div>
-        <div class="kpi-card"><div class="kpi-label">我的 2026 簽約</div><div class="kpi-value">${k.signed.toLocaleString()}</div></div>
-        <div class="kpi-card"><div class="kpi-label">我的簽約率</div><div class="kpi-value">${k.rate.toFixed(1)}%</div></div>
-        <div class="kpi-card"><div class="kpi-label">我的諮詢效益</div><div class="kpi-value">$${Math.round(k.eff).toLocaleString()}</div></div>
+        <div class="kpi-card" title="諮詢場次 = 諮詢日報筆數，扣除標為利衝的案件"><div class="kpi-label">我的 2026 諮詢 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${k.consult.toLocaleString()}</div></div>
+        <div class="kpi-card" title="成案 = 已收款；簽約但未付款不計入（業務定義）"><div class="kpi-label">我的 2026 簽約 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${k.signed.toLocaleString()}</div></div>
+        <div class="kpi-card" title="成案數 ÷ 諮詢場次（成案 = 已收款；簽約但未付款不計入）"><div class="kpi-label">我的簽約率 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">${k.rate.toFixed(1)}%</div></div>
+        <div class="kpi-card" title="已收款金額 ÷ 諮詢場次（簽約但未付款的金額不計入）"><div class="kpi-label">我的諮詢效益 <span style="opacity:0.6;font-size:0.7rem;">ⓘ</span></div><div class="kpi-value">$${Math.round(k.eff).toLocaleString()}</div></div>
       `;
     } else {
       sum.innerHTML = '';
