@@ -3072,7 +3072,8 @@ function dailyAvailableYears() {
   return Array.from(years).sort((a,b) => b - a); // 新到舊
 }
 
-// 把 DAILY_STATE.compare 解析成實際年度數字；'none' 或對照年==當前年 → null（不對照）
+// 把 DAILY_STATE.compare 解析成「跨年對照」的目標年度；
+// 'none' 或對照年==當前年 → null（同年情境改走 MoM 對照，見 isCompareMonthMode）
 function resolveCompareYear() {
   if (DAILY_STATE.compare === 'none') return null;
   const cy = (DAILY_STATE.compare === 'today')
@@ -3080,6 +3081,15 @@ function resolveCompareYear() {
     : parseInt(DAILY_STATE.compare, 10);
   if (!cy || cy === DAILY_STATE.year) return null;
   return cy;
+}
+
+// 同年情境：使用者選的對照年 == 矩陣年度 → 自動切到「上月同日」對照
+function isCompareMonthMode() {
+  if (DAILY_STATE.compare === 'none') return false;
+  const cy = (DAILY_STATE.compare === 'today')
+    ? new Date().getFullYear()
+    : parseInt(DAILY_STATE.compare, 10);
+  return !!cy && cy === DAILY_STATE.year;
 }
 
 // 依現有資料的年份重建「對照」下拉
@@ -3222,7 +3232,8 @@ function renderDailyMatrix() {
   const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
   const year = DAILY_STATE.year;
   const metric = DAILY_STATE.metric;
-  const compareYear = resolveCompareYear();   // null 表示不對照
+  const compareYear = resolveCompareYear();   // 跨年對照目標；null 表示不對照或同年
+  const isMoM = isCompareMonthMode();          // true 表示同年（用上月同日染色）
   const today = new Date();
   const isCurrentYear = (year === today.getFullYear());
   const todayMonth = today.getMonth() + 1;
@@ -3270,9 +3281,14 @@ function renderDailyMatrix() {
       }
       // 今日
       if (isCurrentYear && m === todayMonth && d === todayDate) classes.push('dm-today');
-      // 與對照年度同月同日比較
-      if (DAILY_STATE.showColor && compareYear != null) {
-        const pv = cmpMonthData[m].values[d];
+      // 染色：(1) 跨年模式 — 與對照年度同月同日比；(2) 同年模式 — 與上一個月同日比（1 月無對照）
+      if (DAILY_STATE.showColor) {
+        let pv = null;
+        if (compareYear != null) {
+          pv = cmpMonthData[m].values[d];
+        } else if (isMoM && m > 1) {
+          pv = monthData[m - 1].values[d];
+        }
         if (pv != null && v != null) {
           if (v > pv) classes.push('dm-up');
           else if (v < pv) classes.push('dm-down');
@@ -3317,7 +3333,8 @@ function renderDailySummary() {
   const metric = DAILY_STATE.metric;
   const today = new Date();
   const useYear = DAILY_STATE.year;
-  const compareYear = resolveCompareYear();   // null 表示不對照
+  const compareYear = resolveCompareYear();   // null 表示不對照或同年
+  const isMoM = isCompareMonthMode();          // true 表示同年（用上月同日對照）
 
   // 錨點：永遠是「今天的月/日」，套到 useYear 與 compareYear 上做 to-date vs to-date 的公平比較。
   // 例如今天 5/19，看 2025 頁面就比 2025/5/19 vs 2026/5/19，而不是比 2025/12/31 vs 2026/12/31。
@@ -3389,35 +3406,58 @@ function renderDailySummary() {
     }
   }
 
-  // 寫入 DOM
-  // 「對照年度」當主角：headline = 對照年（預設今年）的值；sub 比對的是矩陣年度（useYear）。
-  // 讀法：「今日（2026/5/19）累積 208，vs 2025 同月同日 234 → ▼26」。
-  // 無對照（compareYear == null，含同年情況）→ headline 退回 useYear 自己的值。
-  const useCompare = compareYear != null;
-  const headlineToday = useCompare ? cmpToday : curToday;
-  const headlineAvg = useCompare ? cmpAvg : avg;
-  const headlineYtd = useCompare ? cmpYtd : ytd;
+  // 三種對照情境：
+  //  (A) 跨年（compareYear 有值）：headline = 對照年的值，sub = 「vs <useYear> 同月同日: ...」
+  //  (B) 同年 MoM（isMoM=true）：headline = useYear 本月的值，sub = 「vs <上月> 同日: ...」
+  //  (C) 無對照：headline = useYear 本月的值，sub = 「未對照」
+  let headlineToday, headlineAvg, headlineYtd;
+  let subToday, subAvg, subYtd;
+  let labelToday = null, labelAvg = null, labelYtd = null;
 
-  const labelToday = useCompare ? `${useYear} 同月同日` : null;
-  const labelAvg = useCompare ? `${useYear} 同期日均` : null;
-  const labelYtd = useCompare ? `${useYear} 同期` : null;
+  if (compareYear != null) {
+    headlineToday = cmpToday; subToday = curToday;
+    headlineAvg = cmpAvg;     subAvg = avg;
+    headlineYtd = cmpYtd;     subYtd = ytd;
+    labelToday = `${useYear} 同月同日`;
+    labelAvg = `${useYear} 同期日均`;
+    labelYtd = `${useYear} 同期`;
+  } else if (isMoM && anchorMonth > 1) {
+    // 算上月同日的對照值
+    const prevMonthIdx = anchorMonth - 1;
+    const prevMonthDays = new Date(useYear, prevMonthIdx, 0).getDate();
+    const prevAnchorDate = Math.min(anchorDateRaw, prevMonthDays);
+    const prevCum = cumulativeForMonth(byYMD, useYear, prevMonthIdx, metric);
+    const prevToday = prevCum.values[prevAnchorDate];
+    const prevAvg = (prevToday != null && prevAnchorDate > 0) ? (prevToday / prevAnchorDate) : null;
+
+    headlineToday = curToday; subToday = prevToday;
+    headlineAvg = avg;        subAvg = prevAvg;
+    headlineYtd = ytd;        subYtd = null;  // YTD 沒有自然的「上月版」
+    labelToday = `${prevMonthIdx} 月同日`;
+    labelAvg = `${prevMonthIdx} 月同期日均`;
+    labelYtd = null;
+  } else {
+    headlineToday = curToday;
+    headlineAvg = avg;
+    headlineYtd = ytd;
+  }
 
   document.getElementById('dailyKpiToday').textContent =
     headlineToday == null ? '—' : dailyFormatValue(headlineToday, metric);
-  document.getElementById('dailyKpiTodayCompare').innerHTML = useCompare
-    ? formatCompare(headlineToday, curToday, metric, labelToday)
+  document.getElementById('dailyKpiTodayCompare').innerHTML = labelToday
+    ? formatCompare(headlineToday, subToday, metric, labelToday)
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiAvg').textContent =
     headlineAvg == null ? '—' : dailyFormatValue(headlineAvg, metric);
-  document.getElementById('dailyKpiAvgCompare').innerHTML = useCompare
-    ? formatCompare(headlineAvg, avg, metric, labelAvg)
+  document.getElementById('dailyKpiAvgCompare').innerHTML = labelAvg
+    ? formatCompare(headlineAvg, subAvg, metric, labelAvg)
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiYtd').textContent =
     headlineYtd == null ? '—' : dailyFormatValue(headlineYtd, metric);
-  document.getElementById('dailyKpiYtdCompare').innerHTML = useCompare
-    ? formatCompare(headlineYtd, ytd, metric, labelYtd)
+  document.getElementById('dailyKpiYtdCompare').innerHTML = labelYtd
+    ? formatCompare(headlineYtd, subYtd, metric, labelYtd)
     : '<span style="color:var(--text-muted);">未對照</span>';
 }
 
