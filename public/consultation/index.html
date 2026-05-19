@@ -2143,7 +2143,8 @@
     </div>
     <div id="unsignedPriorityBanner" style="margin-bottom:12px;"></div>
     <div id="unsignedSummary" style="margin-bottom:16px;"></div>
-    <div id="pendingBindingsSection" style="margin-bottom:16px;"></div>
+    <!-- 待人工綁定 LINE 對話功能已下線（改全手工處理） -->
+    <div id="pendingBindingsSection" style="display:none;margin-bottom:16px;"></div>
     <div class="section">
       <div class="table-wrap">
         <table id="unsignedTable">
@@ -2981,9 +2982,7 @@ function reRenderActivePage() {
       } else {
         renderUnsignedPage();
       }
-      // pending bindings 的「選擇對應案件」候選池來自 allCases，pending fetch 比 allCases 快，
-      // 第一次 render 時 allCases 通常還空 → dropdown 沒選項。allCases 到齊後重渲染一次才會有。
-      if (pendingBindingsLoadState === 'loaded') renderPendingBindings();
+      // 「待人工綁定 LINE 對話」已下線 — 不再 re-render pending bindings
       break;
     case 'pageDetail':    renderDetailPage();   break;
     case 'pageUpload':    renderUploadSummary(); renderSyncStatus(); break;
@@ -7093,8 +7092,7 @@ async function loadPriorityUnsignedCases() {
 }
 
 function renderUnsignedPage() {
-  // 進到未成案 tab 時順便載入待綁定清單（只抓一次，後續 confirm/dismiss 再局部更新）
-  if (pendingBindingsLoadState === 'idle') loadPendingBindings();
+  // 「待人工綁定 LINE 對話」功能已下線（改全手工處理）— 不再 load pending bindings
 
   // 決定資料來源：全量 allCases 優先；否則 fallback 到 priority 小批
   let sourceCases = null;
