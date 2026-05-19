@@ -3390,26 +3390,34 @@ function renderDailySummary() {
   }
 
   // 寫入 DOM
-  const labelToday = compareYear ? `${compareYear} 同月同日` : null;
-  const labelAvg = compareYear ? `${compareYear} 同期日均` : null;
-  const labelYtd = compareYear ? `${compareYear} 同期` : null;
+  // 「對照年度」當主角：headline = 對照年（預設今年）的值；sub 比對的是矩陣年度（useYear）。
+  // 讀法：「今日（2026/5/19）累積 208，vs 2025 同月同日 234 → ▼26」。
+  // 無對照（compareYear == null，含同年情況）→ headline 退回 useYear 自己的值。
+  const useCompare = compareYear != null;
+  const headlineToday = useCompare ? cmpToday : curToday;
+  const headlineAvg = useCompare ? cmpAvg : avg;
+  const headlineYtd = useCompare ? cmpYtd : ytd;
+
+  const labelToday = useCompare ? `${useYear} 同月同日` : null;
+  const labelAvg = useCompare ? `${useYear} 同期日均` : null;
+  const labelYtd = useCompare ? `${useYear} 同期` : null;
 
   document.getElementById('dailyKpiToday').textContent =
-    curToday == null ? '—' : dailyFormatValue(curToday, metric);
-  document.getElementById('dailyKpiTodayCompare').innerHTML = labelToday
-    ? formatCompare(curToday, cmpToday, metric, labelToday)
+    headlineToday == null ? '—' : dailyFormatValue(headlineToday, metric);
+  document.getElementById('dailyKpiTodayCompare').innerHTML = useCompare
+    ? formatCompare(headlineToday, curToday, metric, labelToday)
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiAvg').textContent =
-    avg == null ? '—' : dailyFormatValue(avg, metric);
-  document.getElementById('dailyKpiAvgCompare').innerHTML = labelAvg
-    ? formatCompare(avg, cmpAvg, metric, labelAvg)
+    headlineAvg == null ? '—' : dailyFormatValue(headlineAvg, metric);
+  document.getElementById('dailyKpiAvgCompare').innerHTML = useCompare
+    ? formatCompare(headlineAvg, avg, metric, labelAvg)
     : '<span style="color:var(--text-muted);">未對照</span>';
 
   document.getElementById('dailyKpiYtd').textContent =
-    ytd == null ? '—' : dailyFormatValue(ytd, metric);
-  document.getElementById('dailyKpiYtdCompare').innerHTML = labelYtd
-    ? formatCompare(ytd, cmpYtd, metric, labelYtd)
+    headlineYtd == null ? '—' : dailyFormatValue(headlineYtd, metric);
+  document.getElementById('dailyKpiYtdCompare').innerHTML = useCompare
+    ? formatCompare(headlineYtd, ytd, metric, labelYtd)
     : '<span style="color:var(--text-muted);">未對照</span>';
 }
 
