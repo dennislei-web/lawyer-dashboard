@@ -2887,7 +2887,7 @@ async function loadSourceComparePage() {
 
 // 來源分析的 router：依目前選的 sub-tab 載入對應資料
 function loadSourcePageRouter() {
-  var active = document.querySelector('.src-subtab-btn.active');
+  var active = document.querySelector('.subtabs[data-subtab-group="src"] .subtab-btn.active');
   var sub = active ? active.dataset.subtab : 'compare';
   if (sub==='compare') loadSourceComparePage();
   else loadSourcePage();
