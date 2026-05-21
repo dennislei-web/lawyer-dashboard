@@ -9088,21 +9088,24 @@ function renderHealthDistribution() {
   lawyerTbl.innerHTML = `
     <thead><tr>
       <th style="text-align:left;">諮詢律師</th>
-      <th style="text-align:right;" title="未簽約 + 還在追蹤（已扣暫不追蹤、合署自接）">手上件數</th>
-      <th style="text-align:right;" title="律師/法務已填 no_track_reason，不在法務追單範圍">暫不追蹤件數</th>
+      <th style="text-align:right;" title="所有未簽約案件（含暫不追蹤、合署自接）— 對應「未成案追蹤」tab">未成案案件</th>
+      <th style="text-align:right;" title="未簽約且還需法務主動追單（已扣暫不追蹤、合署自接）">需追蹤案件</th>
       <th style="text-align:right;">缺 LINE</th>
       <th style="text-align:right;">缺速記</th>
       <th style="text-align:right;">缺律師建議</th>
     </tr></thead>
-    <tbody>${lawyerRows.map(([name, d]) => `
+    <tbody>${lawyerRows.map(([name, d]) => {
+      const total = d.n + d.noTrack;
+      return `
       <tr>
         <td>${escHtml(name)}</td>
-        <td style="text-align:right;">${d.n}</td>
-        <td style="text-align:right;color:${d.noTrack > 0 ? 'var(--text-muted)' : 'var(--text-muted)'};">${d.noTrack}</td>
+        <td style="text-align:right;font-weight:600;">${total}</td>
+        <td style="text-align:right;color:${d.n > 0 ? 'var(--gold)' : 'var(--text-muted)'};">${d.n}</td>
         <td style="text-align:right;color:${d.noLine > d.n * 0.5 ? 'var(--red)' : 'var(--text)'};">${d.noLine}</td>
         <td style="text-align:right;color:${d.noNotes > d.n * 0.3 ? 'var(--red)' : 'var(--text)'};">${d.noNotes}</td>
         <td style="text-align:right;color:${d.noLawyerNotes > d.n * 0.7 ? 'var(--red)' : 'var(--text)'};">${d.noLawyerNotes}</td>
-      </tr>`).join('')}</tbody>`;
+      </tr>`;
+    }).join('')}</tbody>`;
 }
 
 function setHealthStaff(name) {
