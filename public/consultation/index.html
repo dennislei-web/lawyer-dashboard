@@ -8920,7 +8920,8 @@ async function loadHealthPage() {
 
   healthState.lawyerMap = new Map((lawyersData || []).map(l => [l.id, l.name]));
   healthState.lawyerOfficeMap = new Map((lawyersData || []).map(l => [l.id, l.office || '']));
-  // 拿掉「主動放棄追蹤」(no_track_reason)
+  // 拿掉「主動放棄追蹤」(no_track_reason) — 但保留下來，分布表要分欄顯示
+  healthState.noTrackCases = (casesData || []).filter(c => (c.no_track_reason || '').trim());
   const activeUnsigned = (casesData || []).filter(c => !((c.no_track_reason || '').trim()));
   // 合署自接：諮詢律師在合署 + 沒指派 tracking_staff → 律師自己接、自己追，不需法務介入
   healthState.cohortSelfCases = activeUnsigned.filter(c =>
@@ -9038,14 +9039,22 @@ function renderHealthDistribution() {
 
   // 律師切片
   const byLawyer = new Map();
+  const ensureLawyer = (name) => {
+    if (!byLawyer.has(name)) byLawyer.set(name, { n: 0, noTrack: 0, noLine: 0, noNotes: 0, noLawyerNotes: 0 });
+    return byLawyer.get(name);
+  };
   cs.forEach(c => {
     const name = healthState.lawyerMap.get(c.lawyer_id) || '?';
-    if (!byLawyer.has(name)) byLawyer.set(name, { n: 0, noLine: 0, noNotes: 0, noLawyerNotes: 0 });
-    const d = byLawyer.get(name);
+    const d = ensureLawyer(name);
     d.n++;
     if (!(c.line_chat_url || '').trim()) d.noLine++;
     if (!(c.tracking_notes || '').trim()) d.noNotes++;
     if (!(c.lawyer_notes || '').trim()) d.noLawyerNotes++;
+  });
+  // 暫不追蹤案件 — 只算 lawyer 維度的 noTrack 數
+  (healthState.noTrackCases || []).forEach(c => {
+    const name = healthState.lawyerMap.get(c.lawyer_id) || '?';
+    ensureLawyer(name).noTrack++;
   });
 
   // 渲染接案（點 row 自動帶入 staff filter）
@@ -9074,12 +9083,13 @@ function renderHealthDistribution() {
     }).join('')}</tbody>`;
 
   // 渲染律師
-  const lawyerRows = [...byLawyer.entries()].sort((a, b) => b[1].n - a[1].n);
+  const lawyerRows = [...byLawyer.entries()].sort((a, b) => (b[1].n + b[1].noTrack) - (a[1].n + a[1].noTrack));
   const lawyerTbl = document.getElementById('healthByLawyer');
   lawyerTbl.innerHTML = `
     <thead><tr>
       <th style="text-align:left;">諮詢律師</th>
-      <th style="text-align:right;">手上</th>
+      <th style="text-align:right;" title="未簽約 + 還在追蹤（已扣暫不追蹤、合署自接）">手上件數</th>
+      <th style="text-align:right;" title="律師/法務已填 no_track_reason，不在法務追單範圍">暫不追蹤件數</th>
       <th style="text-align:right;">缺 LINE</th>
       <th style="text-align:right;">缺速記</th>
       <th style="text-align:right;">缺律師建議</th>
@@ -9088,6 +9098,7 @@ function renderHealthDistribution() {
       <tr>
         <td>${escHtml(name)}</td>
         <td style="text-align:right;">${d.n}</td>
+        <td style="text-align:right;color:${d.noTrack > 0 ? 'var(--text-muted)' : 'var(--text-muted)'};">${d.noTrack}</td>
         <td style="text-align:right;color:${d.noLine > d.n * 0.5 ? 'var(--red)' : 'var(--text)'};">${d.noLine}</td>
         <td style="text-align:right;color:${d.noNotes > d.n * 0.3 ? 'var(--red)' : 'var(--text)'};">${d.noNotes}</td>
         <td style="text-align:right;color:${d.noLawyerNotes > d.n * 0.7 ? 'var(--red)' : 'var(--text)'};">${d.noLawyerNotes}</td>
