@@ -2062,6 +2062,11 @@
       <span class="filter-label">年度</span>
     </div>
 
+    <!-- 部門篩選 -->
+    <div class="year-filter-bar" id="dailyDeptBar" style="margin-bottom:8px;">
+      <span class="filter-label">部門</span>
+    </div>
+
     <!-- 律師篩選 + 比較對象 + 條件格式 -->
     <div class="year-filter-bar" id="dailyControlBar" style="margin-bottom:14px;flex-wrap:wrap;gap:12px;">
       <span class="filter-label">律師</span>
@@ -3093,6 +3098,7 @@ function isHealthAdmin() {
 const DAILY_STATE = {
   metric: 'consults',     // consults | signed | collected | rate
   year: null,             // 西元年；null = 預設今年
+  dept: 'all',            // 'all' 或 DEPARTMENT_ORDER 其中一個
   lawyerId: 'all',
   compare: 'today',       // 'today'（今年）| 'none'（不對照）| '<year>'（指定年度，例：'2024'）
   showColor: true,
@@ -3102,16 +3108,19 @@ const DAILY_STATE = {
 };
 
 // 把所有可見 cases 預聚合成 byYMD：byYMD[year][month][day] = {consults, signed, collected}
-// month/day 都是 1-based；lawyerId='all' 或具體 id 兩種模式都走同一個 cache key
-function buildDailyAggregate(lawyerId) {
-  const key = lawyerId || 'all';
+// month/day 都是 1-based；用 (lawyerId, dept) 複合 key 做 cache
+function buildDailyAggregate(lawyerId, dept) {
+  const lid = lawyerId || 'all';
+  const dp = dept || 'all';
+  const key = `${lid}|${dp}`;
   if (!DAILY_STATE._aggCache) DAILY_STATE._aggCache = {};
   if (DAILY_STATE._aggCache[key]) return DAILY_STATE._aggCache[key];
 
   const byYMD = {};
   for (const c of allCases) {
     if (!c.case_date) continue;
-    if (lawyerId && lawyerId !== 'all' && c.lawyer_id !== lawyerId) continue;
+    if (lid !== 'all' && c.lawyer_id !== lid) continue;
+    if (dp !== 'all' && LAWYER_DEPARTMENTS[c.lawyer_id] !== dp) continue;
     // case_date 是 YYYY-MM-DD
     const y = parseInt(c.case_date.substring(0,4), 10);
     const m = parseInt(c.case_date.substring(5,7), 10);
@@ -3127,6 +3136,57 @@ function buildDailyAggregate(lawyerId) {
   }
   DAILY_STATE._aggCache[key] = byYMD;
   return byYMD;
+}
+
+function deptFilteredLawyers(dept) {
+  const lawyers = Object.values(allLawyersMap || {}).filter(l => l && l.role !== 'legal_staff');
+  if (!dept || dept === 'all') return lawyers;
+  return lawyers.filter(l => LAWYER_DEPARTMENTS[l.id] === dept);
+}
+
+function buildDailyDeptButtons() {
+  const bar = document.getElementById('dailyDeptBar');
+  if (!bar) return;
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+  const items = ['all'].concat(DEPARTMENT_ORDER);
+  items.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (d === DAILY_STATE.dept ? ' active' : '');
+    btn.textContent = d === 'all' ? '全部' : d;
+    btn.onclick = () => {
+      DAILY_STATE.dept = d;
+      // 切部門時：若目前選的律師不在新部門，重置為 'all'
+      if (DAILY_STATE.lawyerId !== 'all') {
+        const allowed = new Set(deptFilteredLawyers(d).map(l => l.id));
+        if (!allowed.has(DAILY_STATE.lawyerId)) DAILY_STATE.lawyerId = 'all';
+      }
+      buildDailyDeptButtons();
+      rebuildDailyLawyerSelect();
+      renderDailyMatrix();
+      renderDailySummary();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function rebuildDailyLawyerSelect() {
+  const sel = document.getElementById('dailyLawyerSelect');
+  if (!sel) return;
+  const dept = DAILY_STATE.dept;
+  const lawyers = deptFilteredLawyers(dept)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-TW'));
+  sel.innerHTML = '';
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = (dept === 'all') ? '全所' : `全${dept}`;
+  sel.appendChild(optAll);
+  for (const l of lawyers) {
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = l.name;
+    sel.appendChild(opt);
+  }
+  sel.value = DAILY_STATE.lawyerId || 'all';
 }
 
 function dailyInvalidateCache() {
@@ -3290,20 +3350,12 @@ function initDailyControls() {
     yearBar.appendChild(b);
   }
 
-  // 律師下拉
+  // 部門按鈕（'全部' + DEPARTMENT_ORDER）
+  buildDailyDeptButtons();
+
+  // 律師下拉（依當前 dept 動態過濾）
+  rebuildDailyLawyerSelect();
   const sel = document.getElementById('dailyLawyerSelect');
-  // 確保 allLawyersMap 有資料
-  const lawyers = Object.values(allLawyersMap || {})
-    .filter(l => l && l.role !== 'legal_staff')
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-TW'));
-  while (sel.options.length > 1) sel.remove(1);
-  for (const l of lawyers) {
-    const opt = document.createElement('option');
-    opt.value = l.id;
-    opt.textContent = l.name;
-    sel.appendChild(opt);
-  }
-  sel.value = 'all';
   sel.addEventListener('change', () => {
     DAILY_STATE.lawyerId = sel.value;
     renderDailyMatrix();
@@ -3330,7 +3382,7 @@ function initDailyControls() {
 }
 
 function renderDailyMatrix() {
-  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId, DAILY_STATE.dept);
   const year = DAILY_STATE.year;
   const metric = DAILY_STATE.metric;
   const compareYear = resolveCompareYear();   // 跨年對照目標；null 表示不對照或同年
@@ -3430,7 +3482,7 @@ function metricLabel(metric) {
 }
 
 function renderDailySummary() {
-  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId, DAILY_STATE.dept);
   const metric = DAILY_STATE.metric;
   const today = new Date();
   const useYear = DAILY_STATE.year;
@@ -3577,7 +3629,7 @@ function formatCompare(cur, prev, metric, label, precise) {
 
 // ----- popup chart -----
 function openDailyMonthChart(month) {
-  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId, DAILY_STATE.dept);
   const metric = DAILY_STATE.metric;
   const years = dailyAvailableYears();
   const daysInMonth = new Date(2024, month, 0).getDate(); // 用平年最大；2 月用 29 也 OK
@@ -3612,7 +3664,7 @@ function openDailyMonthChart(month) {
 }
 
 function openDailyDayChart(day) {
-  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId);
+  const byYMD = buildDailyAggregate(DAILY_STATE.lawyerId, DAILY_STATE.dept);
   const metric = DAILY_STATE.metric;
   const years = dailyAvailableYears();
   const labels = [];
