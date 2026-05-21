@@ -8821,6 +8821,7 @@ const healthState = {
   suggMap: new Map(),   // case_id -> suggestion row
   lawyerMap: new Map(), // lawyer_id -> name
   lawyerOfficeMap: new Map(), // lawyer_id -> office (含「合署」字串者視為合署律師)
+  legalStaffIds: new Set(), // role=legal_staff 的 id — 諮詢律師表要排除
   loadedAt: null,
 };
 
@@ -8877,7 +8878,7 @@ async function loadHealthPage() {
   let lawyersData = [], casesData = [], suggData = [];
   let lawErr = null, casesErr = null, suggErr = null;
   try {
-    const r = await sb.from('lawyers').select('id,name,office');
+    const r = await sb.from('lawyers').select('id,name,office,role');
     lawErr = r.error; lawyersData = r.data || [];
   } catch (e) { lawErr = e; }
   try {
@@ -8920,9 +8921,12 @@ async function loadHealthPage() {
 
   healthState.lawyerMap = new Map((lawyersData || []).map(l => [l.id, l.name]));
   healthState.lawyerOfficeMap = new Map((lawyersData || []).map(l => [l.id, l.office || '']));
+  healthState.legalStaffIds = new Set((lawyersData || []).filter(l => l.role === 'legal_staff').map(l => l.id));
+  // 法務同仁不是諮詢律師 — 把 lawyer_id 指到法務的 cases 排掉，跟主頁 allCases 邏輯一致
+  const lawyerOnlyCases = (casesData || []).filter(c => !healthState.legalStaffIds.has(c.lawyer_id));
   // 拿掉「主動放棄追蹤」(no_track_reason) — 但保留下來，分布表要分欄顯示
-  healthState.noTrackCases = (casesData || []).filter(c => (c.no_track_reason || '').trim());
-  const activeUnsigned = (casesData || []).filter(c => !((c.no_track_reason || '').trim()));
+  healthState.noTrackCases = lawyerOnlyCases.filter(c => (c.no_track_reason || '').trim());
+  const activeUnsigned = lawyerOnlyCases.filter(c => !((c.no_track_reason || '').trim()));
   // 合署自接：諮詢律師在合署 + 沒指派 tracking_staff → 律師自己接、自己追，不需法務介入
   healthState.cohortSelfCases = activeUnsigned.filter(c =>
     healthIsCohortLawyer(c.lawyer_id) && !((c.tracking_staff || '').trim())

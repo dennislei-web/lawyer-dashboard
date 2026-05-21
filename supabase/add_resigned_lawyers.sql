@@ -7,15 +7,15 @@ UPDATE public.lawyers SET is_active = false WHERE name = '黃惠群';
 -- Step 3: Insert resigned lawyers
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('丁巧欣', 'resigned_丁巧欣@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('劉羽芯', 'resigned_劉羽芯@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
-INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('吳書晴', 'resigned_吳書晴@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
+-- 吳書晴 改列為在職法務同仁 (role=legal_staff)，不再放進此批離職律師清單
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('唐于淇', 'resigned_唐于淇@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('張佳榕', 'resigned_張佳榕@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('張紹成', 'resigned_張紹成@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('徐佳緯', 'resigned_徐佳緯@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
-INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('方浚煜', 'resigned_方浚煜@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
+-- 方浚煜 改列為在職法務同仁 (role=legal_staff)
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('李仁傑', 'resigned_李仁傑@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('李家徹', 'resigned_李家徹@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
-INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('李音忻', 'resigned_李音忻@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
+-- 李音忻 改列為在職法務同仁 (role=legal_staff)
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('杜柏賢', 'resigned_杜柏賢@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('林俐妤', 'resigned_林俐妤@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
 INSERT INTO public.lawyers (name, email, role, office, is_active) VALUES ('林貝珍', 'resigned_林貝珍@placeholder.com', 'lawyer', '喆律法律事務所', false) ON CONFLICT DO NOTHING;
