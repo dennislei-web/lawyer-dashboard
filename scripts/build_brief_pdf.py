@@ -523,6 +523,10 @@ def generate_personalized_actions(lw, prep, llm, unsigned, signed, reason_counts
    - 例：「2026 年律師函客單跟上全所同年度 40K（目前歷史平均 18K、2025 為 14.8K）」
 9. **避免重複**：3-4 個 action 要涵蓋不同面向（不要 4 個都是「尾聲話術」）；**任何兩個 action 的 title 不可使用同一個動詞模板**
 10. 優先考慮**效益值**與**客單價**，成案率次要（若是因為接高價案使成案率下滑，那是正確策略選擇）
+11. **術語規範**（喆律事務所慣用詞，違反一律 reject）：
+    - **禁用「包價」這個詞** — 台灣法律業沒有「包價」用法。要表達整案計費請用「打包價」「整案報價」「一站式報價」；要表達給客戶費用請用「報價」
+    - **律師助理一律稱「同事」**，不要寫「請同事 / 老師…」這種並列 — 「老師」可能在 reason_evidence 引號內逐字稿出現（口誤），但你寫的 action why/how 是敘述，不是引用，請統一寫「同事」
+    - 內部分工角色：律師、合署律師、所長、（接案）法務同仁、業務、客戶經理 — 沒有「老師」這個 role
 
 ## 輸出（純 JSON，無 markdown 包裝、無前後說明文字）
 
@@ -2455,6 +2459,15 @@ def main():
             print(f"  [warn] 抓不到全案件 / lag：{e}")
 
     html_out = build_html(prep, llm, all_cases=all_cases, lag_stats=lag_stats)
+
+    # === Post-process：清掉 LLM 已知會吐的錯字 ===
+    # 1) 「包價」是 LLM 自造詞，律師慣用詞只有「報價」/「打包價」（兩字打+包價）
+    #    用 negative lookbehind 避免動到「打包價」
+    html_out = re.sub(r'(?<!打)包價', '報價', html_out)
+    # 2) 「老師」是 transcript 口誤被 LLM 當術語複述（如「請同事 / 老師進來報價」）
+    #    律師助理在事務所一律稱「同事」，brief 敘述中不該出現「老師」
+    html_out = re.sub(r'同事 ?/ ?老師', '同事', html_out)
+    html_out = re.sub(r'請老師', '請同事', html_out)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     html_path = out_dir / f"{args.name}{suffix_part}_brief.html"
