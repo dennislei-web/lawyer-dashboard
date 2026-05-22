@@ -9440,9 +9440,10 @@ function renderHealthAiList() {
     const editBox = `
       <div id="sugg-edit-${s.case_id}" style="display:none;margin-top:8px;">
         <textarea id="sugg-edit-ta-${s.case_id}" style="width:100%;min-height:120px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:0.88rem;font-family:inherit;line-height:1.55;">${escHtml(s.edited_message || s.suggested_message || '')}</textarea>
-        <div style="margin-top:6px;font-size:0.72rem;color:var(--text-muted);">改完按「儲存」會自動標成「改後傳」</div>
-        <div style="margin-top:6px;display:flex;gap:6px;">
-          <button class="btn btn-primary btn-sm" onclick="saveAiSuggEdit('${s.case_id}')">儲存 + 標已處理</button>
+        <div style="margin-top:6px;font-size:0.72rem;color:var(--text-muted);">「儲存」只暫存編輯，<strong>狀態不變</strong>；要標成「改後傳」按右側綠色鈕</div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="saveAiSuggEdit('${s.case_id}', false)">💾 儲存</button>
+          <button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="saveAiSuggEdit('${s.case_id}', true)">✓ 儲存並標已傳改後版</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sugg-edit-${s.case_id}').style.display='none'">取消</button>
         </div>
       </div>`;
@@ -9553,16 +9554,28 @@ function toggleAiSuggEdit(caseId) {
   if (box) box.style.display = box.style.display === 'none' ? '' : 'none';
 }
 
-async function saveAiSuggEdit(caseId) {
+// markSent=true → 同時設 rating='edited'（標已處理）；false（預設）→ 只暫存編輯，不動 rating
+async function saveAiSuggEdit(caseId, markSent) {
   const ta = document.getElementById('sugg-edit-ta-' + caseId);
   if (!ta) return;
   const edited = ta.value.trim();
+  const payload = { edited_message: edited };
+  if (markSent) {
+    payload.rating = 'edited';
+    payload.rating_at = new Date().toISOString();
+  }
   const { error } = await sb.from('consultation_ai_suggestions')
-    .update({ rating: 'edited', rating_at: new Date().toISOString(), edited_message: edited })
+    .update(payload)
     .eq('case_id', caseId);
   if (error) { alert('儲存失敗：' + error.message); return; }
   const s = healthState.suggMap.get(caseId);
-  if (s) { s.rating = 'edited'; s.rating_at = new Date().toISOString(); s.edited_message = edited; }
+  if (s) {
+    s.edited_message = edited;
+    if (markSent) {
+      s.rating = 'edited';
+      s.rating_at = new Date().toISOString();
+    }
+  }
   document.getElementById('sugg-edit-' + caseId).style.display = 'none';
   renderHealthAiList();
 }
