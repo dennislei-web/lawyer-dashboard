@@ -1765,6 +1765,48 @@
       </div>
     </div>
 
+    <!-- Procedure Mix Analysis (完整訴訟 vs 部分程序) -->
+    <div class="section" id="procedureMixSection">
+      <div class="section-header">
+        <div class="section-title" id="procMixTitle">案件程序分布</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);" id="procMixMeta">
+          把諮詢案依 case_type tag 分類為「委任完整訴訟程序 A」vs「委任部分程序 B」；點欄位可排序
+        </div>
+      </div>
+      <div id="procMixSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;"></div>
+      <div class="table-wrap">
+        <table id="procMixTable">
+          <thead>
+            <tr>
+              <th rowspan="2" style="width:44px;vertical-align:middle;">#</th>
+              <th rowspan="2" style="vertical-align:middle;" class="sortable" data-pcol="name">律師</th>
+              <th rowspan="2" style="vertical-align:middle;" class="sortable" data-pcol="dept">所別</th>
+              <th rowspan="2" class="num sortable" data-pcol="total" style="vertical-align:middle;">諮詢數</th>
+              <th rowspan="2" class="num sortable" data-pcol="signed" style="vertical-align:middle;">成案</th>
+              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);color:var(--blue);">完整訴訟程序 A</th>
+              <th colspan="3" class="num" style="border-bottom:1px solid var(--border);color:var(--gold);">部分程序 B</th>
+            </tr>
+            <tr>
+              <th class="num sortable" data-pcol="a">件</th>
+              <th class="num sortable" data-pcol="a_all_pct">/全%</th>
+              <th class="num sortable" data-pcol="a_signed_pct">/成%</th>
+              <th class="num sortable" data-pcol="b">件</th>
+              <th class="num sortable" data-pcol="b_all_pct">/全%</th>
+              <th class="num sortable" data-pcol="b_signed_pct">/成%</th>
+            </tr>
+          </thead>
+          <tbody id="procMixTableBody">
+            <tr><td colspan="11" class="loading"><span class="loading-spinner"></span>案件資料載入中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;line-height:1.5;">
+        <strong>分類規則</strong>　A（完整訴訟）：民/家/刑各審程序、強制執行、保護令、家事/勞動調解、抗告、暫時處分、改定監護、收養、確認親子、假扣押、聲請限定繼承、聲請債權憑證、包套等。
+        B（部分程序）：律師函/存證信函、各類協議書、代協商/律師協商/陪同調解、撰寫書狀、支付命令/本票裁定、證人/律見/陪偵/閱卷/警詢、公證、代筆遺囑、法律顧問、契約等。
+        一案同時含 A、B → 計入 A。
+      </div>
+    </div>
+
     <!-- Resigned Lawyers Section (collapsible) -->
     <div class="section" id="resignedSection" style="display:none;">
       <div class="section-header" style="cursor:pointer;" onclick="toggleResigned()">
@@ -3888,6 +3930,9 @@ function renderOverviewPage() {
   // Amount range analysis
   renderAmountRange(overviewYear);
 
+  // Procedure mix (完整訴訟 A vs 部分程序 B)
+  renderProcedureMix(overviewYear, overviewDept);
+
   // 部門比較圖表（只依年份篩選，不依部門，這樣可以跨部門比較）
   if (canViewAll()) {
     document.getElementById('deptComparisonSection').style.display = '';
@@ -4399,6 +4444,184 @@ function renderResignedSection(stats) {
   }).join('');
 }
 
+// ===================== PROCEDURE MIX ANALYSIS (完整訴訟 A vs 部分程序 B) =====================
+const PROC_A_TAGS = new Set([
+  // 民事
+  '民事一審', '民事二審', '民事三審',
+  // 家事
+  '家事一審', '家事二審', '家事三審',
+  // 刑事
+  '刑事偵查程序', '刑事一審程序', '刑事二審程序', '刑事三審程序',
+  '刑事告訴', '刑事再議程序',
+  '刑事附帶民事一審程序', '刑事一審附帶民事',
+  // 執行 / 救濟
+  '強制執行', '強制執行(五年)',
+  '抗告', '暫時保護令抗告',
+  '通常保護令程序', '暫時處分',
+  // 調解
+  '家事調解程序', '勞動爭議調解',
+  // 其他法院程序
+  '改定監護', '收養程序', '確認親子關係',
+  '假扣押聲請', '聲請核發債權憑證', '聲請限定繼承程序',
+  '履行同居', '法院分別財產制登記',
+  // 套裝
+  '包套',
+]);
+const PROC_B_TAGS = new Set([
+  '律師函', '存證信函',
+  '離婚協議書', '婚姻中協議', '和解協議書', '還款協議書',
+  '撰寫和解書', '協議書撰寫',
+  '代協商', '律師協商', '陪同調解', '調解聲請狀',
+  '撰寫書狀', '民事起訴狀撰寫',
+  '證人', '警詢', '陪偵', '閱卷', '律見',
+  '公證費', '代筆遺囑',
+  '支付命令', '本票裁定',
+  '法律顧問', '常年企業法律顧問', '契約',
+  '請求履行協議',
+]);
+
+function classifyProcedure(caseType, isSigned) {
+  if (!isSigned) return 'unsigned';
+  const tags = (caseType || '').split(',').map(t => t.trim()).filter(Boolean);
+  for (let i = 0; i < tags.length; i++) if (PROC_A_TAGS.has(tags[i])) return 'A';
+  for (let i = 0; i < tags.length; i++) if (PROC_B_TAGS.has(tags[i])) return 'B';
+  return 'signed_other';
+}
+
+let procMixSortCol = 'total';
+let procMixSortDir = 'desc';
+
+function buildProcedureMixRows(year, dept) {
+  // Group cases by lawyer
+  const byLawyer = {};
+  for (const c of allCases) {
+    if (year !== 'all' && (!c.case_date || !c.case_date.startsWith(year))) continue;
+    if (dept !== 'all' && LAWYER_DEPARTMENTS[c.lawyer_id] !== dept) continue;
+    const lid = c.lawyer_id;
+    if (!byLawyer[lid]) byLawyer[lid] = { a: 0, b: 0, signed_other: 0, unsigned: 0 };
+    const bucket = classifyProcedure(c.case_type, !!c.is_signed);
+    if (bucket === 'A') byLawyer[lid].a++;
+    else if (bucket === 'B') byLawyer[lid].b++;
+    else if (bucket === 'signed_other') byLawyer[lid].signed_other++;
+    else byLawyer[lid].unsigned++;
+  }
+  return Object.entries(byLawyer).map(([id, d]) => {
+    const lawyer = allLawyersMap[id] || resignedLawyersMap[id] || { name: '(未知)', office: '' };
+    const total = d.a + d.b + d.signed_other + d.unsigned;
+    const signed = d.a + d.b + d.signed_other;
+    return {
+      id,
+      name: lawyer.name,
+      dept: LAWYER_DEPARTMENTS[id] || '',
+      total,
+      signed,
+      a: d.a,
+      b: d.b,
+      a_all_pct: total > 0 ? d.a / total * 100 : 0,
+      b_all_pct: total > 0 ? d.b / total * 100 : 0,
+      a_signed_pct: signed > 0 ? d.a / signed * 100 : 0,
+      b_signed_pct: signed > 0 ? d.b / signed * 100 : 0,
+      _resigned: !!resignedLawyersMap[id],
+    };
+  });
+}
+
+function renderProcedureMix(year, dept) {
+  const section = document.getElementById('procedureMixSection');
+  if (!section) return;
+  const tbody = document.getElementById('procMixTableBody');
+  const summary = document.getElementById('procMixSummary');
+  const titleEl = document.getElementById('procMixTitle');
+
+  // Title suffix: year + dept
+  const yearLbl = year === 'all' ? '全部年度' : (year + ' 年');
+  const deptLbl = dept === 'all' ? '' : '（' + dept + '）';
+  titleEl.textContent = '案件程序分布 · ' + yearLbl + deptLbl;
+
+  if (casesLoadState !== 'loaded') {
+    const msg = casesLoadState === 'error' ? '案件資料載入失敗' : '案件資料載入中…';
+    const cls = casesLoadState === 'error' ? 'empty-state' : 'loading';
+    tbody.innerHTML = '<tr><td colspan="11" class="' + cls + '">' + (casesLoadState === 'loading' ? '<span class="loading-spinner"></span>' : '') + msg + '</td></tr>';
+    summary.innerHTML = '';
+    return;
+  }
+
+  // Build rows (filter out resigned by default for fair comparison; but include if showing all)
+  let rows = buildProcedureMixRows(year, dept).filter(r => !r._resigned);
+
+  // Compute firm-level totals from rows
+  const firm = rows.reduce((acc, r) => {
+    acc.total += r.total;
+    acc.signed += r.signed;
+    acc.a += r.a;
+    acc.b += r.b;
+    return acc;
+  }, { total: 0, signed: 0, a: 0, b: 0 });
+  const aAllPct = firm.total ? firm.a / firm.total * 100 : 0;
+  const bAllPct = firm.total ? firm.b / firm.total * 100 : 0;
+  const aSignedPct = firm.signed ? firm.a / firm.signed * 100 : 0;
+  const bSignedPct = firm.signed ? firm.b / firm.signed * 100 : 0;
+  const signRate = firm.total ? firm.signed / firm.total * 100 : 0;
+  const otherSigned = firm.signed - firm.a - firm.b;
+
+  summary.innerHTML = `
+    <div class="kpi-card" title="範圍內全部諮詢案件">
+      <div class="kpi-label">總諮詢</div>
+      <div class="kpi-value">${firm.total.toLocaleString()}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">成案 ${firm.signed.toLocaleString()}（${signRate.toFixed(1)}%）</div>
+    </div>
+    <div class="kpi-card" title="完整訴訟程序：進法院走程序的案件">
+      <div class="kpi-label" style="color:var(--blue);">完整訴訟 A</div>
+      <div class="kpi-value" style="color:var(--blue);">${firm.a.toLocaleString()}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">/全 ${aAllPct.toFixed(1)}% · /成 ${aSignedPct.toFixed(1)}%</div>
+    </div>
+    <div class="kpi-card" title="部分程序：律師函、協議書、代協商、撰狀、支付命令等">
+      <div class="kpi-label" style="color:var(--gold);">部分程序 B</div>
+      <div class="kpi-value" style="color:var(--gold);">${firm.b.toLocaleString()}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">/全 ${bAllPct.toFixed(1)}% · /成 ${bSignedPct.toFixed(1)}%</div>
+    </div>
+    <div class="kpi-card" title="已成案但 case_type 沒有 A/B tag（多為純『現場諮詢』或『其他』）">
+      <div class="kpi-label" style="color:var(--text-muted);">已成案未分類</div>
+      <div class="kpi-value" style="color:var(--text-muted);">${otherSigned.toLocaleString()}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">未成案 ${(firm.total - firm.signed).toLocaleString()}</div>
+    </div>
+  `;
+
+  // Sort
+  rows = sortRows(rows, procMixSortCol, procMixSortDir);
+  // Update sort indicators
+  document.querySelectorAll('#procMixTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.pcol === procMixSortCol) {
+      th.classList.add(procMixSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">此範圍無案件資料</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => {
+    const rank = i + 1;
+    const rClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+    const pctTxt = v => (v > 0 ? v.toFixed(1) + '%' : '<span style="color:var(--text-muted);">—</span>');
+    return `<tr onclick="showDetailPage('${r.id}')">
+      <td><span class="rank-badge ${rClass}">${rank}</span></td>
+      <td><strong>${escHtml(r.name)}</strong></td>
+      <td>${escHtml(r.dept || '')}</td>
+      <td class="num">${r.total.toLocaleString()}</td>
+      <td class="num">${r.signed.toLocaleString()}</td>
+      <td class="num" style="color:var(--blue);">${r.a.toLocaleString()}</td>
+      <td class="num">${pctTxt(r.a_all_pct)}</td>
+      <td class="num">${pctTxt(r.a_signed_pct)}</td>
+      <td class="num" style="color:var(--gold);">${r.b.toLocaleString()}</td>
+      <td class="num">${pctTxt(r.b_all_pct)}</td>
+      <td class="num">${pctTxt(r.b_signed_pct)}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ===================== AMOUNT RANGE ANALYSIS =====================
 function renderAmountRange(year) {
   const container = document.getElementById('amountRangeContent');
@@ -4651,6 +4874,20 @@ document.querySelectorAll('#lawyerYoyTable th.sortable').forEach(th => {
     } else {
       lawyerYoySortCol = col;
       lawyerYoySortDir = 'desc';
+    }
+    renderOverviewPage();
+  });
+});
+
+// Procedure mix table sort
+document.querySelectorAll('#procMixTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.pcol;
+    if (procMixSortCol === col) {
+      procMixSortDir = procMixSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      procMixSortCol = col;
+      procMixSortDir = (col === 'name' || col === 'dept') ? 'asc' : 'desc';
     }
     renderOverviewPage();
   });
