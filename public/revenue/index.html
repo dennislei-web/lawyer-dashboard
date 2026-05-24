@@ -3491,12 +3491,16 @@ function _renderCasesOfficeTable(rows) {
 }
 
 function _renderCasesLawyerTable(rows) {
-  // 每位律師（council_lawyers 陣列）匯總
+  // 每位律師承辦 → 6 個律師角色 union（distinct case，同案多角色不重複）
+  // council_lawyers 諮詢、assigned_members 接案、litigation 訴訟、in_court 出庭、pleading 書狀、complaint 起訴
+  var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var byLawyer = {};
   rows.forEach(function(r){
-    var lawyers = r.council_lawyers || [];
-    lawyers.forEach(function(name){
-      if (!name) return;
+    var set = new Set();
+    ROLE_FIELDS.forEach(function(f){
+      (r[f] || []).forEach(function(n){ if (n) set.add(n); });
+    });
+    set.forEach(function(name){
       if (!byLawyer[name]) byLawyer[name] = {inProgress:0, pending:0, closed:0, unconcluded:0};
       if (r.aasm_state === 'appointed') byLawyer[name].inProgress++;
       else if (r.aasm_state === 'pending') byLawyer[name].pending++;
