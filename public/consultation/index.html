@@ -1977,6 +1977,11 @@
       <div class="section-title" style="font-size:1.1rem;" id="trackingTitle">2026 年度追蹤</div>
     </div>
 
+    <!-- 所別篩選 -->
+    <div class="year-filter-bar" id="trackingDeptBar" style="margin-bottom:16px;">
+      <span class="filter-label">篩選部門</span>
+    </div>
+
     <!-- YoY KPI -->
     <div class="yoy-grid" id="yoyGrid">
       <div class="yoy-card">
@@ -2837,6 +2842,7 @@ let priorityUnsignedTargetName = null;
 
 let overviewYear = 'all';
 let overviewDept = 'all';  // 部門篩選：'all' 或 DEPARTMENT_ORDER 其中一個
+let trackingDept = 'all';  // 年度追蹤的部門篩選
 let detailYear   = 'all';
 // 部門比較圖表（同一 ID 重建時要先 destroy 舊的）
 let deptCharts = { counts: null, signRate: null, collected: null, eff: null };
@@ -3904,6 +3910,25 @@ function buildDeptButtons() {
 function filterByDept(stats, dept) {
   if (!dept || dept === 'all') return stats;
   return stats.filter(s => LAWYER_DEPARTMENTS[s.lawyer_id] === dept);
+}
+
+function buildTrackingDeptButtons() {
+  const bar = document.getElementById('trackingDeptBar');
+  if (!bar) return;
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+
+  const items = ['all'].concat(DEPARTMENT_ORDER);
+  items.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (d === trackingDept ? ' active' : '');
+    btn.textContent = d === 'all' ? '全部' : d;
+    btn.onclick = () => {
+      trackingDept = d;
+      buildTrackingDeptButtons();
+      renderTrackingPage();
+    };
+    bar.appendChild(btn);
+  });
 }
 
 // ===================== OVERVIEW PAGE =====================
@@ -5128,12 +5153,23 @@ function renderDetailChart(stats) {
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 function renderTrackingPage() {
+  // 部門 chip bar（只有可看全所的角色才顯示）
+  const deptBar = document.getElementById('trackingDeptBar');
+  if (deptBar) deptBar.style.display = canViewAll() ? '' : 'none';
+  if (!canViewAll()) trackingDept = 'all';
+  buildTrackingDeptButtons();
+
   const now = new Date();
   const currentYear = now.getFullYear().toString();
   const prevYear    = (parseInt(currentYear) - 1).toString();
 
-  const currStats = allStats.filter(s => s.month && s.month.startsWith(currentYear));
-  const prevStats = allStats.filter(s => s.month && s.month.startsWith(prevYear));
+  // 先用未過濾資料決定哪些月份算「已完成」，避免不同部門切換造成比較期間飄移
+  const currStatsAll = allStats.filter(s => s.month && s.month.startsWith(currentYear));
+  const prevStatsAll = allStats.filter(s => s.month && s.month.startsWith(prevYear));
+
+  // 套用部門篩選
+  const currStats = filterByDept(currStatsAll, trackingDept);
+  const prevStats = filterByDept(prevStatsAll, trackingDept);
 
   // Decide which months count as "complete" for a fair YoY comparison.
   // The current calendar month is excluded unless today is its last day.
@@ -5142,7 +5178,7 @@ function renderTrackingPage() {
   const currentMonthComplete = now.getDate() === lastDay;
 
   const completeMonths = new Set();
-  currStats.forEach(s => {
+  currStatsAll.forEach(s => {
     const mm = s.month.slice(5, 7);
     if (mm !== currentMonthMM || currentMonthComplete) completeMonths.add(mm);
   });
@@ -5162,8 +5198,9 @@ function renderTrackingPage() {
     periodLabel = start === end ? (start + ' 月') : (start + '-' + end + ' 月');
   }
 
+  const deptSuffix = (trackingDept && trackingDept !== 'all') ? '（' + trackingDept + '）' : '';
   const titleEl = document.getElementById('trackingTitle');
-  titleEl.textContent = currentYear + ' 年度追蹤';
+  titleEl.textContent = currentYear + ' 年度追蹤' + deptSuffix;
   if (periodLabel) {
     const note = document.createElement('span');
     note.style.cssText = 'font-size:0.85rem;color:var(--text-muted);margin-left:10px;font-weight:400;';
