@@ -1,0 +1,80 @@
+name: 每日更新 CRM 案件主檔
+
+on:
+  schedule:
+    # 每日台灣時間凌晨 3:30 跑增量（recent）
+    - cron: '30 19 * * *'  # UTC 19:30 = 台灣 03:30
+    # 每週日台灣時間凌晨 4:00 跑 refresh-open（更新所有非終局案件狀態）
+    - cron: '0 20 * * 0'   # UTC 20:00 Sun = 台灣週日 04:00（時差 +1 天但週期不變）
+  # 手動觸發
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '同步模式'
+        required: true
+        default: 'recent'
+        type: choice
+        options:
+          - recent       # 抓 list 前 N 頁新案
+          - refresh-open # 重新整理所有非終局案件
+          - full         # 全量重爬（謹慎）
+      recent_pages:
+        description: '若 mode=recent，要抓幾頁 (預設 10)'
+        required: false
+        default: '10'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90  # refresh-open 最久 ~10 分；full 最久 ~80 分
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝依賴
+        run: pip install -r scripts/requirements.txt
+
+      - name: 決定執行模式
+        id: mode
+        run: |
+          # workflow_dispatch 帶 mode；schedule 由 cron 時間決定
+          if [ -n "${{ github.event.inputs.mode }}" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          else
+            # cron 時：週日 UTC 20:00 跑 refresh-open，其他時候 recent
+            DAY_OF_WEEK=$(date -u +%u)  # 1=Mon ... 7=Sun
+            HOUR=$(date -u +%H)
+            if [ "$DAY_OF_WEEK" = "7" ] && [ "$HOUR" = "20" ]; then
+              MODE="refresh-open"
+            else
+              MODE="recent"
+            fi
+          fi
+          echo "MODE=$MODE" >> $GITHUB_OUTPUT
+          echo "Selected mode: $MODE"
+
+      - name: 跑 scrape_case_lists.py
+        run: |
+          case "${{ steps.mode.outputs.MODE }}" in
+            recent)
+              python scripts/scrape_case_lists.py --recent "${{ github.event.inputs.recent_pages || '10' }}"
+              ;;
+            refresh-open)
+              python scripts/scrape_case_lists.py --refresh-open
+              ;;
+            full)
+              python scripts/scrape_case_lists.py
+              ;;
+            *)
+              echo "Unknown mode: ${{ steps.mode.outputs.MODE }}"
+              exit 1
+              ;;
+          esac
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CRM_USERNAME: ${{ secrets.CRM_USERNAME }}
+          CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
