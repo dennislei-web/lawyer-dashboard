@@ -3367,9 +3367,10 @@ async function _loadPartners() {
 }
 
 // 判斷案件是「純所內」/「合署+所內共辦」/「純合署」
-// 規則：union 6 個律師角色去掉法務後的名單 → 跟合署集合比對
+// 規則：union 5 個實際承辦律師角色（不含諮詢律師）去掉法務後的名單 → 跟合署集合比對
+// 不算 council_lawyers（諮詢律師）：他們只是 acquisition channel，不代表實際處理案件
 function _caseOwnerType(row) {
-  var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
+  var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var allLawyers = new Set();
   ROLE_FIELDS.forEach(function(f){
     (row[f] || []).forEach(function(n){
@@ -3652,9 +3653,9 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
 }
 
 function _renderCasesLawyerTable(rows, statesAtAsof) {
-  // 每位律師承辦 → 6 個律師角色 union（distinct case，同案多角色不重複）
+  // 每位律師承辦 → 5 個實際承辦律師角色 union（不含諮詢律師）
   // 排除：法務 + 合署律師
-  var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
+  var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var excludeSet = new Set();
   (_legalStaffSet || []).forEach(function(n){ excludeSet.add(n); });
   (_partnerSet    || []).forEach(function(n){ excludeSet.add(n); });
