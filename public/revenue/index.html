@@ -1288,16 +1288,23 @@
 
     <!-- ========== 案件狀態 (CRM crm_cases) ========== -->
     <div class="page" id="page-cases">
+      <!-- crm_cases 同步狀態 (本 tab 專屬) -->
+      <div id="casesSyncBar" class="section" style="margin-bottom:16px;padding:10px 14px;background:var(--card-bg);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-weight:600;">CRM 案件資料同步狀態</span>
+        <span id="casesSyncInfo" style="font-size:0.85rem;color:var(--text-muted);">載入中…</span>
+        <span style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);">手動更新：執行 <code style="background:rgba(255,255,255,.05);padding:1px 4px;border-radius:3px;">python scripts/scrape_case_lists.py --recent 5</code></span>
+      </div>
+
       <div class="filter-bar">
         <div class="filter-label">接案所：</div>
         <select class="filter-select" id="casesOfficeFilter"><option value="">全部</option></select>
         <div class="filter-label" style="margin-left:12px;">部門：</div>
         <select class="filter-select" id="casesDeptFilter"><option value="">全部</option></select>
-        <div class="filter-label" style="margin-left:18px;">📸 查看時間點：</div>
-        <input type="date" class="filter-select" id="casesAsofDate" style="min-width:140px;" />
+        <div class="filter-label" style="margin-left:18px;" title="影響：KPI 卡 / 各分所統計表 / 律師排行 — 都用這個日期當時的案件狀態（用 transition 時間戳反推）">📸 看哪一天的快照：</div>
+        <input type="date" class="filter-select" id="casesAsofDate" style="min-width:140px;" title="預設今天。改成 2025-05-01 就會顯示那天當時所內的案件狀態" />
         <button class="btn btn-outline btn-sm" id="casesAsofTodayBtn" style="margin-left:4px;" title="重設為今天">今天</button>
-        <div class="filter-label" style="margin-left:auto;">趨勢圖時間範圍：</div>
-        <select class="filter-select" id="casesYearFilter">
+        <div class="filter-label" style="margin-left:auto;" title="只影響下方的「每月新委任 vs 結案趨勢」折線圖要顯示幾個月">📈 折線圖月數：</div>
+        <select class="filter-select" id="casesYearFilter" title="只影響下方折線圖要顯示幾個月">
           <option value="24">近 24 個月</option>
           <option value="12">近 12 個月</option>
           <option value="36">近 36 個月</option>
@@ -3397,7 +3404,29 @@ function _statesAtTime(rows, asof) {
   return out;
 }
 
+async function _loadCasesSyncStatus() {
+  if (!sb) return;
+  var r = await sb.from('sync_status').select('*').eq('id', 'crm_cases').single();
+  if (r.error || !r.data) {
+    document.getElementById('casesSyncInfo').textContent = '尚無同步紀錄';
+    return;
+  }
+  var d = r.data;
+  var ts = d.finished_at || d.updated_at;
+  var ago = '';
+  if (ts) {
+    var diff = (Date.now() - new Date(ts).getTime()) / 1000;
+    if (diff < 3600) ago = Math.round(diff/60) + ' 分鐘前';
+    else if (diff < 86400) ago = Math.round(diff/3600) + ' 小時前';
+    else ago = Math.round(diff/86400) + ' 天前';
+  }
+  var statusIcon = d.status === 'success' ? '✅' : (d.status === 'running' ? '⏳' : '⚠️');
+  document.getElementById('casesSyncInfo').textContent =
+    statusIcon + ' ' + (d.message || d.status) + (ago ? '・' + ago : '') + (d.rows_updated ? '・累計 ' + d.rows_updated.toLocaleString() + ' 筆' : '');
+}
+
 async function loadCasesPage() {
+  _loadCasesSyncStatus();
   // Populate office/dept filters from data on first run
   var rows = await _fetchAllCrmCases();
   if (!rows.length) return;
@@ -3699,6 +3728,9 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     else if (tab==='partner') loadPartnerPage();
     else if (tab==='partnerYearly') loadPartnerYearlyPage();
     else if (tab==='cases') loadCasesPage();
+    // 「案件狀態」tab 不需要對帳同步 bar（那是營收用的）
+    var revBar = document.getElementById('revSyncBar');
+    if (revBar) revBar.style.display = (tab === 'cases') ? 'none' : '';
   });
 });
 
