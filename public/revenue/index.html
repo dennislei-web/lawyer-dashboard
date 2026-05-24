@@ -1334,6 +1334,11 @@
           <div class="kpi-value green" id="casesKpiNewMonth">-</div>
           <div class="kpi-sub" id="casesKpiNewMonthSub"></div>
         </div>
+        <div class="kpi-card" style="border-left:3px solid #06b6d4;">
+          <div class="kpi-label" style="color:#06b6d4;">📜 法律顧問（獨立維度）</div>
+          <div class="kpi-value" style="color:#06b6d4;" id="casesKpiLA">-</div>
+          <div class="kpi-sub" id="casesKpiLASub">持續性合約，不納入結案統計</div>
+        </div>
       </div>
 
       <!-- 趨勢圖 + 分所分布 -->
@@ -3368,6 +3373,17 @@ async function _loadPartners() {
   return _partnerSet;
 }
 
+// 法律顧問判斷：案號 LA 開頭 OR 案由含「法律顧問」字樣
+// 法顧合約持續性質、不會結案，從一般案件統計獨立出來
+function _isLegalAdvisor(row) {
+  if (!row) return false;
+  var sn = row.serial_number || '';
+  if (sn.toUpperCase().startsWith('LA')) return true;
+  var cause = row.cause_of_action || '';
+  if (cause.indexOf('法律顧問') >= 0) return true;
+  return false;
+}
+
 // 判斷案件是「純所內」/「合署+所內共辦」/「純合署」
 // 規則：union 5 個實際承辦角色（去法務 + 去合署比對）
 // CRM UI 對應：
@@ -3524,24 +3540,28 @@ async function loadCasesPage() {
   var isToday = asofInput.value === new Date().toISOString().substring(0,10);
   document.getElementById('casesAsofLabel').textContent = isToday ? '' : '（' + asofInput.value + ' 快照）';
 
-  var filtered = _casesApplyFilter(rows);
+  var allFiltered = _casesApplyFilter(rows);
+  // 法顧切出來獨立統計
+  var legalAdvisors = allFiltered.filter(_isLegalAdvisor);
+  var filtered = allFiltered.filter(function(r){ return !_isLegalAdvisor(r); });
   // 預計算每筆 case 在 asof 那天的狀態
   var statesAtAsof = _statesAtTime(filtered, asofDate);
+  var statesAtAsofLA = _statesAtTime(legalAdvisors, asofDate);
 
-  _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday);
+  _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA);
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(filtered, statesAtAsof);
   _renderCasesOfficeTable(filtered, statesAtAsof);
   _renderCasesLawyerTable(filtered, statesAtAsof);
-  _renderCasesSnapshot(filtered);
+  _renderCasesSnapshot(filtered, legalAdvisors);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
 }
 
-function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
+function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAtAsofLA) {
+  // rows 已排除法顧；laRows 是法顧案件
   // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
-  // 承辦中拆三類：純所內 / 合署共辦 / 純合署
   var inP = {pure_firm:0, mixed:0, pure_partner:0, no_lawyer:0};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
@@ -3551,6 +3571,15 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
       var owner = _caseOwnerType(r);
       inP[owner] = (inP[owner] || 0) + 1;
     }
+  });
+
+  // 法顧獨立統計
+  var la = {appointed:0, closed:0, other:0};
+  (laRows || []).forEach(function(r){
+    var s = (statesAtAsofLA || {})[r.case_id];
+    if (s === 'appointed') la.appointed++;
+    else if (s === 'closed') la.closed++;
+    else if (s !== null) la.other++;
   });
   var completed  = c.pending + c.closed;
   var pre        = c.unappointed + c.unconcluded + c.canceled;
@@ -3572,6 +3601,12 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
   document.getElementById('casesKpiPreSub').textContent = '未委任 ' + c.unappointed.toLocaleString() + ' + 未成案 ' + c.unconcluded.toLocaleString() + ' + 取消 ' + c.canceled.toLocaleString();
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
   document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
+
+  // 法律顧問 KPI（獨立維度）
+  document.getElementById('casesKpiLA').textContent = la.appointed.toLocaleString();
+  document.getElementById('casesKpiLASub').innerHTML =
+    '有效合約中（appointed）<br>'
+    + '<span style="opacity:.7;font-size:0.78rem;">已結束 ' + la.closed.toLocaleString() + '・其他 ' + la.other.toLocaleString() + '・總 ' + (laRows||[]).length.toLocaleString() + '</span>';
 }
 
 function _renderCasesTrend(rows, asofDate) {
@@ -3777,8 +3812,8 @@ function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
 }
 
 // 月底存量演變：過去 5 年每月底快照 stacked area
-// 維度：所內 6 狀態 + 合署（任一狀態，pure_partner + mixed）獨立成一個 stack
-function _renderCasesSnapshot(rows) {
+// 維度：所內 6 狀態 + 合署（任一狀態）+ 法律顧問（獨立維度）
+function _renderCasesSnapshot(rows, laRows) {
   var now = new Date();
   var startY = now.getFullYear() - 5, startM = now.getMonth();
   var labels = [];
@@ -3796,13 +3831,14 @@ function _renderCasesSnapshot(rows) {
   var ownerCache = {};
   rows.forEach(function(r){ ownerCache[r.case_id] = _caseOwnerType(r); });
 
-  // 每月：所內 6 狀態 + 合署總量
+  // 每月：所內 6 狀態 + 合署總量 + 法顧獨立 series
   var series = {
     firm_appointed:[], firm_pending:[], firm_closed:[], firm_unappointed:[], firm_unconcluded:[], firm_canceled:[],
-    partner_total:[]
+    partner_total:[],
+    la_total:[]
   };
   months.forEach(function(d){
-    var c = {firm_appointed:0, firm_pending:0, firm_closed:0, firm_unappointed:0, firm_unconcluded:0, firm_canceled:0, partner_total:0};
+    var c = {firm_appointed:0, firm_pending:0, firm_closed:0, firm_unappointed:0, firm_unconcluded:0, firm_canceled:0, partner_total:0, la_total:0};
     rows.forEach(function(r){
       var s = _stateAtTime(r, d);
       if (!s) return;
@@ -3810,10 +3846,14 @@ function _renderCasesSnapshot(rows) {
       if (owner === 'pure_partner' || owner === 'mixed') {
         c.partner_total++;
       } else {
-        // pure_firm / no_lawyer 都歸所內側
         var key = 'firm_' + s;
         if (key in c) c[key]++;
       }
+    });
+    // 法顧獨立計算
+    (laRows || []).forEach(function(r){
+      var s = _stateAtTime(r, d);
+      if (s) c.la_total++;
     });
     Object.keys(c).forEach(function(k){ series[k].push(c[k]); });
   });
@@ -3832,8 +3872,10 @@ function _renderCasesSnapshot(rows) {
         { label: '所內·未委任 (unappointed)',  data: series.firm_unappointed, backgroundColor: 'rgba(156,163,175,0.5)', borderColor: '#9ca3af', fill: true, stack: 's' },
         { label: '所內·未成案 (unconcluded)',  data: series.firm_unconcluded, backgroundColor: 'rgba(239,68,68,0.4)',   borderColor: '#ef4444', fill: true, stack: 's' },
         { label: '所內·取消 (canceled)',       data: series.firm_canceled,    backgroundColor: 'rgba(107,114,128,0.4)', borderColor: '#6b7280', fill: true, stack: 's' },
-        // 合署當獨立一個維度（疊在最上層）
-        { label: '🤝 合署（任一狀態）',         data: series.partner_total,    backgroundColor: 'rgba(168,85,247,0.55)', borderColor: '#a855f7', borderWidth: 2, fill: true, stack: 's' }
+        // 合署當獨立維度
+        { label: '🤝 合署（任一狀態）',         data: series.partner_total,    backgroundColor: 'rgba(168,85,247,0.55)', borderColor: '#a855f7', borderWidth: 2, fill: true, stack: 's' },
+        // 法顧當獨立維度（疊在最上層）
+        { label: '📜 法律顧問（任一狀態）',     data: series.la_total,         backgroundColor: 'rgba(6,182,212,0.55)',  borderColor: '#06b6d4', borderWidth: 2, fill: true, stack: 's' }
       ]
     },
     options: {
@@ -3841,7 +3883,7 @@ function _renderCasesSnapshot(rows) {
       plugins: {
         legend: { position: 'bottom' },
         tooltip: { mode: 'index' },
-        title: { display: true, text: '所內 = pure_firm + no_lawyer；合署 = pure_partner + mixed (含與所內共辦)', font: { size: 11 }, color: '#94a3b8' }
+        title: { display: true, text: '所內 = pure_firm + no_lawyer；合署 = pure_partner + mixed；法律顧問獨立（持續性合約不會結案）', font: { size: 11 }, color: '#94a3b8' }
       },
       scales: { y: { stacked: true, beginAtZero: true } },
       interaction: { mode: 'index', intersect: false }
