@@ -1375,7 +1375,7 @@
       <!-- 律師承辦中排行 -->
       <div class="table-card" style="margin-top:24px">
         <div class="table-header">
-          <span class="table-title">承辦中律師排行（Top 30）<span class="text-muted" id="casesLawyerCount"></span></span>
+          <span class="table-title" title="統計欄位：負責人員 + 訴訟律師 + 出庭律師 + 寫狀律師 + 起訴律師（同案多角色去重）。已排除法務（含委前法務）+ 合署律師。不計「接案人員」(諮詢律師)。">承辦中律師排行（Top 30） <span style="opacity:.6;font-size:0.8rem;">ℹ️</span><span class="text-muted" id="casesLawyerCount"></span></span>
         </div>
         <div style="overflow-x:auto">
           <table>
@@ -3367,8 +3367,16 @@ async function _loadPartners() {
 }
 
 // 判斷案件是「純所內」/「合署+所內共辦」/「純合署」
-// 規則：union 5 個實際承辦律師角色（不含諮詢律師）去掉法務後的名單 → 跟合署集合比對
-// 不算 council_lawyers（諮詢律師）：他們只是 acquisition channel，不代表實際處理案件
+// 規則：union 5 個實際承辦角色（去法務 + 去合署比對）
+// CRM UI 對應：
+//   assigned_members      = 負責人員（主辦律師，UI 紅星缺漏項）
+//   litigation_lawyers    = 訴訟律師
+//   in_court_lawyers      = 出庭律師（CRM 顯示「預計/實際出庭律師」）
+//   pleading_lawyers      = 寫狀律師（CRM 顯示「預計/實際寫狀同仁」）
+//   complaint_lawyers     = 起訴律師（CRM 後端跟 pleading 同步寫入，保留以防個別案有單獨用）
+// 不算的：
+//   council_lawyers       = 接案人員（CRM 諮詢階段律師，acquisition channel 而非實際處理）
+//   managers              = 委後同仁（行政/客服角色，不是律師）
 function _caseOwnerType(row) {
   var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var allLawyers = new Set();
@@ -3653,8 +3661,10 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
 }
 
 function _renderCasesLawyerTable(rows, statesAtAsof) {
-  // 每位律師承辦 → 5 個實際承辦律師角色 union（不含諮詢律師）
-  // 排除：法務 + 合署律師
+  // 每位律師承辦 → 5 個 CRM 實際承辦角色 union（distinct case，同案多角色不重複）
+  //   負責人員 + 訴訟律師 + 出庭律師 + 寫狀律師 + 起訴律師
+  //   不算「接案人員」(council_lawyers) — 諮詢階段律師不算承辦
+  // 排除：法務（含委前法務）+ 合署律師
   var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var excludeSet = new Set();
   (_legalStaffSet || []).forEach(function(n){ excludeSet.add(n); });
