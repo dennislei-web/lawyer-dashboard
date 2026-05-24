@@ -459,6 +459,30 @@ def update_supabase(target_months):
     )
     print(f"  多律師案件歸第一位後：{len(df_first)} 筆（用於 monthly_stats）")
 
+    # ── 同 case_number 多場諮詢，金額去重 ──
+    # CRM 在「同案二諮」export 時會把整案最終金額灌在每一場（包含未簽約那場），
+    # 直接 groupby sum 會 double-count。
+    # 規則（業務語意）：未成案那場算諮詢場次但不算錢；成案那場才把錢算進去。
+    # 實作：對 collected 值完全相同的重複列 → 保留 is_signed=True 那筆的金額，其餘設 0。
+    # 場次不動（每場諮詢律師都投入了時間）。
+    # 對 collected 值各自不同（如不同律師各收 consult fee）→ 視為獨立收款，不動。
+    if "案件編號" in df_first.columns and "collected" in df_first.columns:
+        n_deduped = 0
+        for case_no, group in df_first.groupby("案件編號"):
+            if len(group) <= 1:
+                continue
+            collected_vals = group["collected"].tolist()
+            if len(set(collected_vals)) == 1 and collected_vals[0] > 0:
+                signed = group[group["已簽約"]]
+                keep_idx = signed.index[0] if len(signed) > 0 else group.index[0]
+                drop_idx = [i for i in group.index if i != keep_idx]
+                df_first.loc[drop_idx, "collected"] = 0
+                if "revenue" in df_first.columns:
+                    df_first.loc[drop_idx, "revenue"] = 0
+                n_deduped += len(drop_idx)
+        if n_deduped > 0:
+            print(f"  同 case_number 重複金額去重：{n_deduped} 列金額設 0（場次保留）")
+
     grouped = df_first.groupby(["諮詢律師", "month"]).agg(
         consult_count=("諮詢律師", "count"),
         signed_count=("已簽約", "sum"),
