@@ -3331,6 +3331,16 @@ document.getElementById('pyOfficeFilter').addEventListener('change', loadPartner
 //  案件狀態 (crm_cases)
 // ═══════════════════════════════════════════════════════════
 var _casesCache = null;  // 暫存全量 crm_cases 資料，filter 只在 client 端聚合
+var _legalStaffSet = null;  // 法務名單，律師排行要排除
+
+async function _loadLegalStaff() {
+  if (_legalStaffSet) return _legalStaffSet;
+  if (!sb) { _legalStaffSet = new Set(); return _legalStaffSet; }
+  var r = await sb.from('lawyers').select('name').eq('role', 'legal_staff');
+  _legalStaffSet = new Set((r.data || []).map(function(x){return x.name;}));
+  console.log('法務排除名單:', Array.from(_legalStaffSet));
+  return _legalStaffSet;
+}
 
 async function _fetchAllCrmCases() {
   if (_casesCache) return _casesCache;
@@ -3427,6 +3437,7 @@ async function _loadCasesSyncStatus() {
 
 async function loadCasesPage() {
   _loadCasesSyncStatus();
+  await _loadLegalStaff();
   // Populate office/dept filters from data on first run
   var rows = await _fetchAllCrmCases();
   if (!rows.length) return;
@@ -3586,14 +3597,16 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
 
 function _renderCasesLawyerTable(rows, statesAtAsof) {
   // 每位律師承辦 → 6 個律師角色 union（distinct case，同案多角色不重複）
+  // 排除：法務（lawyers.role='legal_staff'）
   var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
+  var excludeSet = _legalStaffSet || new Set();
   var byLawyer = {};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) return;  // 案件那時還沒建立
     var set = new Set();
     ROLE_FIELDS.forEach(function(f){
-      (r[f] || []).forEach(function(n){ if (n) set.add(n); });
+      (r[f] || []).forEach(function(n){ if (n && !excludeSet.has(n)) set.add(n); });
     });
     set.forEach(function(name){
       if (!byLawyer[name]) byLawyer[name] = {inProgress:0, pending:0, closed:0, unconcluded:0};
@@ -3614,7 +3627,7 @@ function _renderCasesLawyerTable(rows, statesAtAsof) {
       + '<td class="text-right text-muted">'+l.unconcluded.toLocaleString()+'</td></tr>';
   }).join('');
   document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
-  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄）';
+  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄，已排除 ' + excludeSet.size + ' 位法務）';
 }
 
 function _renderCasesCloseCycle(rows) {
