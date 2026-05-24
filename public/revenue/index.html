@@ -3347,12 +3347,22 @@ async function _loadLegalStaff() {
   return _legalStaffSet;
 }
 
+// 合署律師完整 13 位（司法官 4 + 資深 8 + 諮詢律師 1），與 partners/index.html 的 cohort 一致
+// TODO: 之後遷移到 Supabase 單一資料來源（建議用 lawyers.partner_terms 或新建 partner_cohorts 表），
+// 目前 lawyers 表只記 4 位，partners/index.html 用硬編，先在這裡對齊硬編避免漏算
+var PARTNER_LAWYERS = [
+  // 司法官合署
+  '劉明潔', '方心瑜', '孫少輔', '許致維',
+  // 資深轉合署
+  '李昭萱', '林昀', '徐棠娜', '許煜婕', '陳璽仲', '蕭予馨', '吳柏慶', '柯雪莉',
+  // 諮詢律師轉合署
+  '黃顯皓'
+];
+
 async function _loadPartners() {
   if (_partnerSet) return _partnerSet;
-  if (!sb) { _partnerSet = new Set(); return _partnerSet; }
-  var r = await sb.from('lawyers').select('name').not('partner_terms', 'is', null);
-  _partnerSet = new Set((r.data || []).map(function(x){return x.name;}));
-  console.log('合署律師名單:', Array.from(_partnerSet));
+  _partnerSet = new Set(PARTNER_LAWYERS);
+  console.log('合署律師名單 (' + _partnerSet.size + '):', Array.from(_partnerSet));
   return _partnerSet;
 }
 
