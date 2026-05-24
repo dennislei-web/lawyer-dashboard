@@ -3775,8 +3775,8 @@ function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
 }
 
 // 月底存量演變：過去 5 年每月底快照 stacked area
+// 維度：所內 6 狀態 + 合署（任一狀態，pure_partner + mixed）獨立成一個 stack
 function _renderCasesSnapshot(rows) {
-  // 算出每月最後一天的 5 個狀態 count
   var now = new Date();
   var startY = now.getFullYear() - 5, startM = now.getMonth();
   var labels = [];
@@ -3785,18 +3785,33 @@ function _renderCasesSnapshot(rows) {
     var mStart = (y === startY) ? startM : 0;
     var mEnd   = (y === now.getFullYear()) ? now.getMonth() : 11;
     for (var m = mStart; m <= mEnd; m++) {
-      var d = new Date(y, m + 1, 0, 23, 59, 59);  // 該月最後一天 23:59:59
+      var d = new Date(y, m + 1, 0, 23, 59, 59);
       labels.push(y + '-' + ('0'+(m+1)).slice(-2));
       months.push(d);
     }
   }
-  // 對每個月底，跑一次 _stateAtTime aggregate
-  var series = { appointed: [], pending: [], closed: [], unappointed: [], unconcluded: [], canceled: [] };
+  // 預先算每筆 case 的 owner type（不會隨時間變）— 加速 loop
+  var ownerCache = {};
+  rows.forEach(function(r){ ownerCache[r.case_id] = _caseOwnerType(r); });
+
+  // 每月：所內 6 狀態 + 合署總量
+  var series = {
+    firm_appointed:[], firm_pending:[], firm_closed:[], firm_unappointed:[], firm_unconcluded:[], firm_canceled:[],
+    partner_total:[]
+  };
   months.forEach(function(d){
-    var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0};
+    var c = {firm_appointed:0, firm_pending:0, firm_closed:0, firm_unappointed:0, firm_unconcluded:0, firm_canceled:0, partner_total:0};
     rows.forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (s && s in c) c[s]++;
+      if (!s) return;
+      var owner = ownerCache[r.case_id];
+      if (owner === 'pure_partner' || owner === 'mixed') {
+        c.partner_total++;
+      } else {
+        // pure_firm / no_lawyer 都歸所內側
+        var key = 'firm_' + s;
+        if (key in c) c[key]++;
+      }
     });
     Object.keys(c).forEach(function(k){ series[k].push(c[k]); });
   });
@@ -3808,17 +3823,24 @@ function _renderCasesSnapshot(rows) {
     data: {
       labels: labels,
       datasets: [
-        { label: '承辦中 (appointed)',  data: series.appointed,   backgroundColor: 'rgba(245,158,11,0.7)', borderColor: '#f59e0b', fill: true, stack: 's' },
-        { label: '待結案 (pending)',    data: series.pending,     backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', fill: true, stack: 's' },
-        { label: '已結案 (closed)',     data: series.closed,      backgroundColor: 'rgba(16,185,129,0.6)', borderColor: '#10b981', fill: true, stack: 's' },
-        { label: '未委任 (unappointed)', data: series.unappointed, backgroundColor: 'rgba(156,163,175,0.5)', borderColor: '#9ca3af', fill: true, stack: 's' },
-        { label: '未成案 (unconcluded)', data: series.unconcluded, backgroundColor: 'rgba(239,68,68,0.4)',   borderColor: '#ef4444', fill: true, stack: 's' },
-        { label: '取消 (canceled)',     data: series.canceled,    backgroundColor: 'rgba(107,114,128,0.4)', borderColor: '#6b7280', fill: true, stack: 's' }
+        // 所內 6 狀態先疊（顯示順序由下到上）
+        { label: '所內·承辦中 (appointed)',    data: series.firm_appointed,   backgroundColor: 'rgba(245,158,11,0.7)', borderColor: '#f59e0b', fill: true, stack: 's' },
+        { label: '所內·待結案 (pending)',      data: series.firm_pending,     backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', fill: true, stack: 's' },
+        { label: '所內·已結案 (closed)',       data: series.firm_closed,      backgroundColor: 'rgba(16,185,129,0.6)', borderColor: '#10b981', fill: true, stack: 's' },
+        { label: '所內·未委任 (unappointed)',  data: series.firm_unappointed, backgroundColor: 'rgba(156,163,175,0.5)', borderColor: '#9ca3af', fill: true, stack: 's' },
+        { label: '所內·未成案 (unconcluded)',  data: series.firm_unconcluded, backgroundColor: 'rgba(239,68,68,0.4)',   borderColor: '#ef4444', fill: true, stack: 's' },
+        { label: '所內·取消 (canceled)',       data: series.firm_canceled,    backgroundColor: 'rgba(107,114,128,0.4)', borderColor: '#6b7280', fill: true, stack: 's' },
+        // 合署當獨立一個維度（疊在最上層）
+        { label: '🤝 合署（任一狀態）',         data: series.partner_total,    backgroundColor: 'rgba(168,85,247,0.55)', borderColor: '#a855f7', borderWidth: 2, fill: true, stack: 's' }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index' } },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { mode: 'index' },
+        title: { display: true, text: '所內 = pure_firm + no_lawyer；合署 = pure_partner + mixed (含與所內共辦)', font: { size: 11 }, color: '#94a3b8' }
+      },
       scales: { y: { stacked: true, beginAtZero: true } },
       interaction: { mode: 'index', intersect: false }
     }
