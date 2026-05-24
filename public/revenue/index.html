@@ -1315,7 +1315,7 @@
       <!-- KPI 大類 -->
       <div class="kpi-row">
         <div class="kpi-card gold">
-          <div class="kpi-label">承辦中（已委任）<span id="casesAsofLabel" style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;"></span></div>
+          <div class="kpi-label">所內承辦中（已委任）<span id="casesAsofLabel" style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;"></span></div>
           <div class="kpi-value gold" id="casesKpiInProgress">-</div>
           <div class="kpi-sub" id="casesKpiInProgressSub"></div>
         </div>
@@ -3330,8 +3330,9 @@ document.getElementById('pyOfficeFilter').addEventListener('change', loadPartner
 // ═══════════════════════════════════════════════════════════
 //  案件狀態 (crm_cases)
 // ═══════════════════════════════════════════════════════════
-var _casesCache = null;  // 暫存全量 crm_cases 資料，filter 只在 client 端聚合
-var _legalStaffSet = null;  // 法務名單，律師排行要排除
+var _casesCache = null;
+var _legalStaffSet = null;  // 法務（含委前法務），律師排行排除
+var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
 
 async function _loadLegalStaff() {
   if (_legalStaffSet) return _legalStaffSet;
@@ -3340,6 +3341,36 @@ async function _loadLegalStaff() {
   _legalStaffSet = new Set((r.data || []).map(function(x){return x.name;}));
   console.log('法務排除名單:', Array.from(_legalStaffSet));
   return _legalStaffSet;
+}
+
+async function _loadPartners() {
+  if (_partnerSet) return _partnerSet;
+  if (!sb) { _partnerSet = new Set(); return _partnerSet; }
+  var r = await sb.from('lawyers').select('name').not('partner_terms', 'is', null);
+  _partnerSet = new Set((r.data || []).map(function(x){return x.name;}));
+  console.log('合署律師名單:', Array.from(_partnerSet));
+  return _partnerSet;
+}
+
+// 判斷案件是「純所內」/「合署+所內共辦」/「純合署」
+// 規則：union 6 個律師角色去掉法務後的名單 → 跟合署集合比對
+function _caseOwnerType(row) {
+  var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
+  var allLawyers = new Set();
+  ROLE_FIELDS.forEach(function(f){
+    (row[f] || []).forEach(function(n){
+      if (n && !_legalStaffSet.has(n)) allLawyers.add(n);
+    });
+  });
+  if (allLawyers.size === 0) return 'no_lawyer';
+  var partnerCount = 0, firmCount = 0;
+  allLawyers.forEach(function(n){
+    if (_partnerSet.has(n)) partnerCount++;
+    else firmCount++;
+  });
+  if (firmCount === 0) return 'pure_partner';
+  if (partnerCount === 0) return 'pure_firm';
+  return 'mixed';
 }
 
 async function _fetchAllCrmCases() {
@@ -3438,6 +3469,7 @@ async function _loadCasesSyncStatus() {
 async function loadCasesPage() {
   _loadCasesSyncStatus();
   await _loadLegalStaff();
+  await _loadPartners();
   // Populate office/dept filters from data on first run
   var rows = await _fetchAllCrmCases();
   if (!rows.length) return;
@@ -3481,14 +3513,19 @@ async function loadCasesPage() {
 }
 
 function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
-  // 按 asof 狀態統計
+  // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
+  // 承辦中拆三類：純所內 / 合署共辦 / 純合署
+  var inP = {pure_firm:0, mixed:0, pure_partner:0, no_lawyer:0};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
-    if (s === null) c.notyet++;
-    else if (s in c) c[s]++;
+    if (s === null) { c.notyet++; return; }
+    if (s in c) c[s]++;
+    if (s === 'appointed') {
+      var owner = _caseOwnerType(r);
+      inP[owner] = (inP[owner] || 0) + 1;
+    }
   });
-  var inProgress = c.appointed;
   var completed  = c.pending + c.closed;
   var pre        = c.unappointed + c.unconcluded + c.canceled;
 
@@ -3497,8 +3534,12 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
   var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(asofMonth) && new Date(r.appointed_at) <= asofDate; }).length;
   var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(asofMonth) && new Date(r.closed_at) <= asofDate; }).length;
 
-  document.getElementById('casesKpiInProgress').textContent = inProgress.toLocaleString();
-  document.getElementById('casesKpiInProgressSub').textContent = isToday ? '已委任案件' : '當時已委任案件';
+  // KPI「承辦中」現在改為「所內承辦中」(pure_firm)，副標標示合署
+  document.getElementById('casesKpiInProgress').textContent = inP.pure_firm.toLocaleString();
+  var partnerInfo = '合署共辦 ' + inP.mixed.toLocaleString() + '・純合署 ' + inP.pure_partner.toLocaleString();
+  document.getElementById('casesKpiInProgressSub').innerHTML =
+    '所內律師承辦' + (isToday?'':('・'+asofMonth+' 快照')) +
+    '<br><span style="opacity:.7;font-size:0.78rem;">' + partnerInfo + '</span>';
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
   document.getElementById('casesKpiPre').textContent = pre.toLocaleString();
@@ -3597,9 +3638,13 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
 
 function _renderCasesLawyerTable(rows, statesAtAsof) {
   // 每位律師承辦 → 6 個律師角色 union（distinct case，同案多角色不重複）
-  // 排除：法務（lawyers.role='legal_staff'）
+  // 排除：法務 + 合署律師
   var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
-  var excludeSet = _legalStaffSet || new Set();
+  var excludeSet = new Set();
+  (_legalStaffSet || []).forEach(function(n){ excludeSet.add(n); });
+  (_partnerSet    || []).forEach(function(n){ excludeSet.add(n); });
+  var legalCount = _legalStaffSet ? _legalStaffSet.size : 0;
+  var partnerCount = _partnerSet ? _partnerSet.size : 0;
   var byLawyer = {};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
@@ -3627,7 +3672,7 @@ function _renderCasesLawyerTable(rows, statesAtAsof) {
       + '<td class="text-right text-muted">'+l.unconcluded.toLocaleString()+'</td></tr>';
   }).join('');
   document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
-  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄，已排除 ' + excludeSet.size + ' 位法務）';
+  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
 }
 
 function _renderCasesCloseCycle(rows) {
