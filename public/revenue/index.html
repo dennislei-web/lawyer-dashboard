@@ -1293,6 +1293,9 @@
         <select class="filter-select" id="casesOfficeFilter"><option value="">全部</option></select>
         <div class="filter-label" style="margin-left:12px;">部門：</div>
         <select class="filter-select" id="casesDeptFilter"><option value="">全部</option></select>
+        <div class="filter-label" style="margin-left:18px;">📸 查看時間點：</div>
+        <input type="date" class="filter-select" id="casesAsofDate" style="min-width:140px;" />
+        <button class="btn btn-outline btn-sm" id="casesAsofTodayBtn" style="margin-left:4px;" title="重設為今天">今天</button>
         <div class="filter-label" style="margin-left:auto;">趨勢圖時間範圍：</div>
         <select class="filter-select" id="casesYearFilter">
           <option value="24">近 24 個月</option>
@@ -1305,7 +1308,7 @@
       <!-- KPI 大類 -->
       <div class="kpi-row">
         <div class="kpi-card gold">
-          <div class="kpi-label">承辦中（已委任）</div>
+          <div class="kpi-label">承辦中（已委任）<span id="casesAsofLabel" style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;"></span></div>
           <div class="kpi-value gold" id="casesKpiInProgress">-</div>
           <div class="kpi-sub" id="casesKpiInProgressSub"></div>
         </div>
@@ -1380,6 +1383,14 @@
             </thead>
             <tbody id="casesLawyerTableBody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 月底存量演變 -->
+      <div class="chart-row" style="margin-top:24px">
+        <div class="chart-card">
+          <div class="chart-title">月底案件存量演變（過去 5 年，每月底快照）</div>
+          <div class="chart-container" style="height:320px"><canvas id="casesSnapshotChart"></canvas></div>
         </div>
       </div>
 
@@ -3350,6 +3361,37 @@ function _ymKey(iso) {
   return iso.substring(0, 7);  // 'YYYY-MM'
 }
 
+// 計算指定時間點 (asof Date 物件) 該案件的狀態
+// - 若案件還沒建立 → null
+// - 否則找出 asof 之前最近的 transition 時間戳對應的狀態
+// - 若沒任何 transition → 'unappointed' (default initial state)
+function _stateAtTime(row, asof) {
+  if (!row.crm_created_at) return null;
+  var created = new Date(row.crm_created_at);
+  if (created > asof) return null;
+  // transition 優先序（同時間取最後一個有意義的終局狀態）
+  var transitions = [];
+  if (row.closed_at)      transitions.push({ts: new Date(row.closed_at),      s: 'closed'});
+  if (row.unconcluded_at) transitions.push({ts: new Date(row.unconcluded_at), s: 'unconcluded'});
+  if (row.canceled_at)    transitions.push({ts: new Date(row.canceled_at),    s: 'canceled'});
+  if (row.pending_at)     transitions.push({ts: new Date(row.pending_at),     s: 'pending'});
+  if (row.appointed_at)   transitions.push({ts: new Date(row.appointed_at),   s: 'appointed'});
+  // unappointed_at 是「轉回未委任」的時間，不算初始狀態
+  // 過濾在 asof 之前
+  var valid = transitions.filter(function(t){ return t.ts <= asof; });
+  if (!valid.length) return 'unappointed';  // 已建立但還沒有任何 transition
+  // 取最近的
+  valid.sort(function(a,b){ return b.ts - a.ts; });
+  return valid[0].s;
+}
+
+// 給定 rows 跟 asof，回傳每個 case 的狀態（map case_id → state）
+function _statesAtTime(rows, asof) {
+  var out = {};
+  rows.forEach(function(r){ out[r.case_id] = _stateAtTime(r, asof); });
+  return out;
+}
+
 async function loadCasesPage() {
   // Populate office/dept filters from data on first run
   var rows = await _fetchAllCrmCases();
@@ -3373,55 +3415,71 @@ async function loadCasesPage() {
     });
   }
 
+  // 取得 asof 日期（預設今天）
+  var asofInput = document.getElementById('casesAsofDate');
+  if (!asofInput.value) asofInput.value = new Date().toISOString().substring(0,10);
+  var asofDate = new Date(asofInput.value + 'T23:59:59');  // 取當天結束
+  var isToday = asofInput.value === new Date().toISOString().substring(0,10);
+  document.getElementById('casesAsofLabel').textContent = isToday ? '' : '（' + asofInput.value + ' 快照）';
+
   var filtered = _casesApplyFilter(rows);
-  _renderCasesKpi(filtered);
-  _renderCasesTrend(filtered);
-  _renderCasesByOffice(filtered);
-  _renderCasesOfficeTable(filtered);
-  _renderCasesLawyerTable(filtered);
+  // 預計算每筆 case 在 asof 那天的狀態
+  var statesAtAsof = _statesAtTime(filtered, asofDate);
+
+  _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday);
+  _renderCasesTrend(filtered, asofDate);
+  _renderCasesByOffice(filtered, statesAtAsof);
+  _renderCasesOfficeTable(filtered, statesAtAsof);
+  _renderCasesLawyerTable(filtered, statesAtAsof);
+  _renderCasesSnapshot(filtered);
   _renderCasesCloseCycle(filtered);
 }
 
-function _renderCasesKpi(rows) {
-  var inProgress = rows.filter(function(r){return r.state_category==='in_progress';}).length;
-  var completed = rows.filter(function(r){return r.state_category==='completed';}).length;
-  var pre = rows.filter(function(r){return r.state_category==='pre_engagement';}).length;
-  var thisMonth = new Date().toISOString().substring(0, 7);
-  var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(thisMonth); }).length;
-  var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(thisMonth); }).length;
+function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
+  // 按 asof 狀態統計
+  var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
+  rows.forEach(function(r){
+    var s = statesAtAsof[r.case_id];
+    if (s === null) c.notyet++;
+    else if (s in c) c[s]++;
+  });
+  var inProgress = c.appointed;
+  var completed  = c.pending + c.closed;
+  var pre        = c.unappointed + c.unconcluded + c.canceled;
 
-  // 子分類細節
-  var pending = rows.filter(function(r){return r.aasm_state==='pending';}).length;
-  var closedTotal = rows.filter(function(r){return r.aasm_state==='closed';}).length;
-  var unappointed = rows.filter(function(r){return r.aasm_state==='unappointed';}).length;
-  var unconcluded = rows.filter(function(r){return r.aasm_state==='unconcluded';}).length;
-  var canceled = rows.filter(function(r){return r.aasm_state==='canceled';}).length;
+  // 本月新委任 + 結案（用 asof 所在月份）
+  var asofMonth = asofDate.toISOString().substring(0, 7);
+  var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(asofMonth) && new Date(r.appointed_at) <= asofDate; }).length;
+  var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(asofMonth) && new Date(r.closed_at) <= asofDate; }).length;
 
   document.getElementById('casesKpiInProgress').textContent = inProgress.toLocaleString();
-  document.getElementById('casesKpiInProgressSub').textContent = '已委任案件';
+  document.getElementById('casesKpiInProgressSub').textContent = isToday ? '已委任案件' : '當時已委任案件';
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
-  document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + closedTotal.toLocaleString() + ' + 待結案 ' + pending.toLocaleString();
+  document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
   document.getElementById('casesKpiPre').textContent = pre.toLocaleString();
-  document.getElementById('casesKpiPreSub').textContent = '未委任 ' + unappointed.toLocaleString() + ' + 未成案 ' + unconcluded.toLocaleString() + ' + 取消 ' + canceled.toLocaleString();
+  document.getElementById('casesKpiPreSub').textContent = '未委任 ' + c.unappointed.toLocaleString() + ' + 未成案 ' + c.unconcluded.toLocaleString() + ' + 取消 ' + c.canceled.toLocaleString();
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
-  document.getElementById('casesKpiNewMonthSub').textContent = '本月結案 ' + closedThisMonth.toLocaleString();
+  document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
 }
 
-function _renderCasesTrend(rows) {
+function _renderCasesTrend(rows, asofDate) {
   var range = document.getElementById('casesYearFilter').value;
-  // 收集所有有 appointed_at 或 closed_at 的月份
+  var asofMonth = asofDate.toISOString().substring(0, 7);
+  // 收集所有有 appointed_at 或 closed_at 的月份（僅含 <= asofDate 的事件）
   var byMonth = {};
   rows.forEach(function(r){
-    if (r.appointed_at) {
+    if (r.appointed_at && new Date(r.appointed_at) <= asofDate) {
       var k = _ymKey(r.appointed_at);
       if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].newCase++; }
     }
-    if (r.closed_at) {
+    if (r.closed_at && new Date(r.closed_at) <= asofDate) {
       var k = _ymKey(r.closed_at);
       if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].closed++; }
     }
   });
   var monthKeys = Object.keys(byMonth).sort();
+  // 截到 asofMonth 為止
+  monthKeys = monthKeys.filter(function(k){ return k <= asofMonth; });
   if (range !== 'all') {
     var n = parseInt(range, 10);
     monthKeys = monthKeys.slice(-n);
@@ -3444,10 +3502,10 @@ function _renderCasesTrend(rows) {
   });
 }
 
-function _renderCasesByOffice(rows) {
-  var inProgress = rows.filter(function(r){return r.state_category==='in_progress';});
+function _renderCasesByOffice(rows, statesAtAsof) {
   var byOffice = {};
-  inProgress.forEach(function(r){
+  rows.forEach(function(r){
+    if (statesAtAsof[r.case_id] !== 'appointed') return;
     var k = r.council_office_name || '(未指定)';
     byOffice[k] = (byOffice[k] || 0) + 1;
   });
@@ -3463,16 +3521,18 @@ function _renderCasesByOffice(rows) {
   });
 }
 
-function _renderCasesOfficeTable(rows) {
+function _renderCasesOfficeTable(rows, statesAtAsof) {
   var stateMap = {
     'appointed': 'inProgress', 'pending': 'pending', 'closed': 'closed',
     'unappointed': 'unappointed', 'unconcluded': 'unconcluded', 'canceled': 'canceled'
   };
   var byOffice = {};
   rows.forEach(function(r){
+    var s = statesAtAsof[r.case_id];
+    if (s === null) return;  // 案件那時還沒建立
     var office = r.council_office_name || '(未指定)';
     if (!byOffice[office]) byOffice[office] = {inProgress:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, total:0};
-    var key = stateMap[r.aasm_state];
+    var key = stateMap[s];
     if (key) byOffice[office][key]++;
     byOffice[office].total++;
   });
@@ -3490,22 +3550,23 @@ function _renderCasesOfficeTable(rows) {
   document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="8" class="text-muted text-center">無資料</td></tr>';
 }
 
-function _renderCasesLawyerTable(rows) {
+function _renderCasesLawyerTable(rows, statesAtAsof) {
   // 每位律師承辦 → 6 個律師角色 union（distinct case，同案多角色不重複）
-  // council_lawyers 諮詢、assigned_members 接案、litigation 訴訟、in_court 出庭、pleading 書狀、complaint 起訴
   var ROLE_FIELDS = ['council_lawyers','assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var byLawyer = {};
   rows.forEach(function(r){
+    var s = statesAtAsof[r.case_id];
+    if (s === null) return;  // 案件那時還沒建立
     var set = new Set();
     ROLE_FIELDS.forEach(function(f){
       (r[f] || []).forEach(function(n){ if (n) set.add(n); });
     });
     set.forEach(function(name){
       if (!byLawyer[name]) byLawyer[name] = {inProgress:0, pending:0, closed:0, unconcluded:0};
-      if (r.aasm_state === 'appointed') byLawyer[name].inProgress++;
-      else if (r.aasm_state === 'pending') byLawyer[name].pending++;
-      else if (r.aasm_state === 'closed') byLawyer[name].closed++;
-      else if (r.aasm_state === 'unconcluded') byLawyer[name].unconcluded++;
+      if (s === 'appointed') byLawyer[name].inProgress++;
+      else if (s === 'pending') byLawyer[name].pending++;
+      else if (s === 'closed') byLawyer[name].closed++;
+      else if (s === 'unconcluded') byLawyer[name].unconcluded++;
     });
   });
   var sorted = Object.keys(byLawyer).map(function(n){
@@ -3557,10 +3618,66 @@ function _renderCasesCloseCycle(rows) {
   });
 }
 
+// 月底存量演變：過去 5 年每月底快照 stacked area
+function _renderCasesSnapshot(rows) {
+  // 算出每月最後一天的 5 個狀態 count
+  var now = new Date();
+  var startY = now.getFullYear() - 5, startM = now.getMonth();
+  var labels = [];
+  var months = [];
+  for (var y = startY; y <= now.getFullYear(); y++) {
+    var mStart = (y === startY) ? startM : 0;
+    var mEnd   = (y === now.getFullYear()) ? now.getMonth() : 11;
+    for (var m = mStart; m <= mEnd; m++) {
+      var d = new Date(y, m + 1, 0, 23, 59, 59);  // 該月最後一天 23:59:59
+      labels.push(y + '-' + ('0'+(m+1)).slice(-2));
+      months.push(d);
+    }
+  }
+  // 對每個月底，跑一次 _stateAtTime aggregate
+  var series = { appointed: [], pending: [], closed: [], unappointed: [], unconcluded: [], canceled: [] };
+  months.forEach(function(d){
+    var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0};
+    rows.forEach(function(r){
+      var s = _stateAtTime(r, d);
+      if (s && s in c) c[s]++;
+    });
+    Object.keys(c).forEach(function(k){ series[k].push(c[k]); });
+  });
+
+  if (charts.casesSnapshot) charts.casesSnapshot.destroy();
+  var ctx = document.getElementById('casesSnapshotChart').getContext('2d');
+  charts.casesSnapshot = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '承辦中 (appointed)',  data: series.appointed,   backgroundColor: 'rgba(245,158,11,0.7)', borderColor: '#f59e0b', fill: true, stack: 's' },
+        { label: '待結案 (pending)',    data: series.pending,     backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', fill: true, stack: 's' },
+        { label: '已結案 (closed)',     data: series.closed,      backgroundColor: 'rgba(16,185,129,0.6)', borderColor: '#10b981', fill: true, stack: 's' },
+        { label: '未委任 (unappointed)', data: series.unappointed, backgroundColor: 'rgba(156,163,175,0.5)', borderColor: '#9ca3af', fill: true, stack: 's' },
+        { label: '未成案 (unconcluded)', data: series.unconcluded, backgroundColor: 'rgba(239,68,68,0.4)',   borderColor: '#ef4444', fill: true, stack: 's' },
+        { label: '取消 (canceled)',     data: series.canceled,    backgroundColor: 'rgba(107,114,128,0.4)', borderColor: '#6b7280', fill: true, stack: 's' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index' } },
+      scales: { y: { stacked: true, beginAtZero: true } },
+      interaction: { mode: 'index', intersect: false }
+    }
+  });
+}
+
 // Filter change listeners
 document.getElementById('casesOfficeFilter').addEventListener('change', loadCasesPage);
 document.getElementById('casesDeptFilter').addEventListener('change', loadCasesPage);
 document.getElementById('casesYearFilter').addEventListener('change', loadCasesPage);
+document.getElementById('casesAsofDate').addEventListener('change', loadCasesPage);
+document.getElementById('casesAsofTodayBtn').addEventListener('click', function(){
+  document.getElementById('casesAsofDate').value = new Date().toISOString().substring(0,10);
+  loadCasesPage();
+});
 
 // ═══ TABS & YEAR ═══
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
