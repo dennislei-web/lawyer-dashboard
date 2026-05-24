@@ -1401,11 +1401,15 @@
         </div>
       </div>
 
-      <!-- 結案週期分布 -->
+      <!-- 結案週期 vs 進案週期 並列對照 -->
       <div class="chart-row" style="margin-top:24px">
         <div class="chart-card">
-          <div class="chart-title">結案週期分布（從建案到結案的天數）</div>
+          <div class="chart-title">結案週期分布（已結案：從建案到結案的天數）</div>
           <div class="chart-container" style="height:240px"><canvas id="casesCloseCycleChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">進案週期分布（現存承辦中：從建案至今的天數）</div>
+          <div class="chart-container" style="height:240px"><canvas id="casesOpenCycleChart"></canvas></div>
         </div>
       </div>
     </div>
@@ -3510,6 +3514,7 @@ async function loadCasesPage() {
   _renderCasesLawyerTable(filtered, statesAtAsof);
   _renderCasesSnapshot(filtered);
   _renderCasesCloseCycle(filtered);
+  _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
 }
 
 function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday) {
@@ -3707,6 +3712,44 @@ function _renderCasesCloseCycle(rows) {
     type: 'bar',
     data: { labels: labels, datasets: [{ data: values, backgroundColor: '#10b981' }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: '共 ' + closedRows.length.toLocaleString() + ' 筆已結案案件' } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+// 進案週期分布：現存承辦中 (asof 時是 appointed) 的案件，從建案到 asof 的天數
+function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
+  var openRows = rows.filter(function(r){
+    return statesAtAsof[r.case_id] === 'appointed' && r.crm_created_at;
+  });
+  var buckets = {
+    '<30 天': 0, '30-60 天': 0, '60-90 天': 0, '90-180 天': 0,
+    '180-365 天': 0, '1-2 年': 0, '>2 年': 0
+  };
+  openRows.forEach(function(r){
+    var days = (asofDate - new Date(r.crm_created_at)) / (1000*60*60*24);
+    if (days < 30) buckets['<30 天']++;
+    else if (days < 60) buckets['30-60 天']++;
+    else if (days < 90) buckets['60-90 天']++;
+    else if (days < 180) buckets['90-180 天']++;
+    else if (days < 365) buckets['180-365 天']++;
+    else if (days < 730) buckets['1-2 年']++;
+    else buckets['>2 年']++;
+  });
+  var labels = Object.keys(buckets);
+  var values = labels.map(function(k){return buckets[k];});
+
+  if (charts.casesOpenCycle) charts.casesOpenCycle.destroy();
+  var ctx = document.getElementById('casesOpenCycleChart').getContext('2d');
+  charts.casesOpenCycle = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: '#f59e0b' }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: '共 ' + openRows.length.toLocaleString() + ' 筆承辦中案件' }
+      },
+      scales: { y: { beginAtZero: true } }
+    }
   });
 }
 
