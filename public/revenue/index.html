@@ -611,6 +611,7 @@
     <button class="tab-btn" data-tab="departments">部門分析</button>
     <button class="tab-btn" data-tab="partner">合署律師</button>
     <button class="tab-btn" data-tab="partnerYearly">合署年度追蹤</button>
+    <button class="tab-btn" data-tab="cases">案件狀態</button>
   </div>
 
   <!-- Main Content -->
@@ -1281,6 +1282,112 @@
             </thead>
             <tbody id="pyYoyBody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 案件狀態 (CRM crm_cases) ========== -->
+    <div class="page" id="page-cases">
+      <div class="filter-bar">
+        <div class="filter-label">接案所：</div>
+        <select class="filter-select" id="casesOfficeFilter"><option value="">全部</option></select>
+        <div class="filter-label" style="margin-left:12px;">部門：</div>
+        <select class="filter-select" id="casesDeptFilter"><option value="">全部</option></select>
+        <div class="filter-label" style="margin-left:auto;">趨勢圖時間範圍：</div>
+        <select class="filter-select" id="casesYearFilter">
+          <option value="24">近 24 個月</option>
+          <option value="12">近 12 個月</option>
+          <option value="36">近 36 個月</option>
+          <option value="all">全部</option>
+        </select>
+      </div>
+
+      <!-- KPI 大類 -->
+      <div class="kpi-row">
+        <div class="kpi-card gold">
+          <div class="kpi-label">承辦中（已委任）</div>
+          <div class="kpi-value gold" id="casesKpiInProgress">-</div>
+          <div class="kpi-sub" id="casesKpiInProgressSub"></div>
+        </div>
+        <div class="kpi-card blue">
+          <div class="kpi-label">已處理完成（結案 + 待結案）</div>
+          <div class="kpi-value blue" id="casesKpiCompleted">-</div>
+          <div class="kpi-sub" id="casesKpiCompletedSub"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">未進入承辦</div>
+          <div class="kpi-value" id="casesKpiPre">-</div>
+          <div class="kpi-sub" id="casesKpiPreSub"></div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-label">本月新委任</div>
+          <div class="kpi-value green" id="casesKpiNewMonth">-</div>
+          <div class="kpi-sub" id="casesKpiNewMonthSub"></div>
+        </div>
+      </div>
+
+      <!-- 趨勢圖 + 分所分布 -->
+      <div class="chart-row">
+        <div class="chart-card" style="flex:2">
+          <div class="chart-title">每月新委任 vs 結案趨勢</div>
+          <div class="chart-container" style="height:280px"><canvas id="casesTrendChart"></canvas></div>
+        </div>
+        <div class="chart-card" style="flex:1">
+          <div class="chart-title">承辦中案件 by 接案所</div>
+          <div class="chart-container" style="height:280px"><canvas id="casesByOfficeChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 各分所案件狀態 cross-tab -->
+      <div class="table-card" style="margin-top:16px">
+        <div class="table-header">
+          <span class="table-title">各接案所案件狀態統計</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>接案所</th>
+                <th class="text-right">承辦中</th>
+                <th class="text-right">待結案</th>
+                <th class="text-right">已結案</th>
+                <th class="text-right">未委任</th>
+                <th class="text-right">未成案</th>
+                <th class="text-right">取消</th>
+                <th class="text-right">合計</th>
+              </tr>
+            </thead>
+            <tbody id="casesByOfficeTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 律師承辦中排行 -->
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header">
+          <span class="table-title">承辦中律師排行（Top 30）<span class="text-muted" id="casesLawyerCount"></span></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>律師</th>
+                <th class="text-right">承辦中</th>
+                <th class="text-right">待結案</th>
+                <th class="text-right">歷史已結案</th>
+                <th class="text-right">未成案</th>
+              </tr>
+            </thead>
+            <tbody id="casesLawyerTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 結案週期分布 -->
+      <div class="chart-row" style="margin-top:24px">
+        <div class="chart-card">
+          <div class="chart-title">結案週期分布（從建案到結案的天數）</div>
+          <div class="chart-container" style="height:240px"><canvas id="casesCloseCycleChart"></canvas></div>
         </div>
       </div>
     </div>
@@ -3202,6 +3309,255 @@ async function loadPartnerYearlyPage() {
 }
 document.getElementById('pyOfficeFilter').addEventListener('change', loadPartnerYearlyPage);
 
+// ═══════════════════════════════════════════════════════════
+//  案件狀態 (crm_cases)
+// ═══════════════════════════════════════════════════════════
+var _casesCache = null;  // 暫存全量 crm_cases 資料，filter 只在 client 端聚合
+
+async function _fetchAllCrmCases() {
+  if (_casesCache) return _casesCache;
+  if (!sb) return [];
+  // crm_cases 約 28k 筆。Supabase JS 預設 1000/頁，需要 range pagination
+  var pageSize = 5000;
+  var all = [];
+  var from = 0;
+  while (true) {
+    var r = await sb.from('crm_cases')
+      .select('case_id,serial_number,aasm_state,state_category,council_office_name,department_name,council_lawyers,assigned_members,crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at')
+      .order('crm_created_at', {ascending: false})
+      .range(from, from + pageSize - 1);
+    if (r.error) { console.error('crm_cases fetch error', r.error); break; }
+    var batch = r.data || [];
+    all = all.concat(batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+    if (from > 100000) break;  // safety cap
+  }
+  _casesCache = all;
+  return all;
+}
+
+function _casesApplyFilter(rows) {
+  var office = document.getElementById('casesOfficeFilter').value;
+  var dept = document.getElementById('casesDeptFilter').value;
+  if (office) rows = rows.filter(function(r){ return r.council_office_name === office; });
+  if (dept)   rows = rows.filter(function(r){ return r.department_name === dept; });
+  return rows;
+}
+
+function _ymKey(iso) {
+  if (!iso) return null;
+  return iso.substring(0, 7);  // 'YYYY-MM'
+}
+
+async function loadCasesPage() {
+  // Populate office/dept filters from data on first run
+  var rows = await _fetchAllCrmCases();
+  if (!rows.length) return;
+
+  // Populate filter dropdowns (only first time)
+  var officeSel = document.getElementById('casesOfficeFilter');
+  if (officeSel.options.length <= 1) {
+    var offices = Array.from(new Set(rows.map(function(r){return r.council_office_name;}).filter(Boolean))).sort();
+    offices.forEach(function(o){
+      var opt = document.createElement('option'); opt.value = o; opt.textContent = o;
+      officeSel.appendChild(opt);
+    });
+  }
+  var deptSel = document.getElementById('casesDeptFilter');
+  if (deptSel.options.length <= 1) {
+    var depts = Array.from(new Set(rows.map(function(r){return r.department_name;}).filter(Boolean))).sort();
+    depts.forEach(function(d){
+      var opt = document.createElement('option'); opt.value = d; opt.textContent = d;
+      deptSel.appendChild(opt);
+    });
+  }
+
+  var filtered = _casesApplyFilter(rows);
+  _renderCasesKpi(filtered);
+  _renderCasesTrend(filtered);
+  _renderCasesByOffice(filtered);
+  _renderCasesOfficeTable(filtered);
+  _renderCasesLawyerTable(filtered);
+  _renderCasesCloseCycle(filtered);
+}
+
+function _renderCasesKpi(rows) {
+  var inProgress = rows.filter(function(r){return r.state_category==='in_progress';}).length;
+  var completed = rows.filter(function(r){return r.state_category==='completed';}).length;
+  var pre = rows.filter(function(r){return r.state_category==='pre_engagement';}).length;
+  var thisMonth = new Date().toISOString().substring(0, 7);
+  var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(thisMonth); }).length;
+  var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(thisMonth); }).length;
+
+  // 子分類細節
+  var pending = rows.filter(function(r){return r.aasm_state==='pending';}).length;
+  var closedTotal = rows.filter(function(r){return r.aasm_state==='closed';}).length;
+  var unappointed = rows.filter(function(r){return r.aasm_state==='unappointed';}).length;
+  var unconcluded = rows.filter(function(r){return r.aasm_state==='unconcluded';}).length;
+  var canceled = rows.filter(function(r){return r.aasm_state==='canceled';}).length;
+
+  document.getElementById('casesKpiInProgress').textContent = inProgress.toLocaleString();
+  document.getElementById('casesKpiInProgressSub').textContent = '已委任案件';
+  document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
+  document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + closedTotal.toLocaleString() + ' + 待結案 ' + pending.toLocaleString();
+  document.getElementById('casesKpiPre').textContent = pre.toLocaleString();
+  document.getElementById('casesKpiPreSub').textContent = '未委任 ' + unappointed.toLocaleString() + ' + 未成案 ' + unconcluded.toLocaleString() + ' + 取消 ' + canceled.toLocaleString();
+  document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
+  document.getElementById('casesKpiNewMonthSub').textContent = '本月結案 ' + closedThisMonth.toLocaleString();
+}
+
+function _renderCasesTrend(rows) {
+  var range = document.getElementById('casesYearFilter').value;
+  // 收集所有有 appointed_at 或 closed_at 的月份
+  var byMonth = {};
+  rows.forEach(function(r){
+    if (r.appointed_at) {
+      var k = _ymKey(r.appointed_at);
+      if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].newCase++; }
+    }
+    if (r.closed_at) {
+      var k = _ymKey(r.closed_at);
+      if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].closed++; }
+    }
+  });
+  var monthKeys = Object.keys(byMonth).sort();
+  if (range !== 'all') {
+    var n = parseInt(range, 10);
+    monthKeys = monthKeys.slice(-n);
+  }
+  var newCaseData = monthKeys.map(function(k){return byMonth[k].newCase || 0;});
+  var closedData = monthKeys.map(function(k){return byMonth[k].closed || 0;});
+
+  if (charts.casesTrend) charts.casesTrend.destroy();
+  var ctx = document.getElementById('casesTrendChart').getContext('2d');
+  charts.casesTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: monthKeys,
+      datasets: [
+        { label: '新委任', data: newCaseData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true },
+        { label: '結案', data: closedData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+function _renderCasesByOffice(rows) {
+  var inProgress = rows.filter(function(r){return r.state_category==='in_progress';});
+  var byOffice = {};
+  inProgress.forEach(function(r){
+    var k = r.council_office_name || '(未指定)';
+    byOffice[k] = (byOffice[k] || 0) + 1;
+  });
+  var keys = Object.keys(byOffice).sort(function(a,b){return byOffice[b]-byOffice[a];});
+  var values = keys.map(function(k){return byOffice[k];});
+
+  if (charts.casesByOffice) charts.casesByOffice.destroy();
+  var ctx = document.getElementById('casesByOfficeChart').getContext('2d');
+  charts.casesByOffice = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: keys, datasets: [{ data: values, backgroundColor: '#f59e0b' }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+  });
+}
+
+function _renderCasesOfficeTable(rows) {
+  var stateMap = {
+    'appointed': 'inProgress', 'pending': 'pending', 'closed': 'closed',
+    'unappointed': 'unappointed', 'unconcluded': 'unconcluded', 'canceled': 'canceled'
+  };
+  var byOffice = {};
+  rows.forEach(function(r){
+    var office = r.council_office_name || '(未指定)';
+    if (!byOffice[office]) byOffice[office] = {inProgress:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, total:0};
+    var key = stateMap[r.aasm_state];
+    if (key) byOffice[office][key]++;
+    byOffice[office].total++;
+  });
+  var rowsHtml = Object.keys(byOffice).sort(function(a,b){return byOffice[b].total-byOffice[a].total;}).map(function(o){
+    var s = byOffice[o];
+    return '<tr><td>'+o+'</td>'
+      + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
+      + '<td class="text-right">'+s.pending.toLocaleString()+'</td>'
+      + '<td class="text-right text-green">'+s.closed.toLocaleString()+'</td>'
+      + '<td class="text-right text-muted">'+s.unappointed.toLocaleString()+'</td>'
+      + '<td class="text-right text-muted">'+s.unconcluded.toLocaleString()+'</td>'
+      + '<td class="text-right text-muted">'+s.canceled.toLocaleString()+'</td>'
+      + '<td class="text-right"><b>'+s.total.toLocaleString()+'</b></td></tr>';
+  }).join('');
+  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="8" class="text-muted text-center">無資料</td></tr>';
+}
+
+function _renderCasesLawyerTable(rows) {
+  // 每位律師（council_lawyers 陣列）匯總
+  var byLawyer = {};
+  rows.forEach(function(r){
+    var lawyers = r.council_lawyers || [];
+    lawyers.forEach(function(name){
+      if (!name) return;
+      if (!byLawyer[name]) byLawyer[name] = {inProgress:0, pending:0, closed:0, unconcluded:0};
+      if (r.aasm_state === 'appointed') byLawyer[name].inProgress++;
+      else if (r.aasm_state === 'pending') byLawyer[name].pending++;
+      else if (r.aasm_state === 'closed') byLawyer[name].closed++;
+      else if (r.aasm_state === 'unconcluded') byLawyer[name].unconcluded++;
+    });
+  });
+  var sorted = Object.keys(byLawyer).map(function(n){
+    return Object.assign({name:n}, byLawyer[n]);
+  }).sort(function(a,b){return b.inProgress - a.inProgress;}).slice(0, 30);
+  var html = sorted.map(function(l){
+    return '<tr><td>'+l.name+'</td>'
+      + '<td class="text-right text-gold"><b>'+l.inProgress.toLocaleString()+'</b></td>'
+      + '<td class="text-right">'+l.pending.toLocaleString()+'</td>'
+      + '<td class="text-right text-green">'+l.closed.toLocaleString()+'</td>'
+      + '<td class="text-right text-muted">'+l.unconcluded.toLocaleString()+'</td></tr>';
+  }).join('');
+  document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
+  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄）';
+}
+
+function _renderCasesCloseCycle(rows) {
+  // 已結案 cases 的「建立 → 結案」天數分布
+  var closedRows = rows.filter(function(r){return r.aasm_state === 'closed' && r.crm_created_at && r.closed_at;});
+  var buckets = {
+    '<30 天': 0,
+    '30-60 天': 0,
+    '60-90 天': 0,
+    '90-180 天': 0,
+    '180-365 天': 0,
+    '1-2 年': 0,
+    '>2 年': 0
+  };
+  closedRows.forEach(function(r){
+    var ms = new Date(r.closed_at) - new Date(r.crm_created_at);
+    var days = ms / (1000*60*60*24);
+    if (days < 30) buckets['<30 天']++;
+    else if (days < 60) buckets['30-60 天']++;
+    else if (days < 90) buckets['60-90 天']++;
+    else if (days < 180) buckets['90-180 天']++;
+    else if (days < 365) buckets['180-365 天']++;
+    else if (days < 730) buckets['1-2 年']++;
+    else buckets['>2 年']++;
+  });
+  var labels = Object.keys(buckets);
+  var values = labels.map(function(k){return buckets[k];});
+
+  if (charts.casesCloseCycle) charts.casesCloseCycle.destroy();
+  var ctx = document.getElementById('casesCloseCycleChart').getContext('2d');
+  charts.casesCloseCycle = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: '#10b981' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: '共 ' + closedRows.length.toLocaleString() + ' 筆已結案案件' } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+// Filter change listeners
+document.getElementById('casesOfficeFilter').addEventListener('change', loadCasesPage);
+document.getElementById('casesDeptFilter').addEventListener('change', loadCasesPage);
+document.getElementById('casesYearFilter').addEventListener('change', loadCasesPage);
+
 // ═══ TABS & YEAR ═══
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
@@ -3216,6 +3572,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     else if (tab==='sources') loadSourcePageRouter();
     else if (tab==='partner') loadPartnerPage();
     else if (tab==='partnerYearly') loadPartnerYearlyPage();
+    else if (tab==='cases') loadCasesPage();
   });
 });
 

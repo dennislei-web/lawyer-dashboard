@@ -26,3 +26,9 @@ public/infographics/pdf/
 # Supabase CLI 暫存
 supabase/.temp/
 supabase/supabase/
+
+# scraper logs (大量、會更新)
+scripts/*.log
+scripts/*.err
+scripts/*.log.*
+scripts/*.err.*
