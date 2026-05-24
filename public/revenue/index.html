@@ -3328,22 +3328,27 @@ var _casesCache = null;  // 暫存全量 crm_cases 資料，filter 只在 client
 async function _fetchAllCrmCases() {
   if (_casesCache) return _casesCache;
   if (!sb) return [];
-  // crm_cases 約 28k 筆。Supabase JS 預設 1000/頁，需要 range pagination
-  var pageSize = 5000;
+  // crm_cases 約 28k 筆。Supabase PostgREST 預設 cap 1000 rows/req，所以 pageSize 設 1000 並 loop。
+  var pageSize = 1000;
   var all = [];
   var from = 0;
+  // 多載 6 個 timestamp 欄位（用 _stateAtTime）+ 6 個律師角色欄位（lawyer ranking 用）
+  var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,'
+           + 'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
+           + 'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at';
   while (true) {
     var r = await sb.from('crm_cases')
-      .select('case_id,serial_number,aasm_state,state_category,council_office_name,department_name,council_lawyers,assigned_members,crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at')
-      .order('crm_created_at', {ascending: false})
+      .select(COLS)
+      .order('crm_created_at', {ascending: false, nullsFirst: false})
       .range(from, from + pageSize - 1);
     if (r.error) { console.error('crm_cases fetch error', r.error); break; }
     var batch = r.data || [];
     all = all.concat(batch);
-    if (batch.length < pageSize) break;
-    from += pageSize;
-    if (from > 100000) break;  // safety cap
+    if (batch.length === 0) break;  // 真的抓完
+    from += batch.length;            // 用實際 batch 大小推進，不假設 pageSize
+    if (from > 100000) break;        // safety cap
   }
+  console.log('crm_cases loaded:', all.length);
   _casesCache = all;
   return all;
 }
