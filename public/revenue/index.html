@@ -1398,10 +1398,10 @@
         </div>
       </div>
 
-      <!-- 月底存量演變 -->
+      <!-- 月底存量演變（仍在處理中） -->
       <div class="chart-row" style="margin-top:24px">
         <div class="chart-card">
-          <div class="chart-title">月底案件存量演變（過去 5 年，每月底快照）</div>
+          <div class="chart-title">月底承辦中存量演變（過去 5 年，每月底「仍在處理中」快照）</div>
           <div class="chart-container" style="height:320px"><canvas id="casesSnapshotChart"></canvas></div>
         </div>
       </div>
@@ -3843,21 +3843,22 @@ function _renderCasesSnapshot(rows, laRows) {
       months.push(d);
     }
   }
-  // 每月 3 個 stack：單純所內 / 合署 / 法顧（總量 = 三者相加）
+  // 每月 3 個 stack：單純所內 / 合署 / 法顧 — 只算「仍在處理中」(appointed)
   // owner type 時間感知（每月用該月底重算），避免歷史合署誤判
   var series = { firm:[], partner:[], la:[] };
   months.forEach(function(d){
     var c = {firm:0, partner:0, la:0};
     rows.forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (!s) return;
+      if (s !== 'appointed') return;  // 只算當時 appointed (承辦中)
       var owner = _caseOwnerType(r, d);
       if (owner === 'pure_partner' || owner === 'mixed') c.partner++;
-      else c.firm++;  // pure_firm + no_lawyer 都歸單純所內
+      else c.firm++;
     });
     (laRows || []).forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (s) c.la++;
+      if (s !== 'appointed') return;  // 法顧也只算有效合約中
+      c.la++;
     });
     series.firm.push(c.firm);
     series.partner.push(c.partner);
@@ -3889,7 +3890,7 @@ function _renderCasesSnapshot(rows, laRows) {
             }
           }
         },
-        title: { display: true, text: '單純所內 + 合署 + 法律顧問 = 該月底總量。合署用時間感知判斷（律師加入合署前不算）', font: { size: 11 }, color: '#94a3b8' }
+        title: { display: true, text: '只算當月底「仍在處理中（appointed）」案件。合署用時間感知判斷（律師加入合署前不算）', font: { size: 11 }, color: '#94a3b8' }
       },
       scales: { y: { stacked: true, beginAtZero: true } },
       interaction: { mode: 'index', intersect: false }
