@@ -3346,6 +3346,7 @@ document.getElementById('pyOfficeFilter').addEventListener('change', loadPartner
 var _casesCache = null;
 var _legalStaffSet = null;  // 法務（含委前法務），律師排行排除
 var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
+var _lawyerPrimaryOffice = {};  // 律師 → 主要分所（在 _fetchAllCrmCases 推算）
 
 async function _loadLegalStaff() {
   if (_legalStaffSet) return _legalStaffSet;
@@ -3458,11 +3459,12 @@ async function _fetchAllCrmCases() {
   results.forEach(function(r){ if (r.data) all = all.concat(r.data); });
   console.log('fetched', all.length, 'in', Math.round(performance.now() - t0), 'ms');
 
-  // 3) 預處理：解析 Date 物件 + 預算 handling lawyers，避免後續每月每 case 重複 new Date()
+  // 3) 預處理：解析 Date 物件 + 預算 handling lawyers + 律師主要分所
   var t1 = performance.now();
   var legalStaff = _legalStaffSet || new Set();
+  var lawyerOfficeCounts = {};  // name → { office: count }
   all.forEach(function(r){
-    // transitions 預排序 desc (最近的在前)，方便 _stateAtTime 線性掃描
+    // transitions 預排序 desc
     var trans = [];
     if (r.closed_at)      trans.push([new Date(r.closed_at), 'closed']);
     if (r.unconcluded_at) trans.push([new Date(r.unconcluded_at), 'unconcluded']);
@@ -3473,7 +3475,7 @@ async function _fetchAllCrmCases() {
     r._trans = trans;
     r._created = r.crm_created_at ? new Date(r.crm_created_at) : null;
 
-    // handling lawyers = 5 角色 union 去法務（不含 council_lawyers）
+    // handling lawyers = 5 角色 union 去法務
     var hSet = new Set();
     ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'].forEach(function(f){
       var arr = r[f];
@@ -3483,6 +3485,25 @@ async function _fetchAllCrmCases() {
       }
     });
     r._handling = Array.from(hSet);
+
+    // 累計每位律師在各分所出現次數（用來推算「主要分所」）
+    var office = r.council_office_name;
+    if (office) {
+      r._handling.forEach(function(n){
+        if (!lawyerOfficeCounts[n]) lawyerOfficeCounts[n] = {};
+        lawyerOfficeCounts[n][office] = (lawyerOfficeCounts[n][office] || 0) + 1;
+      });
+    }
+  });
+  // 算每位律師的主要分所（出現最多的分所）
+  _lawyerPrimaryOffice = {};
+  Object.keys(lawyerOfficeCounts).forEach(function(name){
+    var counts = lawyerOfficeCounts[name];
+    var max = 0, primary = null;
+    Object.keys(counts).forEach(function(o){
+      if (counts[o] > max) { max = counts[o]; primary = o; }
+    });
+    _lawyerPrimaryOffice[name] = primary;
   });
   console.log('preprocessed in', Math.round(performance.now() - t1), 'ms');
 
@@ -3601,7 +3622,7 @@ async function loadCasesPage() {
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
   _renderCasesOfficeTable(filtered, statesAtAsof);
-  _renderCasesLawyerTable(filtered, statesAtAsof);
+  _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
   // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
@@ -3758,11 +3779,10 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
   document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="8" class="text-muted text-center">無資料</td></tr>';
 }
 
-function _renderCasesLawyerTable(rows, statesAtAsof) {
+function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
   // 每位律師承辦 → 5 個 CRM 實際承辦角色 union（distinct case，同案多角色不重複）
-  //   負責人員 + 訴訟律師 + 出庭律師 + 寫狀律師 + 起訴律師
-  //   不算「接案人員」(council_lawyers) — 諮詢階段律師不算承辦
   // 排除：法務（含委前法務）+ 合署律師
+  // 若有 office filter → 還要再排除「主要分所不是該所」的律師（避免他所律師臨時參與本所案件入榜）
   var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var excludeSet = new Set();
   (_legalStaffSet || []).forEach(function(n){ excludeSet.add(n); });
@@ -3785,7 +3805,12 @@ function _renderCasesLawyerTable(rows, statesAtAsof) {
       else if (s === 'unconcluded') byLawyer[name].unconcluded++;
     });
   });
-  var sorted = Object.keys(byLawyer).map(function(n){
+  // 若有 office filter → 律師主要分所必須是該所
+  var lawyerNames = Object.keys(byLawyer);
+  if (highlightOffice) {
+    lawyerNames = lawyerNames.filter(function(n){ return _lawyerPrimaryOffice[n] === highlightOffice; });
+  }
+  var sorted = lawyerNames.map(function(n){
     return Object.assign({name:n}, byLawyer[n]);
   }).sort(function(a,b){return b.inProgress - a.inProgress;}).slice(0, 30);
   var html = sorted.map(function(l){
@@ -3796,7 +3821,8 @@ function _renderCasesLawyerTable(rows, statesAtAsof) {
       + '<td class="text-right text-muted">'+l.unconcluded.toLocaleString()+'</td></tr>';
   }).join('');
   document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
-  document.getElementById('casesLawyerCount').textContent = '（共 ' + Object.keys(byLawyer).length + ' 位律師有承辦記錄，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
+  var officeNote = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + lawyerNames.length + ' 位') : ('共 ' + lawyerNames.length + ' 位有承辦記錄');
+  document.getElementById('casesLawyerCount').textContent = '（' + officeNote + '，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
 }
 
 function _renderCasesCloseCycle(rows) {
