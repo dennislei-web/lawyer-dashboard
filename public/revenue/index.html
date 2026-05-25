@@ -3683,27 +3683,27 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
 function _renderCasesTrend(rows, asofDate) {
   var range = document.getElementById('casesYearFilter').value;
   var asofMonth = asofDate.toISOString().substring(0, 7);
-  // 收集所有有 appointed_at 或 closed_at 的月份（僅含 <= asofDate 的事件）
+  // 收集所有有 appointed_at / pending_at / closed_at 的月份（僅含 <= asofDate 的事件）
   var byMonth = {};
+  function bump(k, key) {
+    if (!k) return;
+    if (!byMonth[k]) byMonth[k] = {newCase:0, pending:0, closed:0};
+    byMonth[k][key]++;
+  }
   rows.forEach(function(r){
-    if (r.appointed_at && new Date(r.appointed_at) <= asofDate) {
-      var k = _ymKey(r.appointed_at);
-      if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].newCase++; }
-    }
-    if (r.closed_at && new Date(r.closed_at) <= asofDate) {
-      var k = _ymKey(r.closed_at);
-      if (k) { byMonth[k] = byMonth[k] || {newCase:0, closed:0}; byMonth[k].closed++; }
-    }
+    if (r.appointed_at && new Date(r.appointed_at) <= asofDate) bump(_ymKey(r.appointed_at), 'newCase');
+    if (r.pending_at   && new Date(r.pending_at)   <= asofDate) bump(_ymKey(r.pending_at),   'pending');
+    if (r.closed_at    && new Date(r.closed_at)    <= asofDate) bump(_ymKey(r.closed_at),    'closed');
   });
   var monthKeys = Object.keys(byMonth).sort();
-  // 截到 asofMonth 為止
   monthKeys = monthKeys.filter(function(k){ return k <= asofMonth; });
   if (range !== 'all') {
     var n = parseInt(range, 10);
     monthKeys = monthKeys.slice(-n);
   }
   var newCaseData = monthKeys.map(function(k){return byMonth[k].newCase || 0;});
-  var closedData = monthKeys.map(function(k){return byMonth[k].closed || 0;});
+  var pendingData = monthKeys.map(function(k){return byMonth[k].pending || 0;});
+  var closedData  = monthKeys.map(function(k){return byMonth[k].closed || 0;});
 
   if (charts.casesTrend) charts.casesTrend.destroy();
   var ctx = document.getElementById('casesTrendChart').getContext('2d');
@@ -3713,7 +3713,8 @@ function _renderCasesTrend(rows, asofDate) {
       labels: monthKeys,
       datasets: [
         { label: '新委任', data: newCaseData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true },
-        { label: '結案', data: closedData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true }
+        { label: '待結案', data: pendingData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', tension: 0.3, fill: false, borderDash: [4,4] },
+        { label: '結案',   data: closedData,  borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true }
       ]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
