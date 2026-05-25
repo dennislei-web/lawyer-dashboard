@@ -3352,19 +3352,42 @@ async function _loadLegalStaff() {
   return _legalStaffSet;
 }
 
-// 合署律師完整 16 位（司法官 4 + 資深 8 + 諮詢律師 1 + 司法官合署受雇 3）
-// 司法官合署受雇 3 人薪資由合署負擔（finance/index.html 已標記），跟司法官合署一起處理案件
-// TODO: 之後遷移到 Supabase 單一資料來源（建議用 lawyers.partner_terms 或新建 partner_cohorts 表）
-var PARTNER_LAWYERS = [
+// 合署律師 + 每位起始月（從 partners/index.html 的 monthly data 反推第一筆 = 加入合署月）
+// 用於歷史快照：在某律師正式加入合署之前，案件視為所內
+// TODO: 之後遷移到 Supabase 單一資料來源（建議新建 partner_cohorts 表記 name + start_date + cohort）
+var PARTNER_SINCE = {
   // 司法官合署
-  '劉明潔', '方心瑜', '孫少輔', '許致維',
+  '孫少輔': '2023-11-01',
+  '許致維': '2024-04-01',
+  '劉明潔': '2025-07-01',
+  '方心瑜': '2025-10-01',
   // 資深轉合署
-  '李昭萱', '林昀', '徐棠娜', '許煜婕', '陳璽仲', '蕭予馨', '吳柏慶', '柯雪莉',
+  '陳璽仲': '2024-09-01',
+  '許煜婕': '2024-11-01',
+  '蕭予馨': '2025-01-01',
+  '徐棠娜': '2025-02-01',
+  '林昀':   '2025-03-01',
+  '李昭萱': '2025-06-01',
+  '柯雪莉': '2025-09-01',
+  '吳柏慶': '2026-03-01',
   // 諮詢律師轉合署
-  '黃顯皓',
-  // 司法官合署受雇人員（薪資由合署負擔，案件實質歸合署）
-  '劉誠夫', '陳俊瑋', '曾秉浩'
-];
+  '黃顯皓': '2025-10-01',
+  // 司法官合署受雇人員（跟司法官合署 cohort 開始同期，孫少輔最早加入時即視為合署底下）
+  '劉誠夫': '2023-11-01',
+  '陳俊瑋': '2023-11-01',
+  '曾秉浩': '2023-11-01'
+};
+var PARTNER_LAWYERS = Object.keys(PARTNER_SINCE);
+
+// 預計算 Date 物件（避免 forEach 內反覆 new Date）
+var _partnerSinceDates = {};
+Object.keys(PARTNER_SINCE).forEach(function(n){ _partnerSinceDates[n] = new Date(PARTNER_SINCE[n]); });
+
+function _isPartnerAt(name, asof) {
+  var since = _partnerSinceDates[name];
+  if (!since) return false;
+  return since <= asof;
+}
 
 async function _loadPartners() {
   if (_partnerSet) return _partnerSet;
@@ -3384,18 +3407,11 @@ function _isLegalAdvisor(row) {
   return false;
 }
 
-// 判斷案件是「純所內」/「合署+所內共辦」/「純合署」
-// 規則：union 5 個實際承辦角色（去法務 + 去合署比對）
-// CRM UI 對應：
-//   assigned_members      = 負責人員（主辦律師，UI 紅星缺漏項）
-//   litigation_lawyers    = 訴訟律師
-//   in_court_lawyers      = 出庭律師（CRM 顯示「預計/實際出庭律師」）
-//   pleading_lawyers      = 寫狀律師（CRM 顯示「預計/實際寫狀同仁」）
-//   complaint_lawyers     = 起訴律師（CRM 後端跟 pleading 同步寫入，保留以防個別案有單獨用）
-// 不算的：
-//   council_lawyers       = 接案人員（CRM 諮詢階段律師，acquisition channel 而非實際處理）
-//   managers              = 委後同仁（行政/客服角色，不是律師）
-function _caseOwnerType(row) {
+// 判斷案件在 asof 那個時點屬於「純所內」/「合署+所內共辦」/「純合署」
+// 時間感知：律師正式加入合署之前，案件視為所內（避免歷史快照誤把 2021 案件算成合署）
+// 規則：union 5 個實際承辦角色（去法務後）→ 比對 asof 時誰已是合署
+function _caseOwnerType(row, asof) {
+  if (!asof) asof = new Date();  // 預設今天
   var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
   var allLawyers = new Set();
   ROLE_FIELDS.forEach(function(f){
@@ -3406,7 +3422,7 @@ function _caseOwnerType(row) {
   if (allLawyers.size === 0) return 'no_lawyer';
   var partnerCount = 0, firmCount = 0;
   allLawyers.forEach(function(n){
-    if (_partnerSet.has(n)) partnerCount++;
+    if (_isPartnerAt(n, asof)) partnerCount++;
     else firmCount++;
   });
   if (firmCount === 0) return 'pure_partner';
@@ -3568,7 +3584,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     if (s === null) { c.notyet++; return; }
     if (s in c) c[s]++;
     if (s === 'appointed') {
-      var owner = _caseOwnerType(r);
+      var owner = _caseOwnerType(r, asofDate);  // 用 asof 時點判斷合署身份
       inP[owner] = (inP[owner] || 0) + 1;
     }
   });
@@ -3827,11 +3843,8 @@ function _renderCasesSnapshot(rows, laRows) {
       months.push(d);
     }
   }
-  // 預先算每筆 case 的 owner type（不會隨時間變）— 加速 loop
-  var ownerCache = {};
-  rows.forEach(function(r){ ownerCache[r.case_id] = _caseOwnerType(r); });
-
   // 每月：所內 6 狀態 + 合署總量 + 法顧獨立 series
+  // owner type 改成時間感知（每月用該月底重算），避免歷史合署誤判
   var series = {
     firm_appointed:[], firm_pending:[], firm_closed:[], firm_unappointed:[], firm_unconcluded:[], firm_canceled:[],
     partner_total:[],
@@ -3842,7 +3855,7 @@ function _renderCasesSnapshot(rows, laRows) {
     rows.forEach(function(r){
       var s = _stateAtTime(r, d);
       if (!s) return;
-      var owner = ownerCache[r.case_id];
+      var owner = _caseOwnerType(r, d);  // <-- 用該月底重算 partner 身份
       if (owner === 'pure_partner' || owner === 'mixed') {
         c.partner_total++;
       } else {
