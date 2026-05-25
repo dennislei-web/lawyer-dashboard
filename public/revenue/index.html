@@ -3889,9 +3889,40 @@ function _renderCasesCloseCycle(rows) {
   charts.casesCloseCycle = new Chart(ctx, {
     type: 'bar',
     data: { labels: labels, datasets: [{ data: values, backgroundColor: '#10b981' }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: '共 ' + closedRows.length.toLocaleString() + ' 筆已結案案件' } }, scales: { y: { beginAtZero: true } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 18 } },
+      plugins: { legend: { display: false }, title: { display: true, text: '共 ' + closedRows.length.toLocaleString() + ' 筆已結案案件' } },
+      scales: { y: { beginAtZero: true } }
+    },
+    plugins: [_pctLabelPlugin]
   });
 }
+
+// bar chart 上方畫百分比 plugin（共用給結案/進案週期分布）
+var _pctLabelPlugin = {
+  id: 'pctLabel',
+  afterDatasetsDraw: function(chart) {
+    var ctx = chart.ctx;
+    var ds = chart.data.datasets[0];
+    if (!ds) return;
+    var total = ds.data.reduce(function(s, v){ return s + (v || 0); }, 0);
+    if (!total) return;
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    var meta = chart.getDatasetMeta(0);
+    meta.data.forEach(function(bar, i){
+      var v = ds.data[i] || 0;
+      if (v === 0) return;
+      var pct = (v / total * 100).toFixed(1);
+      ctx.fillText(pct + '%', bar.x, bar.y - 4);
+    });
+    ctx.restore();
+  }
+};
 
 // 進案週期分布：現存承辦中 (asof 時是 appointed) 的案件，從建案到 asof 的天數
 function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
@@ -3922,12 +3953,14 @@ function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
     data: { labels: labels, datasets: [{ data: values, backgroundColor: '#f59e0b' }] },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 18 } },  // 留空間顯示 % 標
       plugins: {
         legend: { display: false },
         title: { display: true, text: '共 ' + openRows.length.toLocaleString() + ' 筆承辦中案件' }
       },
       scales: { y: { beginAtZero: true } }
-    }
+    },
+    plugins: [_pctLabelPlugin]
   });
 }
 
