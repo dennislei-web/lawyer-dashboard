@@ -1398,11 +1398,15 @@
         </div>
       </div>
 
-      <!-- 月底存量演變（仍在處理中） -->
+      <!-- 月底存量演變：承辦中 vs 已完成（並排） -->
       <div class="chart-row" style="margin-top:24px">
-        <div class="chart-card">
-          <div class="chart-title">月底承辦中存量演變（過去 5 年，每月底「仍在處理中」快照）</div>
+        <div class="chart-card" style="flex:1;min-width:0;">
+          <div class="chart-title">📈 月底「仍在處理中」存量（過去 5 年）</div>
           <div class="chart-container" style="height:320px"><canvas id="casesSnapshotChart"></canvas></div>
+        </div>
+        <div class="chart-card" style="flex:1;min-width:0;">
+          <div class="chart-title">✅ 月底「已處理完成」累積（過去 5 年）</div>
+          <div class="chart-container" style="height:320px"><canvas id="casesCompletedSnapshotChart"></canvas></div>
         </div>
       </div>
 
@@ -3863,31 +3867,52 @@ function _renderCasesSnapshot(rows, laRows) {
       months.push(d);
     }
   }
-  // 每月 3 個 stack：單純所內 / 合署 / 法顧 — 只算「仍在處理中」(appointed)
-  // owner type 時間感知（每月用該月底重算），避免歷史合署誤判
-  var series = { firm:[], partner:[], la:[] };
+  // 兩組 series：仍在處理中 (appointed) vs 已處理完成 (closed + unconcluded)
+  // 每組 3 個 stack：單純所內 / 合署 / 法顧
+  var series  = { firm:[], partner:[], la:[] };  // 仍在處理中
+  var seriesC = { firm:[], partner:[], la:[] };  // 已完成
   months.forEach(function(d){
-    var c = {firm:0, partner:0, la:0};
+    var c  = {firm:0, partner:0, la:0};
+    var cc = {firm:0, partner:0, la:0};
     rows.forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (s !== 'appointed') return;  // 只算當時 appointed (承辦中)
+      if (!s) return;
       var owner = _caseOwnerType(r, d);
-      if (owner === 'pure_partner' || owner === 'mixed') c.partner++;
-      else c.firm++;
+      var isPartner = (owner === 'pure_partner' || owner === 'mixed');
+      if (s === 'appointed') {
+        if (isPartner) c.partner++; else c.firm++;
+      } else if (s === 'closed' || s === 'unconcluded') {
+        if (isPartner) cc.partner++; else cc.firm++;
+      }
     });
     (laRows || []).forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (s !== 'appointed') return;  // 法顧也只算有效合約中
-      c.la++;
+      if (!s) return;
+      if (s === 'appointed') c.la++;
+      else if (s === 'closed' || s === 'unconcluded') cc.la++;
     });
-    series.firm.push(c.firm);
-    series.partner.push(c.partner);
-    series.la.push(c.la);
+    series.firm.push(c.firm);   series.partner.push(c.partner);   series.la.push(c.la);
+    seriesC.firm.push(cc.firm); seriesC.partner.push(cc.partner); seriesC.la.push(cc.la);
   });
 
+  // 共用 tooltip footer (顯示總量)
+  function totalFooter(items) {
+    var total = items.reduce(function(sum, it){ return sum + (it.parsed.y || 0); }, 0);
+    return '── 總量：' + total.toLocaleString() + ' 件 ──';
+  }
+  var commonOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' },
+      tooltip: { mode: 'index', callbacks: { footer: totalFooter } }
+    },
+    scales: { y: { stacked: true, beginAtZero: true } },
+    interaction: { mode: 'index', intersect: false }
+  };
+
+  // 圖 1：仍在處理中
   if (charts.casesSnapshot) charts.casesSnapshot.destroy();
-  var ctx = document.getElementById('casesSnapshotChart').getContext('2d');
-  charts.casesSnapshot = new Chart(ctx, {
+  charts.casesSnapshot = new Chart(document.getElementById('casesSnapshotChart').getContext('2d'), {
     type: 'line',
     data: {
       labels: labels,
@@ -3897,24 +3922,30 @@ function _renderCasesSnapshot(rows, laRows) {
         { label: '📜 法律顧問',  data: series.la,      backgroundColor: 'rgba(6,182,212,0.6)',  borderColor: '#06b6d4', borderWidth: 2, fill: true, stack: 's' }
       ]
     },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          mode: 'index',
-          callbacks: {
-            footer: function(items) {
-              var total = items.reduce(function(sum, it){ return sum + (it.parsed.y || 0); }, 0);
-              return '── 總量：' + total.toLocaleString() + ' 件 ──';
-            }
-          }
-        },
-        title: { display: true, text: '只算當月底「仍在處理中（appointed）」案件。合署用時間感知判斷（律師加入合署前不算）', font: { size: 11 }, color: '#94a3b8' }
-      },
-      scales: { y: { stacked: true, beginAtZero: true } },
-      interaction: { mode: 'index', intersect: false }
-    }
+    options: Object.assign({}, commonOptions, {
+      plugins: Object.assign({}, commonOptions.plugins, {
+        title: { display: true, text: '當月底 aasm_state = appointed 的案件', font: { size: 11 }, color: '#94a3b8' }
+      })
+    })
+  });
+
+  // 圖 2：已處理完成（closed + unconcluded 累積快照）
+  if (charts.casesCompletedSnapshot) charts.casesCompletedSnapshot.destroy();
+  charts.casesCompletedSnapshot = new Chart(document.getElementById('casesCompletedSnapshotChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '🏢 單純所內',  data: seriesC.firm,    backgroundColor: 'rgba(16,185,129,0.7)', borderColor: '#10b981', borderWidth: 2, fill: true, stack: 's' },
+        { label: '🤝 合署',      data: seriesC.partner, backgroundColor: 'rgba(168,85,247,0.5)', borderColor: '#a855f7', borderWidth: 2, fill: true, stack: 's' },
+        { label: '📜 法律顧問',  data: seriesC.la,      backgroundColor: 'rgba(6,182,212,0.5)',  borderColor: '#06b6d4', borderWidth: 2, fill: true, stack: 's' }
+      ]
+    },
+    options: Object.assign({}, commonOptions, {
+      plugins: Object.assign({}, commonOptions.plugins, {
+        title: { display: true, text: '當月底 aasm_state IN (closed, unconcluded) 的案件 — 累積結案量', font: { size: 11 }, color: '#94a3b8' }
+      })
+    })
   });
 }
 
