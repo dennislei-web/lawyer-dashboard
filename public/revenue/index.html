@@ -3411,49 +3411,77 @@ function _isLegalAdvisor(row) {
 // 時間感知：律師正式加入合署之前，案件視為所內（避免歷史快照誤把 2021 案件算成合署）
 // 規則：union 5 個實際承辦角色（去法務後）→ 比對 asof 時誰已是合署
 function _caseOwnerType(row, asof) {
-  if (!asof) asof = new Date();  // 預設今天
-  var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
-  var allLawyers = new Set();
-  ROLE_FIELDS.forEach(function(f){
-    (row[f] || []).forEach(function(n){
-      if (n && !_legalStaffSet.has(n)) allLawyers.add(n);
-    });
-  });
-  if (allLawyers.size === 0) return 'no_lawyer';
-  var partnerCount = 0, firmCount = 0;
-  allLawyers.forEach(function(n){
-    if (_isPartnerAt(n, asof)) partnerCount++;
-    else firmCount++;
-  });
-  if (firmCount === 0) return 'pure_partner';
-  if (partnerCount === 0) return 'pure_firm';
+  if (!asof) asof = new Date();
+  var handling = row._handling;
+  if (!handling || handling.length === 0) return 'no_lawyer';
+  var p = 0, f = 0;
+  for (var i = 0; i < handling.length; i++) {
+    if (_isPartnerAt(handling[i], asof)) p++;
+    else f++;
+  }
+  if (f === 0) return 'pure_partner';
+  if (p === 0) return 'pure_firm';
   return 'mixed';
 }
 
 async function _fetchAllCrmCases() {
   if (_casesCache) return _casesCache;
   if (!sb) return [];
-  // crm_cases 約 28k 筆。Supabase PostgREST 預設 cap 1000 rows/req，所以 pageSize 設 1000 並 loop。
+  var t0 = performance.now();
   var pageSize = 1000;
-  var all = [];
-  var from = 0;
-  // 多載 6 個 timestamp 欄位（用 _stateAtTime）+ 6 個律師角色欄位（lawyer ranking 用）
   var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,'
            + 'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
            + 'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at';
-  while (true) {
-    var r = await sb.from('crm_cases')
-      .select(COLS)
-      .order('crm_created_at', {ascending: false, nullsFirst: false})
-      .range(from, from + pageSize - 1);
-    if (r.error) { console.error('crm_cases fetch error', r.error); break; }
-    var batch = r.data || [];
-    all = all.concat(batch);
-    if (batch.length === 0) break;  // 真的抓完
-    from += batch.length;            // 用實際 batch 大小推進，不假設 pageSize
-    if (from > 100000) break;        // safety cap
+
+  // 1) 先抓 count 知道總筆數
+  var countR = await sb.from('crm_cases').select('case_id', { count: 'exact', head: true });
+  var total = countR.count || 30000;
+  var batches = Math.ceil(total / pageSize);
+  console.log('crm_cases total:', total, 'batches:', batches);
+
+  // 2) 平行發 N 個 range query
+  var promises = [];
+  for (var b = 0; b < batches; b++) {
+    promises.push(
+      sb.from('crm_cases')
+        .select(COLS)
+        .order('crm_created_at', {ascending: false, nullsFirst: false})
+        .range(b * pageSize, b * pageSize + pageSize - 1)
+    );
   }
-  console.log('crm_cases loaded:', all.length);
+  var results = await Promise.all(promises);
+  var all = [];
+  results.forEach(function(r){ if (r.data) all = all.concat(r.data); });
+  console.log('fetched', all.length, 'in', Math.round(performance.now() - t0), 'ms');
+
+  // 3) 預處理：解析 Date 物件 + 預算 handling lawyers，避免後續每月每 case 重複 new Date()
+  var t1 = performance.now();
+  var legalStaff = _legalStaffSet || new Set();
+  all.forEach(function(r){
+    // transitions 預排序 desc (最近的在前)，方便 _stateAtTime 線性掃描
+    var trans = [];
+    if (r.closed_at)      trans.push([new Date(r.closed_at), 'closed']);
+    if (r.unconcluded_at) trans.push([new Date(r.unconcluded_at), 'unconcluded']);
+    if (r.canceled_at)    trans.push([new Date(r.canceled_at), 'canceled']);
+    if (r.pending_at)     trans.push([new Date(r.pending_at), 'pending']);
+    if (r.appointed_at)   trans.push([new Date(r.appointed_at), 'appointed']);
+    trans.sort(function(a,b){ return b[0] - a[0]; });
+    r._trans = trans;
+    r._created = r.crm_created_at ? new Date(r.crm_created_at) : null;
+
+    // handling lawyers = 5 角色 union 去法務（不含 council_lawyers）
+    var hSet = new Set();
+    ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'].forEach(function(f){
+      var arr = r[f];
+      if (arr) for (var i = 0; i < arr.length; i++) {
+        var n = arr[i];
+        if (n && !legalStaff.has(n)) hSet.add(n);
+      }
+    });
+    r._handling = Array.from(hSet);
+  });
+  console.log('preprocessed in', Math.round(performance.now() - t1), 'ms');
+
   _casesCache = all;
   return all;
 }
@@ -3472,27 +3500,17 @@ function _ymKey(iso) {
 }
 
 // 計算指定時間點 (asof Date 物件) 該案件的狀態
-// - 若案件還沒建立 → null
-// - 否則找出 asof 之前最近的 transition 時間戳對應的狀態
-// - 若沒任何 transition → 'unappointed' (default initial state)
+// 使用預快取的 row._trans (已排序 desc) 跟 row._created，避免重複 new Date()
 function _stateAtTime(row, asof) {
-  if (!row.crm_created_at) return null;
-  var created = new Date(row.crm_created_at);
-  if (created > asof) return null;
-  // transition 優先序（同時間取最後一個有意義的終局狀態）
-  var transitions = [];
-  if (row.closed_at)      transitions.push({ts: new Date(row.closed_at),      s: 'closed'});
-  if (row.unconcluded_at) transitions.push({ts: new Date(row.unconcluded_at), s: 'unconcluded'});
-  if (row.canceled_at)    transitions.push({ts: new Date(row.canceled_at),    s: 'canceled'});
-  if (row.pending_at)     transitions.push({ts: new Date(row.pending_at),     s: 'pending'});
-  if (row.appointed_at)   transitions.push({ts: new Date(row.appointed_at),   s: 'appointed'});
-  // unappointed_at 是「轉回未委任」的時間，不算初始狀態
-  // 過濾在 asof 之前
-  var valid = transitions.filter(function(t){ return t.ts <= asof; });
-  if (!valid.length) return 'unappointed';  // 已建立但還沒有任何 transition
-  // 取最近的
-  valid.sort(function(a,b){ return b.ts - a.ts; });
-  return valid[0].s;
+  if (!row._created) return null;
+  if (row._created > asof) return null;
+  var trans = row._trans;
+  if (trans && trans.length) {
+    for (var i = 0; i < trans.length; i++) {
+      if (trans[i][0] <= asof) return trans[i][1];
+    }
+  }
+  return 'unappointed';  // 已建立但無 transition
 }
 
 // 給定 rows 跟 asof，回傳每個 case 的狀態（map case_id → state）
@@ -3564,14 +3582,16 @@ async function loadCasesPage() {
   var statesAtAsof = _statesAtTime(filtered, asofDate);
   var statesAtAsofLA = _statesAtTime(legalAdvisors, asofDate);
 
+  // 先渲染輕量的 KPI 跟表格（用戶優先看到）
   _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA);
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(filtered, statesAtAsof);
   _renderCasesOfficeTable(filtered, statesAtAsof);
   _renderCasesLawyerTable(filtered, statesAtAsof);
-  _renderCasesSnapshot(filtered, legalAdvisors);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
+  // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
+  setTimeout(function(){ _renderCasesSnapshot(filtered, legalAdvisors); }, 50);
 }
 
 function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAtAsofLA) {
