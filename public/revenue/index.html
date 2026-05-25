@@ -3586,10 +3586,20 @@ async function loadCasesPage() {
   var statesAtAsof = _statesAtTime(filtered, asofDate);
   var statesAtAsofLA = _statesAtTime(legalAdvisors, asofDate);
 
+  // 「承辦中案件 by 接案所」要永遠顯示所有所別（不套用接案所 filter，只套 dept + 排除法顧）
+  var officeFilterVal = document.getElementById('casesOfficeFilter').value;
+  var deptFilterVal = document.getElementById('casesDeptFilter').value;
+  var officeChartRows = rows.filter(function(r){
+    if (_isLegalAdvisor(r)) return false;
+    if (deptFilterVal && r.department_name !== deptFilterVal) return false;
+    return true;
+  });
+  var officeChartStates = _statesAtTime(officeChartRows, asofDate);
+
   // 先渲染輕量的 KPI 跟表格（用戶優先看到）
   _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA);
   _renderCasesTrend(filtered, asofDate);
-  _renderCasesByOffice(filtered, statesAtAsof);
+  _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
   _renderCasesOfficeTable(filtered, statesAtAsof);
   _renderCasesLawyerTable(filtered, statesAtAsof);
   _renderCasesCloseCycle(filtered);
@@ -3689,7 +3699,7 @@ function _renderCasesTrend(rows, asofDate) {
   });
 }
 
-function _renderCasesByOffice(rows, statesAtAsof) {
+function _renderCasesByOffice(rows, statesAtAsof, highlightOffice) {
   var byOffice = {};
   rows.forEach(function(r){
     if (statesAtAsof[r.case_id] !== 'appointed') return;
@@ -3698,12 +3708,23 @@ function _renderCasesByOffice(rows, statesAtAsof) {
   });
   var keys = Object.keys(byOffice).sort(function(a,b){return byOffice[b]-byOffice[a];});
   var values = keys.map(function(k){return byOffice[k];});
+  // 若有選分所 → 該所實色強調，其他所淡色；若沒選 → 全部實色
+  var colors = keys.map(function(k){
+    if (!highlightOffice) return '#f59e0b';
+    return k === highlightOffice ? '#f59e0b' : 'rgba(245,158,11,0.25)';
+  });
+  var borderColors = keys.map(function(k){
+    return k === highlightOffice ? '#fbbf24' : 'transparent';
+  });
 
   if (charts.casesByOffice) charts.casesByOffice.destroy();
   var ctx = document.getElementById('casesByOfficeChart').getContext('2d');
   charts.casesByOffice = new Chart(ctx, {
     type: 'bar',
-    data: { labels: keys, datasets: [{ data: values, backgroundColor: '#f59e0b' }] },
+    data: {
+      labels: keys,
+      datasets: [{ data: values, backgroundColor: colors, borderColor: borderColors, borderWidth: 2 }]
+    },
     options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
   });
 }
