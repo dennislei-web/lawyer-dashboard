@@ -1398,13 +1398,13 @@
         </div>
       </div>
 
-      <!-- 月底存量演變：承辦中 vs 已完成（並排） -->
-      <div class="chart-row" style="margin-top:24px">
-        <div class="chart-card" style="flex:1;min-width:0;">
+      <!-- 月底存量演變：承辦中 vs 已完成（50/50 並排，覆寫預設 2fr 1fr）-->
+      <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr 1fr;">
+        <div class="chart-card" style="min-width:0;">
           <div class="chart-title">📈 月底「仍在處理中」存量（過去 5 年）</div>
           <div class="chart-container" style="height:320px"><canvas id="casesSnapshotChart"></canvas></div>
         </div>
-        <div class="chart-card" style="flex:1;min-width:0;">
+        <div class="chart-card" style="min-width:0;">
           <div class="chart-title">✅ 月底「已處理完成」累積（過去 5 年）</div>
           <div class="chart-container" style="height:320px"><canvas id="casesCompletedSnapshotChart"></canvas></div>
         </div>
