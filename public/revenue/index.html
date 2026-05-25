@@ -1410,13 +1410,13 @@
         </div>
       </div>
 
-      <!-- 結案週期 vs 進案週期 並列對照 -->
-      <div class="chart-row" style="margin-top:24px">
-        <div class="chart-card">
+      <!-- 結案週期 vs 進案週期 並列對照（50/50）-->
+      <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr 1fr;">
+        <div class="chart-card" style="min-width:0;">
           <div class="chart-title">結案週期分布（已結案：從建案到結案的天數）</div>
           <div class="chart-container" style="height:240px"><canvas id="casesCloseCycleChart"></canvas></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card" style="min-width:0;">
           <div class="chart-title">進案週期分布（現存承辦中：從建案至今的天數）</div>
           <div class="chart-container" style="height:240px"><canvas id="casesOpenCycleChart"></canvas></div>
         </div>
