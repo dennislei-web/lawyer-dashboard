@@ -3639,6 +3639,24 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     (r.data || []).forEach(function(e) { prevYearMap[e.name] = e; });
   }
 
+  // Load existing active adjustments → detect already-applied personnel changes
+  // (re-uploading the salary roster must NOT double-insert the same 離職/新進 rows)
+  var existingApplied = { left: {}, join: {} };
+  if (sb) {
+    var rExist = await sb.from('finance_adjustments')
+      .select('description, start_month, is_active')
+      .eq('fiscal_year', year)
+      .eq('is_active', true);
+    (rExist.data || []).forEach(function(a) {
+      if (!a.description) return;
+      var m = a.description.match(/^(離職|新進)\s+(\S+?)（/);
+      if (!m) return;
+      var key = m[2] + '|' + a.start_month;
+      if (m[1] === '離職') existingApplied.left[key] = true;
+      else existingApplied.join[key] = true;
+    });
+  }
+
   // Compare consecutive months to find ALL changes within the year
   var allLeft = [], allJoined = [];
 
@@ -3709,7 +3727,7 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
 
   var html = '<div class="upload-section" style="margin-top:12px;border-color:var(--blue)">';
   html += '<div class="upload-title" style="color:var(--blue)">' + year + '年確認人事異動</div>';
-  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:12px">根據逐月薪資比對，以下是 ' + year + '年已發生的人事變動。勾選要套用的項目，系統會建立對應的預算調整。</div>';
+  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:12px">根據逐月薪資比對，以下是 ' + year + '年已發生的人事變動。勾選要套用的項目，系統會建立對應的預算調整。<br>已套用過的項目會自動取消勾選並標 <span style="color:var(--green)">✓ 已套用</span>，避免重複計算。</div>';
 
   var totalSavings = 0, totalAdded = 0;
 
@@ -3725,10 +3743,11 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       var moRemain = 12 - e.month + 1;
       var defaultVal = e.avgSalary || e.salary;
       var impact = defaultVal * moRemain;
-      totalSavings += impact;
-      html += '<tr>';
-      html += '<td><input type="checkbox" class="chk-left" data-idx="' + idx + '" checked></td>';
-      html += '<td><strong>' + e.name + '</strong></td>';
+      var leftApplied = !!existingApplied.left[e.name + '|' + e.month];
+      if (!leftApplied) totalSavings += impact;
+      html += '<tr' + (leftApplied ? ' style="opacity:0.55"' : '') + '>';
+      html += '<td><input type="checkbox" class="chk-left" data-idx="' + idx + '"' + (leftApplied ? ' data-applied="1"' : ' checked') + '></td>';
+      html += '<td><strong>' + e.name + '</strong>' + (leftApplied ? ' <span style="font-size:0.7rem;color:var(--green);font-weight:600">✓ 已套用</span>' : '') + '</td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--orange)">' + e.month + '月</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.prevYearAvg + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + (e.prevYearAvg ? fmt(e.prevYearAvg) : '-') + '</td>';
@@ -3757,10 +3776,11 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       var moRemain = 12 - e.month + 1;
       var defaultVal = e.avgSalary || e.salary;
       var impact = defaultVal * moRemain;
-      totalAdded += impact;
-      html += '<tr>';
-      html += '<td><input type="checkbox" class="chk-join" data-idx="' + idx + '" checked></td>';
-      html += '<td><strong>' + e.name + '</strong></td>';
+      var joinApplied = !!existingApplied.join[e.name + '|' + e.month];
+      if (!joinApplied) totalAdded += impact;
+      html += '<tr' + (joinApplied ? ' style="opacity:0.55"' : '') + '>';
+      html += '<td><input type="checkbox" class="chk-join" data-idx="' + idx + '"' + (joinApplied ? ' data-applied="1"' : ' checked') + '></td>';
+      html += '<td><strong>' + e.name + '</strong>' + (joinApplied ? ' <span style="font-size:0.7rem;color:var(--green);font-weight:600">✓ 已套用</span>' : '') + '</td>';
       html += '<td>' + e.dept + '</td>';
       html += '<td style="color:var(--green)">' + e.month + '月</td>';
       html += '<td class="text-right text-muted" style="cursor:pointer" title="點擊採用" onclick="this.parentNode.querySelector(\'.sal-input\').value=' + e.prevYearAvg + ';this.parentNode.querySelector(\'.sal-input\').dispatchEvent(new Event(\'input\'))">' + (e.prevYearAvg ? fmt(e.prevYearAvg) : '-') + '</td>';
@@ -3844,12 +3864,18 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   // Check-all handlers
   var checkAllLeft = document.getElementById('checkAllLeft');
   if (checkAllLeft) checkAllLeft.addEventListener('change', function() {
-    div.querySelectorAll('.chk-left').forEach(function(cb) { cb.checked = checkAllLeft.checked; });
+    div.querySelectorAll('.chk-left').forEach(function(cb) {
+      if (cb.getAttribute('data-applied') === '1') return;
+      cb.checked = checkAllLeft.checked;
+    });
     updateDiffSummary();
   });
   var checkAllJoin = document.getElementById('checkAllJoin');
   if (checkAllJoin) checkAllJoin.addEventListener('change', function() {
-    div.querySelectorAll('.chk-join').forEach(function(cb) { cb.checked = checkAllJoin.checked; });
+    div.querySelectorAll('.chk-join').forEach(function(cb) {
+      if (cb.getAttribute('data-applied') === '1') return;
+      cb.checked = checkAllJoin.checked;
+    });
     updateDiffSummary();
   });
 
