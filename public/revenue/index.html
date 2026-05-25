@@ -3701,9 +3701,10 @@ function _renderCasesTrend(rows, asofDate) {
     var n = parseInt(range, 10);
     monthKeys = monthKeys.slice(-n);
   }
-  var newCaseData = monthKeys.map(function(k){return byMonth[k].newCase || 0;});
-  var pendingData = monthKeys.map(function(k){return byMonth[k].pending || 0;});
-  var closedData  = monthKeys.map(function(k){return byMonth[k].closed || 0;});
+  var newCaseData     = monthKeys.map(function(k){return byMonth[k].newCase || 0;});
+  var pendingData     = monthKeys.map(function(k){return byMonth[k].pending || 0;});
+  var closedData      = monthKeys.map(function(k){return byMonth[k].closed || 0;});
+  var combinedData    = monthKeys.map(function(k, i){ return closedData[i] + pendingData[i]; });
 
   if (charts.casesTrend) charts.casesTrend.destroy();
   var ctx = document.getElementById('casesTrendChart').getContext('2d');
@@ -3713,11 +3714,31 @@ function _renderCasesTrend(rows, asofDate) {
       labels: monthKeys,
       datasets: [
         { label: '新委任', data: newCaseData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true },
-        { label: '待結案', data: pendingData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', tension: 0.3, fill: false, borderDash: [4,4] },
-        { label: '結案',   data: closedData,  borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true }
+        { label: '結案+待結案', data: combinedData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true,
+          // 把 breakdown 暫存在 dataset，tooltip 從 dataIndex 撈
+          _breakdown: { closed: closedData, pending: pendingData }
+        }
       ]
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          mode: 'index',
+          callbacks: {
+            afterLabel: function(item) {
+              if (item.dataset.label === '結案+待結案') {
+                var bd = item.dataset._breakdown;
+                var i = item.dataIndex;
+                return ['　結案: ' + (bd.closed[i] || 0), '　待結案: ' + (bd.pending[i] || 0)];
+              }
+            }
+          }
+        }
+      },
+      scales: { y: { beginAtZero: true } }
+    }
   });
 }
 
