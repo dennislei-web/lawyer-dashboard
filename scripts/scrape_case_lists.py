@@ -211,8 +211,9 @@ def transform(list_row, detail):
             "unappointed_note": detail.get("unappointed_note"),
             "office_name": dict_name(detail.get("office")),
             "council_office_name": dict_name(detail.get("council_office")),
-            "department_name": dict_name(detail.get("department")),
+            "department_name": dict_name(detail.get("department")),  # 實為「品牌」(85010/zhelu/...)
             "group_id": detail.get("group_id"),
+            "group_name": dict_name(detail.get("group")),  # 真正的「部門」(北所一部/北所合署(柯雪莉律師)/...)
             "council_lawyers":      name_list(detail.get("council_lawyer_list")),
             "assigned_members":     name_list(detail.get("assigned_member_list")),
             "litigation_lawyers":   name_list(detail.get("litigation_lawyer_list")),
@@ -448,7 +449,8 @@ def refresh_open(session):
             "synced_at": datetime.utcnow().isoformat() + "Z",
             "office_name": dict_name(detail.get("office")),
             "council_office_name": dict_name(detail.get("council_office")),
-            "department_name": dict_name(detail.get("department")),
+            "department_name": dict_name(detail.get("department")),  # brand
+            "group_name": dict_name(detail.get("group")),  # 真實部門
             "council_lawyers":   name_list(detail.get("council_lawyer_list")),
             "assigned_members":  name_list(detail.get("assigned_member_list")),
             "litigation_lawyers": name_list(detail.get("litigation_lawyer_list")),

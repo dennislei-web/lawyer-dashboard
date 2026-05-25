@@ -3434,7 +3434,7 @@ async function _fetchAllCrmCases() {
   if (!sb) return [];
   var t0 = performance.now();
   var pageSize = 1000;
-  var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,'
+  var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,group_name,'
            + 'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
            + 'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at';
 
@@ -3515,7 +3515,7 @@ function _casesApplyFilter(rows) {
   var office = document.getElementById('casesOfficeFilter').value;
   var dept = document.getElementById('casesDeptFilter').value;
   if (office) rows = rows.filter(function(r){ return r.council_office_name === office; });
-  if (dept)   rows = rows.filter(function(r){ return r.department_name === dept; });
+  if (dept)   rows = rows.filter(function(r){ return r.group_name === dept; });  // 用 group_name (真實部門)
   return rows;
 }
 
@@ -3585,7 +3585,7 @@ async function loadCasesPage() {
   }
   var deptSel = document.getElementById('casesDeptFilter');
   if (deptSel.options.length <= 1) {
-    var depts = Array.from(new Set(rows.map(function(r){return r.department_name;}).filter(Boolean))).sort();
+    var depts = Array.from(new Set(rows.map(function(r){return r.group_name;}).filter(Boolean))).sort();
     depts.forEach(function(d){
       var opt = document.createElement('option'); opt.value = d; opt.textContent = d;
       deptSel.appendChild(opt);
@@ -3612,7 +3612,7 @@ async function loadCasesPage() {
   var deptFilterVal = document.getElementById('casesDeptFilter').value;
   var officeChartRows = rows.filter(function(r){
     if (_isLegalAdvisor(r)) return false;
-    if (deptFilterVal && r.department_name !== deptFilterVal) return false;
+    if (deptFilterVal && r.group_name !== deptFilterVal) return false;
     return true;
   });
   var officeChartStates = _statesAtTime(officeChartRows, asofDate);
