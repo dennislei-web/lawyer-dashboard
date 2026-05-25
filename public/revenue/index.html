@@ -1366,9 +1366,7 @@
                 <th class="text-right">承辦中</th>
                 <th class="text-right">待結案</th>
                 <th class="text-right">已結案</th>
-                <th class="text-right">未委任</th>
-                <th class="text-right">未成案</th>
-                <th class="text-right">取消</th>
+                <th class="text-right">📜 法顧</th>
                 <th class="text-right">合計</th>
               </tr>
             </thead>
@@ -3630,7 +3628,7 @@ async function loadCasesPage() {
   _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA);
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
-  _renderCasesOfficeTable(filtered, statesAtAsof);
+  _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA);
   _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
@@ -3781,19 +3779,29 @@ function _renderCasesByOffice(rows, statesAtAsof, highlightOffice) {
   });
 }
 
-function _renderCasesOfficeTable(rows, statesAtAsof) {
-  var stateMap = {
-    'appointed': 'inProgress', 'pending': 'pending', 'closed': 'closed',
-    'unappointed': 'unappointed', 'unconcluded': 'unconcluded', 'canceled': 'canceled'
-  };
+function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA) {
+  // 一般案：算 承辦中 / 待結案 / 已結案 三類（不顯示未委任/未成案/取消）
   var byOffice = {};
+  function ensureOffice(o){
+    if (!byOffice[o]) byOffice[o] = {inProgress:0, pending:0, closed:0, la_appointed:0, total:0};
+  }
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
-    if (s === null) return;  // 案件那時還沒建立
+    if (s === null) return;
     var office = r.council_office_name || '(未指定)';
-    if (!byOffice[office]) byOffice[office] = {inProgress:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, total:0};
-    var key = stateMap[s];
-    if (key) byOffice[office][key]++;
+    ensureOffice(office);
+    if (s === 'appointed') byOffice[office].inProgress++;
+    else if (s === 'pending') byOffice[office].pending++;
+    else if (s === 'closed')  byOffice[office].closed++;
+    byOffice[office].total++;
+  });
+  // 法顧（只算當下 appointed 的，有效合約中）
+  (laRows || []).forEach(function(r){
+    var s = (statesAtAsofLA || {})[r.case_id];
+    if (s !== 'appointed') return;
+    var office = r.council_office_name || '(未指定)';
+    ensureOffice(office);
+    byOffice[office].la_appointed++;
     byOffice[office].total++;
   });
   var rowsHtml = Object.keys(byOffice).sort(function(a,b){return byOffice[b].total-byOffice[a].total;}).map(function(o){
@@ -3802,12 +3810,10 @@ function _renderCasesOfficeTable(rows, statesAtAsof) {
       + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
       + '<td class="text-right">'+s.pending.toLocaleString()+'</td>'
       + '<td class="text-right text-green">'+s.closed.toLocaleString()+'</td>'
-      + '<td class="text-right text-muted">'+s.unappointed.toLocaleString()+'</td>'
-      + '<td class="text-right text-muted">'+s.unconcluded.toLocaleString()+'</td>'
-      + '<td class="text-right text-muted">'+s.canceled.toLocaleString()+'</td>'
+      + '<td class="text-right" style="color:#06b6d4;">'+s.la_appointed.toLocaleString()+'</td>'
       + '<td class="text-right"><b>'+s.total.toLocaleString()+'</b></td></tr>';
   }).join('');
-  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="8" class="text-muted text-center">無資料</td></tr>';
+  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="6" class="text-muted text-center">無資料</td></tr>';
 }
 
 function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
