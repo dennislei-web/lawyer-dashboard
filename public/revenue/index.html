@@ -3810,6 +3810,8 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
   if (highlightOffice) {
     lawyerNames = lawyerNames.filter(function(n){ return _lawyerPrimaryOffice[n] === highlightOffice; });
   }
+  // 過濾掉承辦中=0 的律師（排行是看「承辦中」，0 沒意義）
+  lawyerNames = lawyerNames.filter(function(n){ return byLawyer[n].inProgress > 0; });
   var sorted = lawyerNames.map(function(n){
     return Object.assign({name:n}, byLawyer[n]);
   }).sort(function(a,b){return b.inProgress - a.inProgress;}).slice(0, 30);
@@ -3821,8 +3823,8 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
       + '<td class="text-right text-muted">'+l.unconcluded.toLocaleString()+'</td></tr>';
   }).join('');
   document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
-  var officeNote = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + lawyerNames.length + ' 位') : ('共 ' + lawyerNames.length + ' 位有承辦記錄');
-  document.getElementById('casesLawyerCount').textContent = '（' + officeNote + '，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
+  var officeNote = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + lawyerNames.length + ' 位') : ('共 ' + lawyerNames.length + ' 位');
+  document.getElementById('casesLawyerCount').textContent = '（' + officeNote + ' 有承辦中案件，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
 }
 
 function _renderCasesCloseCycle(rows) {
