@@ -3474,6 +3474,15 @@ async function _fetchAllCrmCases() {
     trans.sort(function(a,b){ return b[0] - a[0]; });
     r._trans = trans;
     r._created = r.crm_created_at ? new Date(r.crm_created_at) : null;
+    // 曾經結案/未成案的最早時間（給累積結案圖用，flow 語意）
+    var firstDone = null;
+    [r.closed_at, r.unconcluded_at].forEach(function(t){
+      if (t) {
+        var d = new Date(t);
+        if (!firstDone || d < firstDone) firstDone = d;
+      }
+    });
+    r._firstDoneAt = firstDone;
 
     // handling lawyers = 5 角色 union 去法務
     var hSet = new Set();
@@ -3943,24 +3952,25 @@ function _renderCasesSnapshot(rows, laRows) {
   var series  = { firm:[], partner:[], la:[] };  // 仍在處理中
   var seriesC = { firm:[], partner:[], la:[] };  // 已完成
   months.forEach(function(d){
-    var c  = {firm:0, partner:0, la:0};
-    var cc = {firm:0, partner:0, la:0};
+    var c  = {firm:0, partner:0, la:0};  // 仍在處理中（stock）
+    var cc = {firm:0, partner:0, la:0};  // 已處理完成累積（flow，曾經 closed/unconcluded 過）
     rows.forEach(function(r){
-      var s = _stateAtTime(r, d);
-      if (!s) return;
       var owner = _caseOwnerType(r, d);
       var isPartner = (owner === 'pure_partner' || owner === 'mixed');
+      // 仍在處理中：用當下狀態
+      var s = _stateAtTime(r, d);
       if (s === 'appointed') {
         if (isPartner) c.partner++; else c.firm++;
-      } else if (s === 'closed' || s === 'unconcluded') {
+      }
+      // 已處理完成累積：只要曾經結過案就算（避免 re-open 造成數字下降）
+      if (r._firstDoneAt && r._firstDoneAt <= d) {
         if (isPartner) cc.partner++; else cc.firm++;
       }
     });
     (laRows || []).forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (!s) return;
       if (s === 'appointed') c.la++;
-      else if (s === 'closed' || s === 'unconcluded') cc.la++;
+      if (r._firstDoneAt && r._firstDoneAt <= d) cc.la++;
     });
     series.firm.push(c.firm);   series.partner.push(c.partner);   series.la.push(c.la);
     seriesC.firm.push(cc.firm); seriesC.partner.push(cc.partner); seriesC.la.push(cc.la);
@@ -4014,7 +4024,7 @@ function _renderCasesSnapshot(rows, laRows) {
     },
     options: Object.assign({}, commonOptions, {
       plugins: Object.assign({}, commonOptions.plugins, {
-        title: { display: true, text: '當月底 aasm_state IN (closed, unconcluded) 的案件 — 累積結案量', font: { size: 11 }, color: '#94a3b8' }
+        title: { display: true, text: '曾經 closed/unconcluded 的案件累積（含後來 re-open 的）— 只增不減', font: { size: 11 }, color: '#94a3b8' }
       })
     })
   });
