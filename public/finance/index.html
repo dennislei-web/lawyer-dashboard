@@ -613,6 +613,11 @@
             <span class="table-title">月度獲利趨勢</span>
             <span class="text-muted" style="font-size:0.75rem">已過月用實際；未過月兩條線：OKR 目標 vs 按達成率延伸</span>
           </div>
+          <div style="padding:8px 16px;font-size:0.78rem;color:var(--text-muted);line-height:1.5">
+            ⓘ <strong>三欄獲利的差別</strong>：
+            「獲利 (OKR) / (按達成率)」是 <strong>OKR 業務視角</strong>（收入 = KR1 + 法顧含儲值 + 法0×35% + 合署 senior left），<u>不等於</u>會計合併損益。<br>
+            「<strong>會計合併損益</strong>」直接從 finance_data 的損益表算（淨營收 + 營業外收入 − 營業費用 − 稅），對應財務同仁手寫合併表的數字 — <strong>對外/對帳請用這欄</strong>。
+          </div>
           <div style="padding:16px;height:280px"><canvas id="profitMonthlyChart"></canvas></div>
           <div style="overflow-x:auto">
           <table>
@@ -623,6 +628,7 @@
               <th class="num">成本</th>
               <th class="num">獲利 (OKR)</th>
               <th class="num">獲利 (按達成率)</th>
+              <th class="num" title="從 finance_data 損益表直接算：淨營收 + 營業外收入 − 營業費用 − 稅。對應財務同仁的合併 P&L。" style="border-left:2px solid var(--gold)">會計合併損益</th>
               <th>備註</th>
             </tr></thead>
             <tbody id="profitMonthlyTbody"></tbody>
@@ -1224,7 +1230,7 @@ async function loadProfitData() {
         return sb.from('advisor_transactions').select('record_date,amount,client_name').eq('is_void', false);
       }),
       sb.from('fact_010_monthly_team').select('year,month,total_revenue').eq('year', west),
-      sb.from('finance_data').select('amount,month,data_type,finance_categories(section,is_subtotal)').eq('fiscal_year', year).in('data_type', ['actual','budget']),
+      sb.from('finance_data').select('amount,month,data_type,finance_categories(code,section,is_subtotal)').eq('fiscal_year', year).in('data_type', ['actual','budget']),
       fetchOkrTargets(west)
     ]);
     var pjson = results[0];
@@ -1247,7 +1253,9 @@ async function loadProfitData() {
     for (var i=1; i<=12; i++) byMonth[i] = {
       kr1_paid:0, kr1_refund:0, adv_paid:0, adv_refund:0,
       adv_deposit:0, fa0_revenue:0, partner_z_left:0, partner_z_judicial:0,
-      cost_actual:0, cost_budget:0
+      cost_actual:0, cost_budget:0,
+      rev_net_actual:0, non_op_actual:0, tax_actual:0,
+      rev_net_budget:0, non_op_budget:0, tax_budget:0
     };
 
     revRecs.forEach(function(r) {
@@ -1284,15 +1292,26 @@ async function loadProfitData() {
       if (m >= 1 && m <= 12) byMonth[m].fa0_revenue += Number(r.total_revenue || 0);
     });
 
-    // 成本
+    // 成本 + 合併 P&L 各 section（revenue / non_op / tax）
     financeRows.forEach(function(r) {
       var cat = r.finance_categories || {};
-      if (cat.section !== 'operating_expense' || cat.is_subtotal) return;
+      if (cat.is_subtotal) return;
       var m = Number(r.month);
       if (m < 1 || m > 12) return;
       var amt = Number(r.amount || 0);
-      if (r.data_type === 'actual') byMonth[m].cost_actual += amt;
-      else if (r.data_type === 'budget') byMonth[m].cost_budget += amt;
+      var isAct = (r.data_type === 'actual');
+      var bm = byMonth[m];
+      if (cat.section === 'operating_expense') {
+        if (isAct) bm.cost_actual += amt; else bm.cost_budget += amt;
+      } else if (cat.section === 'revenue') {
+        // revenue_returns 是減項
+        var sign = (cat.code === 'revenue_returns') ? -1 : 1;
+        if (isAct) bm.rev_net_actual += sign * amt; else bm.rev_net_budget += sign * amt;
+      } else if (cat.section === 'non_operating_income') {
+        if (isAct) bm.non_op_actual += amt; else bm.non_op_budget += amt;
+      } else if (cat.section === 'tax') {
+        if (isAct) bm.tax_actual += amt; else bm.tax_budget += amt;
+      }
     });
 
     // 合署 left
@@ -1537,6 +1556,7 @@ async function loadProfitData() {
     //   OKR = 月目標 (KR1 + 法顧 + 法0×0.35 + KR4×seniorLeftRatio)
     //   RATE = 已過月實際月均
     var monthlyOKR = [], monthlyRate = [], monthlyCost = [], monthlyRevOKR = [], monthlyRevRate = [];
+    var monthlyMergedPnL = [], monthlyMergedSource = [];
     var actualRevMonthAvg = elapsed > 0 ? (A.kr1 + A.advisor + A.fa0 + A.partner_senior) / elapsed : 0;
     var okrMonthlyRev = KR1_TARGET + KR3_TARGET + KR5_TARGET * 0.35 + kr4Target * seniorLeftRatio;
     for (var mn=1; mn<=12; mn++) {
@@ -1552,6 +1572,20 @@ async function loadProfitData() {
       monthlyCost.push(costM);
       monthlyOKR.push(revOKR - costM);
       monthlyRate.push(revRate - costM);
+
+      // 會計合併損益（直接從 finance_data 損益表算）
+      var hasActualPnL = (bm.rev_net_actual !== 0 || bm.cost_actual > 0 || bm.non_op_actual !== 0);
+      var hasBudgetPnL = (bm.rev_net_budget !== 0 || bm.cost_budget > 0 || bm.non_op_budget !== 0);
+      var mergedPnL = null, mergedSrc = '';
+      if (hasActualPnL) {
+        mergedPnL = bm.rev_net_actual + bm.non_op_actual - bm.cost_actual - bm.tax_actual;
+        mergedSrc = '實際';
+      } else if (hasBudgetPnL) {
+        mergedPnL = bm.rev_net_budget + bm.non_op_budget - bm.cost_budget - bm.tax_budget;
+        mergedSrc = '預算';
+      }
+      monthlyMergedPnL.push(mergedPnL);
+      monthlyMergedSource.push(mergedSrc);
     }
 
     // 渲染表格
@@ -1564,6 +1598,16 @@ async function loadProfitData() {
       var pOkrColor = pOkr >= 0 ? 'var(--green)' : 'var(--red)';
       var pRateColor = pRate >= 0 ? 'var(--green)' : 'var(--red)';
       var rowStyle = (i+1) <= elapsed ? ' style="background:rgba(255,255,255,0.02)"' : '';
+      var mergedVal = monthlyMergedPnL[i];
+      var mergedSrc = monthlyMergedSource[i];
+      var mergedCell;
+      if (mergedVal === null) {
+        mergedCell = '<td class="num" style="color:var(--text-muted);border-left:2px solid var(--gold)">—</td>';
+      } else {
+        var mColor = mergedVal >= 0 ? 'var(--green)' : 'var(--red)';
+        var srcMark = mergedSrc === '預算' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">(預算)</span>' : '';
+        mergedCell = '<td class="num" style="border-left:2px solid var(--gold)"><strong style="color:' + mColor + '">' + fmtMoney(mergedVal) + '</strong>' + srcMark + '</td>';
+      }
       var tr = document.createElement('tr');
       tr.setAttribute('style', rowStyle.replace(/^ style="|"$/g, ''));
       tr.innerHTML = '<td><strong>' + mLabel + '</strong></td>' +
@@ -1572,6 +1616,7 @@ async function loadProfitData() {
         '<td class="num" style="color:var(--text-muted)">' + fmtMoney(monthlyCost[i]) + '</td>' +
         '<td class="num"><strong style="color:' + pOkrColor + '">' + fmtMoney(pOkr) + '</strong></td>' +
         '<td class="num"><strong style="color:' + pRateColor + '">' + fmtMoney(pRate) + '</strong></td>' +
+        mergedCell +
         '<td style="font-size:0.78rem;color:var(--text-muted)">' + note + '</td>';
       mtb.appendChild(tr);
     }
@@ -3736,12 +3781,19 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   var existing = document.getElementById('salaryDiffReport');
   if (existing) existing.remove();
 
+  var appliedLeftCount = allLeft.filter(function(e){return !!existingApplied.left[e.name + '|' + e.month]}).length;
+  var appliedJoinCount = allJoined.filter(function(e){return !!existingApplied.join[e.name + '|' + e.month]}).length;
+
   var div = document.createElement('div');
   div.id = 'salaryDiffReport';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto';
 
-  var html = '<div class="upload-section" style="margin-top:12px;border-color:var(--blue)">';
-  html += '<div class="upload-title" style="color:var(--blue)">' + year + '年確認人事異動</div>';
-  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:12px">根據逐月薪資比對，以下是 ' + year + '年已發生的人事變動。勾選要套用的項目，系統會建立對應的預算調整。<br>已套用過的項目會自動取消勾選並標 <span style="color:var(--green)">✓ 已套用</span>，避免重複計算。</div>';
+  var html = '<div style="background:var(--bg-card);border:1px solid var(--blue);border-radius:12px;max-width:1200px;width:100%;padding:24px;box-shadow:0 12px 48px rgba(0,0,0,0.5)">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  html += '<div style="font-size:1.1rem;font-weight:700;color:var(--blue)">' + year + '年確認人事異動（' + monthSheets.length + ' 個月份比對）</div>';
+  html += '<button class="btn-sm" id="diffCloseBtn" style="font-size:1.1rem;padding:4px 12px;line-height:1">✕</button>';
+  html += '</div>';
+  html += '<div class="text-muted" style="font-size:0.78rem;margin-bottom:12px">根據逐月薪資比對，以下是 ' + year + '年已發生的人事變動。勾選要套用的項目，系統會建立對應的預算調整。<br>已套用過的項目會自動取消勾選並標 <span style="color:var(--green)">✓ 已套用</span>，避免重複計算' + ((appliedLeftCount + appliedJoinCount) > 0 ? '（已偵測 ' + (appliedLeftCount + appliedJoinCount) + ' 筆已套用）' : '') + '。</div>';
 
   var totalSavings = 0, totalAdded = 0;
 
@@ -3815,22 +3867,29 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
   html += '<div id="diffSummary" style="background:var(--bg-row);padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:0.85rem"></div>';
 
   // Action buttons
-  html += '<div style="display:flex;gap:8px;align-items:center">';
+  html += '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end">';
+  html += '<button class="btn-sm" id="diffCancelBtn">關閉（不套用）</button>';
   html += '<button class="btn-primary" id="applySelectedBtn" style="font-size:0.85rem;padding:8px 20px">套用勾選項目</button>';
-  html += '<button class="btn-sm" onclick="document.getElementById(\'salaryDiffReport\').remove()">關閉</button>';
   html += '</div>';
-  html += '</div>';
+  html += '</div>'; // close panel
 
   // Store data for apply
   window._confirmedLeft = allLeft;
   window._confirmedJoined = allJoined;
 
   div.innerHTML = html;
-  document.getElementById('salaryMsg').parentNode.appendChild(div);
+  document.body.appendChild(div);
+
+  function closeModal() { div.remove(); document.removeEventListener('keydown', escHandler); }
+  function escHandler(e) { if (e.key === 'Escape') closeModal(); }
+  document.addEventListener('keydown', escHandler);
+  document.getElementById('diffCloseBtn').addEventListener('click', closeModal);
+  document.getElementById('diffCancelBtn').addEventListener('click', closeModal);
+  div.addEventListener('click', function(e) { if (e.target === div) closeModal(); });
 
   // Live summary update
   function updateDiffSummary() {
-    var savings = 0, added = 0, leftCount = 0, joinCount = 0;
+    var savings = 0, added = 0, leftCount = 0, joinCount = 0, dupCount = 0;
     div.querySelectorAll('.chk-left:checked').forEach(function(cb) {
       var idx = parseInt(cb.getAttribute('data-idx'));
       var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="left"]');
@@ -3840,6 +3899,7 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       var monthlyCost = sal + Math.round(sal * rates.insurance_rate) + Math.round(sal * rates.pension_rate) + Math.round(sal / 12);
       savings += monthlyCost * months;
       leftCount++;
+      if (cb.getAttribute('data-applied') === '1') dupCount++;
     });
     div.querySelectorAll('.chk-join:checked').forEach(function(cb) {
       var idx = parseInt(cb.getAttribute('data-idx'));
@@ -3850,14 +3910,19 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       var monthlyCost = sal + Math.round(sal * rates.insurance_rate) + Math.round(sal * rates.pension_rate) + Math.round(sal / 12);
       added += monthlyCost * months;
       joinCount++;
+      if (cb.getAttribute('data-applied') === '1') dupCount++;
     });
     var net = added - savings;
     var el = document.getElementById('diffSummary');
     if (el) {
-      el.innerHTML = '<strong>預估淨影響：</strong>' +
+      var html2 = '<strong>預估淨影響：</strong>' +
         '<span class="text-green">離職省 ' + fmtCurrency(savings) + '（' + leftCount + '人）</span>' +
         ' + <span class="text-red">新進增 ' + fmtCurrency(added) + '（' + joinCount + '人）</span>' +
         ' = <span style="font-weight:700" class="' + (net >= 0 ? 'text-red' : 'text-green') + '">' + (net >= 0 ? '+' : '') + fmtCurrency(net) + '</span>';
+      if (dupCount > 0) {
+        html2 += '<br><span class="text-red" style="font-weight:600">⚠️ 你勾選了 ' + dupCount + ' 筆已套用過的項目，套用後會重複計算！</span>';
+      }
+      el.innerHTML = html2;
     }
     // Update apply button text
     var btn = document.getElementById('applySelectedBtn');
@@ -3895,13 +3960,14 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
 
   // Apply selected
   document.getElementById('applySelectedBtn').addEventListener('click', async function() {
-    var selectedLeft = [];
+    var selectedLeft = [], dupSelected = 0;
     div.querySelectorAll('.chk-left:checked').forEach(function(cb) {
       var idx = parseInt(cb.getAttribute('data-idx'));
       var e = Object.assign({}, window._confirmedLeft[idx]);
       // Use custom salary from input
       var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="left"]');
       if (salInput) e.useSalary = parseInt(salInput.value) || e.salary;
+      if (cb.getAttribute('data-applied') === '1') dupSelected++;
       selectedLeft.push(e);
     });
     var selectedJoin = [];
@@ -3910,11 +3976,16 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
       var e = Object.assign({}, window._confirmedJoined[idx]);
       var salInput = div.querySelector('.sal-input[data-idx="' + idx + '"][data-type="join"]');
       if (salInput) e.useSalary = parseInt(salInput.value) || e.salary;
+      if (cb.getAttribute('data-applied') === '1') dupSelected++;
       selectedJoin.push(e);
     });
 
     var total = selectedLeft.length + selectedJoin.length;
     if (total === 0) { alert('請勾選要套用的項目'); return; }
+    // 防呆：勾到已套用 → 二次確認
+    if (dupSelected > 0) {
+      if (!confirm('⚠️ 警告：你勾選的項目中有 ' + dupSelected + ' 筆是「已套用過」的人事異動。\n\n再次套用會在 finance_adjustments 中產生重複紀錄（同人同月份會被扣 / 加兩次以上），預算數字會偏差。\n\n如果不是要修正金額（請先去刪掉舊的再重套），請按「取消」並取消勾選那些已套用的項目。\n\n確定要繼續套用？')) return;
+    }
     if (!confirm('確定套用 ' + total + ' 筆調整？（' + selectedLeft.length + ' 筆離職 + ' + selectedJoin.length + ' 筆新進）')) return;
 
     this.disabled = true; this.textContent = '處理中...';
@@ -3976,6 +4047,7 @@ async function showConfirmedChangesReport(year, monthEmployees, monthSheets) {
     this.textContent = '完成！';
     this.style.background = 'var(--green)';
     alert('已套用 ' + total + ' 筆調整！\n離職 ' + selectedLeft.length + ' 人 / 新進 ' + selectedJoin.length + ' 人\n\n請切到「預算編列」查看結果。');
+    closeModal();
   });
 }
 
