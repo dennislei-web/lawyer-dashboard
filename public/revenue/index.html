@@ -1376,24 +1376,43 @@
         </div>
       </div>
 
-      <!-- 律師承辦中排行 -->
-      <div class="table-card" style="margin-top:24px">
-        <div class="table-header">
-          <span class="table-title" title="統計欄位：負責人員 + 訴訟律師 + 出庭律師 + 寫狀律師 + 起訴律師（同案多角色去重）。已排除法務（含委前法務）+ 合署律師。不計「接案人員」(諮詢律師)。">承辦中律師排行（Top 30） <span style="opacity:.6;font-size:0.8rem;">ℹ️</span><span class="text-muted" id="casesLawyerCount"></span></span>
+      <!-- 律師 vs 法務承辦排行（50/50 並排）-->
+      <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr 1fr;">
+        <div class="table-card" style="min-width:0;">
+          <div class="table-header">
+            <span class="table-title" title="統計欄位：負責人員 + 訴訟律師 + 出庭律師 + 寫狀律師 + 起訴律師（同案多角色去重）。已排除法務 + 合署律師。不計「接案人員」(諮詢律師)。">⚖️ 承辦中律師排行 <span style="opacity:.6;font-size:0.8rem;">ℹ️</span><span class="text-muted" id="casesLawyerCount" style="font-size:0.78rem;"></span></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>律師</th>
+                  <th class="text-right">承辦中</th>
+                  <th class="text-right">待結案</th>
+                  <th class="text-right">歷史已結案</th>
+                </tr>
+              </thead>
+              <tbody id="casesLawyerTableBody"></tbody>
+            </table>
+          </div>
         </div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>律師</th>
-                <th class="text-right">承辦中</th>
-                <th class="text-right">待結案</th>
-                <th class="text-right">歷史已結案</th>
-                <th class="text-right">未成案</th>
-              </tr>
-            </thead>
-            <tbody id="casesLawyerTableBody"></tbody>
-          </table>
+        <div class="table-card" style="min-width:0;">
+          <div class="table-header">
+            <span class="table-title" title="法務在 5 個承辦角色欄位出現的案件數，含「只有法務」的案件 + 跟律師共同處理的案件">📋 承辦中法務排行 <span style="opacity:.6;font-size:0.8rem;">ℹ️</span><span class="text-muted" id="casesLegalStaffCount" style="font-size:0.78rem;"></span></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>法務</th>
+                  <th class="text-right">承辦中</th>
+                  <th class="text-right">待結案</th>
+                  <th class="text-right">歷史已結案</th>
+                </tr>
+              </thead>
+              <tbody id="casesLegalStaffTableBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -3416,8 +3435,10 @@ function _isLegalAdvisor(row) {
 // 規則：union 5 個實際承辦角色（去法務後）→ 比對 asof 時誰已是合署
 function _caseOwnerType(row, asof) {
   if (!asof) asof = new Date();
-  var handling = row._handling;
-  if (!handling || handling.length === 0) return 'no_lawyer';
+  var handling = row._handling;       // 不含法務
+  var handlingAll = row._handlingAll; // 含法務
+  if (!handlingAll || handlingAll.length === 0) return 'no_one';      // 真的沒人
+  if (!handling || handling.length === 0) return 'legal_staff_only';  // 只有法務
   var p = 0, f = 0;
   for (var i = 0; i < handling.length; i++) {
     if (_isPartnerAt(handling[i], asof)) p++;
@@ -3483,16 +3504,26 @@ async function _fetchAllCrmCases() {
     });
     r._firstDoneAt = firstDone;
 
-    // handling lawyers = 5 角色 union 去法務
+    // handling lawyers：兩個版本
+    //   _handling     = 5 角色 union 去法務（律師排行用）
+    //   _handlingAll  = 5 角色 union 含法務（owner type 判斷「只有法務」用）
+    //   _handlingLegalOnly = 只有法務的 (用於法務排行)
     var hSet = new Set();
+    var hAllSet = new Set();
+    var hLegalSet = new Set();
     ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'].forEach(function(f){
       var arr = r[f];
       if (arr) for (var i = 0; i < arr.length; i++) {
         var n = arr[i];
-        if (n && !legalStaff.has(n)) hSet.add(n);
+        if (!n) continue;
+        hAllSet.add(n);
+        if (legalStaff.has(n)) hLegalSet.add(n);
+        else hSet.add(n);
       }
     });
     r._handling = Array.from(hSet);
+    r._handlingAll = Array.from(hAllSet);
+    r._handlingLegal = Array.from(hLegalSet);
 
     // 累計每位律師在各分所出現次數（用來推算「主要分所」）
     var office = r.council_office_name;
@@ -3631,6 +3662,7 @@ async function loadCasesPage() {
   _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
   _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA);
   _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal);
+  _renderCasesLegalStaffTable(filtered, statesAtAsof, officeFilterVal);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
   // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
@@ -3641,13 +3673,13 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   // rows 已排除法顧；laRows 是法顧案件
   // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
-  var inP = {pure_firm:0, mixed:0, pure_partner:0, no_lawyer:0};
+  var inP = {pure_firm:0, mixed:0, pure_partner:0, legal_staff_only:0, no_one:0};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) { c.notyet++; return; }
     if (s in c) c[s]++;
     if (s === 'appointed') {
-      var owner = _caseOwnerType(r, asofDate);  // 用 asof 時點判斷合署身份
+      var owner = _caseOwnerType(r, asofDate);
       inP[owner] = (inP[owner] || 0) + 1;
     }
   });
@@ -3668,11 +3700,13 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(asofMonth) && new Date(r.appointed_at) <= asofDate; }).length;
   var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(asofMonth) && new Date(r.closed_at) <= asofDate; }).length;
 
-  // KPI「承辦中」現在改為「所內承辦中」(pure_firm)，副標標示合署
-  document.getElementById('casesKpiInProgress').textContent = inP.pure_firm.toLocaleString();
+  // 所內承辦中 = 律師承辦 (pure_firm) + 法務承辦 (legal_staff_only)
+  var firmTotal = inP.pure_firm + inP.legal_staff_only;
+  document.getElementById('casesKpiInProgress').textContent = firmTotal.toLocaleString();
+  var firmBreakdown = '律師承辦 ' + inP.pure_firm.toLocaleString() + '・📋 法務承辦 ' + inP.legal_staff_only.toLocaleString();
   var partnerInfo = '合署共辦 ' + inP.mixed.toLocaleString() + '・純合署 ' + inP.pure_partner.toLocaleString();
   document.getElementById('casesKpiInProgressSub').innerHTML =
-    '所內律師承辦' + (isToday?'':('・'+asofMonth+' 快照')) +
+    firmBreakdown + (isToday?'':('・'+asofMonth+' 快照')) +
     '<br><span style="opacity:.7;font-size:0.78rem;">' + partnerInfo + '</span>';
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
@@ -3865,7 +3899,44 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
   }).join('');
   document.getElementById('casesLawyerTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
   var officeNote = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + lawyerNames.length + ' 位') : ('共 ' + lawyerNames.length + ' 位');
-  document.getElementById('casesLawyerCount').textContent = '（' + officeNote + ' 有承辦中案件，已排除 ' + legalCount + ' 位法務 + ' + partnerCount + ' 位合署律師）';
+  document.getElementById('casesLawyerCount').textContent = '（' + officeNote + ' 有承辦中案件）';
+}
+
+function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice) {
+  // 法務承辦排行：法務（_handlingLegal）出現在 5 角色任一欄
+  if (!_legalStaffSet) return;
+  var byStaff = {};
+  rows.forEach(function(r){
+    var s = statesAtAsof[r.case_id];
+    if (s === null) return;
+    (r._handlingLegal || []).forEach(function(name){
+      if (!byStaff[name]) byStaff[name] = {inProgress:0, pending:0, closed:0, unconcluded:0};
+      if (s === 'appointed') byStaff[name].inProgress++;
+      else if (s === 'pending') byStaff[name].pending++;
+      else if (s === 'closed') byStaff[name].closed++;
+      else if (s === 'unconcluded') byStaff[name].unconcluded++;
+    });
+  });
+  // 主要分所 filter
+  var names = Object.keys(byStaff);
+  if (highlightOffice) {
+    names = names.filter(function(n){ return _lawyerPrimaryOffice[n] === highlightOffice; });
+  }
+  // 只列出有承辦中的
+  names = names.filter(function(n){ return byStaff[n].inProgress > 0; });
+  var sorted = names.map(function(n){
+    return Object.assign({name:n}, byStaff[n]);
+  }).sort(function(a,b){ return b.inProgress - a.inProgress; }).slice(0, 30);
+
+  var html = sorted.map(function(l){
+    return '<tr><td>'+l.name+'</td>'
+      + '<td class="text-right" style="color:#06b6d4;"><b>'+l.inProgress.toLocaleString()+'</b></td>'
+      + '<td class="text-right">'+l.pending.toLocaleString()+'</td>'
+      + '<td class="text-right text-green">'+l.closed.toLocaleString()+'</td></tr>';
+  }).join('');
+  document.getElementById('casesLegalStaffTableBody').innerHTML = html || '<tr><td colspan="4" class="text-muted text-center">無資料</td></tr>';
+  var note = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + names.length + ' 位') : ('共 ' + names.length + ' 位');
+  document.getElementById('casesLegalStaffCount').textContent = '（' + note + ' 有承辦中案件）';
 }
 
 function _renderCasesCloseCycle(rows) {
@@ -4000,12 +4071,11 @@ function _renderCasesSnapshot(rows, laRows) {
     rows.forEach(function(r){
       var owner = _caseOwnerType(r, d);
       var isPartner = (owner === 'pure_partner' || owner === 'mixed');
-      // 仍在處理中：用當下狀態
+      // 注意：legal_staff_only / pure_firm / no_one 都歸所內側
       var s = _stateAtTime(r, d);
       if (s === 'appointed') {
         if (isPartner) c.partner++; else c.firm++;
       }
-      // 已處理完成累積：只要曾經結過案就算（避免 re-open 造成數字下降）
       if (r._firstDoneAt && r._firstDoneAt <= d) {
         if (isPartner) cc.partner++; else cc.firm++;
       }
