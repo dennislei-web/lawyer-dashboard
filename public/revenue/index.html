@@ -1364,10 +1364,11 @@
               <tr>
                 <th>接案所</th>
                 <th class="text-right">承辦中</th>
-                <th class="text-right">待結案</th>
-                <th class="text-right">已結案</th>
                 <th class="text-right">📜 法顧</th>
-                <th class="text-right">合計</th>
+                <th class="text-right" style="border-left:1px solid var(--border);">委任中合計</th>
+                <th class="text-right" style="padding-left:14px;">待結案</th>
+                <th class="text-right">已結案</th>
+                <th class="text-right" style="border-left:1px solid var(--border);">結案合計</th>
               </tr>
             </thead>
             <tbody id="casesByOfficeTableBody"></tbody>
@@ -3806,14 +3807,17 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA) {
   });
   var rowsHtml = Object.keys(byOffice).sort(function(a,b){return byOffice[b].total-byOffice[a].total;}).map(function(o){
     var s = byOffice[o];
+    var engaged = s.inProgress + s.la_appointed;  // 委任中合計 = 承辦中 + 法顧
+    var closure = s.pending + s.closed;            // 結案合計 = 待結案 + 已結案
     return '<tr><td>'+o+'</td>'
       + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
-      + '<td class="text-right">'+s.pending.toLocaleString()+'</td>'
-      + '<td class="text-right text-green">'+s.closed.toLocaleString()+'</td>'
       + '<td class="text-right" style="color:#06b6d4;">'+s.la_appointed.toLocaleString()+'</td>'
-      + '<td class="text-right"><b>'+s.total.toLocaleString()+'</b></td></tr>';
+      + '<td class="text-right" style="border-left:1px solid var(--border);"><b>'+engaged.toLocaleString()+'</b></td>'
+      + '<td class="text-right" style="padding-left:14px;">'+s.pending.toLocaleString()+'</td>'
+      + '<td class="text-right text-green">'+s.closed.toLocaleString()+'</td>'
+      + '<td class="text-right" style="border-left:1px solid var(--border);"><b>'+closure.toLocaleString()+'</b></td></tr>';
   }).join('');
-  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="6" class="text-muted text-center">無資料</td></tr>';
+  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="7" class="text-muted text-center">無資料</td></tr>';
 }
 
 function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice) {
