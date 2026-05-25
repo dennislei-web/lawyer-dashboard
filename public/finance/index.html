@@ -3248,20 +3248,34 @@ document.getElementById('uploadBtn').addEventListener('click', async function() 
     var allUpserts = [];
     var monthSheets = [];
 
-    // Find monthly sheets (e.g., 11401, 11402, ... or 1410)
+    // Find monthly sheets. Supported sheet-name patterns (year=民國年, e.g. 115):
+    //   1) 民國年+月  : 11501, 11502 ...
+    //   2) 西元年-月  : 2026-01, 2026-04 ... (with dash, 1- or 2-digit month)
+    //   3) 西元年+月  : 202601, 202604 ... (no dash, 6 digits)
+    // Sheets with suffixes (e.g. 2026-03v02, 2026Q1v2025Q1) are deliberately ignored.
+    var rocYear = year;
+    var adYear = year + 1911; // 民國年 → 西元年
     wb.SheetNames.forEach(function(name) {
-      var match = name.match(/^(\d{3,4})(\d{2})$/);
-      if (match) {
-        var sheetYear = parseInt(match[1]);
-        var sheetMonth = parseInt(match[2]);
-        if (sheetMonth >= 1 && sheetMonth <= 12 && (sheetYear === year || sheetYear === Math.floor(year/10))) {
-          monthSheets.push({ name: name, month: sheetMonth });
+      var m, sy, smo;
+      if (m = name.match(/^(\d{4})-(\d{1,2})$/)) {
+        // 西元年-月 with dash
+        sy = parseInt(m[1]); smo = parseInt(m[2]);
+        if (smo >= 1 && smo <= 12 && sy === adYear) {
+          monthSheets.push({ name: name, month: smo });
+        }
+      } else if (m = name.match(/^(\d{3,4})(\d{2})$/)) {
+        // 民國年+月 (3-4 digit year) or 西元年+月 (4 digit year, no dash)
+        sy = parseInt(m[1]); smo = parseInt(m[2]);
+        if (smo >= 1 && smo <= 12) {
+          if (sy === rocYear || sy === adYear || sy === Math.floor(rocYear/10)) {
+            monthSheets.push({ name: name, month: smo });
+          }
         }
       }
     });
 
     if (monthSheets.length === 0) {
-      showUploadMsg('找不到月份工作表（例如 ' + year + '01, ' + year + '02...）', 'error');
+      showUploadMsg('找不到月份工作表（支援格式：' + rocYear + '01、' + adYear + '-01、' + adYear + '01）', 'error');
       return;
     }
 
