@@ -329,7 +329,8 @@
       </div>
       <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
         調整每位律師角色、查看帳號狀態、重設密碼。設定會同步套用到所有 7 個儀表板。<br>
-        <span style="color:var(--blue);">部門主管</span>列可勾選個別儀表板與上傳權限；<span style="color:var(--gold-light);">管理員</span>永遠全開、<span style="color:var(--text-muted);">律師</span>僅諮詢分析。
+        <span style="color:var(--blue);">部門主管</span>列可勾選個別儀表板與上傳權限；<span style="color:var(--gold-light);">管理員</span>永遠全開、<span style="color:var(--text-muted);">律師</span>僅諮詢分析。<br>
+        <span style="color:var(--gold-light);">🧪 進階功能</span>是跨儀表板的 admin 用細部 tab（每日累積 / 1-on-1 全所視角 / 追單 AI 等），不會跟著 admin 角色自動拿到，要在這裡逐一勾選給特定人。
       </div>
       <div class="table-wrap">
         <table>
@@ -345,6 +346,7 @@
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">合署律師</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">委前漏斗</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">法律010</th>
+              <th colspan="4" style="text-align:center;font-size:0.72rem;border-bottom:1px solid var(--border-light);background:rgba(201,168,76,0.04);" title="進階功能：跨儀表板的細部 tab，admin 也不會自動拿到，要在這裡逐一勾選">🧪 進階功能</th>
               <th rowspan="2" style="text-align:center;font-size:0.72rem;">資料上傳</th>
               <th class="sortable" data-sort="status" rowspan="2" style="cursor:pointer;user-select:none;text-align:center;">狀態 <span class="sort-ind" data-for="status"></span></th>
               <th rowspan="2" style="text-align:center;">密碼</th>
@@ -352,10 +354,14 @@
             <tr>
               <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">全部</th>
               <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);">部門</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);background:rgba(201,168,76,0.04);" title="諮詢分析 → 📊 每日累積 tab">諮.每日</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);background:rgba(201,168,76,0.04);" title="營運 → 每日累積 tab">營.每日</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);background:rgba(201,168,76,0.04);" title="諮詢分析 → 1-on-1 追蹤的「全所 grand total」admin 視角；關閉時只看自己那行">1on1 全所</th>
+              <th style="text-align:center;font-size:0.68rem;font-weight:500;color:var(--text-muted);background:rgba(201,168,76,0.04);" title="諮詢分析 → 📊 未成案資料健康度 / 追單 AI 建議 tab">追單 AI</th>
             </tr>
           </thead>
           <tbody id="adminLawyerTableBody">
-            <tr><td colspan="13"><div class="loading"><span class="spinner"></span></div></td></tr>
+            <tr><td colspan="17"><div class="loading"><span class="spinner"></span></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -543,6 +549,16 @@ async function loadLawyers() {
 // 'revenue_dept' = 營運頁僅「部門分析」tab
 var DASHBOARDS = ['consultation','revenue','revenue_dept','finance','advisor','partners','funnel','law010'];
 
+// 進階功能（lawyers.feature_access）：跨儀表板的細部 tab 權限
+// admin 角色不會自動拿到，要在這裡逐一勾選給特定人
+var FEATURES = ['consult_daily','revenue_daily','consult_tracker_admin','consult_health'];
+var FEATURE_LABEL = {
+  consult_daily:         '諮詢分析 → 📊 每日累積 tab',
+  revenue_daily:         '營運 → 每日累積 tab',
+  consult_tracker_admin: '諮詢分析 → 1-on-1 追蹤的「全所 grand total」admin 視角',
+  consult_health:        '諮詢分析 → 📊 未成案資料健康度 / 追單 AI 建議 tab',
+};
+
 function accessCell(l, dashboard) {
   if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
   var role = l.role || 'lawyer';
@@ -577,6 +593,18 @@ function uploadCell(l) {
            ' style="cursor:pointer;width:16px;height:16px;accent-color:var(--blue);">';
   }
   return '<span style="color:var(--red);">✗</span>';
+}
+
+// 進階功能 checkbox：所有 role 都顯示（不會跟著 admin 自動開）
+function featureCell(l, feature) {
+  if (!l.auth_user_id) return '<span style="color:var(--text-muted);font-size:0.9rem;">—</span>';
+  var allowed = Array.isArray(l.feature_access) ? l.feature_access : [];
+  var checked = allowed.indexOf(feature) > -1;
+  return '<input type="checkbox" data-feature="' + feature + '"' +
+         (checked ? ' checked' : '') +
+         ' onchange="toggleFeature(\'' + l.id + '\',\'' + feature + '\',this.checked,this)"' +
+         ' style="cursor:pointer;width:16px;height:16px;accent-color:var(--gold);"' +
+         ' title="' + escHtml(FEATURE_LABEL[feature] || feature) + '">';
 }
 
 // ═══ RENDER ═══
@@ -643,7 +671,7 @@ function renderAdminPage() {
   updateSortIndicators();
 
   if (lawyers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted);">暫無律師資料</td></tr>';
     return;
   }
 
@@ -679,6 +707,10 @@ function renderAdminPage() {
       '<td style="text-align:center;">' + accessCell(l, 'partners') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'funnel') + '</td>' +
       '<td style="text-align:center;">' + accessCell(l, 'law010') + '</td>' +
+      '<td style="text-align:center;background:rgba(201,168,76,0.03);">' + featureCell(l, 'consult_daily') + '</td>' +
+      '<td style="text-align:center;background:rgba(201,168,76,0.03);">' + featureCell(l, 'revenue_daily') + '</td>' +
+      '<td style="text-align:center;background:rgba(201,168,76,0.03);">' + featureCell(l, 'consult_tracker_admin') + '</td>' +
+      '<td style="text-align:center;background:rgba(201,168,76,0.03);">' + featureCell(l, 'consult_health') + '</td>' +
       '<td style="text-align:center;">' + uploadCell(l) + '</td>' +
       '<td style="text-align:center;"><span style="font-size:0.78rem;color:var(--' + (l.is_active ? 'green' : 'text-muted') + ');">' + (l.is_active ? '在職' : '離職') + '</span></td>' +
       '<td style="text-align:center;">' + passwordBtnHtml + '</td>' +
@@ -750,6 +782,28 @@ async function toggleUpload(lawyerId, checked, el) {
     return;
   }
   lawyer.can_upload = checked;
+}
+
+async function toggleFeature(lawyerId, feature, checked, el) {
+  var lawyer = allLawyers.find(function(x){ return x.id === lawyerId; });
+  if (!lawyer) return;
+  var current = Array.isArray(lawyer.feature_access) ? lawyer.feature_access.slice() : [];
+  var next;
+  if (checked) {
+    next = current.indexOf(feature) > -1 ? current : current.concat([feature]);
+  } else {
+    next = current.filter(function(x){ return x !== feature; });
+  }
+  next = FEATURES.filter(function(f){ return next.indexOf(f) > -1; });
+  el.disabled = true;
+  var res = await sb.from('lawyers').update({ feature_access: next }).eq('id', lawyerId);
+  el.disabled = false;
+  if (res.error) {
+    alert('更新失敗：' + res.error.message);
+    el.checked = !checked;
+    return;
+  }
+  lawyer.feature_access = next;
 }
 
 var DEFAULT_PASSWORD = 'ChangeMe123!';

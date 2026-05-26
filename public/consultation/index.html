@@ -3125,21 +3125,32 @@ function showDetailPage(lawyerId) {
   renderDetailPage();
 }
 
-// 🎯 1-on-1 追蹤：雷皓明看全部、一般律師看自己那行
-// 用 currentLawyer 而非 realLawyer 是為了讓 admin 的「視角預覽」也能切到律師視角
+// 🎯 進階功能權限：讀 lawyers.feature_access[] — 在「帳號管理」頁可逐一勾選給誰看
+// currentLawyer：受 View-As 影響（admin 切視角時也跟著變）
+// realLawyer：真實登入身份，不受 View-As 影響（高敏感功能用這個）
+function hasFeature(key, who) {
+  if (!who) return false;
+  var arr = Array.isArray(who.feature_access) ? who.feature_access : [];
+  return arr.indexOf(key) > -1;
+}
+
+// 1-on-1 追蹤：tab 大家都看得到，但「全所 grand total」admin 視角靠 consult_tracker_admin
+// 用 currentLawyer 讓 admin 可以用「視角預覽」切到律師視角時自動看到個人版
 function canViewTracker() {
   return !!currentLawyer;
 }
 function isTrackerAdmin() {
-  return !!(currentLawyer && currentLawyer.email === 'dennis.lei@010.tw');
+  return hasFeature('consult_tracker_admin', currentLawyer);
 }
-// 📊 資料健康度：dennis 觀察 AI 品質 + 客戶關係部（CRM@zhelu.tw）統一帳號讓接案法務跟著做
-// 用 realLawyer（真實登入帳號）而非 currentLawyer（會被 View-As 切換）— 與 tab 顯示條件一致
+
+// 📊 每日累積 tab：用 currentLawyer，讓 View-As 也能模擬律師看不到
+function isDailyAdmin() {
+  return hasFeature('consult_daily', currentLawyer);
+}
+
+// 📊 資料健康度 / 追單 AI 建議：用 realLawyer 避免被 View-As bypass
 function isHealthAdmin() {
-  const who = realLawyer || currentLawyer;
-  if (!who) return false;
-  const e = (who.email || '').toLowerCase();
-  return e === 'dennis.lei@010.tw' || e === 'crm@zhelu.tw';
+  return hasFeature('consult_health', realLawyer || currentLawyer);
 }
 
 // ===================== 📊 每日累積（僅 dennis） =====================
@@ -3813,15 +3824,12 @@ function refreshRoleDependentUI() {
   // 🎯 1-on-1 追蹤 tab — 永遠用 realLawyer.email 判斷（不受 View-As 影響）
   const trackerTab = document.getElementById('tab-tracker');
   if (trackerTab) trackerTab.style.display = canViewTracker() ? '' : 'none';
-  // 📊 每日累積 tab — 僅 dennis.lei@010.tw 可見
+  // 📊 每日累積 tab — 由 feature_access.consult_daily 控制（在帳號管理頁勾選）
   const dailyTab = document.getElementById('tab-daily');
-  if (dailyTab) dailyTab.style.display = isTrackerAdmin() ? '' : 'none';
-  // 📊 資料健康度 tab — dennis（觀察 AI 品質）+ CRM@zhelu.tw（接案法務統一帳號）
+  if (dailyTab) dailyTab.style.display = isDailyAdmin() ? '' : 'none';
+  // 📊 資料健康度 tab — 由 feature_access.consult_health 控制（在帳號管理頁勾選）
   const healthTab = document.getElementById('tab-health');
-  if (healthTab) {
-    const e = (realLawyer && realLawyer.email || '').toLowerCase();
-    healthTab.style.display = (e === 'dennis.lei@010.tw' || e === 'crm@zhelu.tw') ? '' : 'none';
-  }
+  if (healthTab) healthTab.style.display = isHealthAdmin() ? '' : 'none';
 }
 
 function showDashboard() {
@@ -9137,7 +9145,7 @@ async function loadHealthPage() {
   if (!isHealthAdmin()) {
     document.getElementById('healthKpis').innerHTML = `
       <div style="grid-column:1/-1;padding:20px;color:var(--red);background:rgba(255,80,80,0.06);border:1px solid var(--red);border-radius:6px;">
-        ⚠️ 權限檢查失敗（real=${escHtml(realE)} / current=${escHtml(currE)}）— 此頁僅 dennis.lei / crm@zhelu.tw 可見
+        ⚠️ 權限檢查失敗（real=${escHtml(realE)} / current=${escHtml(currE)}）— 此頁需 feature_access.consult_health；請聯繫管理員到「帳號管理」開啟
       </div>`;
     return;
   }
