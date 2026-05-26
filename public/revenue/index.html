@@ -674,12 +674,12 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="overview">總覽</button>
     <button class="tab-btn" data-tab="yearly">年度追蹤</button>
+    <button class="tab-btn" data-tab="daily" id="tab-daily" style="display:none;">📊 每日累積</button>
     <button class="tab-btn" data-tab="sources">來源分析</button>
     <button class="tab-btn" data-tab="departments">部門分析</button>
     <button class="tab-btn" data-tab="partner">合署律師</button>
     <button class="tab-btn" data-tab="partnerYearly">合署年度追蹤</button>
     <button class="tab-btn" data-tab="cases">案件狀態</button>
-    <button class="tab-btn" data-tab="daily" id="tab-daily" style="display:none;">📊 每日累積</button>
   </div>
 
   <!-- Main Content -->
@@ -1392,10 +1392,10 @@
           <div class="kpi-value blue" id="casesKpiCompleted">-</div>
           <div class="kpi-sub" id="casesKpiCompletedSub"></div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-label">未進入承辦</div>
-          <div class="kpi-value" id="casesKpiPre">-</div>
-          <div class="kpi-sub" id="casesKpiPreSub"></div>
+        <div class="kpi-card" style="border-left:3px solid #a78bfa;">
+          <div class="kpi-label" title="律師承辦中案件數 ÷ 該快照月份在接案所工作的可接案律師人數（排除法務、合署律師、行政/支援部門）">⚖️ 律師人均承辦中 <span style="opacity:.6;font-size:0.7rem;">ℹ️</span></div>
+          <div class="kpi-value" style="color:#a78bfa;" id="casesKpiPerLawyer">-</div>
+          <div class="kpi-sub" id="casesKpiPerLawyerSub"></div>
         </div>
         <div class="kpi-card green">
           <div class="kpi-label">本月新委任</div>
@@ -1434,7 +1434,9 @@
                 <th class="text-right">承辦中</th>
                 <th class="text-right">📜 法顧</th>
                 <th class="text-right" style="border-left:1px solid var(--border);">委任中合計</th>
-                <th class="text-right" style="padding-left:14px;">待結案</th>
+                <th class="text-right" style="padding-left:14px;" title="快照月份在職律師人數（排除法務、合署、支援部門）">⚖️ 律師人數</th>
+                <th class="text-right" title="律師承辦中 ÷ 律師人數">人均承辦</th>
+                <th class="text-right" style="padding-left:14px;border-left:1px solid var(--border);">待結案</th>
                 <th class="text-right">已結案</th>
                 <th class="text-right" style="border-left:1px solid var(--border);">結案合計</th>
               </tr>
@@ -3530,6 +3532,60 @@ var _legalStaffSet = null;  // 法務（含委前法務），律師排行排除
 var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
 var _lawyerPrimaryOffice = {};  // 律師 → 主要分所（在 _fetchAllCrmCases 推算）
 
+// 抓某個快照月份的「在職人力」（按接案所）
+// 回傳 { perOffice: {台北所: N, ...}, total, lawyerPerOffice: {...}, lawyerTotal, fiscalYear, month, fallback }
+// lawyer = office IS NOT NULL ∩ 不在法務 set ∩ 不在合署 set ∩ 不在司法官合署 set
+async function _loadHeadcountSnapshot(asofDate) {
+  if (!sb) return null;
+  var rocYear = asofDate.getFullYear() - 1911;
+  var month = asofDate.getMonth() + 1;
+  // 嘗試精準月份；找不到就退到該年最近月份；再找不到就最近年度
+  async function fetchYM(y, m) {
+    var r = await sb.from('finance_employees_monthly').select('name,office,department').eq('fiscal_year', y).eq('month', m);
+    return r.data || [];
+  }
+  var data = await fetchYM(rocYear, month);
+  var fallback = '';
+  if (!data.length) {
+    // 找該年度最近月份
+    var rAny = await sb.from('finance_employees_monthly')
+      .select('name,office,department,month').eq('fiscal_year', rocYear).order('month', { ascending: false }).limit(500);
+    if (rAny.data && rAny.data.length) {
+      var latestM = rAny.data[0].month;
+      data = rAny.data.filter(function(x){ return x.month === latestM; });
+      month = latestM;
+      fallback = rocYear + '年' + month + '月';
+    }
+  }
+  if (!data.length) {
+    // 找最近年度
+    var rLatest = await sb.from('finance_employees_monthly')
+      .select('name,office,department,fiscal_year,month').order('fiscal_year', { ascending: false }).order('month', { ascending: false }).limit(500);
+    if (rLatest.data && rLatest.data.length) {
+      var lY = rLatest.data[0].fiscal_year, lM = rLatest.data[0].month;
+      data = rLatest.data.filter(function(x){ return x.fiscal_year === lY && x.month === lM; });
+      rocYear = lY; month = lM;
+      fallback = rocYear + '年' + month + '月';
+    }
+  }
+  await _loadLegalStaff();
+  await _loadPartners();
+  var legalSet = _legalStaffSet || new Set();
+  var partnerSet = _partnerSet || new Set();
+  var perOffice = {}, lawyerPerOffice = {};
+  var total = 0, lawyerTotal = 0;
+  data.forEach(function(e){
+    if (!e.office) return;
+    perOffice[e.office] = (perOffice[e.office] || 0) + 1;
+    total++;
+    if (!legalSet.has(e.name) && !partnerSet.has(e.name)) {
+      lawyerPerOffice[e.office] = (lawyerPerOffice[e.office] || 0) + 1;
+      lawyerTotal++;
+    }
+  });
+  return { perOffice: perOffice, total: total, lawyerPerOffice: lawyerPerOffice, lawyerTotal: lawyerTotal, fiscalYear: rocYear, month: month, fallback: fallback };
+}
+
 async function _loadLegalStaff() {
   if (_legalStaffSet) return _legalStaffSet;
   if (!sb) { _legalStaffSet = new Set(); return _legalStaffSet; }
@@ -3820,11 +3876,14 @@ async function loadCasesPage() {
   });
   var officeChartStates = _statesAtTime(officeChartRows, asofDate);
 
+  // 快照月份的人力數據（按接案所）
+  var headcount = await _loadHeadcountSnapshot(asofDate);
+
   // 先渲染輕量的 KPI 跟表格（用戶優先看到）
-  _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA);
+  _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA, headcount);
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
-  _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA);
+  _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA, headcount);
   _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA);
   _renderCasesLegalStaffTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA);
   _renderCasesCloseCycle(filtered);
@@ -3833,7 +3892,7 @@ async function loadCasesPage() {
   setTimeout(function(){ _renderCasesSnapshot(filtered, legalAdvisors); }, 50);
 }
 
-function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAtAsofLA) {
+function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAtAsofLA, headcount) {
   // rows 已排除法顧；laRows 是法顧案件
   // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
@@ -3874,8 +3933,19 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     '<br><span style="opacity:.7;font-size:0.78rem;">' + partnerInfo + '</span>';
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
-  document.getElementById('casesKpiPre').textContent = pre.toLocaleString();
-  document.getElementById('casesKpiPreSub').textContent = '未委任 ' + c.unappointed.toLocaleString() + ' + 未成案 ' + c.unconcluded.toLocaleString() + ' + 取消 ' + c.canceled.toLocaleString();
+  // 律師人均承辦中 = inP.pure_firm / 該快照月律師人數
+  if (headcount && headcount.lawyerTotal > 0) {
+    var perLawyer = inP.pure_firm / headcount.lawyerTotal;
+    document.getElementById('casesKpiPerLawyer').textContent = perLawyer.toFixed(1);
+    var snapLabel = headcount.fiscalYear + '年' + headcount.month + '月在職律師 ' + headcount.lawyerTotal + ' 人';
+    if (headcount.fallback) snapLabel = '⚠️ 用 ' + headcount.fallback + ' 替代（無對應月份資料）・律師 ' + headcount.lawyerTotal + ' 人';
+    document.getElementById('casesKpiPerLawyerSub').innerHTML =
+      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + headcount.lawyerTotal + ' 人<br>'
+      + '<span style="opacity:.7;font-size:0.78rem;">' + snapLabel + '</span>';
+  } else {
+    document.getElementById('casesKpiPerLawyer').textContent = '-';
+    document.getElementById('casesKpiPerLawyerSub').textContent = '無人力資料';
+  }
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
   document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
 
@@ -3978,7 +4048,7 @@ function _renderCasesByOffice(rows, statesAtAsof, highlightOffice) {
   });
 }
 
-function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA) {
+function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, headcount) {
   // 一般案：算 承辦中 / 待結案 / 已結案 三類（不顯示未委任/未成案/取消）
   var byOffice = {};
   function ensureOffice(o){
@@ -4003,19 +4073,25 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA) {
     byOffice[office].la_appointed++;
     byOffice[office].total++;
   });
+  var lawyerPerOffice = (headcount && headcount.lawyerPerOffice) || {};
   var rowsHtml = Object.keys(byOffice).sort(function(a,b){return byOffice[b].total-byOffice[a].total;}).map(function(o){
     var s = byOffice[o];
     var engaged = s.inProgress + s.la_appointed;  // 委任中合計 = 承辦中 + 法顧
     var closure = s.pending + s.closed;            // 結案合計 = 待結案 + 已結案
+    var lawyers = lawyerPerOffice[o] || 0;
+    var perLawyer = lawyers > 0 ? (s.inProgress / lawyers) : null;
+    var perLawyerStr = perLawyer === null ? '<span style="color:var(--text-muted)">-</span>' : perLawyer.toFixed(1);
     return '<tr><td>'+o+'</td>'
       + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
       + '<td class="text-right" style="color:#06b6d4;">'+s.la_appointed.toLocaleString()+'</td>'
       + '<td class="text-right" style="border-left:1px solid var(--border);"><b>'+engaged.toLocaleString()+'</b></td>'
-      + '<td class="text-right" style="padding-left:14px;">'+s.pending.toLocaleString()+'</td>'
+      + '<td class="text-right" style="padding-left:14px;color:#a78bfa;">'+(lawyers > 0 ? lawyers : '<span style="color:var(--text-muted)">-</span>')+'</td>'
+      + '<td class="text-right" style="color:#a78bfa;font-weight:600;">'+perLawyerStr+'</td>'
+      + '<td class="text-right" style="padding-left:14px;border-left:1px solid var(--border);">'+s.pending.toLocaleString()+'</td>'
       + '<td class="text-right text-green">'+s.closed.toLocaleString()+'</td>'
       + '<td class="text-right" style="border-left:1px solid var(--border);"><b>'+closure.toLocaleString()+'</b></td></tr>';
   }).join('');
-  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="7" class="text-muted text-center">無資料</td></tr>';
+  document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="9" class="text-muted text-center">無資料</td></tr>';
 }
 
 function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA) {

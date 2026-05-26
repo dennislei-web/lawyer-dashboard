@@ -3527,16 +3527,44 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
     var data = await file.arrayBuffer();
     var wb = XLSX.read(data, { type: 'array' });
 
-    // Find ALL monthly sheets
+    // 部門 → 接案所 對應（對齊 crm_cases.office_name）
+    var DEPT_TO_OFFICE = {
+      '北所律師':'台北所','北所法務':'台北所','北所行政':'台北所','工讀':'台北所',
+      '北所(接案、行政、工讀)':'台北所','北所010':'台北所','北所吉他':'台北所','北所四部':'台北所','北所金貝殼':'台北所',
+      '中所':'台中所','南所':'台南所','台南所':'台南所',
+      '桃所':'桃園所','竹所':'新竹所','新竹所':'新竹所','雄所':'高雄所',
+      '公司':null,'客服':null,'其他':null,'法顧':null,'法律010':null,'品牌部':null,'司法官合署':null
+    };
+    function deptToOffice(d) { d = (d || '').trim(); return d in DEPT_TO_OFFICE ? DEPT_TO_OFFICE[d] : null; }
+
+    // 111 年 A 欄 group label 白名單（沒有「部門」column 時用）
+    var DEPT_LABEL_LEGACY = { '北所律師':1,'北所法務':1,'北所行政':1,'工讀':1,'品牌部':1,'中所':1,'桃所':1,'雄所':1,'台南所':1,'新竹所':1,'客服':1,'法律010':1 };
+
+    // Find ALL monthly sheets — modern (YYMM) and legacy 111 (X月)
     var monthSheets = [];
+    var skippedSheets = [];
     wb.SheetNames.forEach(function(name) {
       var match = name.match(/^(\d{3,4})(\d{2})$/);
       if (match) {
+        var yrPart = parseInt(match[1]);
         var m = parseInt(match[2]);
-        if (m >= 1 && m <= 12) monthSheets.push({ name: name, month: m });
+        if (m >= 1 && m <= 12) {
+          // sheet 名年份跟使用者輸入年度不符 → 視為會計漏匯入該月，跳過
+          if (yrPart !== year) { skippedSheets.push(name + ' (year_part=' + yrPart + ')'); return; }
+          monthSheets.push({ name: name, month: m, legacy: false });
+          return;
+        }
+      }
+      var lm = name.match(/^(?:\d{3}年)?(\d{1,2})月$/);
+      if (lm) {
+        var m2 = parseInt(lm[1]);
+        if (m2 >= 1 && m2 <= 12) monthSheets.push({ name: name, month: m2, legacy: true });
       }
     });
     monthSheets.sort(function(a,b) { return a.month - b.month; });
+    if (skippedSheets.length) {
+      console.warn('跳過 sheet（年份不符）:', skippedSheets);
+    }
 
     if (monthSheets.length === 0) { throw new Error('找不到月份工作表'); }
     var lastMonth = monthSheets[monthSheets.length - 1].month;
@@ -3588,27 +3616,60 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
       var json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       var ci = detectColumns(json);
       monthEmployees[ms.month] = [];
+      var currentDept = null;  // 111 mode: forward-filled from column A whitelist
 
       for (var i = 1; i < json.length; i++) {
         var row = json[i];
+        // 111 mode: forward-fill dept from column A (whitelist)
+        if (ms.legacy) {
+          var aVal = (row[0] || '').toString().trim();
+          if (aVal) {
+            if (DEPT_LABEL_LEGACY[aVal]) {
+              currentDept = aVal;
+            } else {
+              // 非白名單值（眷屬加保/推薦人獎金/個人姓名等調整 row）→ 跳過但保持 currentDept
+              continue;
+            }
+          }
+          if (currentDept === null) continue;
+        }
+
         var name = ci.name >= 0 ? (row[ci.name] || '').toString().trim() : '';
         var baseSalary = ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
         if (!isValidName(name) || baseSalary < 10000) continue;
+
+        var rawDept = ms.legacy
+          ? currentDept
+          : (ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : '');
+
+        // 同一個月份重複出現的人（主薪 + 補發 row）→ 取 base 較大者，補空 dept
+        var existing = monthEmployees[ms.month].find(function(e) { return e.name === name; });
+        if (existing) {
+          if (baseSalary > existing.base) {
+            if (!rawDept && existing.dept) rawDept = existing.dept;
+            existing.base = baseSalary;
+            existing.salary = ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : baseSalary;
+            existing.empTotal = ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0;
+            existing.dept = rawDept;
+          } else if (!existing.dept && rawDept) {
+            existing.dept = rawDept;
+          }
+          continue;
+        }
 
         monthEmployees[ms.month].push({
           name: name,
           base: baseSalary,
           salary: ci.totalSalary >= 0 ? (parseFloat(row[ci.totalSalary]) || 0) : baseSalary,
           empTotal: ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0,
-          dept: ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : ''
+          dept: rawDept
         });
 
         if (!personData[name]) {
           personData[name] = { months: [], dept: '', ci: ci, sums: { baseSalary:0, totalSalary:0, totalPay:0, labor:0, health:0, pension:0, empTotal:0 } };
         }
         personData[name].months.push(ms.month);
-        var dept = ci.dept >= 0 ? (row[ci.dept] || '').toString().trim() : '';
-        personData[name].dept = dept || personData[name].dept;
+        personData[name].dept = rawDept || personData[name].dept;
         // Accumulate for averaging
         var s = personData[name].sums;
         s.baseSalary += ci.baseSalary >= 0 ? (parseFloat(row[ci.baseSalary]) || 0) : 0;
@@ -3619,6 +3680,23 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
         s.pension += ci.pension >= 0 ? (parseFloat(row[ci.pension]) || 0) : 0;
         s.empTotal += ci.empTotal >= 0 ? (parseFloat(row[ci.empTotal]) || 0) : 0;
       }
+    });
+
+    // 跨月 dept backfill: 同名員工的早期月份 dept 為空 → 用後續月份補
+    var nameDeptMap = {};
+    Object.keys(monthEmployees).forEach(function(m) {
+      monthEmployees[m].forEach(function(e) {
+        if (e.dept && !nameDeptMap[e.name]) nameDeptMap[e.name] = e.dept;
+      });
+    });
+    Object.keys(monthEmployees).forEach(function(m) {
+      monthEmployees[m].forEach(function(e) {
+        if (!e.dept && nameDeptMap[e.name]) e.dept = nameDeptMap[e.name];
+      });
+    });
+    // personData dept 也補一次
+    Object.keys(personData).forEach(function(n) {
+      if (!personData[n].dept && nameDeptMap[n]) personData[n].dept = nameDeptMap[n];
     });
 
     // Year-end bonus
@@ -3682,8 +3760,34 @@ document.getElementById('salaryUploadBtn').addEventListener('click', async funct
       if (r.error) throw r.error;
     }
 
+    // 寫入月度資料 (finance_employees_monthly) — 案件狀態頁人均計算用
+    var monthlyRows = [];
+    Object.keys(monthEmployees).forEach(function(m) {
+      var mn = parseInt(m);
+      monthEmployees[m].forEach(function(e) {
+        monthlyRows.push({
+          fiscal_year: year,
+          month: mn,
+          name: e.name,
+          department: e.dept || null,
+          base_salary: Math.round(e.base),
+          bonus: 0,
+          deduct: 0,
+          salary_subtotal: Math.round(e.salary || e.base),
+          source_file: file.name,
+          office: deptToOffice(e.dept)
+        });
+      });
+    });
+    await sb.from('finance_employees_monthly').delete().eq('fiscal_year', year);
+    for (var j = 0; j < monthlyRows.length; j += 200) {
+      var mChunk = monthlyRows.slice(j, j + 200);
+      var mr = await sb.from('finance_employees_monthly').insert(mChunk);
+      if (mr.error) throw mr.error;
+    }
+
     employeeList = employees;
-    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！掃描 ' + monthSheets.length + ' 個月份，解析 ' + employees.length + ' 位員工薪資</div>';
+    document.getElementById('salaryMsg').innerHTML = '<div class="upload-msg success">上傳成功！掃描 ' + monthSheets.length + ' 個月份，解析 ' + employees.length + ' 位員工薪資（已同步月度資料 ' + monthlyRows.length + ' 筆）</div>';
     loadSalaryInfo();
 
     // Confirmed personnel changes (month-over-month within this year)
