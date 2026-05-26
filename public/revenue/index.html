@@ -3543,32 +3543,45 @@ var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
 var _lawyerRoleSet = null;  // lawyers 表 role IN ('lawyer','manager','admin') 的名字（純律師）
 var _lawyerPrimaryOffice = {};  // 律師 → 主要分所（在 _fetchAllCrmCases 推算）
 
-// 抓 lawyers 表 role IN ('lawyer','manager','admin') 的人（純律師類）
+// 律師權威名單 — 從 zhelu.tw/about 官網抓的 66 位律師（含合署/合夥/顧問/實習律師全部視為律師類）
+// 合署 vs 純律師再透過 PARTNER_LAWYERS 區分；不在這名單裡的薪資 row 視為法務/助理
+// TODO: 之後改成從 lawyers 表 + 維護 is_on_website flag，或直接同步官網 API
+var WEBSITE_LAWYERS = new Set([
+  // 台北所 (38)
+  '雷皓明','黃杰','孫少輔','許致維','劉明潔','方心瑜','張又仁','林桑羽','黃顯皓','柯雪莉',
+  '陳寧馨','林昀','張嘉淳','黃世欣','李家泓','徐品軒','蘇萱','林宜嫻','吳柏慶','蕭予馨',
+  '徐棠娜','劉誠夫','陳俊瑋','王怡婷','曾秉浩','李育哲','楊典翰','莊喬鈞','楊啓廷','張文祈',
+  '劉庭懿','秦薇妮','黃庭汶','陳彥銘','陳昱璇','葉欣瑩','謝宗蓉','林敬修',
+  // 桃園所 (8) — '王相為' 跟「王相爲」(unicode variant) 都收
+  '李杰峰','嚴心吟','張元毓','劉雅涵','李家徹','張佳榕','林品妘','王相為','王相爲',
+  // 新竹所 (4)
+  '陶光星','張家瑜','楊睿杰','葉芷羽',
+  // 台中所 (8)
+  '洪琬琪','李昭萱','許煜婕','陳璽仲','林佳穎','劉奕靖','李佳蓉','黃子菱',
+  // 台南所 (4)
+  '王湘閔','黃馨儀','黃書炫','姜奕成',
+  // 高雄所 (4)
+  '王郁萱','廖懿涵','陳映臻','蘇端雅'
+]);
+
+// 已停用：不再從 lawyers 表抓律師，改用 WEBSITE_LAWYERS。保留 stub 給其他地方呼叫不壞
 async function _loadLawyerRoles() {
   if (_lawyerRoleSet) return _lawyerRoleSet;
-  if (!sb) { _lawyerRoleSet = new Set(); return _lawyerRoleSet; }
-  var r = await sb.from('lawyers').select('name,role').in('role', ['lawyer','manager','admin']);
-  _lawyerRoleSet = new Set((r.data || []).map(function(x){return x.name;}));
+  _lawyerRoleSet = WEBSITE_LAWYERS;
   return _lawyerRoleSet;
 }
 
 // 把薪資表員工分類為「律師 / 法務 / 合署 / 其他」
-// e 是 finance_employees_monthly row（含 base_salary）。
-// 邏輯：
-//  1. 合署優先 (partnerSet)
-//  2. lawyers 表 role=lawyer/manager/admin → 律師
-//  3. lawyers 表 role=legal_staff → 法務
-//  4. 不在 lawyers 表 → 用 base_salary 推測（≥65000 律師、否則法務）— lawyers 表沒同步時的 fallback
-//     65k 門檻參考 115/5 實況：在這之上的 7 人都是律師（林宜嫻 89k 等），之下開始混雜資深法務
-function LAWYER_SALARY_THRESHOLD() { return 65000; }
+// e 是 finance_employees_monthly row。
+// 邏輯（以 zhelu.tw/about 官網律師名單為權威）：
+//  1. partnerSet（合署）→ 'partner'
+//  2. WEBSITE_LAWYERS（官網律師）→ 'lawyer'
+//  3. 其餘 office 非空 → 'legalStaff'（法務/助理）
 function _classifyEmployee(e, partnerSet, lawyerSet, legalStaffSet) {
   if (!e.office) return null;
   if (partnerSet.has(e.name)) return 'partner';
-  if (lawyerSet.has(e.name)) return 'lawyer';
-  if (legalStaffSet.has(e.name)) return 'legalStaff';
-  // 不在 lawyers 表 → 用薪資推測
-  var base = Number(e.base_salary || 0);
-  return base >= LAWYER_SALARY_THRESHOLD() ? 'lawyer' : 'legalStaff';
+  if (WEBSITE_LAWYERS.has(e.name)) return 'lawyer';
+  return 'legalStaff';
 }
 
 // 抓全部歷史人力快照 → index by '民國年-月' → { lawyerTotal, lawyerPerOffice }
