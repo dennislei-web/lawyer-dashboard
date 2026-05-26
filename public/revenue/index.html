@@ -1436,8 +1436,8 @@
                 <th class="text-right" style="border-left:1px solid var(--border);">委任中合計</th>
                 <th class="text-right" style="padding-left:14px;" title="快照月份在職律師人數（lawyers 表 role=lawyer/manager/admin，排除法務、合署）">⚖️ 律師</th>
                 <th class="text-right" title="律師承辦中 ÷ 律師人數">人均</th>
-                <th class="text-right" style="padding-left:14px;" title="快照月份法務+助理人數（role=legal_staff + 不在 lawyers 表的薪資 row）">📋 法務</th>
-                <th class="text-right" title="法務承辦中 ÷ 法務人數">人均</th>
+                <th class="text-right" style="padding-left:14px;" title="實際有 appointed 案件分配的法務 distinct 數（不算沒承辦案件的法務）">📋 法務 (有承辦)</th>
+                <th class="text-right" title="法務承辦中 ÷ 有承辦的法務人數">人均</th>
                 <th class="text-right" style="padding-left:14px;border-left:1px solid var(--border);">待結案</th>
                 <th class="text-right">已結案</th>
                 <th class="text-right" style="border-left:1px solid var(--border);">結案合計</th>
@@ -4070,6 +4070,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
   var inP = {pure_firm:0, mixed:0, pure_partner:0, legal_staff_only:0, no_one:0};
+  var activeLegalStaff = new Set();  // 在 appointed 案件中實際分配到的法務 distinct 名單（不論案件 owner type）
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) { c.notyet++; return; }
@@ -4077,6 +4078,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     if (s === 'appointed') {
       var owner = _caseOwnerType(r, asofDate);
       inP[owner] = (inP[owner] || 0) + 1;
+      (r._handlingLegal || []).forEach(function(n){ activeLegalStaff.add(n); });
     }
   });
 
@@ -4120,22 +4122,16 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     }
     if (headcount.fallback) denomLabel = '⚠️ 用 ' + headcount.fallback + ' 替代（無對應月份資料）・律師 ' + lawyerDenom + ' 人';
   }
-  // 法務分母
-  var legalDenom = 0;
-  if (headcount) {
-    if (officeFilter) {
-      legalDenom = (headcount.legalStaffPerOffice || {})[officeFilter] || 0;
-    } else {
-      legalDenom = headcount.legalStaffTotal || 0;
-    }
-  }
+  // 法務分母 = 該範圍內「實際有 appointed 案件分配」的 distinct 法務人數
+  // （rows 已套接案所/部門 filter，activeLegalStaff 是這些案件涉及的法務 union）
+  var legalDenom = activeLegalStaff.size;
   if (lawyerDenom > 0) {
     var perLawyer = inP.pure_firm / lawyerDenom;
     document.getElementById('casesKpiPerLawyer').textContent = perLawyer.toFixed(1);
     var perLegalLine = '';
     if (legalDenom > 0) {
       var perLegal = (inP.legal_staff_only / legalDenom).toFixed(1);
-      perLegalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 人 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
+      perLegalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 位有承辦的法務 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
     }
     document.getElementById('casesKpiPerLawyerSub').innerHTML =
       '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + '<br>'
@@ -4249,9 +4245,10 @@ function _renderCasesByOffice(rows, statesAtAsof, highlightOffice) {
 function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, headcount, asofDate) {
   // 一般案：算 承辦中 / 待結案 / 已結案 三類（不顯示未委任/未成案/取消）
   // 承辦中再細分為「律師承辦 (pure_firm)」「法務承辦 (legal_staff_only)」用於人均
+  // 每所追蹤「實際有承辦案件的 distinct 法務 set」當法務人均分母
   var byOffice = {};
   function ensureOffice(o){
-    if (!byOffice[o]) byOffice[o] = {inProgress:0, pureFirm:0, legalStaffOnly:0, pending:0, closed:0, la_appointed:0, total:0};
+    if (!byOffice[o]) byOffice[o] = {inProgress:0, pureFirm:0, legalStaffOnly:0, pending:0, closed:0, la_appointed:0, total:0, activeLegal: new Set()};
   }
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
@@ -4263,6 +4260,7 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
       var owner = _caseOwnerType(r, asofDate);
       if (owner === 'pure_firm') byOffice[office].pureFirm++;
       else if (owner === 'legal_staff_only') byOffice[office].legalStaffOnly++;
+      (r._handlingLegal || []).forEach(function(n){ byOffice[office].activeLegal.add(n); });
     }
     else if (s === 'pending') byOffice[office].pending++;
     else if (s === 'closed')  byOffice[office].closed++;
@@ -4278,7 +4276,6 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
     byOffice[office].total++;
   });
   var lawyerPerOffice = (headcount && headcount.lawyerPerOffice) || {};
-  var legalStaffPerOffice = (headcount && headcount.legalStaffPerOffice) || {};
   function dashOrNum(v) { return v > 0 ? v : '<span style="color:var(--text-muted)">-</span>'; }
   function ratioStr(num, denom) {
     return denom > 0 ? (num / denom).toFixed(1) : '<span style="color:var(--text-muted)">-</span>';
@@ -4288,7 +4285,7 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
     var engaged = s.inProgress + s.la_appointed;
     var closure = s.pending + s.closed;
     var lawyers = lawyerPerOffice[o] || 0;
-    var legals = legalStaffPerOffice[o] || 0;
+    var legals = s.activeLegal.size;  // 實際有承辦案件的法務 distinct 數
     return '<tr><td>'+o+'</td>'
       + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
       + '<td class="text-right" style="color:#06b6d4;">'+s.la_appointed.toLocaleString()+'</td>'
@@ -4549,10 +4546,12 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory) {
   var seriesC = { firm:[], partner:[], la:[] };  // 已完成
   var seriesPureFirm = [];      // 律師承辦中（owner=pure_firm）
   var seriesLegalStaff = [];    // 法務承辦中（owner=legal_staff_only）
+  var seriesActiveLegal = [];   // 每月「實際有承辦案件的法務人數」(distinct)
   months.forEach(function(d){
     var c  = {firm:0, partner:0, la:0};  // 仍在處理中（stock）
     var cc = {firm:0, partner:0, la:0};  // 已處理完成累積（flow，曾經 closed/unconcluded 過）
     var pureFirmCount = 0, legalStaffCount = 0;
+    var activeLegalSet = new Set();
     rows.forEach(function(r){
       var owner = _caseOwnerType(r, d);
       var isPartner = (owner === 'pure_partner' || owner === 'mixed');
@@ -4562,6 +4561,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory) {
         if (isPartner) c.partner++; else c.firm++;
         if (owner === 'pure_firm') pureFirmCount++;
         else if (owner === 'legal_staff_only') legalStaffCount++;
+        (r._handlingLegal || []).forEach(function(n){ activeLegalSet.add(n); });
       }
       if (r._firstDoneAt && r._firstDoneAt <= d) {
         if (isPartner) cc.partner++; else cc.firm++;
@@ -4576,6 +4576,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory) {
     seriesC.firm.push(cc.firm); seriesC.partner.push(cc.partner); seriesC.la.push(cc.la);
     seriesPureFirm.push(pureFirmCount);
     seriesLegalStaff.push(legalStaffCount);
+    seriesActiveLegal.push(activeLegalSet.size);
   });
 
   // 共用 tooltip footer (顯示總量)
@@ -4638,11 +4639,8 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory) {
     if (!hc) return null;
     return officeFilter ? (hc.lawyerPerOffice[officeFilter] || 0) : hc.lawyerTotal;
   });
-  var legalCounts = rocKeys.map(function(k){
-    var hc = (headcountHistory || {})[k];
-    if (!hc) return null;
-    return officeFilter ? (hc.legalStaffPerOffice[officeFilter] || 0) : hc.legalStaffTotal;
-  });
+  // 法務分母改用每月實際有承辦案件的 distinct 法務 count（不用 headcountHistory）
+  var legalCounts = seriesActiveLegal;
   var lawyerRatios = seriesPureFirm.map(function(n, i){
     var d = lawyerCounts[i];
     return (d && d > 0) ? +(n / d).toFixed(2) : null;
