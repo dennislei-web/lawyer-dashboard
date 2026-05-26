@@ -4178,6 +4178,30 @@ function _renderCasesTrend(rows, asofDate) {
 
   if (charts.casesTrend) charts.casesTrend.destroy();
   var ctx = document.getElementById('casesTrendChart').getContext('2d');
+  // 月份多時跳著畫 label 避免擁擠
+  var labelStride = monthKeys.length > 36 ? 3 : (monthKeys.length > 18 ? 2 : 1);
+  var pointLabelPlugin = {
+    id: 'casesTrendPointLabel',
+    afterDatasetsDraw: function(chart) {
+      var ctx2 = chart.ctx;
+      ctx2.save();
+      ctx2.font = 'bold 10px sans-serif';
+      ctx2.textAlign = 'center';
+      chart.data.datasets.forEach(function(ds, di) {
+        var meta = chart.getDatasetMeta(di);
+        ctx2.fillStyle = ds.borderColor;
+        meta.data.forEach(function(pt, idx) {
+          if (idx % labelStride !== 0 && idx !== meta.data.length - 1) return;
+          var v = ds.data[idx];
+          if (v == null) return;
+          // 新委任在點上方、結案+待結案在點下方，避免重疊
+          var yOffset = di === 0 ? -6 : 12;
+          ctx2.fillText(v, pt.x, pt.y + yOffset);
+        });
+      });
+      ctx2.restore();
+    }
+  };
   charts.casesTrend = new Chart(ctx, {
     type: 'line',
     data: {
@@ -4185,13 +4209,13 @@ function _renderCasesTrend(rows, asofDate) {
       datasets: [
         { label: '新委任', data: newCaseData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true },
         { label: '結案+待結案', data: combinedData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true,
-          // 把 breakdown 暫存在 dataset，tooltip 從 dataIndex 撈
           _breakdown: { closed: closedData, pending: pendingData }
         }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 18, bottom: 14 } },
       plugins: {
         legend: { position: 'top' },
         tooltip: {
@@ -4208,7 +4232,8 @@ function _renderCasesTrend(rows, asofDate) {
         }
       },
       scales: { y: { beginAtZero: true } }
-    }
+    },
+    plugins: [pointLabelPlugin]
   });
 }
 
