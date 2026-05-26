@@ -417,7 +417,7 @@ async function loadUserProfile() {
     currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
     if (realLawyer.role === 'admin') {
       try {
-        var all = await sb.from('lawyers').select('id,name,role,can_upload,dashboard_access,is_active').order('name');
+        var all = await sb.from('lawyers').select('id,name,email,role,can_upload,dashboard_access,feature_access,is_active').order('name');
         allLawyersForViewAs = all.data || [];
       } catch (e) { allLawyersForViewAs = []; }
     }
