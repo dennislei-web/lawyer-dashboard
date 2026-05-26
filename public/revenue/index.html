@@ -3595,19 +3595,20 @@ var LAWYER_HEADCOUNT_OVERRIDE = {
 };
 
 // 把薪資表員工分類為「律師 / 法務 / 合署 / 其他」
-// e 是 finance_employees_monthly row。
-// 邏輯（以 zhelu.tw/about 官網律師名單為權威）：
-//  1. WEBSITE_PARTNERS（官網 合署/合夥/顧問 律師）→ 'partner'
-//     ※ 合署律師薪資由合署另結，幾乎不會在 finance_employees_monthly 出現
-//        留這個 check 是為了一致性 + 若未來某個合署有薪資 row 也不會被誤算進「律師」
-//  2. partnerSet（程式碼歷史名單，多 3 個司法官合署受雇人員）→ 'partner'
-//  3. WEBSITE_LAWYERS（官網律師）→ 'lawyer'
-//  4. 其餘 office 非空 → 'legalStaff'（法務/助理）
-function _classifyEmployee(e, partnerSet, lawyerSet, legalStaffSet) {
+// e 是 finance_employees_monthly row（含 base_salary），asof 是判斷日期。
+// 邏輯：
+//  1. _isPartnerAt(name, asof) → 'partner'
+//     用 PARTNER_SINCE 日期判斷，陳璽仲等資深合署在「轉合署前」仍歸 lawyer
+//  2. WEBSITE_LAWYERS（官網律師名單）→ 'lawyer'
+//  3. base_salary >= 65000 → 'lawyer'
+//     歷史律師 fallback —— 已離職律師不在現在的官網名單，但本薪 >= 65k 推測為當時律師
+//     65k 門檻保守（中位法務在 50k 左右）；對現在的人沒影響（都已在 WEBSITE_LAWYERS）
+//  4. 其餘 office 非空 → 'legalStaff'（法務/助理/支援）
+function _classifyEmployee(e, asof) {
   if (!e.office) return null;
-  if (WEBSITE_PARTNERS.has(e.name)) return 'partner';
-  if (partnerSet.has(e.name)) return 'partner';
+  if (_isPartnerAt(e.name, asof)) return 'partner';
   if (WEBSITE_LAWYERS.has(e.name)) return 'lawyer';
+  if (Number(e.base_salary || 0) >= 65000) return 'lawyer';
   return 'legalStaff';
 }
 
@@ -3632,9 +3633,6 @@ async function _loadHeadcountHistory() {
     if (r.data.length < BATCH) break;
     from += BATCH;
   }
-  var legalSet = _legalStaffSet || new Set();
-  var lawyerSet = _lawyerRoleSet || new Set();
-  var partnerSet = _partnerSet || new Set();
   var byYM = {};
   // 為了 override 不雙算，每個 (ym) 維護一個 lawyerNames set
   function ensureYM(k) {
@@ -3645,10 +3643,15 @@ async function _loadHeadcountHistory() {
     };
     return byYM[k];
   }
+  // 民國年-月 → 該月底 Date (給 _isPartnerAt 用)
+  function endOfMonth(fy, mn) {
+    return new Date(fy + 1911, mn, 0, 23, 59, 59);  // mn (1-12) → Date(year, mn, 0) = 上個月最後一天 = mn 月最後一天
+  }
   all.forEach(function(e) {
     var k = e.fiscal_year + '-' + e.month;
     var b = ensureYM(k);
-    var cls = _classifyEmployee(e, partnerSet, lawyerSet, legalSet);
+    var asof = endOfMonth(e.fiscal_year, e.month);
+    var cls = _classifyEmployee(e, asof);
     if (cls === 'lawyer') {
       b.lawyerTotal++;
       b.lawyerPerOffice[e.office] = (b.lawyerPerOffice[e.office] || 0) + 1;
@@ -3714,12 +3717,7 @@ async function _loadHeadcountSnapshot(asofDate) {
       fallback = rocYear + '年' + month + '月';
     }
   }
-  await _loadLegalStaff();
-  await _loadLawyerRoles();
   await _loadPartners();
-  var legalSet = _legalStaffSet || new Set();
-  var lawyerSet = _lawyerRoleSet || new Set();
-  var partnerSet = _partnerSet || new Set();
   var perOffice = {}, lawyerPerOffice = {}, legalStaffPerOffice = {};
   var lawyerNames = new Set();
   var total = 0, lawyerTotal = 0, legalStaffTotal = 0;
@@ -3727,7 +3725,7 @@ async function _loadHeadcountSnapshot(asofDate) {
     if (!e.office) return;
     perOffice[e.office] = (perOffice[e.office] || 0) + 1;
     total++;
-    var cls = _classifyEmployee(e, partnerSet, lawyerSet, legalSet);
+    var cls = _classifyEmployee(e, asofDate);
     if (cls === 'lawyer') {
       lawyerPerOffice[e.office] = (lawyerPerOffice[e.office] || 0) + 1;
       lawyerTotal++;
