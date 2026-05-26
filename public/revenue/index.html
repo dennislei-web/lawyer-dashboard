@@ -1728,7 +1728,7 @@ async function showDashboard() {
   renderRevenueSyncStatus();
   populateOfficeFilters(); initYearButtons(); initMonthBtns();
 
-  // 每日累積 tab — 僅 dennis.lei@010.tw 可見
+  // 每日累積 tab — 由 feature_access.revenue_daily 控制（在帳號管理頁勾選）
   var dailyTab = document.getElementById('tab-daily');
   if (dailyTab) dailyTab.style.display = isDailyAdmin() ? '' : 'none';
 
@@ -3543,8 +3543,21 @@ var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
 var _lawyerRoleSet = null;  // lawyers 表 role IN ('lawyer','manager','admin') 的名字（純律師）
 var _lawyerPrimaryOffice = {};  // 律師 → 主要分所（在 _fetchAllCrmCases 推算）
 
+// 官網標題含「合署/合夥/顧問」的 15 位 = 合署律師（薪資由合署另結、不會在 finance_employees_monthly）
+// 這名單是分類器的權威合署 set；案件 owner 歷史判斷另用 PARTNER_SINCE (有日期)
+// 註：黃世欣、蘇萱 在這名單但 PARTNER_SINCE 還沒有 → 案件側 owner_type 會誤判他們為「純律師」
+//     待確認轉合署日期後補進 PARTNER_SINCE
+var WEBSITE_PARTNERS = new Set([
+  // 合夥律師 (1)
+  '孫少輔',
+  // 資深顧問律師 (5)
+  '許致維','劉明潔','方心瑜','黃顯皓','柯雪莉',
+  // 資深合署律師 (9)
+  '林昀','黃世欣','蘇萱','吳柏慶','蕭予馨','徐棠娜','李昭萱','許煜婕','陳璽仲'
+]);
+
 // 律師權威名單 — 從 zhelu.tw/about 官網抓的 66 位律師（含合署/合夥/顧問/實習律師全部視為律師類）
-// 合署 vs 純律師再透過 PARTNER_LAWYERS 區分；不在這名單裡的薪資 row 視為法務/助理
+// 合署 vs 純律師再透過 WEBSITE_PARTNERS 區分；不在這名單裡的薪資 row 視為法務/助理
 // TODO: 之後改成從 lawyers 表 + 維護 is_on_website flag，或直接同步官網 API
 var WEBSITE_LAWYERS = new Set([
   // 台北所 (38)
@@ -3574,11 +3587,15 @@ async function _loadLawyerRoles() {
 // 把薪資表員工分類為「律師 / 法務 / 合署 / 其他」
 // e 是 finance_employees_monthly row。
 // 邏輯（以 zhelu.tw/about 官網律師名單為權威）：
-//  1. partnerSet（合署）→ 'partner'
-//  2. WEBSITE_LAWYERS（官網律師）→ 'lawyer'
-//  3. 其餘 office 非空 → 'legalStaff'（法務/助理）
+//  1. WEBSITE_PARTNERS（官網 合署/合夥/顧問 律師）→ 'partner'
+//     ※ 合署律師薪資由合署另結，幾乎不會在 finance_employees_monthly 出現
+//        留這個 check 是為了一致性 + 若未來某個合署有薪資 row 也不會被誤算進「律師」
+//  2. partnerSet（程式碼歷史名單，多 3 個司法官合署受雇人員）→ 'partner'
+//  3. WEBSITE_LAWYERS（官網律師）→ 'lawyer'
+//  4. 其餘 office 非空 → 'legalStaff'（法務/助理）
 function _classifyEmployee(e, partnerSet, lawyerSet, legalStaffSet) {
   if (!e.office) return null;
+  if (WEBSITE_PARTNERS.has(e.name)) return 'partner';
   if (partnerSet.has(e.name)) return 'partner';
   if (WEBSITE_LAWYERS.has(e.name)) return 'lawyer';
   return 'legalStaff';
@@ -4629,7 +4646,7 @@ document.getElementById('casesAsofTodayBtn').addEventListener('click', function(
   loadCasesPage();
 });
 
-// ═══ DAILY CUMULATIVE (僅 dennis) ═══
+// ═══ DAILY CUMULATIVE (由 feature_access.revenue_daily 控制) ═══
 var DAILY_STATE = {
   metric: 'payment',
   year: null,
@@ -4645,8 +4662,11 @@ var DAILY_STATE = {
 };
 
 function isDailyAdmin() {
-  var email = ((currentUser && currentUser.email) || (currentLawyer && currentLawyer.email) || '').toLowerCase();
-  return email === 'dennis.lei@010.tw';
+  // 由 lawyers.feature_access.revenue_daily 控制（在「帳號管理」頁逐一勾選）
+  var who = currentLawyer;
+  if (!who) return false;
+  var arr = Array.isArray(who.feature_access) ? who.feature_access : [];
+  return arr.indexOf('revenue_daily') > -1;
 }
 
 function dailyAvailableYears() {
