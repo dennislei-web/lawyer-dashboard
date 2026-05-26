@@ -3553,14 +3553,22 @@ async function _loadLawyerRoles() {
 }
 
 // 把薪資表員工分類為「律師 / 法務 / 合署 / 其他」
-// e 是 finance_employees_monthly row。回傳 'lawyer' | 'legalStaff' | 'partner' | null（不分類，例如沒 office）
+// e 是 finance_employees_monthly row（含 base_salary）。
+// 邏輯：
+//  1. 合署優先 (partnerSet)
+//  2. lawyers 表 role=lawyer/manager/admin → 律師
+//  3. lawyers 表 role=legal_staff → 法務
+//  4. 不在 lawyers 表 → 用 base_salary 推測（≥65000 律師、否則法務）— lawyers 表沒同步時的 fallback
+//     65k 門檻參考 115/5 實況：在這之上的 7 人都是律師（林宜嫻 89k 等），之下開始混雜資深法務
+function LAWYER_SALARY_THRESHOLD() { return 65000; }
 function _classifyEmployee(e, partnerSet, lawyerSet, legalStaffSet) {
   if (!e.office) return null;
   if (partnerSet.has(e.name)) return 'partner';
   if (lawyerSet.has(e.name)) return 'lawyer';
   if (legalStaffSet.has(e.name)) return 'legalStaff';
-  // 不在 lawyers 表但薪資表有 office → 推測為法務/助理（雄所的董沐穎/楊曜綾/楊喬伊這類）
-  return 'legalStaff';
+  // 不在 lawyers 表 → 用薪資推測
+  var base = Number(e.base_salary || 0);
+  return base >= LAWYER_SALARY_THRESHOLD() ? 'lawyer' : 'legalStaff';
 }
 
 // 抓全部歷史人力快照 → index by '民國年-月' → { lawyerTotal, lawyerPerOffice }
@@ -3577,7 +3585,7 @@ async function _loadHeadcountHistory() {
   var from = 0, BATCH = 1000;
   while (true) {
     var r = await sb.from('finance_employees_monthly')
-      .select('name,office,fiscal_year,month')
+      .select('name,office,fiscal_year,month,base_salary')
       .range(from, from + BATCH - 1);
     if (!r.data || !r.data.length) break;
     all = all.concat(r.data);
@@ -3616,7 +3624,7 @@ async function _loadHeadcountSnapshot(asofDate) {
   var month = asofDate.getMonth() + 1;
   // 嘗試精準月份；找不到就退到該年最近月份；再找不到就最近年度
   async function fetchYM(y, m) {
-    var r = await sb.from('finance_employees_monthly').select('name,office,department').eq('fiscal_year', y).eq('month', m);
+    var r = await sb.from('finance_employees_monthly').select('name,office,department,base_salary').eq('fiscal_year', y).eq('month', m);
     return r.data || [];
   }
   var data = await fetchYM(rocYear, month);
@@ -3624,7 +3632,7 @@ async function _loadHeadcountSnapshot(asofDate) {
   if (!data.length) {
     // 找該年度最近月份
     var rAny = await sb.from('finance_employees_monthly')
-      .select('name,office,department,month').eq('fiscal_year', rocYear).order('month', { ascending: false }).limit(500);
+      .select('name,office,department,month,base_salary').eq('fiscal_year', rocYear).order('month', { ascending: false }).limit(500);
     if (rAny.data && rAny.data.length) {
       var latestM = rAny.data[0].month;
       data = rAny.data.filter(function(x){ return x.month === latestM; });
@@ -3635,7 +3643,7 @@ async function _loadHeadcountSnapshot(asofDate) {
   if (!data.length) {
     // 找最近年度
     var rLatest = await sb.from('finance_employees_monthly')
-      .select('name,office,department,fiscal_year,month').order('fiscal_year', { ascending: false }).order('month', { ascending: false }).limit(500);
+      .select('name,office,department,fiscal_year,month,base_salary').order('fiscal_year', { ascending: false }).order('month', { ascending: false }).limit(500);
     if (rLatest.data && rLatest.data.length) {
       var lY = rLatest.data[0].fiscal_year, lM = rLatest.data[0].month;
       data = rLatest.data.filter(function(x){ return x.fiscal_year === lY && x.month === lM; });
