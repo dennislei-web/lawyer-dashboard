@@ -1500,6 +1500,14 @@
         </div>
       </div>
 
+      <!-- 律師人均承辦中 月度快照 -->
+      <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr;">
+        <div class="chart-card" style="min-width:0;">
+          <div class="chart-title">⚖️ 律師人均承辦中 — 月底快照（過去 5 年）<span class="text-muted" style="font-size:0.78rem;margin-left:8px;">律師承辦中案件 ÷ 該月在職律師人數 ・ 跟著上方接案所/部門 filter</span></div>
+          <div class="chart-container" style="height:320px"><canvas id="casesPerLawyerSnapshotChart"></canvas></div>
+        </div>
+      </div>
+
       <!-- 結案週期 vs 進案週期 並列對照（50/50）-->
       <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr 1fr;">
         <div class="chart-card" style="min-width:0;">
@@ -3532,6 +3540,41 @@ var _legalStaffSet = null;  // 法務（含委前法務），律師排行排除
 var _partnerSet = null;     // 合署律師，律師排行排除 + KPI 分開算
 var _lawyerPrimaryOffice = {};  // 律師 → 主要分所（在 _fetchAllCrmCases 推算）
 
+// 抓全部歷史人力快照 → index by '民國年-月' → { lawyerTotal, lawyerPerOffice }
+// 用於律師人均月度折線圖
+var _headcountHistoryCache = null;
+async function _loadHeadcountHistory() {
+  if (_headcountHistoryCache) return _headcountHistoryCache;
+  if (!sb) return {};
+  await _loadLegalStaff();
+  await _loadPartners();
+  // 分頁抓全部（5641 筆 / 1000 batch ≈ 6 round）
+  var all = [];
+  var from = 0, BATCH = 1000;
+  while (true) {
+    var r = await sb.from('finance_employees_monthly')
+      .select('name,office,fiscal_year,month')
+      .range(from, from + BATCH - 1);
+    if (!r.data || !r.data.length) break;
+    all = all.concat(r.data);
+    if (r.data.length < BATCH) break;
+    from += BATCH;
+  }
+  var legalSet = _legalStaffSet || new Set();
+  var partnerSet = _partnerSet || new Set();
+  var byYM = {};
+  all.forEach(function(e) {
+    var k = e.fiscal_year + '-' + e.month;
+    if (!byYM[k]) byYM[k] = { lawyerTotal: 0, lawyerPerOffice: {} };
+    if (e.office && !legalSet.has(e.name) && !partnerSet.has(e.name)) {
+      byYM[k].lawyerTotal++;
+      byYM[k].lawyerPerOffice[e.office] = (byYM[k].lawyerPerOffice[e.office] || 0) + 1;
+    }
+  });
+  _headcountHistoryCache = byYM;
+  return byYM;
+}
+
 // 抓某個快照月份的「在職人力」（按接案所）
 // 回傳 { perOffice: {台北所: N, ...}, total, lawyerPerOffice: {...}, lawyerTotal, fiscalYear, month, fallback }
 // lawyer = office IS NOT NULL ∩ 不在法務 set ∩ 不在合署 set ∩ 不在司法官合署 set
@@ -3876,8 +3919,9 @@ async function loadCasesPage() {
   });
   var officeChartStates = _statesAtTime(officeChartRows, asofDate);
 
-  // 快照月份的人力數據（按接案所）
+  // 快照月份的人力數據（按接案所）+ 5 年人力快照歷史（給人均月度折線圖）
   var headcount = await _loadHeadcountSnapshot(asofDate);
+  var headcountHistory = await _loadHeadcountHistory();
 
   // 先渲染輕量的 KPI 跟表格（用戶優先看到）
   _renderCasesKpi(filtered, statesAtAsof, asofDate, isToday, legalAdvisors, statesAtAsofLA, headcount);
@@ -3889,7 +3933,7 @@ async function loadCasesPage() {
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
   // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
-  setTimeout(function(){ _renderCasesSnapshot(filtered, legalAdvisors); }, 50);
+  setTimeout(function(){ _renderCasesSnapshot(filtered, legalAdvisors, headcountHistory); }, 50);
 }
 
 function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAtAsofLA, headcount) {
@@ -4328,11 +4372,12 @@ function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
 
 // 月底存量演變：過去 5 年每月底快照 stacked area
 // 維度：所內 6 狀態 + 合署（任一狀態）+ 法律顧問（獨立維度）
-function _renderCasesSnapshot(rows, laRows) {
+function _renderCasesSnapshot(rows, laRows, headcountHistory) {
   var now = new Date();
   var startY = now.getFullYear() - 5, startM = now.getMonth();
   var labels = [];
   var months = [];
+  var rocKeys = [];  // 民國年-月 key 對應每個 label
   for (var y = startY; y <= now.getFullYear(); y++) {
     var mStart = (y === startY) ? startM : 0;
     var mEnd   = (y === now.getFullYear()) ? now.getMonth() : 11;
@@ -4340,15 +4385,18 @@ function _renderCasesSnapshot(rows, laRows) {
       var d = new Date(y, m + 1, 0, 23, 59, 59);
       labels.push(y + '-' + ('0'+(m+1)).slice(-2));
       months.push(d);
+      rocKeys.push((y - 1911) + '-' + (m + 1));
     }
   }
   // 兩組 series：仍在處理中 (appointed) vs 已處理完成 (closed + unconcluded)
   // 每組 3 個 stack：單純所內 / 合署 / 法顧
   var series  = { firm:[], partner:[], la:[] };  // 仍在處理中
   var seriesC = { firm:[], partner:[], la:[] };  // 已完成
+  var seriesPureFirm = [];  // 律師承辦中（不含法務、合署）→ 給人均圖當分子
   months.forEach(function(d){
     var c  = {firm:0, partner:0, la:0};  // 仍在處理中（stock）
     var cc = {firm:0, partner:0, la:0};  // 已處理完成累積（flow，曾經 closed/unconcluded 過）
+    var pureFirmCount = 0;
     rows.forEach(function(r){
       var owner = _caseOwnerType(r, d);
       var isPartner = (owner === 'pure_partner' || owner === 'mixed');
@@ -4356,6 +4404,7 @@ function _renderCasesSnapshot(rows, laRows) {
       var s = _stateAtTime(r, d);
       if (s === 'appointed') {
         if (isPartner) c.partner++; else c.firm++;
+        if (owner === 'pure_firm') pureFirmCount++;
       }
       if (r._firstDoneAt && r._firstDoneAt <= d) {
         if (isPartner) cc.partner++; else cc.firm++;
@@ -4368,6 +4417,7 @@ function _renderCasesSnapshot(rows, laRows) {
     });
     series.firm.push(c.firm);   series.partner.push(c.partner);   series.la.push(c.la);
     seriesC.firm.push(cc.firm); seriesC.partner.push(cc.partner); seriesC.la.push(cc.la);
+    seriesPureFirm.push(pureFirmCount);
   });
 
   // 共用 tooltip footer (顯示總量)
@@ -4421,6 +4471,46 @@ function _renderCasesSnapshot(rows, laRows) {
         title: { display: true, text: '曾經 closed/unconcluded 的案件累積（含後來 re-open 的）— 只增不減', font: { size: 11 }, color: '#94a3b8' }
       })
     })
+  });
+
+  // 圖 3：律師人均承辦中 — 月底快照
+  var officeFilter = document.getElementById('casesOfficeFilter').value;
+  var lawyerCounts = rocKeys.map(function(k){
+    var hc = (headcountHistory || {})[k];
+    if (!hc) return null;
+    return officeFilter ? (hc.lawyerPerOffice[officeFilter] || 0) : hc.lawyerTotal;
+  });
+  var ratios = seriesPureFirm.map(function(n, i){
+    var d = lawyerCounts[i];
+    return (d && d > 0) ? +(n / d).toFixed(2) : null;
+  });
+  // tooltip 額外欄位
+  var bdAfterLabel = function(item) {
+    if (item.dataset.label !== '人均承辦中') return;
+    var i = item.dataIndex;
+    return ['　案件數: ' + (seriesPureFirm[i] || 0), '　律師人數: ' + (lawyerCounts[i] === null ? '無資料' : lawyerCounts[i])];
+  };
+  if (charts.casesPerLawyerSnapshot) charts.casesPerLawyerSnapshot.destroy();
+  charts.casesPerLawyerSnapshot = new Chart(document.getElementById('casesPerLawyerSnapshotChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '人均承辦中', data: ratios, borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.18)', borderWidth: 2.5, fill: true, tension: 0.3, pointRadius: 2.5, pointHoverRadius: 5, spanGaps: true }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false, callbacks: { afterLabel: bdAfterLabel } },
+        title: { display: true, text: (officeFilter ? officeFilter : '全所') + ' ・ 排除法務/合署/支援部門', font: { size: 11 }, color: '#94a3b8' }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: '人均承辦中 (件 / 人)', color: '#94a3b8' } }
+      },
+      interaction: { mode: 'index', intersect: false }
+    }
   });
 }
 
