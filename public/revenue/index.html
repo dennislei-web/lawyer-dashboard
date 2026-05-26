@@ -3934,17 +3934,28 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
   // 律師人均承辦中 = inP.pure_firm / 該快照月律師人數
-  if (headcount && headcount.lawyerTotal > 0) {
-    var perLawyer = inP.pure_firm / headcount.lawyerTotal;
+  // 若有接案所 filter → 分母用該所人數；無 filter → 全所總數
+  var officeFilter = document.getElementById('casesOfficeFilter').value;
+  var lawyerDenom = 0, denomLabel = '';
+  if (headcount) {
+    if (officeFilter) {
+      lawyerDenom = (headcount.lawyerPerOffice || {})[officeFilter] || 0;
+      denomLabel = headcount.fiscalYear + '年' + headcount.month + '月 ' + officeFilter + '在職律師 ' + lawyerDenom + ' 人';
+    } else {
+      lawyerDenom = headcount.lawyerTotal;
+      denomLabel = headcount.fiscalYear + '年' + headcount.month + '月全所在職律師 ' + lawyerDenom + ' 人';
+    }
+    if (headcount.fallback) denomLabel = '⚠️ 用 ' + headcount.fallback + ' 替代（無對應月份資料）・律師 ' + lawyerDenom + ' 人';
+  }
+  if (lawyerDenom > 0) {
+    var perLawyer = inP.pure_firm / lawyerDenom;
     document.getElementById('casesKpiPerLawyer').textContent = perLawyer.toFixed(1);
-    var snapLabel = headcount.fiscalYear + '年' + headcount.month + '月在職律師 ' + headcount.lawyerTotal + ' 人';
-    if (headcount.fallback) snapLabel = '⚠️ 用 ' + headcount.fallback + ' 替代（無對應月份資料）・律師 ' + headcount.lawyerTotal + ' 人';
     document.getElementById('casesKpiPerLawyerSub').innerHTML =
-      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + headcount.lawyerTotal + ' 人<br>'
-      + '<span style="opacity:.7;font-size:0.78rem;">' + snapLabel + '</span>';
+      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人<br>'
+      + '<span style="opacity:.7;font-size:0.78rem;">' + denomLabel + '</span>';
   } else {
     document.getElementById('casesKpiPerLawyer').textContent = '-';
-    document.getElementById('casesKpiPerLawyerSub').textContent = '無人力資料';
+    document.getElementById('casesKpiPerLawyerSub').textContent = officeFilter ? (officeFilter + ' 該月無人力資料') : '無人力資料';
   }
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
   document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
