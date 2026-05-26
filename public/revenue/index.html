@@ -3754,13 +3754,63 @@ async function _loadHeadcountSnapshot(asofDate) {
   };
 }
 
+// _lawyersMeta: name → { is_legal: bool, departed_at: Date|null }
+//   departed_at = null → 在職（不過濾）
+//   departed_at = Date → asof >= departed_at 後過濾
+//   is_active=false 但 departed_at 為 NULL → 用 sentinel 1900-01-01（永遠視為已離職）
+var _lawyersMeta = null;
+
 async function _loadLegalStaff() {
   if (_legalStaffSet) return _legalStaffSet;
-  if (!sb) { _legalStaffSet = new Set(); return _legalStaffSet; }
-  var r = await sb.from('lawyers').select('name').eq('role', 'legal_staff');
-  _legalStaffSet = new Set((r.data || []).map(function(x){return x.name;}));
-  console.log('法務排除名單:', Array.from(_legalStaffSet));
+  if (!sb) { _legalStaffSet = new Set(); _lawyersMeta = {}; return _legalStaffSet; }
+  var r = await sb.from('lawyers').select('name,role,is_active,departed_at');
+  var meta = {};
+  var legalSet = new Set();
+  (r.data || []).forEach(function(row){
+    var isLegal = row.role === 'legal_staff';
+    var dep = null;
+    if (!row.is_active) {
+      dep = row.departed_at ? new Date(row.departed_at) : new Date('1900-01-01');
+    }
+    meta[row.name] = { is_legal: isLegal, departed_at: dep };
+    if (isLegal) legalSet.add(row.name);
+  });
+  _lawyersMeta = meta;
+  _legalStaffSet = legalSet;
+  var departedCount = Object.keys(meta).filter(function(n){return meta[n].departed_at;}).length;
+  console.log('法務排除名單:', Array.from(_legalStaffSet).length, '人; 已離職:', departedCount, '人');
   return _legalStaffSet;
+}
+
+// asof 時點該名字是否已離職（用於從「處理中」過濾）
+function _isDepartedByAt(name, asof) {
+  var m = _lawyersMeta && _lawyersMeta[name];
+  if (!m || !m.departed_at) return false;
+  return asof >= m.departed_at;
+}
+
+// 對 row 在 asof 套用「已交接清單」規則：
+//   若 case 上有任何 asof 時點仍在職的人，則排除所有 asof 時點已離職的人
+//   否則保留全部（真孤兒案）
+// 回傳 { handling: [], handlingAll: [], handlingLegal: [] }
+function _handlingFilteredAt(row, asof) {
+  if (!asof) asof = new Date();
+  var raw = row._rawAttached || [];
+  if (!raw.length) return { handling: [], handlingAll: [], handlingLegal: [] };
+  var meta = _lawyersMeta || {};
+  var hasActive = false;
+  for (var i = 0; i < raw.length; i++) {
+    if (!_isDepartedByAt(raw[i], asof)) { hasActive = true; break; }
+  }
+  var h = [], hAll = [], hLegal = [];
+  for (var j = 0; j < raw.length; j++) {
+    var n = raw[j];
+    if (hasActive && _isDepartedByAt(n, asof)) continue;
+    hAll.push(n);
+    if (meta[n] && meta[n].is_legal) hLegal.push(n);
+    else h.push(n);
+  }
+  return { handling: h, handlingAll: hAll, handlingLegal: hLegal };
 }
 
 // 合署律師 + 每位起始月（從 partners/index.html 的 monthly data 反推第一筆 = 加入合署月）
@@ -3827,10 +3877,12 @@ function _isLegalAdvisor(row) {
 // 規則：union 5 個實際承辦角色（去法務後）→ 比對 asof 時誰已是合署
 function _caseOwnerType(row, asof) {
   if (!asof) asof = new Date();
-  var handling = row._handling;       // 不含法務
-  var handlingAll = row._handlingAll; // 含法務
-  if (!handlingAll || handlingAll.length === 0) return 'no_one';      // 真的沒人
-  if (!handling || handling.length === 0) return 'legal_staff_only';  // 只有法務
+  // 用 asof 過濾「已交接離職者」後再判定 owner type
+  var f0 = _handlingFilteredAt(row, asof);
+  var handling = f0.handling;       // 不含法務
+  var handlingAll = f0.handlingAll; // 含法務
+  if (handlingAll.length === 0) return 'no_one';      // 真的沒人
+  if (handling.length === 0) return 'legal_staff_only';  // 只有法務
   var p = 0, f = 0;
   for (var i = 0; i < handling.length; i++) {
     if (_isPartnerAt(handling[i], asof)) p++;
@@ -3896,26 +3948,23 @@ async function _fetchAllCrmCases() {
     });
     r._firstDoneAt = firstDone;
 
-    // handling lawyers：兩個版本
-    //   _handling     = 5 角色 union 去法務（律師排行用）
-    //   _handlingAll  = 5 角色 union 含法務（owner type 判斷「只有法務」用）
-    //   _handlingLegalOnly = 只有法務的 (用於法務排行)
-    var hSet = new Set();
-    var hAllSet = new Set();
-    var hLegalSet = new Set();
+    // handling lawyers：
+    //   _rawAttached   = 5 角色 union 未過濾（含已離職）— 時間感知 view 用
+    //   _handling      = 用 now 過濾「已交接離職者」後去法務（律師排行用）
+    //   _handlingAll   = 用 now 過濾後含法務（owner type 判斷「只有法務」用）
+    //   _handlingLegal = 用 now 過濾後只留法務（法務排行用）
+    var rawSet = new Set();
     ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'].forEach(function(f){
       var arr = r[f];
       if (arr) for (var i = 0; i < arr.length; i++) {
-        var n = arr[i];
-        if (!n) continue;
-        hAllSet.add(n);
-        if (legalStaff.has(n)) hLegalSet.add(n);
-        else hSet.add(n);
+        if (arr[i]) rawSet.add(arr[i]);
       }
     });
-    r._handling = Array.from(hSet);
-    r._handlingAll = Array.from(hAllSet);
-    r._handlingLegal = Array.from(hLegalSet);
+    r._rawAttached = Array.from(rawSet);
+    var filtered = _handlingFilteredAt(r, new Date());
+    r._handling = filtered.handling;
+    r._handlingAll = filtered.handlingAll;
+    r._handlingLegal = filtered.handlingLegal;
 
     // 累計每位律師在各分所出現次數（用來推算「主要分所」）
     var office = r.council_office_name;
@@ -4057,8 +4106,8 @@ async function loadCasesPage() {
   _renderCasesTrend(filtered, asofDate);
   _renderCasesByOffice(officeChartRows, officeChartStates, officeFilterVal);
   _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA, headcount, asofDate);
-  _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA);
-  _renderCasesLegalStaffTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA);
+  _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA, asofDate);
+  _renderCasesLegalStaffTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA, asofDate);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
   // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
@@ -4078,7 +4127,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     if (s === 'appointed') {
       var owner = _caseOwnerType(r, asofDate);
       inP[owner] = (inP[owner] || 0) + 1;
-      (r._handlingLegal || []).forEach(function(n){ activeLegalStaff.add(n); });
+      _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(n){ activeLegalStaff.add(n); });
     }
   });
 
@@ -4285,7 +4334,7 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
       var owner = _caseOwnerType(r, asofDate);
       if (owner === 'pure_firm') byOffice[office].pureFirm++;
       else if (owner === 'legal_staff_only') byOffice[office].legalStaffOnly++;
-      (r._handlingLegal || []).forEach(function(n){ byOffice[office].activeLegal.add(n); });
+      _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(n){ byOffice[office].activeLegal.add(n); });
     }
     else if (s === 'pending') byOffice[office].pending++;
     else if (s === 'closed')  byOffice[office].closed++;
@@ -4326,14 +4375,12 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
   document.getElementById('casesByOfficeTableBody').innerHTML = rowsHtml || '<tr><td colspan="11" class="text-muted text-center">無資料</td></tr>';
 }
 
-function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA) {
+function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA, asofDate) {
   // 每位律師承辦 → 5 個 CRM 實際承辦角色 union（distinct case，同案多角色不重複）
-  // 排除：法務（含委前法務）+ 合署律師
-  // 若有 office filter → 還要再排除「主要分所不是該所」的律師（避免他所律師臨時參與本所案件入榜）
-  var ROLE_FIELDS = ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'];
-  var excludeSet = new Set();
-  (_legalStaffSet || []).forEach(function(n){ excludeSet.add(n); });
-  (_partnerSet    || []).forEach(function(n){ excludeSet.add(n); });
+  // 排除：法務（含委前法務）+ 合署律師 + 已交接的離職者（asof 時點已離 + 案上有在職人）
+  // 若有 office filter → 還要再排除「主要分所不是該所」的律師
+  if (!asofDate) asofDate = new Date();
+  var partnerSet = _partnerSet || new Set();
   var legalCount = _legalStaffSet ? _legalStaffSet.size : 0;
   var partnerCount = _partnerSet ? _partnerSet.size : 0;
   var byLawyer = {};
@@ -4343,11 +4390,9 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, st
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) return;  // 案件那時還沒建立
-    var set = new Set();
-    ROLE_FIELDS.forEach(function(f){
-      (r[f] || []).forEach(function(n){ if (n && !excludeSet.has(n)) set.add(n); });
-    });
-    set.forEach(function(name){
+    // _handlingFilteredAt 已套「已交接離職者過濾」並切出非法務 (handling)；再排合署律師
+    _handlingFilteredAt(r, asofDate).handling.forEach(function(name){
+      if (partnerSet.has(name)) return;
       ensureLawyer(name);
       if (s === 'appointed') byLawyer[name].inProgress++;
       else if (s === 'pending') byLawyer[name].pending++;
@@ -4355,15 +4400,12 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, st
       else if (s === 'unconcluded') byLawyer[name].unconcluded++;
     });
   });
-  // 法顧 appointed（合約有效）按律師加總；同樣排除法務 + 合署
+  // 法顧 appointed（合約有效）按律師加總；同樣排除法務 + 合署 + 已交接離職者
   (laRows || []).forEach(function(r){
     var s = (statesAtAsofLA || {})[r.case_id];
     if (s !== 'appointed') return;
-    var set = new Set();
-    ROLE_FIELDS.forEach(function(f){
-      (r[f] || []).forEach(function(n){ if (n && !excludeSet.has(n)) set.add(n); });
-    });
-    set.forEach(function(name){
+    _handlingFilteredAt(r, asofDate).handling.forEach(function(name){
+      if (partnerSet.has(name)) return;
       ensureLawyer(name);
       byLawyer[name].laAppointed++;
     });
@@ -4391,9 +4433,10 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, st
   document.getElementById('casesLawyerCount').textContent = '（' + officeNote + ' 有承辦中案件）';
 }
 
-function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA) {
-  // 法務承辦排行：法務（_handlingLegal）出現在 5 角色任一欄
+function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA, asofDate) {
+  // 法務承辦排行：法務出現在 5 角色任一欄；用 asof 過濾「已交接離職者」
   if (!_legalStaffSet) return;
+  if (!asofDate) asofDate = new Date();
   var byStaff = {};
   function ensureStaff(name) {
     if (!byStaff[name]) byStaff[name] = {inProgress:0, pending:0, closed:0, unconcluded:0, laAppointed:0};
@@ -4401,7 +4444,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) return;
-    (r._handlingLegal || []).forEach(function(name){
+    _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(name){
       ensureStaff(name);
       if (s === 'appointed') byStaff[name].inProgress++;
       else if (s === 'pending') byStaff[name].pending++;
@@ -4413,7 +4456,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
   (laRows || []).forEach(function(r){
     var s = (statesAtAsofLA || {})[r.case_id];
     if (s !== 'appointed') return;
-    (r._handlingLegal || []).forEach(function(name){
+    _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(name){
       ensureStaff(name);
       byStaff[name].laAppointed++;
     });
@@ -4586,7 +4629,8 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory) {
         if (isPartner) c.partner++; else c.firm++;
         if (owner === 'pure_firm') pureFirmCount++;
         else if (owner === 'legal_staff_only') legalStaffCount++;
-        (r._handlingLegal || []).forEach(function(n){ activeLegalSet.add(n); });
+        // 用 asof=d 過濾「已交接離職者」後再統計當月活躍法務
+        _handlingFilteredAt(r, d).handlingLegal.forEach(function(n){ activeLegalSet.add(n); });
       }
       if (r._firstDoneAt && r._firstDoneAt <= d) {
         if (isPartner) cc.partner++; else cc.firm++;
