@@ -3098,7 +3098,7 @@ function showTab(tab) {
     loadHealthPage();
   }
   if (tab === 'daily') {
-    if (!isTrackerAdmin()) return;
+    if (!isDailyAdmin()) return;
     renderDailyPage();
   }
 }
@@ -3360,7 +3360,7 @@ function dailyFormatValue(v, metric, precise) {
 }
 
 function renderDailyPage() {
-  if (!isTrackerAdmin()) return;
+  if (!isDailyAdmin()) return;
   if (casesLoadState !== 'loaded') {
     document.getElementById('dailyMatrixBody').innerHTML =
       '<tr><td colspan="13" class="loading"><span class="loading-spinner"></span>載入案件資料中...</td></tr>';
