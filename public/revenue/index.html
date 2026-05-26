@@ -3584,6 +3584,16 @@ async function _loadLawyerRoles() {
   return _lawyerRoleSet;
 }
 
+// 律師人數補正名單 — 處理薪資資料不完整 / office 對應錯誤的情況
+// 格式：{ name: { office: 接案所, sinceYM: '民國年-月' (含) } }
+// 從 sinceYM 起把該人算進指定 office 的「律師」人數；若該人本來已在 data 中以其他 office 計入，不重複加
+var LAWYER_HEADCOUNT_OVERRIDE = {
+  '葉欣瑩': { office: '台北所', sinceYM: '115-05', reason: '115/5 中新到職、薪資未進主表' },
+  '陳昱璇': { office: '台北所', sinceYM: '115-05', reason: '115/5 中新到職、薪資未進主表' },
+  '林品妘': { office: '桃園所', sinceYM: '115-03', reason: '新到職桃園律師、115/3+ 薪資未在主表' },
+  '陳彥銘': { office: '台北所', sinceYM: '115-03', reason: 'dept=法顧 office=NULL，業務上算北所律師' }
+};
+
 // 把薪資表員工分類為「律師 / 法務 / 合署 / 其他」
 // e 是 finance_employees_monthly row。
 // 邏輯（以 zhelu.tw/about 官網律師名單為權威）：
@@ -3626,21 +3636,44 @@ async function _loadHeadcountHistory() {
   var lawyerSet = _lawyerRoleSet || new Set();
   var partnerSet = _partnerSet || new Set();
   var byYM = {};
-  all.forEach(function(e) {
-    var k = e.fiscal_year + '-' + e.month;
+  // 為了 override 不雙算，每個 (ym) 維護一個 lawyerNames set
+  function ensureYM(k) {
     if (!byYM[k]) byYM[k] = {
       lawyerTotal: 0, lawyerPerOffice: {},
-      legalStaffTotal: 0, legalStaffPerOffice: {}
+      legalStaffTotal: 0, legalStaffPerOffice: {},
+      lawyerNames: new Set()
     };
+    return byYM[k];
+  }
+  all.forEach(function(e) {
+    var k = e.fiscal_year + '-' + e.month;
+    var b = ensureYM(k);
     var cls = _classifyEmployee(e, partnerSet, lawyerSet, legalSet);
     if (cls === 'lawyer') {
-      byYM[k].lawyerTotal++;
-      byYM[k].lawyerPerOffice[e.office] = (byYM[k].lawyerPerOffice[e.office] || 0) + 1;
+      b.lawyerTotal++;
+      b.lawyerPerOffice[e.office] = (b.lawyerPerOffice[e.office] || 0) + 1;
+      b.lawyerNames.add(e.name);
     } else if (cls === 'legalStaff') {
-      byYM[k].legalStaffTotal++;
-      byYM[k].legalStaffPerOffice[e.office] = (byYM[k].legalStaffPerOffice[e.office] || 0) + 1;
+      b.legalStaffTotal++;
+      b.legalStaffPerOffice[e.office] = (b.legalStaffPerOffice[e.office] || 0) + 1;
     }
   });
+
+  // 套用 LAWYER_HEADCOUNT_OVERRIDE 把新到職、薪資未進主表、office=NULL 的律師補進去
+  Object.keys(byYM).forEach(function(k) {
+    var parts = k.split('-').map(Number);
+    var ym = parts[0] * 12 + parts[1];
+    Object.keys(LAWYER_HEADCOUNT_OVERRIDE).forEach(function(name) {
+      var o = LAWYER_HEADCOUNT_OVERRIDE[name];
+      var sP = o.sinceYM.split('-').map(Number);
+      if (ym < sP[0] * 12 + sP[1]) return;
+      if (byYM[k].lawyerNames.has(name)) return;  // 已在某 office 計入，不再重複
+      byYM[k].lawyerTotal++;
+      byYM[k].lawyerPerOffice[o.office] = (byYM[k].lawyerPerOffice[o.office] || 0) + 1;
+      byYM[k].lawyerNames.add(name);
+    });
+  });
+
   _headcountHistoryCache = byYM;
   return byYM;
 }
@@ -3688,6 +3721,7 @@ async function _loadHeadcountSnapshot(asofDate) {
   var lawyerSet = _lawyerRoleSet || new Set();
   var partnerSet = _partnerSet || new Set();
   var perOffice = {}, lawyerPerOffice = {}, legalStaffPerOffice = {};
+  var lawyerNames = new Set();
   var total = 0, lawyerTotal = 0, legalStaffTotal = 0;
   data.forEach(function(e){
     if (!e.office) return;
@@ -3697,10 +3731,22 @@ async function _loadHeadcountSnapshot(asofDate) {
     if (cls === 'lawyer') {
       lawyerPerOffice[e.office] = (lawyerPerOffice[e.office] || 0) + 1;
       lawyerTotal++;
+      lawyerNames.add(e.name);
     } else if (cls === 'legalStaff') {
       legalStaffPerOffice[e.office] = (legalStaffPerOffice[e.office] || 0) + 1;
       legalStaffTotal++;
     }
+  });
+  // 套用 LAWYER_HEADCOUNT_OVERRIDE
+  var ym = rocYear * 12 + month;
+  Object.keys(LAWYER_HEADCOUNT_OVERRIDE).forEach(function(name) {
+    var o = LAWYER_HEADCOUNT_OVERRIDE[name];
+    var sP = o.sinceYM.split('-').map(Number);
+    if (ym < sP[0] * 12 + sP[1]) return;
+    if (lawyerNames.has(name)) return;
+    lawyerPerOffice[o.office] = (lawyerPerOffice[o.office] || 0) + 1;
+    lawyerTotal++;
+    lawyerNames.add(name);
   });
   return {
     perOffice: perOffice, total: total,
