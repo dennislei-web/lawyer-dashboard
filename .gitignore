@@ -10,6 +10,8 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/
+.venv/
+venv/
 
 # scratch / 一次性 debug 腳本（檔名約定）
 scripts/_*
