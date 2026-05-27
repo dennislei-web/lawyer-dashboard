@@ -53,23 +53,23 @@ OFFICES_ORDERED = ['全所', '台北所', '桃園所', '新竹所', '台中所',
 
 # 律師權威名單 — 來自 zhelu.tw/about 官網（66 位）+ revenue dashboard WEBSITE_LAWYERS
 # 不在這名單但出現在案件 5 個律師 role 的人 → 視為法務（同 revenue tab 邏輯）
-WEBSITE_LAWYERS = {
-    # 台北所 (38)
-    '雷皓明','黃杰','孫少輔','許致維','劉明潔','方心瑜','張又仁','林桑羽','黃顯皓','柯雪莉',
-    '陳寧馨','林昀','張嘉淳','黃世欣','李家泓','徐品軒','蘇萱','林宜嫻','吳柏慶','蕭予馨',
-    '徐棠娜','劉誠夫','陳俊瑋','王怡婷','曾秉浩','李育哲','楊典翰','莊喬鈞','楊啓廷','張文祈',
-    '劉庭懿','秦薇妮','黃庭汶','陳彥銘','陳昱璇','葉欣瑩','謝宗蓉','林敬修',
-    # 桃園所 (8)
-    '李杰峰','嚴心吟','張元毓','劉雅涵','李家徹','張佳榕','林品妘','王相為','王相爲',
-    # 新竹所 (4)
-    '陶光星','張家瑜','楊睿杰','葉芷羽',
-    # 台中所 (8)
-    '洪琬琪','李昭萱','許煜婕','陳璽仲','林佳穎','劉奕靖','李佳蓉','黃子菱',
-    # 台南所 (4)
-    '王湘閔','黃馨儀','黃書炫','姜奕成',
-    # 高雄所 (4)
-    '王郁萱','廖懿涵','陳映臻','蘇端雅',
+# 也用來把 consultation_cases.lawyer_id 對應到 office 算 per-office booking
+LAWYERS_BY_OFFICE = {
+    '台北所': {
+        '雷皓明','黃杰','孫少輔','許致維','劉明潔','方心瑜','張又仁','林桑羽','黃顯皓','柯雪莉',
+        '陳寧馨','林昀','張嘉淳','黃世欣','李家泓','徐品軒','蘇萱','林宜嫻','吳柏慶','蕭予馨',
+        '徐棠娜','劉誠夫','陳俊瑋','王怡婷','曾秉浩','李育哲','楊典翰','莊喬鈞','楊啓廷','張文祈',
+        '劉庭懿','秦薇妮','黃庭汶','陳彥銘','陳昱璇','葉欣瑩','謝宗蓉','林敬修',
+    },
+    '桃園所': {'李杰峰','嚴心吟','張元毓','劉雅涵','李家徹','張佳榕','林品妘','王相為','王相爲'},
+    '新竹所': {'陶光星','張家瑜','楊睿杰','葉芷羽'},
+    '台中所': {'洪琬琪','李昭萱','許煜婕','陳璽仲','林佳穎','劉奕靖','李佳蓉','黃子菱'},
+    '台南所': {'王湘閔','黃馨儀','黃書炫','姜奕成'},
+    '高雄所': {'王郁萱','廖懿涵','陳映臻','蘇端雅'},
 }
+WEBSITE_LAWYERS = set().union(*LAWYERS_BY_OFFICE.values())
+# 反向 map: name -> office
+LAWYER_NAME_TO_OFFICE = {n: o for o, names in LAWYERS_BY_OFFICE.items() for n in names}
 
 # 非諮詢律師（不算辦案律師）
 NON_CONSULTING_LAWYERS = {
@@ -239,11 +239,19 @@ for r in fin_rows:
             sal_office_by_mo[off][fm] += amt
 
 # Booking: 用 consultation_cases is_signed=true 的 revenue 加總 by case_date 月
-# 全所層級才算 (個別所留 0)
+# 全所 = 全部 signed booking；個別所 = lawyer_id 對應到該所的 booking
 print('=== Loading consultation_cases for booking ===')
 cons_rows = fetch_all(f'{SB_URL}/consultation_cases?select=case_date,is_signed,revenue,lawyer_id')
 print(f'  consultation_cases: {len(cons_rows)} rows')
+
+# lawyer_id -> name (從 lawyers 表)
+print('  loading lawyers map...')
+lawyer_rows = fetch_all(f'{SB_URL}/lawyers?select=id,name')
+lawyer_id_to_name = {r['id']: r['name'] for r in lawyer_rows if r.get('id')}
+
 booking_by_mo_all = defaultdict(float)
+booking_by_mo_office = {o: defaultdict(float) for o in OFFICE_DEPTS}
+unmapped_lawyer_ids = set()
 for r in cons_rows:
     if not r.get('is_signed'): continue
     rev = r.get('revenue')
@@ -254,9 +262,18 @@ for r in cons_rows:
         dt = datetime.fromisoformat(cd).date()
     except:
         continue
-    # 轉民國年: 西元年 - 1911
     fy = dt.year - 1911
-    booking_by_mo_all[(fy, dt.month)] += float(rev)
+    key = (fy, dt.month)
+    amt = float(rev)
+    booking_by_mo_all[key] += amt
+    lid = r.get('lawyer_id')
+    name = lawyer_id_to_name.get(lid) if lid else None
+    off = LAWYER_NAME_TO_OFFICE.get(name) if name else None
+    if off:
+        booking_by_mo_office[off][key] += amt
+    elif lid:
+        unmapped_lawyer_ids.add(lid)
+print(f'  booking signed: 全所 total {len(cons_rows)} rows; per-office mapped offices = {sum(1 for o in booking_by_mo_office if booking_by_mo_office[o])}; unmapped lawyer_id count = {len(unmapped_lawyer_ids)}')
 
 def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
     """
@@ -479,7 +496,7 @@ by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_
 
 for off in OFFICE_DEPTS:
     print(f'=== Computing {off} ===')
-    by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off])
+    by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off], booking_by_mo_office[off])
 
 # ============ Office breakdown (全所 only) — 各分所 lifetime cost ranking ============
 print('\n=== Office breakdown ===')
