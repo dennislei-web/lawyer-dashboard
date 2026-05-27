@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 維運清單</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
+  <style>
+    :root {
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a;
+      --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+      --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+      --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+      --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+      --header-bg:rgba(10,22,40,0.95);
+      --login-shadow:rgba(0,0,0,0.5);
+      --tab-active-bg:rgba(201,168,76,0.12);
+      --tab-active-border:rgba(201,168,76,0.2);
+      --tab-active-color:var(--gold-light);
+      --ghost-bg:rgba(255,255,255,0.07);
+      --ghost-hover-bg:rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e;
+      --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.1);
+      --green:#15803d; --green-dim:rgba(21,128,61,0.12);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.1);
+      --orange:#d97706; --orange-dim:rgba(217,119,6,0.1);
+      --header-bg:rgba(255,255,255,0.95);
+      --login-shadow:rgba(0,0,0,0.12);
+      --tab-active-bg:rgba(37,99,235,0.1);
+      --tab-active-border:rgba(37,99,235,0.25);
+      --tab-active-color:#2563eb;
+      --ghost-bg:rgba(0,0,0,0.04);
+      --ghost-hover-bg:rgba(0,0,0,0.08);
+    }
+    .embed-mode .header { display:none !important; }
+    .embed-mode #loginPage { display:none !important; }
+    .embed-mode body { padding-top:0 !important; }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main); color:var(--text); min-height:100vh; font-size:14px;
+    }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background: radial-gradient(ellipse at 20% 50%, rgba(79,142,247,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(201,168,76,0.06) 0%, transparent 50%),
+                  var(--bg-main);
+    }
+    .login-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+      padding:44px 40px; width:100%; max-width:420px; box-shadow:0 24px 64px var(--login-shadow);
+    }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .firm-name { font-size:1.6rem; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+    .subtitle { margin-top:6px; font-size:0.85rem; color:var(--text-muted); letter-spacing:1px; }
+    .login-divider { height:1px; background:linear-gradient(to right,transparent,var(--border-light),transparent); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+    .form-group input {
+      width:100%; padding:12px 16px; background:var(--bg-row); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-size:0.95rem; transition:border-color 0.2s;
+    }
+    .form-group input:focus { outline:none; border-color:var(--gold); }
+    .btn-login {
+      width:100%; padding:13px; background:linear-gradient(135deg,var(--gold),#b8942e);
+      color:#0a0a0a; font-weight:700; font-size:0.95rem; border:none; border-radius:8px;
+      cursor:pointer; transition:opacity 0.2s; margin-top:8px;
+    }
+    .btn-login:hover { opacity:0.9; }
+    .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+    .login-error { color:var(--red); font-size:0.85rem; margin-top:12px; text-align:center; display:none; }
+
+    /* HEADER */
+    .header {
+      position:sticky; top:0; z-index:100;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 24px; height:56px;
+      background:var(--header-bg); backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+    }
+    .header-left { display:flex; align-items:center; gap:16px; }
+    .header-brand { font-size:1.1rem; font-weight:700; color:var(--gold-light); letter-spacing:1px; }
+    .header-subtitle { font-size:0.78rem; color:var(--text-muted); }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .user-badge { font-size:0.8rem; color:var(--text-muted); padding:4px 10px; background:var(--ghost-bg); border-radius:6px; }
+    .btn-icon {
+      background:var(--ghost-bg); border:1px solid var(--border); border-radius:8px;
+      color:var(--text-muted); cursor:pointer; padding:6px 10px; font-size:0.85rem;
+      transition:all 0.15s;
+    }
+    .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
+
+    /* MAIN */
+    .main { padding:20px 24px; max-width:1400px; margin:0 auto; }
+    .section {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+      padding:20px; margin-bottom:16px;
+    }
+    .section-header { margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .section-title { font-size:1rem; font-weight:600; }
+    .section-desc { font-size:0.82rem; color:var(--text-muted); margin-top:4px; line-height:1.6; }
+    .page-title { font-size:1.3rem; font-weight:700; margin-bottom:8px; }
+
+    /* Tables */
+    .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table { width:100%; border-collapse:collapse; }
+    thead th {
+      padding:10px 12px; text-align:left; font-size:0.75rem; font-weight:600;
+      color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    tbody td { padding:10px 12px; font-size:0.85rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    tbody tr:hover { background:var(--bg-hover); }
+
+    .text-green { color:var(--green); }
+    .text-red { color:var(--red); }
+    .text-gold { color:var(--gold-light); }
+    .text-blue { color:var(--blue); }
+    .text-orange { color:var(--orange); }
+    .text-muted { color:var(--text-muted); }
+
+    /* Badges */
+    .badge {
+      display:inline-block; padding:2px 8px; border-radius:4px;
+      font-size:0.72rem; font-weight:600;
+    }
+    .badge-auto { background:var(--green-dim); color:var(--green); }
+    .badge-manual { background:var(--orange-dim); color:var(--orange); }
+    .badge-semi { background:var(--blue-dim); color:var(--blue); }
+
+    /* Checklist */
+    .checklist-item {
+      display:flex; align-items:flex-start; gap:12px; padding:12px;
+      border:1px solid var(--border); border-radius:8px; margin-bottom:8px;
+      background:var(--bg-row); transition:all 0.15s;
+    }
+    .checklist-item.done { opacity:0.55; border-color:var(--green-dim); }
+    .checklist-item.done .checklist-title { text-decoration:line-through; color:var(--text-muted); }
+    .checklist-item input[type="checkbox"] {
+      width:18px; height:18px; margin-top:2px; cursor:pointer;
+      accent-color:var(--gold);
+    }
+    .checklist-body { flex:1; min-width:0; }
+    .checklist-title { font-size:0.9rem; font-weight:600; margin-bottom:4px; }
+    .checklist-desc { font-size:0.78rem; color:var(--text-muted); line-height:1.55; }
+    .checklist-meta {
+      font-size:0.72rem; color:var(--text-muted); margin-top:4px;
+      display:flex; gap:12px; flex-wrap:wrap;
+    }
+
+    /* Code blocks */
+    code, .mono {
+      font-family:Menlo,Consolas,monospace; font-size:0.82rem;
+      background:var(--bg-row); padding:2px 6px; border-radius:4px;
+      border:1px solid var(--border);
+    }
+    pre {
+      background:var(--bg-row); border:1px solid var(--border); border-radius:6px;
+      padding:12px 14px; font-family:Menlo,Consolas,monospace; font-size:0.78rem;
+      overflow-x:auto; line-height:1.55;
+    }
+
+    /* Links */
+    a.link { color:var(--blue); text-decoration:none; }
+    a.link:hover { text-decoration:underline; }
+
+    /* No-access */
+    #noAccessPage {
+      display:none; min-height:100vh; align-items:center; justify-content:center; padding:20px;
+    }
+    .no-access-card {
+      background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+      padding:40px; max-width:480px; text-align:center;
+    }
+
+    .loading { text-align:center; padding:40px; color:var(--text-muted); }
+    .spinner {
+      display:inline-block; width:24px; height:24px;
+      border:2px solid var(--border); border-top-color:var(--gold);
+      border-radius:50%; animation:spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .month-tag {
+      display:inline-block; padding:2px 8px; border-radius:4px;
+      background:var(--gold);  color:#0a0a0a; font-weight:600; font-size:0.78rem;
+    }
+
+    @media (max-width:640px) {
+      body { font-size:13px; }
+      .header { flex-wrap:wrap; height:auto; padding:8px 12px; gap:6px; }
+      .header-left { width:100%; gap:8px; }
+      .header-subtitle { display:none; }
+      .header-right {
+        width:100%; justify-content:flex-end; gap:6px;
+        overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap;
+      }
+      .header-right .btn-icon, .header-right a.btn-icon {
+        font-size:0.72rem !important; padding:4px 8px !important; white-space:nowrap;
+      }
+      .main { padding:12px; }
+      .section { padding:14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">維運清單</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>電子郵件</label>
+        <input type="email" id="loginEmail" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage">
+  <div class="no-access-card">
+    <div style="font-size:2.4rem;margin-bottom:12px;">🔒</div>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:10px;">無權限存取維運清單</div>
+    <div style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:24px;">
+      維運清單僅限<strong style="color:var(--gold-light);">管理員</strong>使用。<br>
+      您的帳號（<span id="noAccessUser"></span>）不具備此權限，請聯繫管理員。
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/lawyer-dashboard/" class="btn-login" style="text-decoration:none;display:inline-block;max-width:200px;padding:10px 20px;">返回諮詢分析</a>
+      <button class="btn-icon" id="noAccessLogout" style="padding:10px 20px;">登出</button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">維運清單</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div style="margin-bottom:20px;">
+      <div class="page-title">🛠 維運清單</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);">
+        一頁看完所有資料源狀態、月度維運動作、與排程清單。完整說明見
+        <a class="link" href="https://github.com/dennislei-web/lawyer-dashboard/blob/main/docs/MAINTENANCE.md" target="_blank">docs/MAINTENANCE.md</a>。
+      </div>
+    </div>
+
+    <!-- ═══ 1. 資料新鮮度 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">📡 資料新鮮度</div>
+          <div class="section-desc">即時查詢各資料表最新一筆資料的日期；亮 ⚠ 表示落後預期值。</div>
+        </div>
+        <button class="btn-icon" onclick="loadFreshness()" id="refreshBtn">🔄 重新整理</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24%;">資料源</th>
+              <th style="width:18%;">最新資料</th>
+              <th style="width:10%;">狀態</th>
+              <th>用途 / 更新方式</th>
+            </tr>
+          </thead>
+          <tbody id="freshnessBody">
+            <tr><td colspan="4" class="loading"><div class="spinner"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ 2. 每月維運清單 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">📅 每月維運清單 <span class="month-tag" id="currentMonthTag"></span></div>
+          <div class="section-desc">月底固定動作，勾選狀態存在這台裝置 localStorage（不同步雲端，僅個人提醒）。</div>
+        </div>
+        <button class="btn-icon" onclick="resetChecklist()">🔁 重置本月</button>
+      </div>
+      <div id="checklistBody"></div>
+    </div>
+
+    <!-- ═══ 3. 自動排程清單 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">⚙️ 自動排程清單</div>
+          <div class="section-desc">這些 cron 跑掛了維運的人要知道；下面 link 可以直接點進去看 logs。</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:22%;">排程</th>
+              <th style="width:14%;">位置</th>
+              <th style="width:22%;">排程時間（台北）</th>
+              <th>內容</th>
+            </tr>
+          </thead>
+          <tbody id="schedulesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ 4. 業務維護 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">👥 業務團隊維護的資料</div>
+          <div class="section-desc">這些不是 admin 動，但要知道誰負責；資料異常時找對人。</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30%;">項目</th>
+              <th style="width:18%;">維護者</th>
+              <th>Source-of-truth</th>
+            </tr>
+          </thead>
+          <tbody id="ownershipBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ 5. 結構性限制 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">⚠️ 結構性限制</div>
+          <div class="section-desc">不是 bug 也不是維運能解的，僅供決策參考。</div>
+        </div>
+      </div>
+      <ul style="padding-left:20px;line-height:2;font-size:0.88rem;">
+        <li><strong>合署資料天生延遲一個月</strong> — 律師月底才填，4/29 填 3 月、5/29 填 4 月。</li>
+        <li><strong>010 sheet <code>meeting_date</code> 永遠是空的</strong> — 改用 <code>intake_date → first_payment_date</code> 近似。</li>
+        <li><strong>法顧客戶集合不能自動推 CRM</strong> — 業務指示：CRM 儲值有但 sheet 沒登的不計入法顧。</li>
+        <li><strong>finance actual 要等月結</strong> — 大概每月 5-10 號才有上個月完整損益表。</li>
+        <li><strong>諮詢 transcript</strong> — CRM 沒所有會議記錄，部分案件 brief 分析要靠手動 ZIP 補。</li>
+      </ul>
+    </div>
+
+    <!-- ═══ 6. 故障排除 ═══ -->
+    <div class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">🩺 故障排除指令</div>
+          <div class="section-desc">在 lawyer-dashboard repo 目錄下執行（需 gh CLI）。</div>
+        </div>
+      </div>
+      <div style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);">查 GitHub Actions 最近執行：</div>
+<pre>gh run list --workflow=update-stats.yml --limit 5
+gh run list --workflow=update-cases.yml --limit 5
+gh run list --workflow=update-revenue.yml --limit 5
+gh run list --workflow=sync-010.yml --limit 5
+gh run list --workflow=sync-partners.yml --limit 5</pre>
+      <div style="margin:14px 0 8px 0;font-size:0.85rem;color:var(--text-muted);">看失敗 run 的 logs：</div>
+<pre>gh run view &lt;run-id&gt; --log-failed</pre>
+      <div style="margin:14px 0 8px 0;font-size:0.85rem;color:var(--text-muted);">手動觸發合署同步：</div>
+<pre>gh workflow run sync-partners.yml</pre>
+      <div style="margin:14px 0 8px 0;font-size:0.85rem;color:var(--text-muted);">Apps Script 失敗不會通知，每月手動看一次：</div>
+      <ul style="padding-left:20px;line-height:1.9;font-size:0.85rem;">
+        <li>「法顧成案清單」Sheet → 擴充功能 → Apps Script → 執行紀錄</li>
+        <li>「委前各項數據追蹤表單」Sheet → 擴充功能 → Apps Script → 執行紀錄</li>
+        <li>Edge Function logs：<a class="link" href="https://supabase.com/dashboard/project/zpbkeyhxyykbvownrngf/functions" target="_blank">Supabase Functions Console</a></li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// 若使用者直接打開這個 URL（非 shell iframe）→ redirect 回 shell
+if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
+  window.location.replace('/lawyer-dashboard/#/maintenance');
+  throw new Error('redirecting to shell');
+}
+// ═══ EMBED MODE ═══
+if (window.location.search.indexOf('embed=1') > -1) {
+  document.documentElement.classList.add('embed-mode');
+}
+
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer, isAdmin = false;
+
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+// ═══ THEME ═══
+function _applyTheme(v) {
+  document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : '');
+  var b = document.getElementById('themeToggle');
+  if (b) b.innerHTML = v === 'light' ? '&#9728;' : '&#x1f313;';
+}
+_applyTheme(localStorage.getItem('theme') || 'dark');
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'light' ? 'dark' : 'light';
+  _applyTheme(next);
+  localStorage.setItem('theme', next);
+});
+window.addEventListener('storage', function(e) {
+  if (e.key === 'theme' && e.newValue) _applyTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    _applyTheme(e.data.value);
+    localStorage.setItem('theme', e.data.value);
+  }
+});
+
+// ═══ AUTH ═══
+async function checkSession() {
+  if (!sb) return showLogin();
+  var s = await sb.auth.getSession();
+  if (s.data.session) {
+    currentUser = s.data.session.user;
+    await loadUserProfile();
+    if (!isAdmin) { showNoAccess(); return; }
+    showDashboard();
+  } else {
+    showLogin();
+  }
+}
+async function loadUserProfile() {
+  if (!sb || !currentUser) return;
+  var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single();
+  if (r.data) {
+    currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data;
+    isAdmin = currentLawyer.role === 'admin';
+  }
+}
+function showLogin() {
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('noAccessPage').style.display = 'none';
+}
+function showNoAccess() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  var p = document.getElementById('noAccessPage');
+  p.style.display = 'flex';
+  document.getElementById('noAccessUser').textContent = (currentUser && currentUser.email) || '';
+}
+function showDashboard() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('noAccessPage').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser.email || '');
+  renderAll();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('loginBtn'), err = document.getElementById('loginError');
+  err.style.display = 'none'; btn.disabled = true; btn.textContent = '登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({
+      email: document.getElementById('loginEmail').value.trim(),
+      password: document.getElementById('loginPassword').value,
+    });
+    if (r.error) throw r.error;
+    location.reload();
+  } catch (ex) {
+    err.textContent = '登入失敗：' + (ex.message || '請確認帳號密碼');
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut();
+  location.reload();
+});
+document.getElementById('noAccessLogout').addEventListener('click', async function() {
+  if (sb) await sb.auth.signOut();
+  location.reload();
+});
+
+// ═══ 資料新鮮度 ═══
+function fmt(d) {
+  if (!d) return '無';
+  if (typeof d === 'string') return d.slice(0,10);
+  return new Date(d).toISOString().slice(0,10);
+}
+function daysAgo(dateStr) {
+  if (!dateStr) return Infinity;
+  var d = new Date(dateStr);
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+function statusFor(days, warnDays, critDays) {
+  if (days === Infinity) return { txt:'無資料', color:'var(--red)' };
+  if (days >= critDays) return { txt:'⚠ 落後 ' + days + ' 天', color:'var(--red)' };
+  if (days >= warnDays) return { txt:'⚠ ' + days + ' 天前', color:'var(--orange)' };
+  return { txt:'✓ ' + days + ' 天前', color:'var(--green)' };
+}
+
+async function maxOf(table, dateCol) {
+  try {
+    var r = await sb.from(table).select(dateCol).order(dateCol, { ascending:false }).limit(1);
+    if (r.error || !r.data || !r.data[0]) return null;
+    return r.data[0][dateCol];
+  } catch (e) { return null; }
+}
+
+async function loadFreshness() {
+  var tbody = document.getElementById('freshnessBody');
+  tbody.innerHTML = '<tr><td colspan="4" class="loading"><div class="spinner"></div></td></tr>';
+
+  var results = await Promise.all([
+    maxOf('consultation_cases', 'consult_date'),
+    maxOf('monthly_stats', 'month'),
+    maxOf('revenue_records', 'transaction_date'),
+    maxOf('advisor_transactions', 'transaction_date'),
+    maxOf('advisor_cases', 'sign_date'),
+    maxOf('fact_010_monthly_team', 'month'),
+    maxOf('consult_oa_funnel_daily', 'insight_date'),
+    maxOf('consult_oa_monthly_funnel', 'month_start'),
+    maxOf('consult_oa_tag_chats_monthly', 'month_start'),
+    maxOf('finance_data', 'created_at'),
+    maxOf('finance_employees', 'created_at'),
+  ]);
+
+  var rows = [
+    { name:'consultation_cases', latest:results[0], warn:2, crit:5, page:'諮詢分析', desc:'CRM 諮詢明細・每日 12:00 / 00:00 自動' },
+    { name:'monthly_stats', latest:results[1], warn:35, crit:60, page:'諮詢分析', desc:'月度諮詢統計・每日自動 rebuild' },
+    { name:'revenue_records', latest:results[2], warn:3, crit:7, page:'營運 / 財務規劃', desc:'CRM 對帳・每日 12:00 / 00:00 自動' },
+    { name:'advisor_transactions', latest:results[3], warn:3, crit:7, page:'法律顧問', desc:'法顧儲值・每日自動' },
+    { name:'advisor_cases (sheet)', latest:results[4], warn:7, crit:30, page:'法律顧問', desc:'業務手動 sheet → Apps Script 每日 02:00' },
+    { name:'fact_010_monthly_team', latest:results[5], warn:35, crit:60, page:'法律 010', desc:'法律010總表・每日 09:00 自動' },
+    { name:'consult_oa_funnel_daily', latest:results[6], warn:3, crit:7, page:'委前漏斗', desc:'LINE follower API・每日 09:00 Edge Function' },
+    { name:'consult_oa_monthly_funnel', latest:results[7], warn:35, crit:60, page:'委前漏斗', desc:'委前 sheet・每週一 09:00 Apps Script' },
+    { name:'consult_oa_tag_chats_monthly', latest:results[8], warn:35, crit:60, page:'委前漏斗', desc:'⚠ 手動輸入・每月初請進「委前漏斗」頁編輯' },
+    { name:'finance_data', latest:results[9], warn:35, crit:60, page:'財務規劃', desc:'⚠ 手動上傳損益表 Excel・月底會計結帳後' },
+    { name:'finance_employees', latest:results[10], warn:60, crit:120, page:'財務規劃', desc:'⚠ 手動上傳薪資表 Excel' },
+  ];
+
+  tbody.innerHTML = '';
+  rows.forEach(function(r) {
+    var d = daysAgo(r.latest);
+    var s = statusFor(d, r.warn, r.crit);
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><strong>' + r.name + '</strong><br><span style="font-size:0.72rem;color:var(--text-muted);">' + r.page + '</span></td>' +
+      '<td class="mono">' + fmt(r.latest) + '</td>' +
+      '<td style="color:' + s.color + ';font-weight:600;font-size:0.82rem;">' + s.txt + '</td>' +
+      '<td style="color:var(--text-muted);font-size:0.82rem;">' + r.desc + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ═══ 每月維運清單 ═══
+var CHECKLIST = [
+  { id:'finance_actual', title:'上傳上月損益表 actual', desc:'會計月結完成後，在「財務規劃」頁 →「上傳損益表 Excel」→ 選「實際支出」', page:'財務規劃' },
+  { id:'salary_sheet', title:'上傳薪資表（如有變動）', desc:'人資交付薪資 Excel → 在「財務規劃」頁 →「上傳薪資表 Excel」', page:'財務規劃' },
+  { id:'partners_sync', title:'觸發合署同步（律師回填後）', desc:'律師月底前回填上月案件明細到 Drive → 在「合署律師」頁按「立即同步」', page:'合署律師' },
+  { id:'oa_tag_chats', title:'輸入 LINE 標籤聊天室數', desc:'LINE OA Manager → 聊天設定 → 標籤 → 「115年MM月」聊天室數量 → 「委前漏斗」頁編輯', page:'委前漏斗' },
+  { id:'workflow_check', title:'檢查自動排程是否健康', desc:'gh run list 看 update-stats / update-cases / update-revenue / sync-010 / consult_funnel_sync 是否有 failure', page:'-' },
+  { id:'okr_target', title:'OKR target 是否需調整', desc:'季度/半年才需要動，平時跳過', page:'OKR' },
+];
+
+function checklistKey() {
+  var now = new Date();
+  return 'maintenance_checklist_' + now.getFullYear() + '_' + (now.getMonth()+1);
+}
+function loadChecklistState() {
+  try { return JSON.parse(localStorage.getItem(checklistKey()) || '{}'); } catch(e) { return {}; }
+}
+function saveChecklistState(state) {
+  try { localStorage.setItem(checklistKey(), JSON.stringify(state)); } catch(e) {}
+}
+function renderChecklist() {
+  var now = new Date();
+  document.getElementById('currentMonthTag').textContent = now.getFullYear() + ' 年 ' + (now.getMonth()+1) + ' 月';
+  var state = loadChecklistState();
+  var box = document.getElementById('checklistBody');
+  box.innerHTML = '';
+  CHECKLIST.forEach(function(item) {
+    var done = !!state[item.id];
+    var div = document.createElement('div');
+    div.className = 'checklist-item' + (done ? ' done' : '');
+    div.innerHTML =
+      '<input type="checkbox" data-id="' + item.id + '"' + (done ? ' checked' : '') + '>' +
+      '<div class="checklist-body">' +
+        '<div class="checklist-title">' + item.title + '</div>' +
+        '<div class="checklist-desc">' + item.desc + '</div>' +
+        '<div class="checklist-meta">' +
+          '<span>📍 ' + item.page + '</span>' +
+          (state['_done_at_' + item.id] ? '<span>✓ ' + state['_done_at_' + item.id] + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    box.appendChild(div);
+  });
+  box.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      var id = this.getAttribute('data-id');
+      var s = loadChecklistState();
+      if (this.checked) {
+        s[id] = true;
+        s['_done_at_' + id] = new Date().toISOString().slice(0,16).replace('T', ' ');
+      } else {
+        delete s[id];
+        delete s['_done_at_' + id];
+      }
+      saveChecklistState(s);
+      renderChecklist();
+    });
+  });
+}
+function resetChecklist() {
+  if (!confirm('確定要重置本月的勾選狀態嗎？')) return;
+  localStorage.removeItem(checklistKey());
+  renderChecklist();
+}
+
+// ═══ 自動排程清單 ═══
+var SCHEDULES = [
+  { name:'update-stats.yml', loc:'GitHub Actions', when:'每日 12:00、00:00', what:'daily_update.py（諮詢統計 + 案件）', badge:'auto',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/update-stats.yml' },
+  { name:'update-cases.yml', loc:'GitHub Actions', when:'每日 03:30；週日 04:00 refresh-open', what:'scrape_case_lists.py', badge:'auto',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/update-cases.yml' },
+  { name:'update-revenue.yml', loc:'GitHub Actions', when:'每日 12:00、00:00', what:'scrape_reconciliation.py + scrape_advisor_transactions.py', badge:'auto',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/update-revenue.yml' },
+  { name:'sync-010.yml', loc:'GitHub Actions', when:'每日 09:00', what:'sync_010.py（法律010總表 → Supabase）', badge:'auto',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/sync-010.yml' },
+  { name:'consult_funnel_sync', loc:'Supabase Edge Function', when:'每日 09:00（pg_cron）', what:'LINE Messaging API → consult_oa_funnel_daily', badge:'auto',
+    link:'https://supabase.com/dashboard/project/zpbkeyhxyykbvownrngf/functions' },
+  { name:'advisor_sync.gs', loc:'「法顧成案清單」Apps Script', when:'每日 02:00', what:'業績成案清單 / inbound / 陌開拜訪 → advisor_cases / advisor_inbound / cold_call_visits', badge:'semi',
+    link:null },
+  { name:'consult_oa_monthly_sync.gs', loc:'「委前各項數據追蹤表單」Apps Script', when:'每週一 09:00', what:'各帳號進線及場次數據 → consult_oa_monthly_funnel', badge:'semi',
+    link:null },
+  { name:'sync-partners.yml', loc:'GitHub Actions', when:'無 cron — 手動按按鈕', what:'抓 Drive xlsx → embed 進 partners/index.html', badge:'manual',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/sync-partners.yml' },
+  { name:'deploy-pages.yml', loc:'GitHub Actions', when:'push main 觸發', what:'部署 GitHub Pages', badge:'auto',
+    link:'https://github.com/dennislei-web/lawyer-dashboard/actions/workflows/deploy-pages.yml' },
+];
+
+function renderSchedules() {
+  var tbody = document.getElementById('schedulesBody');
+  tbody.innerHTML = '';
+  SCHEDULES.forEach(function(s) {
+    var badgeHtml = '<span class="badge badge-' + s.badge + '">' +
+      (s.badge === 'auto' ? '自動' : (s.badge === 'semi' ? '半自動' : '手動')) +
+      '</span>';
+    var nameHtml = s.link
+      ? '<a class="link mono" href="' + s.link + '" target="_blank">' + s.name + '</a>'
+      : '<span class="mono">' + s.name + '</span>';
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + nameHtml + ' ' + badgeHtml + '</td>' +
+      '<td style="font-size:0.82rem;color:var(--text-muted);">' + s.loc + '</td>' +
+      '<td style="font-size:0.82rem;">' + s.when + '</td>' +
+      '<td style="font-size:0.82rem;color:var(--text-muted);">' + s.what + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ═══ 業務維護 ═══
+var OWNERSHIP = [
+  { item:'法顧成案清單（定義法顧客戶集合）', owner:'業務', sot:'「法顧成案清單」Google Sheet' },
+  { item:'inbound 數據', owner:'業務', sot:'「法顧成案清單」Google Sheet' },
+  { item:'電話陌開拜訪進度', owner:'業務', sot:'「法顧成案清單」Google Sheet' },
+  { item:'委前各項數據追蹤表單（49 分頁）', owner:'委前團隊', sot:'Google Sheet（每月填）' },
+  { item:'法律 010 總表', owner:'010 團隊', sot:'Google Sheet（18 分頁；meeting_date 沒在填）' },
+  { item:'合署律師案件明細 xlsx', owner:'13 位合署律師', sot:'Drive 16【財務】資料夾，月底回填' },
+];
+
+function renderOwnership() {
+  var tbody = document.getElementById('ownershipBody');
+  tbody.innerHTML = '';
+  OWNERSHIP.forEach(function(o) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + o.item + '</td>' +
+      '<td><strong>' + o.owner + '</strong></td>' +
+      '<td style="color:var(--text-muted);font-size:0.82rem;">' + o.sot + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ═══ START ═══
+function renderAll() {
+  renderSchedules();
+  renderOwnership();
+  renderChecklist();
+  loadFreshness();
+}
+
+checkSession();
+</script>
+</body>
+</html>
