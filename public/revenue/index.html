@@ -1495,6 +1495,71 @@
         </div>
       </div>
 
+      <!-- 🕰️ 律師案件 Aging 盤點 — 每位律師手上的老案/新案分布 -->
+      <div class="table-card" style="margin-top:24px">
+        <div class="table-header" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span class="table-title">🕰️ 律師案件 Aging 盤點 <span style="opacity:.6;font-size:0.7rem" title="每位律師當下 appointed 案件按「建案至今天數」分桶。Aging 起點 = crm_created_at（與「庫存老化指數」同口徑）；委任後天數另外顯示，扣除諮詢/報價階段。合署律師一併列入。">ℹ️</span></span>
+          <span class="text-muted" id="casesAgingCount" style="font-size:0.78rem;"></span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <span class="filter-label">分群：</span>
+            <button class="year-btn active" data-aging-group="all">全部</button>
+            <button class="year-btn" data-aging-group="firm">所內</button>
+            <button class="year-btn" data-aging-group="partner">合署</button>
+            <span class="filter-label" style="margin-left:12px;">排序：</span>
+            <button class="year-btn active" data-aging-sort="old_count">僵案數 (&gt;180天)</button>
+            <button class="year-btn" data-aging-sort="old_pct">老案佔比</button>
+            <button class="year-btn" data-aging-sort="norm">案型 normalize</button>
+            <button class="year-btn" data-aging-sort="total">在手案總數</button>
+          </div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-muted);padding:0 16px 8px;">
+          📐 <b>案型 normalize ratio</b> = 每件 active 案的年齡 ÷ 該案型（部門）結案週期中位的中位數。&gt; 1 表手上案件平均已超齡，&gt; 2 是高度僵案 cluster。
+          🎯 行動：點律師名展開「該律師的具體僵案清單」。
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>律師</th>
+                <th>主要分所</th>
+                <th class="text-right">在手案</th>
+                <th class="text-right" style="color:#3b82f6;" title="≤ 90 天">新案<br><span style="font-size:0.7rem;font-weight:normal;opacity:.7;">0-90天</span></th>
+                <th class="text-right" style="color:#10b981;" title="91-180 天">中齡<br><span style="font-size:0.7rem;font-weight:normal;opacity:.7;">91-180</span></th>
+                <th class="text-right" style="color:#f59e0b;" title="181-365 天">老案<br><span style="font-size:0.7rem;font-weight:normal;opacity:.7;">181-365</span></th>
+                <th class="text-right" style="color:#ef4444;" title="&gt; 365 天">僵案<br><span style="font-size:0.7rem;font-weight:normal;opacity:.7;">&gt;365天</span></th>
+                <th class="text-right" style="border-left:1px solid var(--border);padding-left:14px;" title="(>180 天案數) / 在手案總數">老案佔比</th>
+                <th class="text-right" title="在手案的建案至今天數中位">平均年齡<br><span style="font-size:0.7rem;font-weight:normal;opacity:.7;">中位/天</span></th>
+                <th class="text-right" title="每件案的（年齡 ÷ 該案型結案中位）的中位數。> 1 = 已超齡">案型<br>normalize</th>
+              </tr>
+            </thead>
+            <tbody id="casesAgingTableBody"></tbody>
+          </table>
+        </div>
+        <!-- 展開律師詳細案件清單 (點律師名顯示) -->
+        <div id="casesAgingDetail" style="display:none;border-top:1px solid var(--border);padding:16px;background:var(--bg-secondary);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <span style="font-weight:600;" id="casesAgingDetailTitle">—</span>
+            <button class="btn btn-outline btn-sm" id="casesAgingDetailClose">✕ 關閉</button>
+          </div>
+          <div style="overflow-x:auto;max-height:480px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>案號</th>
+                  <th>部門</th>
+                  <th>接案所</th>
+                  <th class="text-right">建案至今</th>
+                  <th class="text-right">委任至今</th>
+                  <th class="text-right">同案型結案中位</th>
+                  <th class="text-right">案型 ratio</th>
+                </tr>
+              </thead>
+              <tbody id="casesAgingDetailBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- 月底存量演變：承辦中 vs 已完成（50/50 並排，覆寫預設 2fr 1fr）-->
       <div class="chart-row" style="margin-top:24px;grid-template-columns:1fr 1fr;">
         <div class="chart-card" style="min-width:0;">
@@ -4144,6 +4209,7 @@ async function loadCasesPage() {
   _renderCasesOfficeTable(filtered, statesAtAsof, legalAdvisors, statesAtAsofLA, headcount, asofDate);
   _renderCasesLawyerTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA, asofDate);
   _renderCasesLegalStaffTable(filtered, statesAtAsof, officeFilterVal, legalAdvisors, statesAtAsofLA, asofDate);
+  _renderCasesLawyerAging(filtered, statesAtAsof, asofDate);
   _renderCasesCloseCycle(filtered);
   _renderCasesOpenCycle(filtered, statesAtAsof, asofDate);
   // 重的 snapshot chart (60 個月 × 28k iterations) 延後到下個 tick，讓上面先畫完
@@ -4566,6 +4632,222 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
   document.getElementById('casesLegalStaffCount').textContent = '（' + note + ' 有承辦中案件）';
 }
 
+// ─────────────────────────────────────────────────────────────
+// 律師案件 Aging 盤點
+// 每位律師當下 appointed 案件按建案至今天數分桶，含合署律師
+// 案型 normalize：每件案 (年齡 / 該部門結案週期中位) 的中位
+// ─────────────────────────────────────────────────────────────
+var _agingState = { group: 'all', sort: 'old_count', rows: null, asof: null, deptMedian: null };
+
+function _median(arr) {
+  if (!arr.length) return 0;
+  var s = arr.slice().sort(function(a,b){return a-b;});
+  var m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+
+function _renderCasesLawyerAging(rows, statesAtAsof, asofDate) {
+  if (!asofDate) asofDate = new Date();
+  var partnerSet = _partnerSet || new Set();
+  var legalSet = _legalStaffSet || new Set();
+
+  // ① 各部門 (group_name) 結案週期中位 — 從歷史 closed 案件算
+  var deptClosedDurs = {};
+  rows.forEach(function(r){
+    if (r.aasm_state !== 'closed') return;
+    if (!r._created || !r.closed_at) return;
+    var dept = r.group_name || '(未指定)';
+    var days = (new Date(r.closed_at) - r._created) / 86400000;
+    if (days < 0) return;
+    if (!deptClosedDurs[dept]) deptClosedDurs[dept] = [];
+    deptClosedDurs[dept].push(days);
+  });
+  var deptMedian = {};
+  Object.keys(deptClosedDurs).forEach(function(d){
+    deptMedian[d] = _median(deptClosedDurs[d]);
+  });
+  // 全所結案中位當 fallback
+  var allClosedDurs = [];
+  Object.keys(deptClosedDurs).forEach(function(d){ allClosedDurs = allClosedDurs.concat(deptClosedDurs[d]); });
+  var globalMedian = _median(allClosedDurs);
+
+  // ② 每位律師（含合署）的 active 案件列表
+  // 注意：_handlingFilteredAt 已過濾「已交接離職者」+ 排法務；我們這裡用 handling (純律師類)
+  //      但 handling 預設已排合署？要 check — 看 _handlingFilteredAt 實作
+  var byLawyer = {};   // name → { active_cases: [{case, age}], isPartner, primaryOffice }
+  rows.forEach(function(r){
+    var s = statesAtAsof[r.case_id];
+    if (s !== 'appointed') return;
+    if (!r._created) return;
+    var age = Math.floor((asofDate - r._created) / 86400000);
+    if (age < 0) return;
+    var apptAge = r.appointed_at ? Math.floor((asofDate - new Date(r.appointed_at)) / 86400000) : null;
+    var dept = r.group_name || '(未指定)';
+    var deptMed = deptMedian[dept] || globalMedian || 0;
+    var typeRatio = deptMed > 0 ? age / deptMed : null;
+
+    // 用 handlingAll（含法務），再自己排除法務但保留律師 + 合署
+    var filtered = _handlingFilteredAt(r, asofDate);
+    var allNames = new Set();
+    filtered.handling.forEach(function(n){ allNames.add(n); });
+    // 合署律師被 handling 排除？實際看 _handlingFilteredAt 沒有排 partner，所以 handling 就包含合署
+    // 但 _renderCasesLawyerTable 後面才 if (partnerSet.has(name)) return; 跳過
+    // 所以這裡 handling 已含合署 ✓
+
+    allNames.forEach(function(name){
+      if (legalSet.has(name)) return;  // 排法務
+      if (!byLawyer[name]) {
+        byLawyer[name] = {
+          name: name,
+          cases: [],
+          isPartner: partnerSet.has(name),
+          primaryOffice: _lawyerPrimaryOffice[name] || '—'
+        };
+      }
+      byLawyer[name].cases.push({
+        case_id: r.case_id,
+        serial: r.serial_number,
+        dept: dept,
+        office: r.council_office_name || '—',
+        age: age,
+        apptAge: apptAge,
+        deptMed: deptMed,
+        typeRatio: typeRatio
+      });
+    });
+  });
+
+  // ③ 對每位律師算 bucket + 統計
+  var lawyers = Object.values(byLawyer).map(function(l){
+    var b = { lt90: 0, m180: 0, m365: 0, gt365: 0 };
+    var ages = [], ratios = [];
+    l.cases.forEach(function(c){
+      if (c.age <= 90) b.lt90++;
+      else if (c.age <= 180) b.m180++;
+      else if (c.age <= 365) b.m365++;
+      else b.gt365++;
+      ages.push(c.age);
+      if (c.typeRatio !== null) ratios.push(c.typeRatio);
+    });
+    var total = l.cases.length;
+    var oldCount = b.m365 + b.gt365;  // >180 天
+    return Object.assign(l, {
+      buckets: b,
+      total: total,
+      oldCount: oldCount,
+      oldPct: total > 0 ? oldCount / total : 0,
+      medianAge: _median(ages),
+      normRatio: _median(ratios)
+    });
+  });
+
+  // 儲存 state，sort/filter button 可以重用
+  _agingState.rows = lawyers;
+  _agingState.asof = asofDate;
+  _agingState.deptMedian = deptMedian;
+
+  _redrawCasesLawyerAging();
+}
+
+function _redrawCasesLawyerAging() {
+  var lawyers = _agingState.rows || [];
+  var group = _agingState.group;
+  var sort = _agingState.sort;
+
+  // 分群過濾
+  var filtered = lawyers.filter(function(l){
+    if (group === 'firm') return !l.isPartner;
+    if (group === 'partner') return l.isPartner;
+    return true;
+  });
+
+  // 排序
+  filtered.sort(function(a,b){
+    if (sort === 'old_count') return b.oldCount - a.oldCount || b.total - a.total;
+    if (sort === 'old_pct')   return b.oldPct - a.oldPct || b.oldCount - a.oldCount;
+    if (sort === 'norm')      return (b.normRatio || 0) - (a.normRatio || 0);
+    if (sort === 'total')     return b.total - a.total;
+    return 0;
+  });
+
+  function ageColor(age) {
+    if (age > 365) return '#ef4444';
+    if (age > 180) return '#f59e0b';
+    if (age > 90)  return '#10b981';
+    return '#3b82f6';
+  }
+  function pctStr(p) {
+    var color = p >= 0.5 ? '#ef4444' : (p >= 0.3 ? '#f59e0b' : 'inherit');
+    return '<span style="color:'+color+';font-weight:600;">' + (p*100).toFixed(0) + '%</span>';
+  }
+  function ratioStr(r) {
+    if (r === 0 || r === undefined || r === null || isNaN(r)) return '<span class="text-muted">—</span>';
+    var color = r >= 2 ? '#ef4444' : (r >= 1 ? '#f59e0b' : (r >= 0.5 ? '#10b981' : '#3b82f6'));
+    return '<span style="color:'+color+';font-weight:600;">' + r.toFixed(2) + '×</span>';
+  }
+  function badge(l) {
+    if (l.isPartner) return ' <span style="background:#7c3aed33;color:#a78bfa;font-size:0.65rem;padding:1px 6px;border-radius:8px;margin-left:4px;">合署</span>';
+    return '';
+  }
+
+  var html = filtered.map(function(l){
+    return '<tr style="cursor:pointer;" onclick="_openAgingDetail(\''+l.name.replace(/\'/g,"\\'")+'\')" title="點擊看 '+l.name+' 的具體案件清單">'
+      + '<td><b>'+l.name+'</b>'+badge(l)+'</td>'
+      + '<td class="text-muted">'+l.primaryOffice+'</td>'
+      + '<td class="text-right"><b>'+l.total+'</b></td>'
+      + '<td class="text-right" style="color:#3b82f6;">'+(l.buckets.lt90||'—')+'</td>'
+      + '<td class="text-right" style="color:#10b981;">'+(l.buckets.m180||'—')+'</td>'
+      + '<td class="text-right" style="color:#f59e0b;">'+(l.buckets.m365||'—')+'</td>'
+      + '<td class="text-right" style="color:#ef4444;font-weight:600;">'+(l.buckets.gt365||'—')+'</td>'
+      + '<td class="text-right" style="border-left:1px solid var(--border);padding-left:14px;">'+pctStr(l.oldPct)+' <span class="text-muted" style="font-size:0.75rem;">('+l.oldCount+')</span></td>'
+      + '<td class="text-right" style="color:'+ageColor(l.medianAge)+';">'+l.medianAge.toFixed(0)+'</td>'
+      + '<td class="text-right">'+ratioStr(l.normRatio)+'</td>'
+      + '</tr>';
+  }).join('');
+  document.getElementById('casesAgingTableBody').innerHTML = html || '<tr><td colspan="10" class="text-muted text-center">無資料</td></tr>';
+  var countNote = '共 ' + filtered.length + ' 位';
+  if (group === 'firm') countNote = '所內 ' + filtered.length + ' 位';
+  if (group === 'partner') countNote = '合署 ' + filtered.length + ' 位';
+  document.getElementById('casesAgingCount').textContent = '（' + countNote + '）';
+}
+
+function _openAgingDetail(name) {
+  var rows = _agingState.rows || [];
+  var l = rows.find(function(x){ return x.name === name; });
+  if (!l) return;
+  var detail = document.getElementById('casesAgingDetail');
+  var title = document.getElementById('casesAgingDetailTitle');
+  var body = document.getElementById('casesAgingDetailBody');
+  title.innerHTML = '🕰️ ' + name + (l.isPartner ? ' <span style="background:#7c3aed33;color:#a78bfa;font-size:0.7rem;padding:2px 8px;border-radius:8px;">合署</span>' : '') + ' · 在手 ' + l.total + ' 案 · 老案 ' + l.oldCount + ' (' + (l.oldPct*100).toFixed(0) + '%)';
+
+  // 按 typeRatio desc 排
+  var cases = l.cases.slice().sort(function(a,b){ return (b.typeRatio||0) - (a.typeRatio||0); });
+  function ageColor2(age) {
+    if (age > 365) return '#ef4444';
+    if (age > 180) return '#f59e0b';
+    if (age > 90)  return '#10b981';
+    return '#3b82f6';
+  }
+  function ratioStr2(r) {
+    if (r === null || r === undefined || isNaN(r)) return '<span class="text-muted">—</span>';
+    var color = r >= 2 ? '#ef4444' : (r >= 1 ? '#f59e0b' : (r >= 0.5 ? '#10b981' : '#3b82f6'));
+    return '<span style="color:'+color+';font-weight:600;">' + r.toFixed(2) + '×</span>';
+  }
+  body.innerHTML = cases.map(function(c){
+    return '<tr>'
+      + '<td style="font-family:monospace;font-size:0.85rem;">'+(c.serial || c.case_id)+'</td>'
+      + '<td>'+c.dept+'</td>'
+      + '<td class="text-muted">'+c.office+'</td>'
+      + '<td class="text-right" style="color:'+ageColor2(c.age)+';font-weight:600;">'+c.age+' 天</td>'
+      + '<td class="text-right text-muted">'+(c.apptAge !== null ? c.apptAge + ' 天' : '—')+'</td>'
+      + '<td class="text-right text-muted">'+(c.deptMed ? c.deptMed.toFixed(0) + ' 天' : '—')+'</td>'
+      + '<td class="text-right">'+ratioStr2(c.typeRatio)+'</td>'
+      + '</tr>';
+  }).join('');
+  detail.style.display = 'block';
+  detail.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
 function _renderCasesCloseCycle(rows) {
   // 已結案 cases 的「建立 → 結案」天數分布
   var closedRows = rows.filter(function(r){return r.aasm_state === 'closed' && r.crm_created_at && r.closed_at;});
@@ -4881,6 +5163,27 @@ document.getElementById('casesAsofDate').addEventListener('change', loadCasesPag
 document.getElementById('casesAsofTodayBtn').addEventListener('click', function(){
   document.getElementById('casesAsofDate').value = new Date().toISOString().substring(0,10);
   loadCasesPage();
+});
+
+// 律師案件 Aging 盤點：分群/排序切換 — 不重抓資料，只 redraw
+document.querySelectorAll('[data-aging-group]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('[data-aging-group]').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    _agingState.group = btn.getAttribute('data-aging-group');
+    _redrawCasesLawyerAging();
+  });
+});
+document.querySelectorAll('[data-aging-sort]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('[data-aging-sort]').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    _agingState.sort = btn.getAttribute('data-aging-sort');
+    _redrawCasesLawyerAging();
+  });
+});
+document.getElementById('casesAgingDetailClose').addEventListener('click', function(){
+  document.getElementById('casesAgingDetail').style.display = 'none';
 });
 
 // ═══ DAILY CUMULATIVE (由 feature_access.revenue_daily 控制) ═══
