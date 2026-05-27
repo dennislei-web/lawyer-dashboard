@@ -91,37 +91,51 @@ def parse_names(field):
 
 LAWYER_ROLE_FIELDS = ['council_lawyers','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers']
 
-# 案型 normalize — substantive case type 優先，諮詢只在 fallback 使用
-# 邏輯：cause 中只要出現實質案型 keyword（家事/民事/刑事...）就用那個，
-#       全部 miss 才看是否含「諮詢」keyword。這修正了「現場諮詢；離婚協議書」誤歸諮詢的問題。
+# 案型 normalize — 3 階段：
+#   1. cause 完全等於 PURE_CONSULT → 真實諮詢（一次見面就結）
+#   2. 含實質案型 keyword → 對應案型（家事/民事/刑事...）
+#   3. 含諮詢 keyword 但不在 PURE → 「混合服務」(諮詢+小型法律服務 套餐)
 SUBSTANTIVE_CASE_TYPES = [
-    ('家事', ['家事', '離婚', '親權', '監護', '扶養', '配偶', '繼承', '遺產', '婚姻', '剩餘財產', '夫妻']),
+    ('家事', ['家事', '離婚', '親權', '監護', '扶養', '配偶', '繼承', '遺產', '婚姻', '剩餘財產', '夫妻',
+              '保護令', '通常保護令']),
     ('刑事', ['刑事', '毒品', '傷害', '詐欺', '竊盜', '妨害', '公然侮辱', '誹謗', '偽造', '違反',
-              '誣告', '告訴', '偵查', '殺人', '搶奪', '強制']),
-    ('簡易訴訟', ['支付命令', '本票', '律師函', '強制執行', '存證信函', '聲請', '催告']),
-    ('民事一般', ['民事', '損害賠償', '債務', '契約', '租賃', '買賣', '返還', '清償', '借款', '侵害']),
-    ('商務/勞資', ['公司', '股東', '勞資', '工資', '勞動']),
+              '誣告', '告訴', '偵查', '殺人', '搶奪', '強制', '校園霸凌', '少年保護']),
+    ('簡易訴訟', ['支付命令', '本票', '律師函', '強制執行', '存證信函', '聲請', '催告',
+                  '單次出庭', '陪同開庭', '陪同出席', '閱卷', '陳報', '書狀', '抗告', '聲明',
+                  '律師代協商', '律師單次出庭']),
+    ('民事一般', ['民事', '損害賠償', '債務', '契約', '租賃', '買賣', '返還', '清償', '借款', '侵害',
+                  '協議書', '和解書', '和解協議', '調解', '車禍鑑定']),
+    ('商務/勞資', ['公司', '股東', '勞資', '工資', '勞動', '公平交易', '性別平等', '法律意見書',
+                   '常年法顧']),
     ('智財', ['智慧財產', '商標', '專利', '著作權']),
-    ('行政/稅務', ['行政訴訟', '稅', '罰鍰']),
+    ('行政/稅務', ['行政訴訟', '稅', '罰鍰', '訴願', '退學', '懲戒']),
+    ('遺囑/其他文件', ['遺囑']),
 ]
+PURE_CONSULT_CAUSES = {
+    '現場諮詢', '視訊諮詢', '電話諮詢', '通話諮詢', '免費諮詢', '律師諮詢',
+    '律師諮詢會議', '諮詢', '二次諮詢', '第二次現場諮詢', '現場(免費)諮詢',
+}
 CONSULT_KEYWORDS = ['現場諮詢', '視訊諮詢', '電話諮詢', '通話諮詢', '免費諮詢', '律師諮詢', '諮詢']
 
 def classify_case_type(c):
-    cause = (c.get('cause_of_action') or '').strip()
+    cause = (c.get('cause_of_action') or '').strip().rstrip('；;,、:: ').strip()
     sn = (c.get('serial_number') or '').upper()
     if sn.startswith('LA') or '法律顧問' in cause:
         return '法律顧問'
     if not cause:
         return '未分類'
-    # Step 1: 找實質案型 keyword
+    # Step 1: pure consultation (strict match)
+    if cause in PURE_CONSULT_CAUSES:
+        return '諮詢'
+    # Step 2: substantive case type
     for label, keys in SUBSTANTIVE_CASE_TYPES:
         for k in keys:
             if k in cause:
                 return label
-    # Step 2: 全部 miss，才 fallback 諮詢
+    # Step 3: 含諮詢 keyword 但 mixed → 套餐式「混合服務」
     for k in CONSULT_KEYWORDS:
         if k in cause:
-            return '諮詢'
+            return '混合服務'
     return '其他'
 
 def is_la(c):
@@ -132,7 +146,7 @@ print('=== Loading data ===')
 fin_rows = fetch_all(f'{SB_URL}/finance_employees_monthly?select=fiscal_year,month,name,department,salary_subtotal')
 print(f'  finance: {len(fin_rows)} rows')
 
-case_cols = ('case_id,serial_number,'
+case_cols = ('case_id,serial_number,aasm_state,'
              'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
              'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at,'
              'cause_of_action,department_name,council_office_name')
@@ -160,7 +174,16 @@ for c in general_cases + la_cases:
     c['_legal_staff'] = legal_staff - NON_CONSULTING_LAWYERS
     c['_case_type'] = classify_case_type(c)
 
-def state_at(c, asof):
+def state_at(c, asof, latest_asof=None):
+    """
+    回傳 case 在 asof 時的 state。
+    對 latest_asof（==今天的 snapshot），改用 CRM 當下的 aasm_state field，
+    避免 ghost-active（CRM appointed→unappointed transition 在 crm_cases schema 沒對應 column）。
+    對 historical asof，best effort 用 transition timestamps 推。
+    """
+    if latest_asof is not None and asof == latest_asof:
+        # Trust CRM's current state for now-snapshot
+        return c.get('aasm_state') or None
     trans = []
     for fld, st in [('_appointed','appointed'),('_pending','pending'),('_closed','closed'),
                     ('_canceled','canceled'),('_unconc','unconcluded')]:
@@ -198,6 +221,7 @@ for r in fin_rows:
 print(f'\n=== Computing {len(months)} monthly snapshots ===')
 monthly_series = []
 age_distribution = []
+LATEST_ASOF = months[-1][3]  # 給 state_at 對 latest 用 aasm_state 過濾
 
 for fy, m, mstart, asof in months:
     counts = {'pure_firm':0,'legal_staff_only':0,'pure_partner':0,'mixed':0,'no_one':0}
@@ -205,7 +229,7 @@ for fy, m, mstart, asof in months:
     active_durs = []
     age_buckets = {'<90':0, '90-365':0, '1-2yr':0, '>2yr':0}
     for c in general_cases:
-        if state_at(c, asof) != 'appointed': continue
+        if state_at(c, asof, LATEST_ASOF) != 'appointed': continue
         ot = owner_type(c, asof)
         counts[ot] += 1
         if c['_created']:
@@ -216,7 +240,7 @@ for fy, m, mstart, asof in months:
             elif age < 730: age_buckets['1-2yr'] += 1
             else: age_buckets['>2yr'] += 1
     for c in la_cases:
-        if state_at(c, asof) == 'appointed': la_active += 1
+        if state_at(c, asof, LATEST_ASOF) == 'appointed': la_active += 1
 
     closed_durs = []
     for c in general_cases:
@@ -268,7 +292,7 @@ by_type = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[],
 twelve_mo_ago = date(latest_asof.year - 1, latest_asof.month, 1) if latest_asof.month > 1 else date(latest_asof.year - 2, 12, 1)
 for c in general_cases:
     t = c['_case_type']
-    if state_at(c, latest_asof) == 'appointed':
+    if state_at(c, latest_asof, latest_asof) == 'appointed':
         by_type[t]['active'] += 1
         ot = owner_type(c, latest_asof)
         if ot in ('pure_firm','legal_staff_only'): by_type[t]['pure_firm'] += 1
@@ -299,7 +323,7 @@ print(f'=== Office breakdown ===')
 by_office = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
 for c in general_cases:
     o = c.get('council_office_name') or '(未標示)'
-    if state_at(c, latest_asof) == 'appointed':
+    if state_at(c, latest_asof, latest_asof) == 'appointed':
         by_office[o]['active'] += 1
         ot = owner_type(c, latest_asof)
         if ot in ('pure_firm','legal_staff_only'): by_office[o]['pure_firm'] += 1
@@ -331,7 +355,7 @@ person_stats = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs
                                      'is_partner':False, 'as_lawyer':False, 'as_legal_staff':False})
 
 for c in general_cases:
-    s = state_at(c, latest_asof)
+    s = state_at(c, latest_asof, latest_asof)
     closed_this_year = c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof
 
     # 5 個 lawyer role 取 union (含合署律師)
