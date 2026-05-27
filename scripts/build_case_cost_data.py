@@ -37,7 +37,11 @@ PARTNER_SINCE = {
     '劉誠夫': '2023-11-01', '陳俊瑋': '2023-11-01', '曾秉浩': '2023-11-01',
 }
 PARTNER_SINCE_DT = {k: datetime.strptime(v, '%Y-%m-%d').date() for k, v in PARTNER_SINCE.items()}
-EXCLUDE_DEPTS_010 = {'北所010', '北所金貝殼'}
+# 北所010 是歷史 dept 名 (misleading)，實際上 17 位裡有 11 位是 WEBSITE 律師、辦的是台北所 cases
+# (memory project_finance_employees_115: "010 只 2 固薪人")
+# 之前全 dept 排掉導致台北所 律師薪資從 18 人剩 7 人 → 與 revenue tab "20 人" 嚴重不符
+# 改成只排 北所金貝殼 (112-114 短暫存在的 dept, 2 人, minor noise)
+EXCLUDE_DEPTS_010 = {'北所金貝殼'}
 
 # finance_employees_monthly.office 已直接帶 6 所 (台北所/桃園所/...)
 # office=None 的 row (跨所共用: 其他/公司/法顧) 只進「全所」aggregate
@@ -68,6 +72,23 @@ LAWYER_NAME_TO_OFFICE = {n: o for o, names in LAWYERS_BY_OFFICE.items() for n in
 NON_CONSULTING_LAWYERS = {
     '張飛宇',  # 財務主管
 }
+
+# 律師判定 fallback (跟 revenue tab _classifyEmployee 對齊)
+# base_salary >= 65K 視為當時的律師 (歷史律師可能不在 WEBSITE)
+LAWYER_BASE_SALARY_FALLBACK = 65000
+# 新到職 / 薪資表外律師 (revenue tab LAWYER_HEADCOUNT_OVERRIDE)
+LAWYER_HEADCOUNT_OVERRIDE = {
+    '葉欣瑩': {'office': '台北所', 'since_ym': (115, 5)},
+    '陳昱璇': {'office': '台北所', 'since_ym': (115, 5)},
+    '林品妘': {'office': '桃園所', 'since_ym': (115, 3)},
+    '陳彥銘': {'office': '台北所', 'since_ym': (115, 3)},  # dept=法顧 office=NULL, 業務上算北所
+}
+
+def is_lawyer_by_classify(name, base_salary, asof_fy, asof_m):
+    """跟 revenue tab _classifyEmployee 對齊"""
+    if name in WEBSITE_LAWYERS: return True
+    if (base_salary or 0) >= LAWYER_BASE_SALARY_FALLBACK: return True
+    return False
 
 def fy_to_year(fy): return fy + 1911
 def month_end(y, m):
@@ -147,7 +168,7 @@ def is_la(c):
     return sn.startswith('LA') or '法律顧問' in (c.get('cause_of_action') or '')
 
 print('=== Loading data ===')
-fin_rows = fetch_all(f'{SB_URL}/finance_employees_monthly?select=fiscal_year,month,name,department,office,salary_subtotal')
+fin_rows = fetch_all(f'{SB_URL}/finance_employees_monthly?select=fiscal_year,month,name,department,office,base_salary,salary_subtotal')
 print(f'  finance: {len(fin_rows)} rows')
 
 case_cols = ('case_id,serial_number,aasm_state,'
@@ -553,23 +574,35 @@ for o, d in sorted(by_office_agg.items(), key=lambda x: -x[1]['active']):
     })
 
 # ============ Salary structure breakdown — 最新月 by office × role ============
+# 律師判定跟 revenue tab 對齊: WEBSITE_LAWYERS ∪ {base_salary>=65K} ∪ OVERRIDE
 print('=== Salary structure (latest month) ===')
 salary_structure = {}
 latest_fm = (latest_fy, latest_m)
+latest_ym = latest_fy * 12 + latest_m
 for off in OFFICES_ORDERED:
     lawyers = []  # 律師
     support = []  # 法務/行政
+    lawyer_names_seen = set()
     for r in sal_structure_rows:
         if (r['fiscal_year'], r['month']) != latest_fm: continue
-        if off == '全所':
-            # 排 010 + 金貝殼 (跟 sal_all_by_mo 一致)
-            pass
-        else:
+        if off != '全所':
             if r.get('office') != off: continue
         nm = r.get('name') or '(無名)'
         amt = r.get('salary_subtotal') or 0
-        bucket = lawyers if nm in WEBSITE_LAWYERS else support
-        bucket.append({'name': nm, 'salary': amt, 'department': r.get('department'), 'office': r.get('office')})
+        base = r.get('base_salary') or 0
+        is_lawyer = is_lawyer_by_classify(nm, base, latest_fy, latest_m)
+        if is_lawyer:
+            lawyers.append({'name': nm, 'salary': amt, 'department': r.get('department'), 'office': r.get('office')})
+            lawyer_names_seen.add(nm)
+        else:
+            support.append({'name': nm, 'salary': amt, 'department': r.get('department'), 'office': r.get('office')})
+    # Apply LAWYER_HEADCOUNT_OVERRIDE (在 office 對應 + asof >= since_ym 才加；薪資未在主表 → salary=0)
+    for nm, info in LAWYER_HEADCOUNT_OVERRIDE.items():
+        if nm in lawyer_names_seen: continue
+        if off != '全所' and info['office'] != off: continue
+        since_y, since_m = info['since_ym']
+        if latest_ym < since_y * 12 + since_m: continue
+        lawyers.append({'name': nm, 'salary': 0, 'department': '(override:薪資未在主表)', 'office': info['office']})
     salary_structure[off] = {
         '律師': {
             'headcount': len(lawyers),
