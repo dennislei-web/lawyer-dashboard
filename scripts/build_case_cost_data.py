@@ -240,6 +240,8 @@ for r in fin_rows:
 
 # Booking: 用 consultation_cases is_signed=true 的 revenue 加總 by case_date 月
 # 全所 = 全部 signed booking；個別所 = lawyer_id 對應到該所的 booking
+# Office attribution: 動態從 crm_cases 推每位律師主要 office（council_office_name 眾數），
+# 蓋住現職 + 離職員工（如楊于瑾、黃惠群等都是台北所離職員工，不是平台律師）
 print('=== Loading consultation_cases for booking ===')
 cons_rows = fetch_all(f'{SB_URL}/consultation_cases?select=case_date,is_signed,revenue,lawyer_id')
 print(f'  consultation_cases: {len(cons_rows)} rows')
@@ -249,9 +251,30 @@ print('  loading lawyers map...')
 lawyer_rows = fetch_all(f'{SB_URL}/lawyers?select=id,name')
 lawyer_id_to_name = {r['id']: r['name'] for r in lawyer_rows if r.get('id')}
 
+# name -> primary office (from crm_cases council_office_name mode)
+print('  inferring name -> office from crm_cases...')
+_name_office_counter = defaultdict(Counter)
+for c in general_cases + la_cases:
+    o = c.get('council_office_name')
+    if not o: continue
+    seen = set()
+    for f in LAWYER_ROLE_FIELDS:
+        seen.update(parse_names(c.get(f)))
+    seen.update(parse_names(c.get('assigned_members')))
+    for n in seen:
+        n = n.strip()
+        if n: _name_office_counter[n][o] += 1
+NAME_TO_PRIMARY_OFFICE = {n: cnt.most_common(1)[0][0] for n, cnt in _name_office_counter.items() if cnt}
+# 用 LAWYERS_BY_OFFICE 當權威 override（現職 cohort 名單最準）
+for off, names in LAWYERS_BY_OFFICE.items():
+    for n in names:
+        NAME_TO_PRIMARY_OFFICE[n] = off
+print(f'  name -> office mapped: {len(NAME_TO_PRIMARY_OFFICE)} names')
+
 booking_by_mo_all = defaultdict(float)
 booking_by_mo_office = {o: defaultdict(float) for o in OFFICE_DEPTS}
-unmapped_lawyer_ids = set()
+unmapped_revenue = 0.0
+unmapped_lawyers = Counter()
 for r in cons_rows:
     if not r.get('is_signed'): continue
     rev = r.get('revenue')
@@ -268,12 +291,15 @@ for r in cons_rows:
     booking_by_mo_all[key] += amt
     lid = r.get('lawyer_id')
     name = lawyer_id_to_name.get(lid) if lid else None
-    off = LAWYER_NAME_TO_OFFICE.get(name) if name else None
-    if off:
+    off = NAME_TO_PRIMARY_OFFICE.get(name) if name else None
+    if off and off in booking_by_mo_office:
         booking_by_mo_office[off][key] += amt
-    elif lid:
-        unmapped_lawyer_ids.add(lid)
-print(f'  booking signed: 全所 total {len(cons_rows)} rows; per-office mapped offices = {sum(1 for o in booking_by_mo_office if booking_by_mo_office[o])}; unmapped lawyer_id count = {len(unmapped_lawyer_ids)}')
+    else:
+        unmapped_revenue += amt
+        unmapped_lawyers[name or f'(no-name id:{lid[:8] if lid else "?"})'] += amt
+print(f'  signed booking: total={sum(booking_by_mo_all.values()):,.0f}; unmapped={unmapped_revenue:,.0f} ({100*unmapped_revenue/sum(booking_by_mo_all.values()):.1f}%)')
+if unmapped_revenue > 0:
+    print(f'  top 5 unmapped: {dict(unmapped_lawyers.most_common(5))}')
 
 def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
     """
