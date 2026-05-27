@@ -3759,11 +3759,29 @@ async function _loadHeadcountSnapshot(asofDate) {
 //   departed_at = Date → asof >= departed_at 後過濾
 //   is_active=false 但 departed_at 為 NULL → 用 sentinel 1900-01-01（永遠視為已離職）
 var _lawyersMeta = null;
+// _nameAliases: alias_name → canonical_name（處理 CRM typo 同人多名）
+var _nameAliases = {};
+
+// CRM 來源名 → 正規化名（typo 合併）
+function _canonName(n) {
+  if (!n) return n;
+  return _nameAliases[n] || n;
+}
 
 async function _loadLegalStaff() {
   if (_legalStaffSet) return _legalStaffSet;
   if (!sb) { _legalStaffSet = new Set(); _lawyersMeta = {}; return _legalStaffSet; }
-  var r = await sb.from('lawyers').select('name,role,is_active,departed_at');
+  // 同時載入 lawyers + name aliases
+  var [r, aliasR] = await Promise.all([
+    sb.from('lawyers').select('name,role,is_active,departed_at'),
+    sb.from('lawyer_name_aliases').select('alias_name,canonical_name')
+  ]);
+  // 先建 alias map（給後續 _canonName 用）
+  var aliases = {};
+  (aliasR.data || []).forEach(function(row){
+    aliases[row.alias_name] = row.canonical_name;
+  });
+  _nameAliases = aliases;
   var meta = {};
   var legalSet = new Set();
   (r.data || []).forEach(function(row){
@@ -3778,7 +3796,7 @@ async function _loadLegalStaff() {
   _lawyersMeta = meta;
   _legalStaffSet = legalSet;
   var departedCount = Object.keys(meta).filter(function(n){return meta[n].departed_at;}).length;
-  console.log('法務排除名單:', Array.from(_legalStaffSet).length, '人; 已離職:', departedCount, '人');
+  console.log('法務排除名單:', Array.from(_legalStaffSet).length, '人; 已離職:', departedCount, '人; name alias:', Object.keys(aliases).length, '組');
   return _legalStaffSet;
 }
 
@@ -3957,7 +3975,7 @@ async function _fetchAllCrmCases() {
     ['assigned_members','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers'].forEach(function(f){
       var arr = r[f];
       if (arr) for (var i = 0; i < arr.length; i++) {
-        if (arr[i]) rawSet.add(arr[i]);
+        if (arr[i]) rawSet.add(_canonName(arr[i]));  // typo 合併（王悅璇 → 王悦璇 等）
       }
     });
     r._rawAttached = Array.from(rawSet);
