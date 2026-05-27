@@ -938,22 +938,27 @@
           </div>
         </div>
 
-        <!-- Lawyer ranking table -->
+        <!-- Lawyer / Legal staff ranking table -->
         <div class="table-card" style="margin-top:16px">
           <div class="table-header">
-            <span class="table-title">⚖️ 律師 backlog 排行
+            <span class="table-title" id="ccRankingTitle">⚖️ 律師 backlog 排行
               <span class="text-muted" style="font-size:0.75rem;font-weight:normal">
                 — backlog_ratio = active ÷ 12mo 結案數，&gt;2 偏 inventory bloat
               </span>
             </span>
-            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:0.78rem;color:var(--text-muted)">
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:0.78rem;color:var(--text-muted);flex-wrap:wrap">
+              角色：
+              <select id="ccPersonRole" style="padding:4px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.78rem">
+                <option value="lawyer">⚖️ 律師</option>
+                <option value="legal_staff">📋 法務</option>
+              </select>
               排序：
               <select id="ccLawyerSort" style="padding:4px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.78rem">
                 <option value="active">承辦中 ↓</option>
                 <option value="backlog">backlog_ratio ↓</option>
                 <option value="closed">12mo 結案 ↓</option>
               </select>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer" id="ccOnlyFirmLabel">
                 <input type="checkbox" id="ccLawyerOnlyFirm" style="accent-color:var(--gold)"> 只看所內
               </label>
             </div>
@@ -985,6 +990,7 @@
             • <strong>合署 absorb gap</strong> = 所內 u$ − 全所 lump u$（合署 cohort 對固定成本的稀釋效應）。<br>
             • <strong>lifetime 成本/件</strong> = 當月 u_firm × 該月結案週期中位（月）。<br>
             • <strong>合署 since date</strong>：18 位律師逐一 hardcoded（含司法官受雇 3 人 since 2023-11-01）。資料源：revenue dashboard。<br>
+            • <strong>律師 vs 法務分類</strong>：律師排行只算 WEBSITE_LAWYERS 66 人白名單（含合署）。不在白名單但出現在案件 5 個律師 role 的人 + assigned_members 視為法務。<br>
             • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。
           </div>
         </div>
@@ -4522,6 +4528,7 @@ function renderCaseCost() {
   ccRenderLawyerTable();
 
   // Bind interactivity
+  document.getElementById('ccPersonRole').addEventListener('change', ccRenderLawyerTable);
   document.getElementById('ccLawyerSort').addEventListener('change', ccRenderLawyerTable);
   document.getElementById('ccLawyerOnlyFirm').addEventListener('change', ccRenderLawyerTable);
 }
@@ -4690,10 +4697,21 @@ function ccRenderOffice() {
 }
 
 function ccRenderLawyerTable() {
-  var rows = caseCostData.lawyer_ranking.slice();
+  var role = document.getElementById('ccPersonRole').value;
+  var src = role === 'legal_staff' ? caseCostData.legal_staff_ranking : caseCostData.lawyer_ranking;
+  var rows = (src || []).slice();
   var sort = document.getElementById('ccLawyerSort').value;
   var onlyFirm = document.getElementById('ccLawyerOnlyFirm').checked;
-  if (onlyFirm) rows = rows.filter(function(r){ return !r.is_partner; });
+
+  // 法務沒有合署概念，「只看所內」隱藏 + 失效
+  var onlyFirmLabel = document.getElementById('ccOnlyFirmLabel');
+  if (role === 'legal_staff') {
+    onlyFirmLabel.style.display = 'none';
+  } else {
+    onlyFirmLabel.style.display = '';
+    if (onlyFirm) rows = rows.filter(function(r){ return !r.is_partner; });
+  }
+
   if (sort === 'active') rows.sort(function(a,b){ return b.active_inventory - a.active_inventory; });
   else if (sort === 'backlog') rows.sort(function(a,b){
     var ba = a.backlog_ratio == null ? 9999 : a.backlog_ratio;
@@ -4703,9 +4721,16 @@ function ccRenderLawyerTable() {
   else if (sort === 'closed') rows.sort(function(a,b){ return b.closed_in_12mo - a.closed_in_12mo; });
   rows = rows.slice(0, 30);
 
+  // Title
+  var titleIcon = role === 'legal_staff' ? '📋 法務' : '⚖️ 律師';
+  var titleN = (src || []).length;
+  document.getElementById('ccRankingTitle').innerHTML = titleIcon + ' backlog 排行 <span class="text-muted" style="font-size:0.75rem;font-weight:normal">(共 ' + titleN + ' 人有承辦或結案紀錄；backlog_ratio = active ÷ 12mo 結案數，&gt;2 偏 inventory bloat)</span>';
+
   var tbody = document.getElementById('ccLawyerTbody');
   tbody.innerHTML = rows.map(function(r, i) {
-    var icon = r.is_partner ? '🤝' : '⚖️';
+    var icon;
+    if (role === 'legal_staff') icon = '📋';
+    else icon = r.is_partner ? '🤝' : '⚖️';
     var brCell;
     if (r.backlog_ratio == null) {
       brCell = '<span style="color:var(--text-muted)">∞ (無結案)</span>';
@@ -4713,9 +4738,10 @@ function ccRenderLawyerTable() {
       var color = r.backlog_ratio > 3 ? '#ef4444' : (r.backlog_ratio > 2 ? '#f59e0b' : (r.backlog_ratio < 1 ? '#10b981' : 'var(--text)'));
       brCell = '<span style="color:' + color + ';font-weight:600">' + r.backlog_ratio.toFixed(2) + '</span>';
     }
+    var partnerTag = (role !== 'legal_staff' && r.is_partner) ? ' <span style="font-size:0.7rem;color:#f59e0b">合署</span>' : '';
     return '<tr style="border-bottom:1px solid var(--border)">'
       + '<td style="padding:8px 10px;color:var(--text-muted)">' + (i+1) + '</td>'
-      + '<td style="padding:8px 10px">' + icon + ' <strong>' + r.name + '</strong>' + (r.is_partner ? ' <span style="font-size:0.7rem;color:#f59e0b">合署</span>' : '') + '</td>'
+      + '<td style="padding:8px 10px">' + icon + ' <strong>' + r.name + '</strong>' + partnerTag + '</td>'
       + '<td style="padding:8px 10px;text-align:right">' + r.active_inventory + '</td>'
       + '<td style="padding:8px 10px;text-align:right">' + r.closed_in_12mo + '</td>'
       + '<td style="padding:8px 10px;text-align:right">' + (r.closed_dur_median ? r.closed_dur_median.toFixed(0) + 'd' : '—') + '</td>'

@@ -34,6 +34,26 @@ PARTNER_SINCE = {
 PARTNER_SINCE_DT = {k: datetime.strptime(v, '%Y-%m-%d').date() for k, v in PARTNER_SINCE.items()}
 EXCLUDE_DEPTS_010 = {'北所010', '北所金貝殼'}
 
+# 律師權威名單 — 來自 zhelu.tw/about 官網（66 位）+ revenue dashboard WEBSITE_LAWYERS
+# 不在這名單但出現在案件 5 個律師 role 的人 → 視為法務（同 revenue tab 邏輯）
+WEBSITE_LAWYERS = {
+    # 台北所 (38)
+    '雷皓明','黃杰','孫少輔','許致維','劉明潔','方心瑜','張又仁','林桑羽','黃顯皓','柯雪莉',
+    '陳寧馨','林昀','張嘉淳','黃世欣','李家泓','徐品軒','蘇萱','林宜嫻','吳柏慶','蕭予馨',
+    '徐棠娜','劉誠夫','陳俊瑋','王怡婷','曾秉浩','李育哲','楊典翰','莊喬鈞','楊啓廷','張文祈',
+    '劉庭懿','秦薇妮','黃庭汶','陳彥銘','陳昱璇','葉欣瑩','謝宗蓉','林敬修',
+    # 桃園所 (8)
+    '李杰峰','嚴心吟','張元毓','劉雅涵','李家徹','張佳榕','林品妘','王相為','王相爲',
+    # 新竹所 (4)
+    '陶光星','張家瑜','楊睿杰','葉芷羽',
+    # 台中所 (8)
+    '洪琬琪','李昭萱','許煜婕','陳璽仲','林佳穎','劉奕靖','李佳蓉','黃子菱',
+    # 台南所 (4)
+    '王湘閔','黃馨儀','黃書炫','姜奕成',
+    # 高雄所 (4)
+    '王郁萱','廖懿涵','陳映臻','蘇端雅',
+}
+
 # 非諮詢律師（不算辦案律師）
 NON_CONSULTING_LAWYERS = {
     '張飛宇',  # 財務主管
@@ -295,36 +315,65 @@ for o, d in sorted(by_office.items(), key=lambda x: -x[1]['active']):
         'lifetime_cost_per_case': round(lifetime),
     })
 
-# ============ Lawyer ranking ============
-print(f'=== Lawyer ranking ===')
-lawyer_stats = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'is_partner':False})
+# ============ Lawyer / Legal staff ranking ============
+# 律師排行：5 個 lawyer role 出現的人，且 name ∈ WEBSITE_LAWYERS（排除法務）
+# 法務排行：assigned_members 出現的人 + 在 5 個 lawyer role 但不在 WEBSITE_LAWYERS 的人
+print(f'=== Lawyer / Legal staff ranking ===')
+
+person_stats = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[],
+                                     'is_partner':False, 'as_lawyer':False, 'as_legal_staff':False})
+
 for c in general_cases:
     s = state_at(c, latest_asof)
     closed_this_year = c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof
-    for name in c['_handling_lawyers']:
-        if s == 'appointed':
-            lawyer_stats[name]['active'] += 1
-        if closed_this_year and c['_created']:
-            lawyer_stats[name]['closed_in_12mo'] += 1
-            lawyer_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
-        if PARTNER_SINCE_DT.get(name) and PARTNER_SINCE_DT[name] <= latest_asof:
-            lawyer_stats[name]['is_partner'] = True
 
-lawyer_ranking = []
-for name, d in lawyer_stats.items():
-    if d['active'] == 0 and d['closed_in_12mo'] == 0: continue
-    cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
-    lawyer_ranking.append({
-        'name': name,
-        'is_partner': d['is_partner'],
-        'active_inventory': d['active'],
-        'closed_in_12mo': d['closed_in_12mo'],
-        'closed_dur_median': round(cdur_med, 1),
-        # 推估每律師的「年化結案能力」 = closed_in_12mo
-        # backlog ratio = active / closed_in_12mo（越高表示越偏 inventory bloat）
-        'backlog_ratio': round(d['active'] / d['closed_in_12mo'], 2) if d['closed_in_12mo'] else None,
-    })
-lawyer_ranking.sort(key=lambda x: -x['active_inventory'])
+    # 5 個 lawyer role 取 union (含合署律師)
+    lawyer_role_names = set()
+    for fld in LAWYER_ROLE_FIELDS:
+        lawyer_role_names.update(parse_names(c.get(fld)))
+    legal_staff_names = set(parse_names(c.get('assigned_members')))
+
+    # 律師 = lawyer role 名單 ∩ WEBSITE_LAWYERS（含合署）
+    case_lawyers = (lawyer_role_names & WEBSITE_LAWYERS) - NON_CONSULTING_LAWYERS
+    # 法務 = assigned_members + (lawyer role 但不在 WEBSITE_LAWYERS) − NON_CONSULTING
+    case_legal_staff = (legal_staff_names | (lawyer_role_names - WEBSITE_LAWYERS)) - NON_CONSULTING_LAWYERS - WEBSITE_LAWYERS
+
+    for name in case_lawyers:
+        person_stats[name]['as_lawyer'] = True
+        if PARTNER_SINCE_DT.get(name) and PARTNER_SINCE_DT[name] <= latest_asof:
+            person_stats[name]['is_partner'] = True
+        if s == 'appointed':
+            person_stats[name]['active'] += 1
+        if closed_this_year and c['_created']:
+            person_stats[name]['closed_in_12mo'] += 1
+            person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+    for name in case_legal_staff:
+        person_stats[name]['as_legal_staff'] = True
+        if s == 'appointed':
+            person_stats[name]['active'] += 1
+        if closed_this_year and c['_created']:
+            person_stats[name]['closed_in_12mo'] += 1
+            person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+
+def build_ranking(filter_role):
+    out = []
+    for name, d in person_stats.items():
+        if not d[filter_role]: continue
+        if d['active'] == 0 and d['closed_in_12mo'] == 0: continue
+        cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
+        out.append({
+            'name': name,
+            'is_partner': d['is_partner'],
+            'active_inventory': d['active'],
+            'closed_in_12mo': d['closed_in_12mo'],
+            'closed_dur_median': round(cdur_med, 1),
+            'backlog_ratio': round(d['active'] / d['closed_in_12mo'], 2) if d['closed_in_12mo'] else None,
+        })
+    out.sort(key=lambda x: -x['active_inventory'])
+    return out
+
+lawyer_ranking = build_ranking('as_lawyer')
+legal_staff_ranking = build_ranking('as_legal_staff')
 
 # ============ Output ============
 output = {
@@ -340,6 +389,7 @@ output = {
     'case_type_breakdown': case_type_breakdown,
     'office_breakdown': office_breakdown,
     'lawyer_ranking': lawyer_ranking,
+    'legal_staff_ranking': legal_staff_ranking,
 }
 
 out_path = 'public/finance/case-cost-data.json'
@@ -354,6 +404,7 @@ print(f'\nsaved: {out_path}')
 print(f'  monthly_series: {len(monthly_series)} months')
 print(f'  case_type_breakdown: {len(case_type_breakdown)} types')
 print(f'  office_breakdown: {len(office_breakdown)} offices')
-print(f'  lawyer_ranking: {len(lawyer_ranking)} lawyers')
+print(f'  lawyer_ranking: {len(lawyer_ranking)} lawyers (WEBSITE_LAWYERS 白名單)')
+print(f'  legal_staff_ranking: {len(legal_staff_ranking)} legal staff')
 print(f'  age_distribution: {len(age_distribution)} months')
 print(f'\nfile size: {os.path.getsize(out_path):,} bytes')
