@@ -4666,7 +4666,7 @@ function renderCaseCost() {
   else if (salBookingPct > 55) sbVerdict = '🟠 警戒';
   else if (salBookingPct > 40) sbVerdict = '🟡 略高';
   else sbVerdict = '🟢 健康';
-  salBookingSubEl.innerHTML = sbVerdict + ' · 起點 ' + salBookingFirst.toFixed(1) + '% → ' + (sbDelta >= 0 ? '+' : '') + sbDelta.toFixed(1) + 'pp';
+  salBookingSubEl.innerHTML = sbVerdict + ' · 起點 ' + salBookingFirst.toFixed(1) + '% → ' + (sbDelta >= 0 ? '+' : '') + sbDelta.toFixed(1) + ' 個百分點';
   var sbColor = salBookingPct > 70 ? '#ef4444' : (salBookingPct > 55 ? '#f59e0b' : (salBookingPct > 40 ? '#eab308' : '#10b981'));
   salBookingEl.style.color = sbColor;
   salBookingCard.style.borderLeftColor = sbColor;
