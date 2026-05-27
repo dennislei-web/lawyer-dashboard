@@ -3984,10 +3984,14 @@ async function _fetchAllCrmCases() {
     r._handlingAll = filtered.handlingAll;
     r._handlingLegal = filtered.handlingLegal;
 
-    // 累計每位律師在各分所出現次數（用來推算「主要分所」）
+    // 累計每位律師/法務在各分所出現次數（用來推算「主要分所」）
     var office = r.council_office_name;
     if (office) {
       r._handling.forEach(function(n){
+        if (!lawyerOfficeCounts[n]) lawyerOfficeCounts[n] = {};
+        lawyerOfficeCounts[n][office] = (lawyerOfficeCounts[n][office] || 0) + 1;
+      });
+      r._handlingLegal.forEach(function(n){
         if (!lawyerOfficeCounts[n]) lawyerOfficeCounts[n] = {};
         lawyerOfficeCounts[n][office] = (lawyerOfficeCounts[n][office] || 0) + 1;
       });
@@ -4453,6 +4457,7 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, st
 
 function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows, statesAtAsofLA, asofDate) {
   // 法務承辦排行：法務出現在 5 角色任一欄；用 asof 過濾「已交接離職者」
+  // 分所 filter 用「案件接案所」(council_office_name)，與上方各所統計表的「法務 (有承辦)」同口徑
   if (!_legalStaffSet) return;
   if (!asofDate) asofDate = new Date();
   var byStaff = {};
@@ -4460,6 +4465,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
     if (!byStaff[name]) byStaff[name] = {inProgress:0, pending:0, closed:0, unconcluded:0, laAppointed:0};
   }
   rows.forEach(function(r){
+    if (highlightOffice && r.council_office_name !== highlightOffice) return;
     var s = statesAtAsof[r.case_id];
     if (s === null) return;
     _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(name){
@@ -4472,6 +4478,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
   });
   // 法顧 appointed（合約有效）按法務加總
   (laRows || []).forEach(function(r){
+    if (highlightOffice && r.council_office_name !== highlightOffice) return;
     var s = (statesAtAsofLA || {})[r.case_id];
     if (s !== 'appointed') return;
     _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(name){
@@ -4479,13 +4486,8 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
       byStaff[name].laAppointed++;
     });
   });
-  // 主要分所 filter
-  var names = Object.keys(byStaff);
-  if (highlightOffice) {
-    names = names.filter(function(n){ return _lawyerPrimaryOffice[n] === highlightOffice; });
-  }
   // 承辦中=0 且 法顧=0 才隱藏
-  names = names.filter(function(n){ return byStaff[n].inProgress > 0 || byStaff[n].laAppointed > 0; });
+  var names = Object.keys(byStaff).filter(function(n){ return byStaff[n].inProgress > 0 || byStaff[n].laAppointed > 0; });
   var sorted = names.map(function(n){
     return Object.assign({name:n}, byStaff[n]);
   }).sort(function(a,b){ return b.inProgress - a.inProgress; }).slice(0, 30);
@@ -4498,7 +4500,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
       + '<td class="text-right text-green">'+l.closed.toLocaleString()+'</td></tr>';
   }).join('');
   document.getElementById('casesLegalStaffTableBody').innerHTML = html || '<tr><td colspan="5" class="text-muted text-center">無資料</td></tr>';
-  var note = highlightOffice ? ('主要分所=' + highlightOffice + ' 的 ' + names.length + ' 位') : ('共 ' + names.length + ' 位');
+  var note = highlightOffice ? ('接案所=' + highlightOffice + ' 的 ' + names.length + ' 位') : ('共 ' + names.length + ' 位');
   document.getElementById('casesLegalStaffCount').textContent = '（' + note + ' 有承辦中案件）';
 }
 
