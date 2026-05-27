@@ -4204,8 +4204,19 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
       var perLegal = (inP.legal_staff_only / legalDenom).toFixed(1);
       perLegalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 位有承辦的法務 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
     }
+    // 合署人均：純合署 + 共辦 ÷ asof 那天 active 的合署律師數
+    // office filter 啟用時不顯示（合署無接案所概念，分子被局部過濾失真）
+    var perPartnerLine = '';
+    if (!officeFilter) {
+      var partnerActive = PARTNER_LAWYERS.filter(function(n){ return _isPartnerAt(n, asofDate); }).length;
+      if (partnerActive > 0) {
+        var partnerTouched = inP.pure_partner + inP.mixed;
+        var perPartner = (partnerTouched / partnerActive).toFixed(1);
+        perPartnerLine = '<br>🤝 合署 (純合署 ' + inP.pure_partner.toLocaleString() + ' + 共辦 ' + inP.mixed.toLocaleString() + ') ÷ ' + partnerActive + ' 位合署 <span style="color:#a78bfa;font-weight:600;">= ' + perPartner + '</span>';
+      }
+    }
     document.getElementById('casesKpiPerLawyerSub').innerHTML =
-      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + '<br>'
+      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + perPartnerLine + '<br>'
       + '<span style="opacity:.7;font-size:0.78rem;">' + denomLabel + '</span>';
   } else {
     document.getElementById('casesKpiPerLawyer').textContent = '-';
