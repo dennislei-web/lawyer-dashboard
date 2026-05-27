@@ -1407,6 +1407,11 @@
           <div class="kpi-value" style="color:#06b6d4;" id="casesKpiLA">-</div>
           <div class="kpi-sub" id="casesKpiLASub">持續性合約，不納入結案統計</div>
         </div>
+        <div class="kpi-card" style="border-left:3px solid #f472b6;">
+          <div class="kpi-label" title="(純合署 + 共辦) 案件數 ÷ asof 那天 active 合署律師數。office filter 啟用時隱藏（合署無接案所概念）">🤝 合署人均承辦中 <span style="opacity:.6;font-size:0.7rem;">ℹ️</span></div>
+          <div class="kpi-value" style="color:#f472b6;" id="casesKpiPartner">-</div>
+          <div class="kpi-sub" id="casesKpiPartnerSub"></div>
+        </div>
       </div>
 
       <!-- 趨勢圖 + 分所分布 -->
@@ -3862,6 +3867,15 @@ var PARTNER_SINCE = {
 };
 var PARTNER_LAWYERS = Object.keys(PARTNER_SINCE);
 
+// 合署律師所屬辦公室（hardcode；未列名者預設 '台北所'）
+// 李昭萱 / 許煜婕 / 陳璽仲 為台中合署，其餘 15 位都在台北
+var PARTNER_OFFICE = {
+  '李昭萱': '台中所',
+  '許煜婕': '台中所',
+  '陳璽仲': '台中所'
+};
+function _partnerOffice(name) { return PARTNER_OFFICE[name] || '台北所'; }
+
 // 預計算 Date 物件（避免 forEach 內反覆 new Date）
 var _partnerSinceDates = {};
 Object.keys(PARTNER_SINCE).forEach(function(n){ _partnerSinceDates[n] = new Date(PARTNER_SINCE[n]); });
@@ -4142,6 +4156,8 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
   var inP = {pure_firm:0, mixed:0, pure_partner:0, legal_staff_only:0, no_one:0};
   var activeLegalStaff = new Set();  // 在 appointed 案件中實際分配到的法務 distinct 名單（不論案件 owner type）
+  // 合署 cohort 案件 touch by office：一案有台北合署 → 台北 +1；同案再有台中合署 → 台中 +1
+  var partnerOfficeTouches = {};
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
     if (s === null) { c.notyet++; return; }
@@ -4149,7 +4165,15 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     if (s === 'appointed') {
       var owner = _caseOwnerType(r, asofDate);
       inP[owner] = (inP[owner] || 0) + 1;
-      _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(n){ activeLegalStaff.add(n); });
+      var filtered = _handlingFilteredAt(r, asofDate);
+      filtered.handlingLegal.forEach(function(n){ activeLegalStaff.add(n); });
+      if (owner === 'pure_partner' || owner === 'mixed') {
+        var caseOffices = new Set();
+        filtered.handling.forEach(function(n){
+          if (_isPartnerAt(n, asofDate)) caseOffices.add(_partnerOffice(n));
+        });
+        caseOffices.forEach(function(o){ partnerOfficeTouches[o] = (partnerOfficeTouches[o] || 0) + 1; });
+      }
     }
   });
 
@@ -4204,19 +4228,8 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
       var perLegal = (inP.legal_staff_only / legalDenom).toFixed(1);
       perLegalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 位有承辦的法務 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
     }
-    // 合署人均：純合署 + 共辦 ÷ asof 那天 active 的合署律師數
-    // office filter 啟用時不顯示（合署無接案所概念，分子被局部過濾失真）
-    var perPartnerLine = '';
-    if (!officeFilter) {
-      var partnerActive = PARTNER_LAWYERS.filter(function(n){ return _isPartnerAt(n, asofDate); }).length;
-      if (partnerActive > 0) {
-        var partnerTouched = inP.pure_partner + inP.mixed;
-        var perPartner = (partnerTouched / partnerActive).toFixed(1);
-        perPartnerLine = '<br>🤝 合署 (純合署 ' + inP.pure_partner.toLocaleString() + ' + 共辦 ' + inP.mixed.toLocaleString() + ') ÷ ' + partnerActive + ' 位合署 <span style="color:#a78bfa;font-weight:600;">= ' + perPartner + '</span>';
-      }
-    }
     document.getElementById('casesKpiPerLawyerSub').innerHTML =
-      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + perPartnerLine + '<br>'
+      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + '<br>'
       + '<span style="opacity:.7;font-size:0.78rem;">' + denomLabel + '</span>';
   } else {
     document.getElementById('casesKpiPerLawyer').textContent = '-';
@@ -4224,6 +4237,42 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   }
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
   document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
+
+  // 🤝 合署人均承辦中（獨立卡）：(純合署 + 共辦) ÷ asof active 合署人數
+  // office filter 啟用時不顯示（合署無接案所概念，案件 filter 後分子失真）
+  if (officeFilter) {
+    document.getElementById('casesKpiPartner').textContent = '-';
+    document.getElementById('casesKpiPartnerSub').innerHTML =
+      '<span style="opacity:.7;">合署無接案所概念</span><br>'
+      + '<span style="opacity:.7;font-size:0.78rem;">請取消接案所 filter 查看</span>';
+  } else {
+    var activePartners = PARTNER_LAWYERS.filter(function(n){ return _isPartnerAt(n, asofDate); });
+    var partnerByOffice = {};
+    activePartners.forEach(function(n){
+      var o = _partnerOffice(n);
+      partnerByOffice[o] = (partnerByOffice[o] || 0) + 1;
+    });
+    var partnerTouched = inP.pure_partner + inP.mixed;
+    if (activePartners.length > 0) {
+      var perPartner = (partnerTouched / activePartners.length);
+      document.getElementById('casesKpiPartner').textContent = perPartner.toFixed(1);
+      var sub = '純合署 ' + inP.pure_partner.toLocaleString() + ' + 共辦 ' + inP.mixed.toLocaleString() + ' ÷ ' + activePartners.length + ' 位';
+      // 各 cohort 拆解
+      var officeLines = Object.keys(partnerByOffice).sort().map(function(o){
+        var icon = (o === '台中所') ? '🏞️' : '🏙️';
+        var denom = partnerByOffice[o];
+        var num = partnerOfficeTouches[o] || 0;
+        var per = denom > 0 ? (num / denom).toFixed(1) : '-';
+        return icon + ' ' + o + ' ' + num.toLocaleString() + ' ÷ ' + denom + ' 位 <span style="color:#f472b6;font-weight:600;">= ' + per + '</span>';
+      }).join('<br>');
+      document.getElementById('casesKpiPartnerSub').innerHTML =
+        sub + '<br>' + officeLines
+        + '<br><span style="opacity:.7;font-size:0.78rem;">跨所共辦會在兩邊各計一次</span>';
+    } else {
+      document.getElementById('casesKpiPartner').textContent = '-';
+      document.getElementById('casesKpiPartnerSub').textContent = '無合署律師';
+    }
+  }
 
   // 法律顧問 KPI（獨立維度）
   document.getElementById('casesKpiLA').textContent = la.appointed.toLocaleString();
