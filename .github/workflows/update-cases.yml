@@ -6,6 +6,8 @@ on:
     - cron: '30 19 * * *'  # UTC 19:30 = 台灣 03:30
     # 每週日台灣時間凌晨 4:00 跑 refresh-open（更新所有非終局案件狀態）
     - cron: '0 20 * * 0'   # UTC 20:00 Sun = 台灣週日 04:00（時差 +1 天但週期不變）
+    # 每月 1 號台灣時間凌晨 01:00 跑 full（修補歷史案件 sync 漂移）
+    - cron: '0 17 1 * *'   # UTC 17:00 1st = 台灣每月 1 號 01:00
   # 手動觸發
   workflow_dispatch:
     inputs:
@@ -44,10 +46,16 @@ jobs:
           if [ -n "${{ github.event.inputs.mode }}" ]; then
             MODE="${{ github.event.inputs.mode }}"
           else
-            # cron 時：週日 UTC 20:00 跑 refresh-open，其他時候 recent
+            # cron 時：依時間判斷
+            #   每月 1 號 UTC 17:00 → full（修補歷史漂移）
+            #   每週日 UTC 20:00 → refresh-open
+            #   其他 → recent
+            DAY_OF_MONTH=$(date -u +%d)
             DAY_OF_WEEK=$(date -u +%u)  # 1=Mon ... 7=Sun
             HOUR=$(date -u +%H)
-            if [ "$DAY_OF_WEEK" = "7" ] && [ "$HOUR" = "20" ]; then
+            if [ "$DAY_OF_MONTH" = "01" ] && [ "$HOUR" = "17" ]; then
+              MODE="full"
+            elif [ "$DAY_OF_WEEK" = "7" ] && [ "$HOUR" = "20" ]; then
               MODE="refresh-open"
             else
               MODE="recent"
