@@ -897,7 +897,26 @@
           </div>
         </div>
 
-        <!-- KPI Row 2: Diagnostic — 週期 + 老化 -->
+        <!-- KPI Row 2: 真實 P&L 比值（修正 stock-flow trap）-->
+        <div class="table-card" style="margin:8px 0;border-left:3px solid var(--gold);padding:0">
+          <div style="padding:8px 14px;font-size:0.75rem;color:var(--text-muted)">
+            🎯 <strong style="color:var(--gold)">真實 P&L 比值</strong> ─ 上方 lifetime / u$ 是「薪資 ÷ 存量」會被庫存稀釋；下面這兩個是「薪資 ÷ 流量」，跟損益表對得起來
+          </div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-card" id="ccKpiSalBookingCard" style="border-left:3px solid #ef4444">
+            <div class="kpi-label">💰 薪資 ÷ 新成案金額（12 個月）<span style="opacity:.6;font-size:0.7rem" title="每月新成案金額 = 諮詢分析簽約 revenue 加總；薪資 = 律師+法務+行政 (排010+金貝殼)。健康法律事務所應 &lt; 50%">ℹ️</span></div>
+            <div class="kpi-value" id="ccKpiSalBooking">-</div>
+            <div class="kpi-sub" id="ccKpiSalBookingSub"></div>
+          </div>
+          <div class="kpi-card" id="ccKpiSalClosedCard" style="border-left:3px solid #f59e0b">
+            <div class="kpi-label">📦 薪資 ÷ 結案數（12 個月，元/件）<span style="opacity:.6;font-size:0.7rem" title="每結一件案件實際吃掉多少人事成本。用流量 ÷ 流量，避開存量稀釋陷阱">ℹ️</span></div>
+            <div class="kpi-value" id="ccKpiSalClosed">-</div>
+            <div class="kpi-sub" id="ccKpiSalClosedSub"></div>
+          </div>
+        </div>
+
+        <!-- KPI Row 3: Diagnostic — 週期 + 老化 -->
         <div class="kpi-row">
           <div class="kpi-card blue">
             <div class="kpi-label">處理中案件週期中位 <span style="opacity:.6;font-size:0.7rem" title="當下 active appointed 案件從建案至今的天數中位。庫存老化指標">ℹ️</span></div>
@@ -916,10 +935,18 @@
           </div>
         </div>
 
+        <!-- Chart 0: 真實 P&L 比值趨勢 (NEW) -->
+        <div class="chart-row">
+          <div class="chart-card" style="grid-column: 1 / -1">
+            <div class="chart-title">🎯 真實 P&L 比值趨勢 — 4 年（12 個月滾動平均）</div>
+            <div class="chart-container" style="height:300px"><canvas id="ccTrendFlowRatio"></canvas></div>
+          </div>
+        </div>
+
         <!-- Chart 1: 單位月成本趨勢 -->
         <div class="chart-row">
           <div class="chart-card" style="grid-column: 1 / -1">
-            <div class="chart-title">單位月成本趨勢 — 4 年（含合署 absorb gap）</div>
+            <div class="chart-title">單位月成本趨勢 — 4 年（含合署 absorb gap，這兩條會被存量稀釋）</div>
             <div class="chart-container" style="height:300px"><canvas id="ccTrendCost"></canvas></div>
           </div>
         </div>
@@ -1011,6 +1038,7 @@
             • <strong>律師 vs 法務分類</strong>：律師排行只算 WEBSITE_LAWYERS 66 人白名單（含合署）。不在白名單但出現在案件 5 個律師 role 的人 + assigned_members 視為法務。<br>
             • <strong>案型分類</strong>：3 階段判定 — (1) 純諮詢 cause（無分隔符後綴）→ 諮詢；(2) 含實質案型 keyword（家事/民事/刑事...）→ 對應案型；(3) 含諮詢 keyword 但 mixed → 「混合服務」（諮詢+小型法律服務套餐）。<br>
             • <strong>Active 案件判定</strong>：最新月用 CRM <code>aasm_state == 'appointed'</code> 直接過濾（避免 ghost-active）。歷史月份用 transition timestamps best-effort 推（crm_cases schema 沒 unappointed_at，appointed→unappointed 的 transition 推不到，所以歷史 active 可能系統性 over-count，但 trend 方向不變）。<br>
+            • <strong>真實 P&L 比值（薪資÷新成案 / 薪資÷結案數）</strong>：用流量÷流量、避開存量稀釋陷阱。新成案金額來自 consultation_cases.revenue (is_signed=true 加總 by case_date)；結案數來自該月 crm_cases.closed_at；薪資=律師+法務+行政（排010）。用 12 個月滾動平均消除單月 noise（諮詢→簽約有 lag）。<br>
             • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。<br>
             • <strong>所別 filter</strong>：分母用 <code>council_office_name</code> 篩；分子薪資只算該所對應 department（北所=北所吉他/北所(接案、行政、工讀)/北所四部；桃=桃所；竹=竹所；中=中所；南=南所；雄=雄所）。「其他/公司/法顧/None」這類跨所共用 dept 只在「全所」算進去，個別所視圖會略低估。<br>
             • <strong>年度 filter</strong>：選某年後趨勢圖 zoom 到該年 12 個月、KPI 的「起點」改成該年 1 月、案型/律師排行用該年最後月份為 asof。
@@ -4601,7 +4629,44 @@ function renderCaseCost() {
   var lifetimeAsofTag = latestClosed.fy_mo === latest.fy_mo ? '' : '（' + latestClosed.fy_mo + '）';
   document.getElementById('ccKpiLifetimeSub').innerHTML = '元/件' + lifetimeAsofTag + ' · 起點 ' + _fmtNum(firstClosed.lifetime_cost_per_case) + ' → ' + (lifetimeDelta >= 0 ? '+' : '') + _fmtPct(lifetimeDelta, 1);
 
-  // KPI Row 2 — Diagnostic
+  // KPI Row 2 — 真實 P&L 比值 (12mo rolling)
+  // 找最新有 booking 的點
+  var latestFlow = (function(){
+    for (var i = ms.length - 1; i >= 0; i--) if (ms[i].new_booking_12mo > 0) return ms[i];
+    return latest;
+  })();
+  // 起點要 ≥ 第 12 個月才算 full 12mo window（避開 partial window 比較失真）
+  var firstFlow = (function(){
+    for (var i = 11; i < ms.length; i++) if (ms[i].new_booking_12mo > 0) return ms[i];
+    return ms[Math.min(11, ms.length-1)] || first;
+  })();
+  var salBookingPct = latestFlow.sal_to_booking_pct_12mo || 0;
+  var salBookingFirst = firstFlow.sal_to_booking_pct_12mo || 0;
+  var salClosed = latestFlow.sal_per_closed_case_12mo || 0;
+  var salClosedFirst = firstFlow.sal_per_closed_case_12mo || 0;
+  // 薪資/booking %
+  var salBookingEl = document.getElementById('ccKpiSalBooking');
+  var salBookingSubEl = document.getElementById('ccKpiSalBookingSub');
+  var salBookingCard = document.getElementById('ccKpiSalBookingCard');
+  salBookingEl.textContent = salBookingPct.toFixed(1) + '%';
+  var sbDelta = salBookingFirst ? (salBookingPct - salBookingFirst) : 0;
+  var sbVerdict;
+  if (salBookingPct > 70) sbVerdict = '🔴 危險（健康應 <50%）';
+  else if (salBookingPct > 55) sbVerdict = '🟠 警戒';
+  else if (salBookingPct > 40) sbVerdict = '🟡 略高';
+  else sbVerdict = '🟢 健康';
+  salBookingSubEl.innerHTML = sbVerdict + ' · 起點 ' + salBookingFirst.toFixed(1) + '% → ' + (sbDelta >= 0 ? '+' : '') + sbDelta.toFixed(1) + 'pp';
+  var sbColor = salBookingPct > 70 ? '#ef4444' : (salBookingPct > 55 ? '#f59e0b' : (salBookingPct > 40 ? '#eab308' : '#10b981'));
+  salBookingEl.style.color = sbColor;
+  salBookingCard.style.borderLeftColor = sbColor;
+  // 薪資/結案數
+  var salClosedEl = document.getElementById('ccKpiSalClosed');
+  var salClosedSubEl = document.getElementById('ccKpiSalClosedSub');
+  salClosedEl.textContent = _fmtNum(salClosed);
+  var scDelta = salClosedFirst ? (salClosed / salClosedFirst - 1) : 0;
+  salClosedSubEl.innerHTML = '元/件 · 起點 ' + _fmtNum(salClosedFirst) + ' → ' + (scDelta >= 0 ? '+' : '') + _fmtPct(scDelta, 1);
+
+  // KPI Row 3 — Diagnostic
   var adurDelta = first.active_dur_median ? (latest.active_dur_median - first.active_dur_median) / first.active_dur_median : 0;
   var cdurDelta = firstClosed.closed_dur_median ? (latestClosed.closed_dur_median - firstClosed.closed_dur_median) / firstClosed.closed_dur_median : 0;
   document.getElementById('ccKpiActiveDur').textContent = latest.active_dur_median.toFixed(0) + ' 天';
@@ -4631,6 +4696,7 @@ function renderCaseCost() {
   agingCard.style.borderLeftColor = agingColor;
 
   // Charts
+  ccRenderTrendFlowRatio();
   ccRenderTrendCost();
   ccRenderTrendDur();
   ccRenderTrendLifetime();
@@ -4662,6 +4728,48 @@ function _ccCommonOpts(yCallback) {
       y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 }, callback: yCallback }, grid: { color: 'rgba(255,255,255,0.05)' } }
     }
   };
+}
+
+function ccRenderTrendFlowRatio() {
+  var ms = ccView.monthly_series;
+  var labels = ms.map(function(r) { return r.fy_mo; });
+  var ctx = document.getElementById('ccTrendFlowRatio');
+  if (charts.ccTrendFlowRatio) charts.ccTrendFlowRatio.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  // 找有 booking 資料起點 (避開早期 booking=0 的月份)
+  charts.ccTrendFlowRatio = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '薪資 ÷ 新成案金額 % (12 個月)', data: ms.map(function(r){ return r.sal_to_booking_pct_12mo > 0 ? r.sal_to_booking_pct_12mo : null; }),
+          borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.15)', tension: 0.3, borderWidth: 2.5, yAxisID: 'y', fill: true },
+        { label: '薪資 ÷ 結案數 (元/件, 12 個月)', data: ms.map(function(r){ return r.sal_per_closed_case_12mo > 0 ? r.sal_per_closed_case_12mo : null; }),
+          borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: {
+            label: function(c) {
+              if (c.datasetIndex === 0) return c.dataset.label + ': ' + c.parsed.y.toFixed(1) + '%';
+              return c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString();
+            }
+          }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 9 }, maxRotation: 60, autoSkip: true, autoSkipPadding: 10 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { position: 'left', ticks: { color: '#ef4444', font: { size: 10 }, callback: function(v){ return v + '%'; } }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: '薪資/新成案 %', color: '#ef4444' } },
+        y1: { position: 'right', ticks: { color: '#f59e0b', font: { size: 10 }, callback: function(v){ return (v/1000).toFixed(0) + 'K'; } }, grid: { drawOnChartArea: false }, title: { display: true, text: '薪資/結案 元/件', color: '#f59e0b' } }
+      }
+    }
+  });
 }
 
 function ccRenderTrendCost() {

@@ -238,7 +238,27 @@ for r in fin_rows:
         if dept in depts:
             sal_office_by_mo[off][fm] += amt
 
-def compute_office_slice(office, case_filter, sal_by_mo):
+# Booking: 用 consultation_cases is_signed=true 的 revenue 加總 by case_date 月
+# 全所層級才算 (個別所留 0)
+print('=== Loading consultation_cases for booking ===')
+cons_rows = fetch_all(f'{SB_URL}/consultation_cases?select=case_date,is_signed,revenue,lawyer_id')
+print(f'  consultation_cases: {len(cons_rows)} rows')
+booking_by_mo_all = defaultdict(float)
+for r in cons_rows:
+    if not r.get('is_signed'): continue
+    rev = r.get('revenue')
+    if not rev: continue
+    cd = r.get('case_date')
+    if not cd: continue
+    try:
+        dt = datetime.fromisoformat(cd).date()
+    except:
+        continue
+    # 轉民國年: 西元年 - 1911
+    fy = dt.year - 1911
+    booking_by_mo_all[(fy, dt.month)] += float(rev)
+
+def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
     """
     case_filter: callable(case) -> bool
     sal_by_mo: dict (fy, m) -> salary
@@ -286,6 +306,13 @@ def compute_office_slice(office, case_filter, sal_by_mo):
         adur_mean = statistics.mean(active_durs) if active_durs else 0
         lifetime_cost_per_case = u_firm * cdur_median / 30 if cdur_median else 0
 
+        # 真實 P&L 比值 (flow/flow, 修正 stock-flow trap)
+        new_booking = (booking_by_mo or {}).get((fy, m), 0)
+        n_closed = len(closed_durs)
+        sal_to_booking_pct = round(sal / new_booking * 100, 1) if new_booking else 0
+        sal_per_closed_case = round(sal / n_closed) if n_closed else 0
+        # 12 mo rolling 待後續迴圈外計算
+
         monthly_series.append({
             'fy_mo': f'{fy}-{m:02d}',
             'real_date': asof.isoformat(),
@@ -297,6 +324,9 @@ def compute_office_slice(office, case_filter, sal_by_mo):
             'mixed': counts['mixed'],
             'u_lump': round(u_lump),
             'u_firm': round(u_firm),
+            'new_booking': round(new_booking),
+            'sal_to_booking_pct': sal_to_booking_pct,
+            'sal_per_closed_case': sal_per_closed_case,
             'active_dur_median': round(adur_median, 1),
             'active_dur_mean': round(adur_mean, 1),
             'closed_dur_median': round(cdur_median, 1),
@@ -308,6 +338,17 @@ def compute_office_slice(office, case_filter, sal_by_mo):
             'fy_mo': f'{fy}-{m:02d}',
             **age_buckets
         })
+
+    # 12 個月 rolling average for sal_to_booking_pct + sal_per_closed_case (穩定化 monthly noise)
+    for i in range(len(monthly_series)):
+        window = monthly_series[max(0, i-11):i+1]
+        sal_sum = sum(r['sal_office'] for r in window)
+        booking_sum = sum(r['new_booking'] for r in window)
+        closed_sum = sum(r['n_closed_in_month'] for r in window)
+        monthly_series[i]['sal_to_booking_pct_12mo'] = round(sal_sum / booking_sum * 100, 1) if booking_sum else 0
+        monthly_series[i]['sal_per_closed_case_12mo'] = round(sal_sum / closed_sum) if closed_sum else 0
+        monthly_series[i]['new_booking_12mo'] = round(booking_sum)
+        monthly_series[i]['n_closed_12mo'] = closed_sum
 
     # case_type / ranking 用 latest asof（最新月 / 各年的 year-end 由前端 derive）
     # 為了讓「年度」filter 在前端 zoom 後仍能拿到該年 asof 的 breakdown，
@@ -434,7 +475,7 @@ def compute_office_slice(office, case_filter, sal_by_mo):
 # ============ Compute slices ============
 by_office = {}
 print('\n=== Computing 全所 ===')
-by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo)
+by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo, booking_by_mo_all)
 
 for off in OFFICE_DEPTS:
     print(f'=== Computing {off} ===')
