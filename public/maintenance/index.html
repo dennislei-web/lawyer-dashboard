@@ -539,11 +539,37 @@ function statusFor(days, warnDays, critDays) {
   return { txt:'✓ ' + days + ' 天前', color:'var(--green)' };
 }
 
-async function maxOf(table, dateCol) {
+async function maxOf(table, dateCol, filterFn) {
   try {
-    var r = await sb.from(table).select(dateCol).order(dateCol, { ascending:false }).limit(1);
+    var q = sb.from(table).select(dateCol).order(dateCol, { ascending:false }).limit(50);
+    if (filterFn) q = filterFn(q);
+    var r = await q;
     if (r.error || !r.data || !r.data[0]) return null;
     return r.data[0][dateCol];
+  } catch (e) { return null; }
+}
+
+// 010 表是 year + month 兩個 integer 欄，合成 YYYY-MM-01
+async function maxYearMonth(table) {
+  try {
+    var r = await sb.from(table).select('year,month').order('year',{ascending:false}).order('month',{ascending:false}).limit(1);
+    if (r.error || !r.data || !r.data[0]) return null;
+    var y = r.data[0].year, m = r.data[0].month;
+    return y + '-' + String(m).padStart(2,'0') + '-01';
+  } catch (e) { return null; }
+}
+
+// 委前 monthly funnel 有未來月份 ghost rows（sheet 公式預填）→ 過濾 sessions/leads 至少一個 > 0
+async function maxMonthlyFunnel() {
+  try {
+    var today = new Date().toISOString().slice(0,10);
+    var r = await sb.from('consult_oa_monthly_funnel')
+      .select('month_start,sessions,leads')
+      .lte('month_start', today)
+      .or('sessions.gt.0,leads.gt.0')
+      .order('month_start',{ascending:false}).limit(1);
+    if (r.error || !r.data || !r.data[0]) return null;
+    return r.data[0].month_start;
   } catch (e) { return null; }
 }
 
@@ -552,14 +578,14 @@ async function loadFreshness() {
   tbody.innerHTML = '<tr><td colspan="4" class="loading"><div class="spinner"></div></td></tr>';
 
   var results = await Promise.all([
-    maxOf('consultation_cases', 'consult_date'),
+    maxOf('consultation_cases', 'case_date'),
     maxOf('monthly_stats', 'month'),
-    maxOf('revenue_records', 'transaction_date'),
-    maxOf('advisor_transactions', 'transaction_date'),
-    maxOf('advisor_cases', 'sign_date'),
-    maxOf('fact_010_monthly_team', 'month'),
+    maxOf('revenue_records', 'record_date'),
+    maxOf('advisor_transactions', 'record_date'),
+    maxOf('advisor_cases', 'paid_at'),
+    maxYearMonth('fact_010_monthly_team'),
     maxOf('consult_oa_funnel_daily', 'insight_date'),
-    maxOf('consult_oa_monthly_funnel', 'month_start'),
+    maxMonthlyFunnel(),
     maxOf('consult_oa_tag_chats_monthly', 'month_start'),
     maxOf('finance_data', 'created_at'),
     maxOf('finance_employees', 'created_at'),
