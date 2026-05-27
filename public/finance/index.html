@@ -851,11 +851,24 @@
     <div class="page" id="page-case-cost">
       <div id="ccLoading" class="text-muted" style="padding:24px;text-align:center">載入中⋯</div>
       <div id="ccContent" style="display:none">
+        <!-- Filter bar -->
+        <div class="filter-bar" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="filter-label" style="font-size:0.82rem;color:var(--text-muted)">所別：</span>
+            <select id="ccOfficeFilter" style="padding:5px 10px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem"></select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="filter-label" style="font-size:0.82rem;color:var(--text-muted)">年度：</span>
+            <select id="ccYearFilter" style="padding:5px 10px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.85rem"></select>
+          </div>
+          <div id="ccFilterHint" style="margin-left:auto;font-size:0.75rem;color:var(--text-muted)"></div>
+        </div>
+
         <!-- Meta bar -->
         <div class="table-card" style="margin-bottom:16px;border-left:3px solid var(--gold);padding:0">
           <div style="padding:12px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:0.85rem">
             <div>📅 資料截至 <strong id="ccAsofDate">—</strong></div>
-            <div style="color:var(--text-muted)">觀察期 <span id="ccWindow">—</span> · 共 52 個月</div>
+            <div style="color:var(--text-muted)">觀察期 <span id="ccWindow">—</span> · <span id="ccWindowSlice">共 52 個月</span></div>
             <div style="margin-left:auto;color:var(--text-muted);font-size:0.75rem" id="ccGenAt"></div>
           </div>
         </div>
@@ -932,12 +945,12 @@
         </div>
 
         <!-- Chart 4: 案型 + Office -->
-        <div class="chart-row">
-          <div class="chart-card">
+        <div class="chart-row" id="ccCaseTypeOfficeRow">
+          <div class="chart-card" id="ccCaseTypeCard">
             <div class="chart-title">案型 lifetime 成本 (asof <span id="ccAsofLabel">—</span>)</div>
             <div class="chart-container" style="height:340px"><canvas id="ccCaseTypeBar"></canvas></div>
           </div>
-          <div class="chart-card">
+          <div class="chart-card" id="ccOfficeCard">
             <div class="chart-title">分所 lifetime 成本</div>
             <div class="chart-container" style="height:340px"><canvas id="ccOfficeBar"></canvas></div>
           </div>
@@ -998,7 +1011,9 @@
             • <strong>律師 vs 法務分類</strong>：律師排行只算 WEBSITE_LAWYERS 66 人白名單（含合署）。不在白名單但出現在案件 5 個律師 role 的人 + assigned_members 視為法務。<br>
             • <strong>案型分類</strong>：3 階段判定 — (1) 純諮詢 cause（無分隔符後綴）→ 諮詢；(2) 含實質案型 keyword（家事/民事/刑事...）→ 對應案型；(3) 含諮詢 keyword 但 mixed → 「混合服務」（諮詢+小型法律服務套餐）。<br>
             • <strong>Active 案件判定</strong>：最新月用 CRM <code>aasm_state == 'appointed'</code> 直接過濾（避免 ghost-active）。歷史月份用 transition timestamps best-effort 推（crm_cases schema 沒 unappointed_at，appointed→unappointed 的 transition 推不到，所以歷史 active 可能系統性 over-count，但 trend 方向不變）。<br>
-            • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。
+            • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。<br>
+            • <strong>所別 filter</strong>：分母用 <code>council_office_name</code> 篩；分子薪資只算該所對應 department（北所=北所吉他/北所(接案、行政、工讀)/北所四部；桃=桃所；竹=竹所；中=中所；南=南所；雄=雄所）。「其他/公司/法顧/None」這類跨所共用 dept 只在「全所」算進去，個別所視圖會略低估。<br>
+            • <strong>年度 filter</strong>：選某年後趨勢圖 zoom 到該年 12 個月、KPI 的「起點」改成該年 1 月、案型/律師排行用該年最後月份為 asof。
           </div>
         </div>
       </div>
@@ -4466,6 +4481,10 @@ async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonu
 // ═══════════════════════════════════════════════════════════
 var caseCostData = null;
 var caseCostLoaded = false;
+var ccFilterOffice = '全所';
+var ccFilterYear = 'all';
+// 當前 view 的衍生資料（filter applied）
+var ccView = null;
 
 async function loadCaseCostData() {
   if (caseCostLoaded) return;
@@ -4476,6 +4495,7 @@ async function loadCaseCostData() {
     var r = await fetch(url, { credentials: 'same-origin' });
     if (!r.ok) throw new Error('fetch failed: ' + r.status);
     caseCostData = await r.json();
+    ccInitFilters();
     renderCaseCost();
     loadingEl.style.display = 'none';
     contentEl.style.display = '';
@@ -4488,25 +4508,88 @@ async function loadCaseCostData() {
 function _fmtNum(n) { return (n || 0).toLocaleString('en-US'); }
 function _fmtPct(n, digits) { return ((n || 0) * 100).toFixed(digits == null ? 1 : digits) + '%'; }
 
+function ccInitFilters() {
+  var d = caseCostData;
+  var offSel = document.getElementById('ccOfficeFilter');
+  offSel.innerHTML = (d.offices || ['全所']).map(function(o){
+    return '<option value="' + o + '"' + (o === ccFilterOffice ? ' selected' : '') + '>' + o + '</option>';
+  }).join('');
+  var yearSel = document.getElementById('ccYearFilter');
+  var years = (d.meta && d.meta.fiscal_years) ? d.meta.fiscal_years : [111,112,113,114,115];
+  var opts = ['<option value="all"' + (ccFilterYear === 'all' ? ' selected' : '') + '>全期</option>'];
+  years.forEach(function(y){
+    opts.push('<option value="' + y + '"' + (String(ccFilterYear) === String(y) ? ' selected' : '') + '>' + y + ' 年度</option>');
+  });
+  yearSel.innerHTML = opts.join('');
+  offSel.addEventListener('change', function(){ ccFilterOffice = this.value; renderCaseCost(); });
+  yearSel.addEventListener('change', function(){ ccFilterYear = this.value; renderCaseCost(); });
+}
+
+// 依 filter 算出當前 view
+function ccBuildView() {
+  var d = caseCostData;
+  var slice = (d.by_office && d.by_office[ccFilterOffice]) || d.by_office['全所'];
+  var allMs = slice.monthly_series || [];
+  var allAge = slice.age_distribution || [];
+  var ms = allMs, ageDist = allAge;
+  if (ccFilterYear !== 'all') {
+    var prefix = ccFilterYear + '-';
+    ms = allMs.filter(function(r){ return r.fy_mo.indexOf(prefix) === 0; });
+    ageDist = allAge.filter(function(r){ return r.fy_mo.indexOf(prefix) === 0; });
+  }
+  var yk = String(ccFilterYear);
+  var ctb = (slice.case_type_by_year && slice.case_type_by_year[yk]) || [];
+  var lr = (slice.lawyer_by_year && slice.lawyer_by_year[yk]) || [];
+  var lsr = (slice.legal_staff_by_year && slice.legal_staff_by_year[yk]) || [];
+  return {
+    monthly_series: ms,
+    age_distribution: ageDist,
+    case_type_breakdown: ctb,
+    lawyer_ranking: lr,
+    legal_staff_ranking: lsr,
+    office_breakdown: d.office_breakdown || [],
+  };
+}
+
 function renderCaseCost() {
   var d = caseCostData;
   if (!d) return;
-  var ms = d.monthly_series;
+  ccView = ccBuildView();
+  var ms = ccView.monthly_series;
+  if (!ms.length) {
+    document.getElementById('ccFilterHint').textContent = '⚠️ 此 filter 組合無資料';
+    return;
+  }
   var latest = ms[ms.length - 1];
   var first = ms[0];
+  // 個別所小樣本月份可能 0 結案 → lifetime / closed_dur KPI 用最近/最早有結案的月做 fallback
+  var latestClosed = (function(){
+    for (var i = ms.length - 1; i >= 0; i--) if (ms[i].closed_dur_median > 0) return ms[i];
+    return latest;
+  })();
+  var firstClosed = (function(){
+    for (var i = 0; i < ms.length; i++) if (ms[i].closed_dur_median > 0) return ms[i];
+    return first;
+  })();
+
+  // Filter hint
+  var asofLabel = latest.fy_mo;
+  var hint = ccFilterOffice + ' · ' + (ccFilterYear === 'all' ? '全期' : (ccFilterYear + ' 年度')) + ' · ' + ms.length + ' 個月';
+  document.getElementById('ccFilterHint').textContent = hint;
+  document.getElementById('ccWindowSlice').textContent = '當前顯示 ' + ms.length + ' 個月 (' + first.fy_mo + ' ~ ' + latest.fy_mo + ')';
 
   // Meta
   document.getElementById('ccAsofDate').textContent = d.meta.asof_date + '（' + d.meta.asof_fy_mo + '）';
   document.getElementById('ccWindow').textContent = d.meta.window;
   document.getElementById('ccGenAt').textContent = '生成於 ' + d.meta.generated_at.slice(0, 16).replace('T', ' ');
-  document.getElementById('ccAsofLabel').textContent = d.meta.asof_fy_mo;
+  document.getElementById('ccAsofLabel').textContent = asofLabel;
 
   // KPI Row 1
   var uLumpDelta = (latest.u_lump - first.u_lump) / first.u_lump;
   var uFirmDelta = (latest.u_firm - first.u_firm) / first.u_firm;
   var gap = latest.u_firm - latest.u_lump;
   var gapPct = gap / latest.u_firm;
-  var lifetimeDelta = (latest.lifetime_cost_per_case - first.lifetime_cost_per_case) / first.lifetime_cost_per_case;
+  var lifetimeDelta = firstClosed.lifetime_cost_per_case ? (latestClosed.lifetime_cost_per_case - firstClosed.lifetime_cost_per_case) / firstClosed.lifetime_cost_per_case : 0;
 
   document.getElementById('ccKpiULump').textContent = _fmtNum(latest.u_lump);
   document.getElementById('ccKpiULumpSub').innerHTML = '元/件/月 · 起點 ' + _fmtNum(first.u_lump) + ' → 變動 ' + (uLumpDelta >= 0 ? '+' : '') + _fmtPct(uLumpDelta, 1);
@@ -4514,21 +4597,23 @@ function renderCaseCost() {
   document.getElementById('ccKpiUFirmSub').innerHTML = '元/件/月 · 起點 ' + _fmtNum(first.u_firm) + ' → 變動 ' + (uFirmDelta >= 0 ? '+' : '') + _fmtPct(uFirmDelta, 1);
   document.getElementById('ccKpiGap').textContent = _fmtNum(gap);
   document.getElementById('ccKpiGapSub').innerHTML = '元/件/月 (' + _fmtPct(gapPct, 1) + ' 稀釋率)';
-  document.getElementById('ccKpiLifetime').textContent = _fmtNum(latest.lifetime_cost_per_case);
-  document.getElementById('ccKpiLifetimeSub').innerHTML = '元/件 · 起點 ' + _fmtNum(first.lifetime_cost_per_case) + ' → ' + (lifetimeDelta >= 0 ? '+' : '') + _fmtPct(lifetimeDelta, 1);
+  document.getElementById('ccKpiLifetime').textContent = _fmtNum(latestClosed.lifetime_cost_per_case);
+  var lifetimeAsofTag = latestClosed.fy_mo === latest.fy_mo ? '' : '（' + latestClosed.fy_mo + '）';
+  document.getElementById('ccKpiLifetimeSub').innerHTML = '元/件' + lifetimeAsofTag + ' · 起點 ' + _fmtNum(firstClosed.lifetime_cost_per_case) + ' → ' + (lifetimeDelta >= 0 ? '+' : '') + _fmtPct(lifetimeDelta, 1);
 
   // KPI Row 2 — Diagnostic
-  var adurDelta = (latest.active_dur_median - first.active_dur_median) / first.active_dur_median;
-  var cdurDelta = (latest.closed_dur_median - first.closed_dur_median) / first.closed_dur_median;
+  var adurDelta = first.active_dur_median ? (latest.active_dur_median - first.active_dur_median) / first.active_dur_median : 0;
+  var cdurDelta = firstClosed.closed_dur_median ? (latestClosed.closed_dur_median - firstClosed.closed_dur_median) / firstClosed.closed_dur_median : 0;
   document.getElementById('ccKpiActiveDur').textContent = latest.active_dur_median.toFixed(0) + ' 天';
   document.getElementById('ccKpiActiveDurSub').innerHTML = '起點 ' + first.active_dur_median.toFixed(0) + ' 天 → ' + (adurDelta >= 0 ? '+' : '') + _fmtPct(adurDelta, 1);
-  document.getElementById('ccKpiClosedDur').textContent = latest.closed_dur_median.toFixed(0) + ' 天';
-  document.getElementById('ccKpiClosedDurSub').innerHTML = '起點 ' + first.closed_dur_median.toFixed(0) + ' 天 → ' + (cdurDelta >= 0 ? '+' : '') + _fmtPct(cdurDelta, 1);
+  document.getElementById('ccKpiClosedDur').textContent = latestClosed.closed_dur_median.toFixed(0) + ' 天';
+  var closedDurAsofTag = latestClosed.fy_mo === latest.fy_mo ? '' : '（' + latestClosed.fy_mo + '）';
+  document.getElementById('ccKpiClosedDurSub').innerHTML = '起點 ' + firstClosed.closed_dur_median.toFixed(0) + ' 天' + closedDurAsofTag + ' → ' + (cdurDelta >= 0 ? '+' : '') + _fmtPct(cdurDelta, 1);
 
-  // 老化指數 = 2 × active_dur / closed_dur
+  // 老化指數 = 2 × active_dur / closed_dur (用 latestClosed/firstClosed 避免 0 結案月)
   function _aging(r) { return r.closed_dur_median > 0 ? (2 * r.active_dur_median / r.closed_dur_median) : 0; }
-  var agingNow = _aging(latest);
-  var agingFirst = _aging(first);
+  var agingNow = _aging(latestClosed);
+  var agingFirst = _aging(firstClosed);
   var agingEl = document.getElementById('ccKpiAging');
   var agingSubEl = document.getElementById('ccKpiAgingSub');
   var agingCard = document.getElementById('ccKpiAgingCard');
@@ -4554,10 +4639,13 @@ function renderCaseCost() {
   ccRenderOffice();
   ccRenderLawyerTable();
 
-  // Bind interactivity
-  document.getElementById('ccPersonRole').addEventListener('change', ccRenderLawyerTable);
-  document.getElementById('ccLawyerSort').addEventListener('change', ccRenderLawyerTable);
-  document.getElementById('ccLawyerOnlyFirm').addEventListener('change', ccRenderLawyerTable);
+  // Bind interactivity (once)
+  if (!renderCaseCost._bound) {
+    document.getElementById('ccPersonRole').addEventListener('change', ccRenderLawyerTable);
+    document.getElementById('ccLawyerSort').addEventListener('change', ccRenderLawyerTable);
+    document.getElementById('ccLawyerOnlyFirm').addEventListener('change', ccRenderLawyerTable);
+    renderCaseCost._bound = true;
+  }
 }
 
 function _ccCommonOpts(yCallback) {
@@ -4577,7 +4665,7 @@ function _ccCommonOpts(yCallback) {
 }
 
 function ccRenderTrendCost() {
-  var ms = caseCostData.monthly_series;
+  var ms = ccView.monthly_series;
   var labels = ms.map(function(r) { return r.fy_mo; });
   var ctx = document.getElementById('ccTrendCost');
   if (charts.ccTrendCost) charts.ccTrendCost.destroy();
@@ -4595,7 +4683,7 @@ function ccRenderTrendCost() {
 }
 
 function ccRenderTrendDur() {
-  var ms = caseCostData.monthly_series;
+  var ms = ccView.monthly_series;
   var labels = ms.map(function(r) { return r.fy_mo; });
   var ctx = document.getElementById('ccTrendDur');
   if (charts.ccTrendDur) charts.ccTrendDur.destroy();
@@ -4613,7 +4701,7 @@ function ccRenderTrendDur() {
 }
 
 function ccRenderTrendLifetime() {
-  var ms = caseCostData.monthly_series;
+  var ms = ccView.monthly_series;
   var labels = ms.map(function(r) { return r.fy_mo; });
   var ctx = document.getElementById('ccTrendLifetime');
   if (charts.ccTrendLifetime) charts.ccTrendLifetime.destroy();
@@ -4630,7 +4718,7 @@ function ccRenderTrendLifetime() {
 }
 
 function ccRenderAgeDist() {
-  var ad = caseCostData.age_distribution;
+  var ad = ccView.age_distribution;
   var labels = ad.map(function(r) { return r.fy_mo; });
   var ctx = document.getElementById('ccAgeDist');
   if (charts.ccAgeDist) charts.ccAgeDist.destroy();
@@ -4655,7 +4743,7 @@ function ccRenderAgeDist() {
 }
 
 function ccRenderCaseType() {
-  var rows = caseCostData.case_type_breakdown.slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
+  var rows = (ccView.case_type_breakdown || []).slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
   var ctx = document.getElementById('ccCaseTypeBar');
   if (charts.ccCaseTypeBar) charts.ccCaseTypeBar.destroy();
   var cs = getComputedStyle(document.documentElement);
@@ -4690,7 +4778,17 @@ function ccRenderCaseType() {
 }
 
 function ccRenderOffice() {
-  var rows = caseCostData.office_breakdown.slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
+  // 個別所 view 下，這張圖沒意義（只剩 1 條）→ 隱藏 + 案型卡片改佔滿
+  var card = document.getElementById('ccOfficeCard');
+  var ctCard = document.getElementById('ccCaseTypeCard');
+  if (ccFilterOffice !== '全所') {
+    card.style.display = 'none';
+    ctCard.style.gridColumn = '1 / -1';
+    return;
+  }
+  card.style.display = '';
+  ctCard.style.gridColumn = '';
+  var rows = (ccView.office_breakdown || []).slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
   var ctx = document.getElementById('ccOfficeBar');
   if (charts.ccOfficeBar) charts.ccOfficeBar.destroy();
   var cs = getComputedStyle(document.documentElement);
@@ -4725,7 +4823,7 @@ function ccRenderOffice() {
 
 function ccRenderLawyerTable() {
   var role = document.getElementById('ccPersonRole').value;
-  var src = role === 'legal_staff' ? caseCostData.legal_staff_ranking : caseCostData.lawyer_ranking;
+  var src = role === 'legal_staff' ? ccView.legal_staff_ranking : ccView.lawyer_ranking;
   var rows = (src || []).slice();
   var sort = document.getElementById('ccLawyerSort').value;
   var onlyFirm = document.getElementById('ccLawyerOnlyFirm').checked;

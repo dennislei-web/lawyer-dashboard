@@ -2,17 +2,22 @@
 案件成本 dashboard ETL — 產 public/finance/case-cost-data.json
 
 包含：
-  monthly_series: 52 個月時間序列（薪資、案件量、單位月成本、進案/結案週期、lifetime 成本）
-  case_type_breakdown: 案型 lifetime cost 排行（當下 active）
-  office_breakdown: 各 office 單位月成本 + lifetime cost
-  lawyer_ranking: 律師個別 active inventory 排行
-  age_distribution: 月度案件年齡桶分布 (timeline)
+  by_office[office]:
+    monthly_series: 52 個月時間序列（薪資、案件量、單位月成本、進案/結案週期、lifetime 成本）
+    age_distribution: 月度案件年齡桶分布 (timeline)
+    case_type_breakdown: 案型 lifetime cost 排行（latest asof）
+    lawyer_ranking / legal_staff_ranking: 個別 active inventory 排行
+    office_breakdown: 各分所 lifetime cost（僅 '全所' 有）
   meta: 計算時點、口徑說明
+  offices: ['全所', '台北所', ...]
 
 口徑：
-  分子薪資 = 律師 + 法務 + 行政（排 010 + 金貝殼），不排雷皓明/黃杰
-  分母案件 = 一般案件（排法顧 LA*）
-  case lifetime cost = u_firm × 結案週期(月)
+  全所:
+    分子薪資 = 律師 + 法務 + 行政（排 010 + 金貝殼），全 dept
+    分母案件 = 一般案件（排法顧 LA*），全 office
+  個別所:
+    分子薪資 = 該所對應 department 的薪資（跨所/共用 dept 不算）
+    分母案件 = council_office_name == 該所 的一般案件
 """
 import sys, io, os, urllib.request, json, statistics
 from collections import defaultdict, Counter
@@ -33,6 +38,18 @@ PARTNER_SINCE = {
 }
 PARTNER_SINCE_DT = {k: datetime.strptime(v, '%Y-%m-%d').date() for k, v in PARTNER_SINCE.items()}
 EXCLUDE_DEPTS_010 = {'北所010', '北所金貝殼'}
+
+# Office → department mapping (薪資分子)
+# 跨所共用 dept (其他/公司/法顧/None) 只在 '全所' 算
+OFFICE_DEPTS = {
+    '台北所': {'北所吉他', '北所(接案、行政、工讀)', '北所四部'},
+    '桃園所': {'桃所'},
+    '新竹所': {'竹所'},
+    '台中所': {'中所'},
+    '台南所': {'南所'},
+    '高雄所': {'雄所'},
+}
+OFFICES_ORDERED = ['全所', '台北所', '桃園所', '新竹所', '台中所', '台南所', '高雄所']
 
 # 律師權威名單 — 來自 zhelu.tw/about 官網（66 位）+ revenue dashboard WEBSITE_LAWYERS
 # 不在這名單但出現在案件 5 個律師 role 的人 → 視為法務（同 revenue tab 邏輯）
@@ -91,10 +108,7 @@ def parse_names(field):
 
 LAWYER_ROLE_FIELDS = ['council_lawyers','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers']
 
-# 案型 normalize — 3 階段：
-#   1. cause 完全等於 PURE_CONSULT → 真實諮詢（一次見面就結）
-#   2. 含實質案型 keyword → 對應案型（家事/民事/刑事...）
-#   3. 含諮詢 keyword 但不在 PURE → 「混合服務」(諮詢+小型法律服務 套餐)
+# 案型 normalize
 SUBSTANTIVE_CASE_TYPES = [
     ('家事', ['家事', '離婚', '親權', '監護', '扶養', '配偶', '繼承', '遺產', '婚姻', '剩餘財產', '夫妻',
               '保護令', '通常保護令']),
@@ -124,15 +138,12 @@ def classify_case_type(c):
         return '法律顧問'
     if not cause:
         return '未分類'
-    # Step 1: pure consultation (strict match)
     if cause in PURE_CONSULT_CAUSES:
         return '諮詢'
-    # Step 2: substantive case type
     for label, keys in SUBSTANTIVE_CASE_TYPES:
         for k in keys:
             if k in cause:
                 return label
-    # Step 3: 含諮詢 keyword 但 mixed → 套餐式「混合服務」
     for k in CONSULT_KEYWORDS:
         if k in cause:
             return '混合服務'
@@ -173,6 +184,7 @@ for c in general_cases + la_cases:
     c['_handling_all'] = (handling | legal_staff) - NON_CONSULTING_LAWYERS
     c['_legal_staff'] = legal_staff - NON_CONSULTING_LAWYERS
     c['_case_type'] = classify_case_type(c)
+    c['_office'] = c.get('council_office_name') or '(未標示)'
 
 def state_at(c, asof, latest_asof=None):
     """
@@ -182,7 +194,6 @@ def state_at(c, asof, latest_asof=None):
     對 historical asof，best effort 用 transition timestamps 推。
     """
     if latest_asof is not None and asof == latest_asof:
-        # Trust CRM's current state for now-snapshot
         return c.get('aasm_state') or None
     trans = []
     for fld, st in [('_appointed','appointed'),('_pending','pending'),('_closed','closed'),
@@ -205,137 +216,252 @@ def owner_type(c, asof):
     if p == 0: return 'pure_firm'
     return 'mixed'
 
-# ============ Monthly series ============
+# Months
 months = []
 for fy in [111, 112, 113, 114, 115]:
     for m in range(1, 13):
         if fy == 115 and m > 4: break
         y = fy_to_year(fy)
         months.append((fy, m, month_start(y, m), month_end(y, m)))
+LATEST_ASOF = months[-1][3]
 
-sal_by_mo = defaultdict(float)
+# Salary aggregation: 全所 = 全部排 010；個別所 = OFFICE_DEPTS mapping
+sal_all_by_mo = defaultdict(float)
+sal_office_by_mo = {o: defaultdict(float) for o in OFFICE_DEPTS}
 for r in fin_rows:
-    if r.get('department') in EXCLUDE_DEPTS_010: continue
-    sal_by_mo[(r['fiscal_year'], r['month'])] += r['salary_subtotal'] or 0
+    dept = r.get('department')
+    if dept in EXCLUDE_DEPTS_010: continue
+    fm = (r['fiscal_year'], r['month'])
+    amt = r['salary_subtotal'] or 0
+    sal_all_by_mo[fm] += amt
+    for off, depts in OFFICE_DEPTS.items():
+        if dept in depts:
+            sal_office_by_mo[off][fm] += amt
 
-print(f'\n=== Computing {len(months)} monthly snapshots ===')
-monthly_series = []
-age_distribution = []
-LATEST_ASOF = months[-1][3]  # 給 state_at 對 latest 用 aasm_state 過濾
+def compute_office_slice(office, case_filter, sal_by_mo):
+    """
+    case_filter: callable(case) -> bool
+    sal_by_mo: dict (fy, m) -> salary
+    returns dict with monthly_series, age_distribution, case_type_breakdown, lawyer_ranking, legal_staff_ranking
+    """
+    general_subset = [c for c in general_cases if case_filter(c)]
+    la_subset = [c for c in la_cases if case_filter(c)]
 
-for fy, m, mstart, asof in months:
-    counts = {'pure_firm':0,'legal_staff_only':0,'pure_partner':0,'mixed':0,'no_one':0}
-    la_active = 0
-    active_durs = []
-    age_buckets = {'<90':0, '90-365':0, '1-2yr':0, '>2yr':0}
-    for c in general_cases:
-        if state_at(c, asof, LATEST_ASOF) != 'appointed': continue
-        ot = owner_type(c, asof)
-        counts[ot] += 1
-        if c['_created']:
-            age = (asof - c['_created']).days
-            active_durs.append(age)
-            if age < 90: age_buckets['<90'] += 1
-            elif age < 365: age_buckets['90-365'] += 1
-            elif age < 730: age_buckets['1-2yr'] += 1
-            else: age_buckets['>2yr'] += 1
-    for c in la_cases:
-        if state_at(c, asof, LATEST_ASOF) == 'appointed': la_active += 1
+    monthly_series = []
+    age_distribution = []
+    for fy, m, mstart, asof in months:
+        counts = {'pure_firm':0,'legal_staff_only':0,'pure_partner':0,'mixed':0,'no_one':0}
+        la_active = 0
+        active_durs = []
+        age_buckets = {'<90':0, '90-365':0, '1-2yr':0, '>2yr':0}
+        for c in general_subset:
+            if state_at(c, asof, LATEST_ASOF) != 'appointed': continue
+            ot = owner_type(c, asof)
+            counts[ot] += 1
+            if c['_created']:
+                age = (asof - c['_created']).days
+                active_durs.append(age)
+                if age < 90: age_buckets['<90'] += 1
+                elif age < 365: age_buckets['90-365'] += 1
+                elif age < 730: age_buckets['1-2yr'] += 1
+                else: age_buckets['>2yr'] += 1
+        for c in la_subset:
+            if state_at(c, asof, LATEST_ASOF) == 'appointed': la_active += 1
 
-    closed_durs = []
-    for c in general_cases:
-        if c['_closed'] and mstart <= c['_closed'] <= asof and c['_created']:
-            closed_durs.append((c['_closed'] - c['_created']).days)
+        closed_durs = []
+        for c in general_subset:
+            if c['_closed'] and mstart <= c['_closed'] <= asof and c['_created']:
+                closed_durs.append((c['_closed'] - c['_created']).days)
 
-    firm = counts['pure_firm'] + counts['legal_staff_only']
-    part = counts['pure_partner'] + counts['mixed']
-    lump = firm + part
-    sal = sal_by_mo[(fy, m)]
+        firm = counts['pure_firm'] + counts['legal_staff_only']
+        part = counts['pure_partner'] + counts['mixed']
+        lump = firm + part
+        sal = sal_by_mo[(fy, m)]
 
-    u_lump = sal/lump if lump else 0
-    u_firm = sal/firm if firm else 0
-    cdur_median = statistics.median(closed_durs) if closed_durs else 0
-    cdur_mean = statistics.mean(closed_durs) if closed_durs else 0
-    adur_median = statistics.median(active_durs) if active_durs else 0
-    adur_mean = statistics.mean(active_durs) if active_durs else 0
-    lifetime_cost_per_case = u_firm * cdur_median / 30 if cdur_median else 0
+        u_lump = sal/lump if lump else 0
+        u_firm = sal/firm if firm else 0
+        cdur_median = statistics.median(closed_durs) if closed_durs else 0
+        cdur_mean = statistics.mean(closed_durs) if closed_durs else 0
+        adur_median = statistics.median(active_durs) if active_durs else 0
+        adur_mean = statistics.mean(active_durs) if active_durs else 0
+        lifetime_cost_per_case = u_firm * cdur_median / 30 if cdur_median else 0
 
-    monthly_series.append({
-        'fy_mo': f'{fy}-{m:02d}',
-        'real_date': asof.isoformat(),
-        'sal_office': round(sal),
-        'firm': firm, 'partner': part, 'lump': lump, 'la_active': la_active,
-        'pure_firm': counts['pure_firm'],
-        'legal_staff_only': counts['legal_staff_only'],
-        'pure_partner': counts['pure_partner'],
-        'mixed': counts['mixed'],
-        'u_lump': round(u_lump),
-        'u_firm': round(u_firm),
-        'active_dur_median': round(adur_median, 1),
-        'active_dur_mean': round(adur_mean, 1),
-        'closed_dur_median': round(cdur_median, 1),
-        'closed_dur_mean': round(cdur_mean, 1),
-        'n_closed_in_month': len(closed_durs),
-        'lifetime_cost_per_case': round(lifetime_cost_per_case),
-    })
-    age_distribution.append({
-        'fy_mo': f'{fy}-{m:02d}',
-        **age_buckets
-    })
+        monthly_series.append({
+            'fy_mo': f'{fy}-{m:02d}',
+            'real_date': asof.isoformat(),
+            'sal_office': round(sal),
+            'firm': firm, 'partner': part, 'lump': lump, 'la_active': la_active,
+            'pure_firm': counts['pure_firm'],
+            'legal_staff_only': counts['legal_staff_only'],
+            'pure_partner': counts['pure_partner'],
+            'mixed': counts['mixed'],
+            'u_lump': round(u_lump),
+            'u_firm': round(u_firm),
+            'active_dur_median': round(adur_median, 1),
+            'active_dur_mean': round(adur_mean, 1),
+            'closed_dur_median': round(cdur_median, 1),
+            'closed_dur_mean': round(cdur_mean, 1),
+            'n_closed_in_month': len(closed_durs),
+            'lifetime_cost_per_case': round(lifetime_cost_per_case),
+        })
+        age_distribution.append({
+            'fy_mo': f'{fy}-{m:02d}',
+            **age_buckets
+        })
 
-# ============ Case type breakdown — 用最近月 asof ============
+    # case_type / ranking 用 latest asof（最新月 / 各年的 year-end 由前端 derive）
+    # 為了讓「年度」filter 在前端 zoom 後仍能拿到該年 asof 的 breakdown，
+    # 改成預先算每個 fy 的 year-end asof 的 breakdown
+    case_type_by_year = {}
+    lawyer_by_year = {}
+    legal_staff_by_year = {}
+
+    def asof_for_year(fy):
+        # 該 fy 在 months 中的最後一個 entry
+        entries = [m_tuple for m_tuple in months if m_tuple[0] == fy]
+        return entries[-1] if entries else None
+
+    # 包含 'all' 和每個 fy 各一個 snapshot
+    year_keys = ['all'] + sorted({m_tuple[0] for m_tuple in months})
+
+    twelve_mo_window = lambda asof: (
+        date(asof.year - 1, asof.month, 1) if asof.month > 1 else date(asof.year - 2, 12, 1),
+        asof
+    )
+
+    for yk in year_keys:
+        if yk == 'all':
+            entry = months[-1]
+        else:
+            entry = asof_for_year(yk)
+            if entry is None: continue
+        fy_e, m_e, mstart_e, asof_e = entry
+        tw_start, tw_end = twelve_mo_window(asof_e)
+        latest_sal = sal_by_mo[(fy_e, m_e)]
+        # latest u_firm = 該 asof 的 monthly_series u_firm
+        # 找對應的 monthly entry
+        ms_entry = next((x for x in monthly_series if x['fy_mo'] == f'{fy_e}-{m_e:02d}'), None)
+        latest_u_firm = ms_entry['u_firm'] if ms_entry else 0
+
+        # case type
+        by_type = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
+        for c in general_subset:
+            t = c['_case_type']
+            if state_at(c, asof_e, LATEST_ASOF) == 'appointed':
+                by_type[t]['active'] += 1
+                ot = owner_type(c, asof_e)
+                if ot in ('pure_firm','legal_staff_only'): by_type[t]['pure_firm'] += 1
+                elif ot in ('pure_partner','mixed'): by_type[t]['partner'] += 1
+            if c['_closed'] and tw_start <= c['_closed'] <= tw_end and c['_created']:
+                by_type[t]['closed_in_12mo'] += 1
+                by_type[t]['closed_durs'].append((c['_closed'] - c['_created']).days)
+
+        type_rows = []
+        for t, d in sorted(by_type.items(), key=lambda x: -x[1]['active']):
+            cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
+            cdur_mean = statistics.mean(d['closed_durs']) if d['closed_durs'] else 0
+            lifetime = latest_u_firm * cdur_med / 30 if cdur_med else 0
+            type_rows.append({
+                'case_type': t,
+                'active': d['active'],
+                'pure_firm': d['pure_firm'],
+                'partner': d['partner'],
+                'closed_in_12mo': d['closed_in_12mo'],
+                'closed_dur_median': round(cdur_med, 1),
+                'closed_dur_mean': round(cdur_mean, 1),
+                'lifetime_cost_per_case': round(lifetime),
+            })
+        case_type_by_year[str(yk)] = type_rows
+
+        # ranking
+        person_stats = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[],
+                                            'is_partner':False, 'as_lawyer':False, 'as_legal_staff':False})
+        for c in general_subset:
+            s = state_at(c, asof_e, LATEST_ASOF)
+            closed_this_year = c['_closed'] and tw_start <= c['_closed'] <= tw_end
+            lawyer_role_names = set()
+            for fld in LAWYER_ROLE_FIELDS:
+                lawyer_role_names.update(parse_names(c.get(fld)))
+            legal_staff_names = set(parse_names(c.get('assigned_members')))
+            case_lawyers = (lawyer_role_names & WEBSITE_LAWYERS) - NON_CONSULTING_LAWYERS
+            case_legal_staff = (legal_staff_names | (lawyer_role_names - WEBSITE_LAWYERS)) - NON_CONSULTING_LAWYERS - WEBSITE_LAWYERS
+
+            for name in case_lawyers:
+                person_stats[name]['as_lawyer'] = True
+                if PARTNER_SINCE_DT.get(name) and PARTNER_SINCE_DT[name] <= asof_e:
+                    person_stats[name]['is_partner'] = True
+                if s == 'appointed':
+                    person_stats[name]['active'] += 1
+                if closed_this_year and c['_created']:
+                    person_stats[name]['closed_in_12mo'] += 1
+                    person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+            for name in case_legal_staff:
+                person_stats[name]['as_legal_staff'] = True
+                if s == 'appointed':
+                    person_stats[name]['active'] += 1
+                if closed_this_year and c['_created']:
+                    person_stats[name]['closed_in_12mo'] += 1
+                    person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+
+        def build_ranking(filter_role):
+            out = []
+            for name, d in person_stats.items():
+                if not d[filter_role]: continue
+                if d['active'] == 0 and d['closed_in_12mo'] == 0: continue
+                cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
+                out.append({
+                    'name': name,
+                    'is_partner': d['is_partner'],
+                    'active_inventory': d['active'],
+                    'closed_in_12mo': d['closed_in_12mo'],
+                    'closed_dur_median': round(cdur_med, 1),
+                    'backlog_ratio': round(d['active'] / d['closed_in_12mo'], 2) if d['closed_in_12mo'] else None,
+                })
+            out.sort(key=lambda x: -x['active_inventory'])
+            return out
+
+        lawyer_by_year[str(yk)] = build_ranking('as_lawyer')
+        legal_staff_by_year[str(yk)] = build_ranking('as_legal_staff')
+
+    return {
+        'monthly_series': monthly_series,
+        'age_distribution': age_distribution,
+        'case_type_by_year': case_type_by_year,
+        'lawyer_by_year': lawyer_by_year,
+        'legal_staff_by_year': legal_staff_by_year,
+    }
+
+# ============ Compute slices ============
+by_office = {}
+print('\n=== Computing 全所 ===')
+by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo)
+
+for off in OFFICE_DEPTS:
+    print(f'=== Computing {off} ===')
+    by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off])
+
+# ============ Office breakdown (全所 only) — 各分所 lifetime cost ranking ============
+print('\n=== Office breakdown ===')
 latest_fy, latest_m, latest_start, latest_asof = months[-1]
-latest_sal = sal_by_mo[(latest_fy, latest_m)]
-print(f'\n=== Case type breakdown (asof {latest_asof}) ===')
-
-by_type = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
 twelve_mo_ago = date(latest_asof.year - 1, latest_asof.month, 1) if latest_asof.month > 1 else date(latest_asof.year - 2, 12, 1)
-for c in general_cases:
-    t = c['_case_type']
-    if state_at(c, latest_asof, latest_asof) == 'appointed':
-        by_type[t]['active'] += 1
-        ot = owner_type(c, latest_asof)
-        if ot in ('pure_firm','legal_staff_only'): by_type[t]['pure_firm'] += 1
-        elif ot in ('pure_partner','mixed'): by_type[t]['partner'] += 1
-    if c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof and c['_created']:
-        by_type[t]['closed_in_12mo'] += 1
-        by_type[t]['closed_durs'].append((c['_closed'] - c['_created']).days)
+latest_u_firm_all = by_office['全所']['monthly_series'][-1]['u_firm']
 
-latest_u_firm = monthly_series[-1]['u_firm']
-case_type_breakdown = []
-for t, d in sorted(by_type.items(), key=lambda x: -x[1]['active']):
-    cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
-    cdur_mean = statistics.mean(d['closed_durs']) if d['closed_durs'] else 0
-    lifetime = latest_u_firm * cdur_med / 30 if cdur_med else 0
-    case_type_breakdown.append({
-        'case_type': t,
-        'active': d['active'],
-        'pure_firm': d['pure_firm'],
-        'partner': d['partner'],
-        'closed_in_12mo': d['closed_in_12mo'],
-        'closed_dur_median': round(cdur_med, 1),
-        'closed_dur_mean': round(cdur_mean, 1),
-        'lifetime_cost_per_case': round(lifetime),
-    })
-
-# ============ Office breakdown ============
-print(f'=== Office breakdown ===')
-by_office = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
+by_office_agg = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
 for c in general_cases:
-    o = c.get('council_office_name') or '(未標示)'
-    if state_at(c, latest_asof, latest_asof) == 'appointed':
-        by_office[o]['active'] += 1
+    o = c['_office']
+    if state_at(c, latest_asof, LATEST_ASOF) == 'appointed':
+        by_office_agg[o]['active'] += 1
         ot = owner_type(c, latest_asof)
-        if ot in ('pure_firm','legal_staff_only'): by_office[o]['pure_firm'] += 1
-        elif ot in ('pure_partner','mixed'): by_office[o]['partner'] += 1
+        if ot in ('pure_firm','legal_staff_only'): by_office_agg[o]['pure_firm'] += 1
+        elif ot in ('pure_partner','mixed'): by_office_agg[o]['partner'] += 1
     if c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof and c['_created']:
-        by_office[o]['closed_in_12mo'] += 1
-        by_office[o]['closed_durs'].append((c['_closed'] - c['_created']).days)
+        by_office_agg[o]['closed_in_12mo'] += 1
+        by_office_agg[o]['closed_durs'].append((c['_closed'] - c['_created']).days)
 
 office_breakdown = []
-for o, d in sorted(by_office.items(), key=lambda x: -x[1]['active']):
+for o, d in sorted(by_office_agg.items(), key=lambda x: -x[1]['active']):
     cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
-    lifetime = latest_u_firm * cdur_med / 30 if cdur_med else 0
+    lifetime = latest_u_firm_all * cdur_med / 30 if cdur_med else 0
     office_breakdown.append({
         'office': o,
         'active': d['active'],
@@ -346,96 +472,33 @@ for o, d in sorted(by_office.items(), key=lambda x: -x[1]['active']):
         'lifetime_cost_per_case': round(lifetime),
     })
 
-# ============ Lawyer / Legal staff ranking ============
-# 律師排行：5 個 lawyer role 出現的人，且 name ∈ WEBSITE_LAWYERS（排除法務）
-# 法務排行：assigned_members 出現的人 + 在 5 個 lawyer role 但不在 WEBSITE_LAWYERS 的人
-print(f'=== Lawyer / Legal staff ranking ===')
-
-person_stats = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[],
-                                     'is_partner':False, 'as_lawyer':False, 'as_legal_staff':False})
-
-for c in general_cases:
-    s = state_at(c, latest_asof, latest_asof)
-    closed_this_year = c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof
-
-    # 5 個 lawyer role 取 union (含合署律師)
-    lawyer_role_names = set()
-    for fld in LAWYER_ROLE_FIELDS:
-        lawyer_role_names.update(parse_names(c.get(fld)))
-    legal_staff_names = set(parse_names(c.get('assigned_members')))
-
-    # 律師 = lawyer role 名單 ∩ WEBSITE_LAWYERS（含合署）
-    case_lawyers = (lawyer_role_names & WEBSITE_LAWYERS) - NON_CONSULTING_LAWYERS
-    # 法務 = assigned_members + (lawyer role 但不在 WEBSITE_LAWYERS) − NON_CONSULTING
-    case_legal_staff = (legal_staff_names | (lawyer_role_names - WEBSITE_LAWYERS)) - NON_CONSULTING_LAWYERS - WEBSITE_LAWYERS
-
-    for name in case_lawyers:
-        person_stats[name]['as_lawyer'] = True
-        if PARTNER_SINCE_DT.get(name) and PARTNER_SINCE_DT[name] <= latest_asof:
-            person_stats[name]['is_partner'] = True
-        if s == 'appointed':
-            person_stats[name]['active'] += 1
-        if closed_this_year and c['_created']:
-            person_stats[name]['closed_in_12mo'] += 1
-            person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
-    for name in case_legal_staff:
-        person_stats[name]['as_legal_staff'] = True
-        if s == 'appointed':
-            person_stats[name]['active'] += 1
-        if closed_this_year and c['_created']:
-            person_stats[name]['closed_in_12mo'] += 1
-            person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
-
-def build_ranking(filter_role):
-    out = []
-    for name, d in person_stats.items():
-        if not d[filter_role]: continue
-        if d['active'] == 0 and d['closed_in_12mo'] == 0: continue
-        cdur_med = statistics.median(d['closed_durs']) if d['closed_durs'] else 0
-        out.append({
-            'name': name,
-            'is_partner': d['is_partner'],
-            'active_inventory': d['active'],
-            'closed_in_12mo': d['closed_in_12mo'],
-            'closed_dur_median': round(cdur_med, 1),
-            'backlog_ratio': round(d['active'] / d['closed_in_12mo'], 2) if d['closed_in_12mo'] else None,
-        })
-    out.sort(key=lambda x: -x['active_inventory'])
-    return out
-
-lawyer_ranking = build_ranking('as_lawyer')
-legal_staff_ranking = build_ranking('as_legal_staff')
-
 # ============ Output ============
 output = {
     'meta': {
         'generated_at': datetime.utcnow().isoformat() + 'Z',
         'asof_date': latest_asof.isoformat(),
         'asof_fy_mo': f'{latest_fy}-{latest_m:02d}',
-        '口徑': '分子薪資 = 律師+法務+行政（排010+金貝殼）; 分母案件 = 一般案件（排法顧）; lifetime = u_firm × 結案週期(月)',
+        '口徑': '分子薪資=律師+法務+行政（排010+金貝殼）; 分母案件=一般案件（排法顧）; 個別所薪資只算 OFFICE_DEPTS mapping，跨所/共用 dept 只在全所',
         'window': f'{months[0][0]}-{months[0][1]:02d} ~ {months[-1][0]}-{months[-1][1]:02d}',
+        'fiscal_years': sorted({m_t[0] for m_t in months}),
     },
-    'monthly_series': monthly_series,
-    'age_distribution': age_distribution,
-    'case_type_breakdown': case_type_breakdown,
+    'offices': OFFICES_ORDERED,
     'office_breakdown': office_breakdown,
-    'lawyer_ranking': lawyer_ranking,
-    'legal_staff_ranking': legal_staff_ranking,
+    'by_office': by_office,
 }
 
 out_path = 'public/finance/case-cost-data.json'
 with open(out_path, 'w', encoding='utf-8') as f:
     json.dump(output, f, ensure_ascii=False, separators=(',', ':'))
 
-# Also pretty version for inspection
+# Pretty preview
 with open('scripts/_case_cost_preview.json', 'w', encoding='utf-8') as f:
     json.dump(output, f, ensure_ascii=False, indent=2)
 
 print(f'\nsaved: {out_path}')
-print(f'  monthly_series: {len(monthly_series)} months')
-print(f'  case_type_breakdown: {len(case_type_breakdown)} types')
-print(f'  office_breakdown: {len(office_breakdown)} offices')
-print(f'  lawyer_ranking: {len(lawyer_ranking)} lawyers (WEBSITE_LAWYERS 白名單)')
-print(f'  legal_staff_ranking: {len(legal_staff_ranking)} legal staff')
-print(f'  age_distribution: {len(age_distribution)} months')
+for o in OFFICES_ORDERED:
+    if o not in by_office: continue
+    slc = by_office[o]
+    last = slc['monthly_series'][-1]
+    print(f'  {o:8} u_firm={last["u_firm"]:>6} active={last["firm"]+last["partner"]:>5}  case_types(all)={len(slc["case_type_by_year"].get("all",[]))}  lawyers(all)={len(slc["lawyer_by_year"].get("all",[]))}')
 print(f'\nfile size: {os.path.getsize(out_path):,} bytes')
