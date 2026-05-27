@@ -91,18 +91,20 @@ def parse_names(field):
 
 LAWYER_ROLE_FIELDS = ['council_lawyers','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers']
 
-# 案型 normalize — keyword match
-CASE_TYPES = [
-    ('諮詢', ['諮詢']),  # 現場/視訊/電話諮詢
-    ('家事', ['家事', '離婚', '親權', '監護', '扶養', '配偶', '繼承', '遺產']),
-    ('刑事', ['刑事', '毒品', '傷害', '詐欺', '竊盜', '妨害', '公然侮辱', '誹謗', '偽造', '違反']),
-    ('簡易訴訟', ['支付命令', '本票', '律師函', '強制執行', '存證信函']),
-    ('民事一般', ['民事', '損害賠償', '債務', '契約', '租賃', '買賣']),
+# 案型 normalize — substantive case type 優先，諮詢只在 fallback 使用
+# 邏輯：cause 中只要出現實質案型 keyword（家事/民事/刑事...）就用那個，
+#       全部 miss 才看是否含「諮詢」keyword。這修正了「現場諮詢；離婚協議書」誤歸諮詢的問題。
+SUBSTANTIVE_CASE_TYPES = [
+    ('家事', ['家事', '離婚', '親權', '監護', '扶養', '配偶', '繼承', '遺產', '婚姻', '剩餘財產', '夫妻']),
+    ('刑事', ['刑事', '毒品', '傷害', '詐欺', '竊盜', '妨害', '公然侮辱', '誹謗', '偽造', '違反',
+              '誣告', '告訴', '偵查', '殺人', '搶奪', '強制']),
+    ('簡易訴訟', ['支付命令', '本票', '律師函', '強制執行', '存證信函', '聲請', '催告']),
+    ('民事一般', ['民事', '損害賠償', '債務', '契約', '租賃', '買賣', '返還', '清償', '借款', '侵害']),
     ('商務/勞資', ['公司', '股東', '勞資', '工資', '勞動']),
     ('智財', ['智慧財產', '商標', '專利', '著作權']),
     ('行政/稅務', ['行政訴訟', '稅', '罰鍰']),
-    ('法律顧問', ['法律顧問']),
 ]
+CONSULT_KEYWORDS = ['現場諮詢', '視訊諮詢', '電話諮詢', '通話諮詢', '免費諮詢', '律師諮詢', '諮詢']
 
 def classify_case_type(c):
     cause = (c.get('cause_of_action') or '').strip()
@@ -111,10 +113,15 @@ def classify_case_type(c):
         return '法律顧問'
     if not cause:
         return '未分類'
-    for label, keys in CASE_TYPES:
+    # Step 1: 找實質案型 keyword
+    for label, keys in SUBSTANTIVE_CASE_TYPES:
         for k in keys:
             if k in cause:
                 return label
+    # Step 2: 全部 miss，才 fallback 諮詢
+    for k in CONSULT_KEYWORDS:
+        if k in cause:
+            return '諮詢'
     return '其他'
 
 def is_la(c):
