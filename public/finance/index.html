@@ -500,6 +500,7 @@
     <button class="tab-btn" data-tab="compare">實際 vs 預算</button>
     <button class="tab-btn" data-tab="profit">預估獲利</button>
     <button class="tab-btn" data-tab="history">歷史資料</button>
+    <button class="tab-btn" data-tab="case-cost">案件成本</button>
   </div>
 
   <div class="main">
@@ -846,6 +847,150 @@
       </div>
     </div>
 
+    <!-- ========== 案件成本 ========== -->
+    <div class="page" id="page-case-cost">
+      <div id="ccLoading" class="text-muted" style="padding:24px;text-align:center">載入中⋯</div>
+      <div id="ccContent" style="display:none">
+        <!-- Meta bar -->
+        <div class="table-card" style="margin-bottom:16px;border-left:3px solid var(--gold);padding:0">
+          <div style="padding:12px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:0.85rem">
+            <div>📅 資料截至 <strong id="ccAsofDate">—</strong></div>
+            <div style="color:var(--text-muted)">觀察期 <span id="ccWindow">—</span> · 共 52 個月</div>
+            <div style="margin-left:auto;color:var(--text-muted);font-size:0.75rem" id="ccGenAt"></div>
+          </div>
+        </div>
+
+        <!-- KPI Row 1 -->
+        <div class="kpi-row">
+          <div class="kpi-card blue">
+            <div class="kpi-label">u$/件/月 — 全所 lump <span style="opacity:.6;font-size:0.7rem" title="月薪資 ÷ 月底全所承辦中一般案件數">ℹ️</span></div>
+            <div class="kpi-value blue" id="ccKpiULump">-</div>
+            <div class="kpi-sub" id="ccKpiULumpSub"></div>
+          </div>
+          <div class="kpi-card green">
+            <div class="kpi-label">u$/件/月 — 所內 only</div>
+            <div class="kpi-value green" id="ccKpiUFirm">-</div>
+            <div class="kpi-sub" id="ccKpiUFirmSub"></div>
+          </div>
+          <div class="kpi-card orange">
+            <div class="kpi-label">合署 absorb gap</div>
+            <div class="kpi-value orange" id="ccKpiGap">-</div>
+            <div class="kpi-sub" id="ccKpiGapSub"></div>
+          </div>
+          <div class="kpi-card gold">
+            <div class="kpi-label">lifetime 成本/件 <span style="opacity:.6;font-size:0.7rem" title="u_firm × 該月結案週期中位(月)">ℹ️</span></div>
+            <div class="kpi-value gold" id="ccKpiLifetime">-</div>
+            <div class="kpi-sub" id="ccKpiLifetimeSub"></div>
+          </div>
+        </div>
+
+        <!-- KPI Row 2 -->
+        <div class="kpi-row">
+          <div class="kpi-card blue">
+            <div class="kpi-label">進案週期中位 (active appointed age)</div>
+            <div class="kpi-value blue" id="ccKpiActiveDur">-</div>
+            <div class="kpi-sub" id="ccKpiActiveDurSub"></div>
+          </div>
+          <div class="kpi-card orange">
+            <div class="kpi-label">結案週期中位 (closed cases)</div>
+            <div class="kpi-value orange" id="ccKpiClosedDur">-</div>
+            <div class="kpi-sub" id="ccKpiClosedDurSub"></div>
+          </div>
+        </div>
+
+        <!-- Chart 1: 單位月成本趨勢 -->
+        <div class="chart-row">
+          <div class="chart-card" style="grid-column: 1 / -1">
+            <div class="chart-title">單位月成本趨勢 — 4 年（含合署 absorb gap）</div>
+            <div class="chart-container" style="height:300px"><canvas id="ccTrendCost"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Chart 2: 週期 + lifetime -->
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">案件週期中位 — 進案 vs 結案</div>
+            <div class="chart-container" style="height:280px"><canvas id="ccTrendDur"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">lifetime 成本/件 月度演變</div>
+            <div class="chart-container" style="height:280px"><canvas id="ccTrendLifetime"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Chart 3: 案件年齡分布 -->
+        <div class="chart-row">
+          <div class="chart-card" style="grid-column: 1 / -1">
+            <div class="chart-title">案件年齡分布演變 — active appointed 按建案天數分桶</div>
+            <div class="chart-container" style="height:300px"><canvas id="ccAgeDist"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Chart 4: 案型 + Office -->
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">案型 lifetime 成本 (asof <span id="ccAsofLabel">—</span>)</div>
+            <div class="chart-container" style="height:340px"><canvas id="ccCaseTypeBar"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">分所 lifetime 成本</div>
+            <div class="chart-container" style="height:340px"><canvas id="ccOfficeBar"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Lawyer ranking table -->
+        <div class="table-card" style="margin-top:16px">
+          <div class="table-header">
+            <span class="table-title">⚖️ 律師 backlog 排行
+              <span class="text-muted" style="font-size:0.75rem;font-weight:normal">
+                — backlog_ratio = active ÷ 12mo 結案數，&gt;2 偏 inventory bloat
+              </span>
+            </span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;font-size:0.78rem;color:var(--text-muted)">
+              排序：
+              <select id="ccLawyerSort" style="padding:4px 8px;background:var(--bg-row);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.78rem">
+                <option value="active">承辦中 ↓</option>
+                <option value="backlog">backlog_ratio ↓</option>
+                <option value="closed">12mo 結案 ↓</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="checkbox" id="ccLawyerOnlyFirm" style="accent-color:var(--gold)"> 只看所內
+              </label>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="lawyer-table" id="ccLawyerTable" style="width:100%;border-collapse:collapse;font-size:0.85rem">
+              <thead>
+                <tr style="background:var(--bg-row);border-bottom:1px solid var(--border)">
+                  <th style="padding:10px;text-align:left">#</th>
+                  <th style="padding:10px;text-align:left">律師</th>
+                  <th style="padding:10px;text-align:right">承辦中</th>
+                  <th style="padding:10px;text-align:right">12mo 結案</th>
+                  <th style="padding:10px;text-align:right">結案週期中位</th>
+                  <th style="padding:10px;text-align:right">backlog_ratio</th>
+                </tr>
+              </thead>
+              <tbody id="ccLawyerTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Caveat -->
+        <div class="table-card" style="margin-top:16px;border-left:3px solid var(--blue)">
+          <div style="padding:12px 16px;font-size:0.78rem;color:var(--text-muted);line-height:1.7">
+            <strong style="color:var(--text)">口徑說明：</strong><br>
+            • <strong>分子薪資</strong> = 律師 + 法務 + 行政（排除「北所010」+「北所金貝殼」），含雷皓明、黃杰、總部行政人員。<br>
+            • <strong>分母案件</strong> = 一般案件，排除法律顧問（LA* 序號或案由含「法律顧問」）。<br>
+            • <strong>所內 only u$</strong> 分母 = pure_firm + legal_staff_only（不含合署+共辦）。<br>
+            • <strong>合署 absorb gap</strong> = 所內 u$ − 全所 lump u$（合署 cohort 對固定成本的稀釋效應）。<br>
+            • <strong>lifetime 成本/件</strong> = 當月 u_firm × 該月結案週期中位（月）。<br>
+            • <strong>合署 since date</strong>：18 位律師逐一 hardcoded（含司法官受雇 3 人 since 2023-11-01）。資料源：revenue dashboard。<br>
+            • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
   </div><!-- close localContent -->
 </div>
@@ -1066,6 +1211,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     else if (tab === 'compare') loadCompareData();
     else if (tab === 'profit') loadProfitData();
     else if (tab === 'history') loadHistoryData();
+    else if (tab === 'case-cost') loadCaseCostData();
   });
 });
 
@@ -4300,6 +4446,282 @@ async function applyMidYearHireAdjust(name, salary, labor, health, pension, bonu
     });
   }
   if (!silent) alert('已補足「' + name + '」' + year + '年 1~' + endMonth + '月成本');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 6: CASE COST  (案件成本)
+// ═══════════════════════════════════════════════════════════
+var caseCostData = null;
+var caseCostLoaded = false;
+
+async function loadCaseCostData() {
+  if (caseCostLoaded) return;
+  var loadingEl = document.getElementById('ccLoading');
+  var contentEl = document.getElementById('ccContent');
+  try {
+    var url = 'case-cost-data.json?t=' + Date.now();
+    var r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('fetch failed: ' + r.status);
+    caseCostData = await r.json();
+    renderCaseCost();
+    loadingEl.style.display = 'none';
+    contentEl.style.display = '';
+    caseCostLoaded = true;
+  } catch (e) {
+    loadingEl.innerHTML = '⚠️ 載入失敗：' + e.message + '<br><span style="font-size:0.78rem">case-cost-data.json 可能尚未產生。請執行 <code>python scripts/build_case_cost_data.py</code></span>';
+  }
+}
+
+function _fmtNum(n) { return (n || 0).toLocaleString('en-US'); }
+function _fmtPct(n, digits) { return ((n || 0) * 100).toFixed(digits == null ? 1 : digits) + '%'; }
+
+function renderCaseCost() {
+  var d = caseCostData;
+  if (!d) return;
+  var ms = d.monthly_series;
+  var latest = ms[ms.length - 1];
+  var first = ms[0];
+
+  // Meta
+  document.getElementById('ccAsofDate').textContent = d.meta.asof_date + '（' + d.meta.asof_fy_mo + '）';
+  document.getElementById('ccWindow').textContent = d.meta.window;
+  document.getElementById('ccGenAt').textContent = '生成於 ' + d.meta.generated_at.slice(0, 16).replace('T', ' ');
+  document.getElementById('ccAsofLabel').textContent = d.meta.asof_fy_mo;
+
+  // KPI Row 1
+  var uLumpDelta = (latest.u_lump - first.u_lump) / first.u_lump;
+  var uFirmDelta = (latest.u_firm - first.u_firm) / first.u_firm;
+  var gap = latest.u_firm - latest.u_lump;
+  var gapPct = gap / latest.u_firm;
+  var lifetimeDelta = (latest.lifetime_cost_per_case - first.lifetime_cost_per_case) / first.lifetime_cost_per_case;
+
+  document.getElementById('ccKpiULump').textContent = _fmtNum(latest.u_lump);
+  document.getElementById('ccKpiULumpSub').innerHTML = '元/件/月 · 起點 ' + _fmtNum(first.u_lump) + ' → 變動 ' + (uLumpDelta >= 0 ? '+' : '') + _fmtPct(uLumpDelta, 1);
+  document.getElementById('ccKpiUFirm').textContent = _fmtNum(latest.u_firm);
+  document.getElementById('ccKpiUFirmSub').innerHTML = '元/件/月 · 起點 ' + _fmtNum(first.u_firm) + ' → 變動 ' + (uFirmDelta >= 0 ? '+' : '') + _fmtPct(uFirmDelta, 1);
+  document.getElementById('ccKpiGap').textContent = _fmtNum(gap);
+  document.getElementById('ccKpiGapSub').innerHTML = '元/件/月 (' + _fmtPct(gapPct, 1) + ' 稀釋率)';
+  document.getElementById('ccKpiLifetime').textContent = _fmtNum(latest.lifetime_cost_per_case);
+  document.getElementById('ccKpiLifetimeSub').innerHTML = '元/件 · 起點 ' + _fmtNum(first.lifetime_cost_per_case) + ' → ' + (lifetimeDelta >= 0 ? '+' : '') + _fmtPct(lifetimeDelta, 1);
+
+  // KPI Row 2
+  var adurDelta = (latest.active_dur_median - first.active_dur_median) / first.active_dur_median;
+  var cdurDelta = (latest.closed_dur_median - first.closed_dur_median) / first.closed_dur_median;
+  document.getElementById('ccKpiActiveDur').textContent = latest.active_dur_median.toFixed(0) + ' 天';
+  document.getElementById('ccKpiActiveDurSub').innerHTML = '起點 ' + first.active_dur_median.toFixed(0) + ' 天 → ' + (adurDelta >= 0 ? '+' : '') + _fmtPct(adurDelta, 1);
+  document.getElementById('ccKpiClosedDur').textContent = latest.closed_dur_median.toFixed(0) + ' 天';
+  document.getElementById('ccKpiClosedDurSub').innerHTML = '起點 ' + first.closed_dur_median.toFixed(0) + ' 天 → ' + (cdurDelta >= 0 ? '+' : '') + _fmtPct(cdurDelta, 1);
+
+  // Charts
+  ccRenderTrendCost();
+  ccRenderTrendDur();
+  ccRenderTrendLifetime();
+  ccRenderAgeDist();
+  ccRenderCaseType();
+  ccRenderOffice();
+  ccRenderLawyerTable();
+
+  // Bind interactivity
+  document.getElementById('ccLawyerSort').addEventListener('change', ccRenderLawyerTable);
+  document.getElementById('ccLawyerOnlyFirm').addEventListener('change', ccRenderLawyerTable);
+}
+
+function _ccCommonOpts(yCallback) {
+  var cs = getComputedStyle(document.documentElement);
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: {
+      legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 9 }, maxRotation: 60, autoSkip: true, autoSkipPadding: 10 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 }, callback: yCallback }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  };
+}
+
+function ccRenderTrendCost() {
+  var ms = caseCostData.monthly_series;
+  var labels = ms.map(function(r) { return r.fy_mo; });
+  var ctx = document.getElementById('ccTrendCost');
+  if (charts.ccTrendCost) charts.ccTrendCost.destroy();
+  charts.ccTrendCost = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'u$/件/月 — 全所 lump', data: ms.map(function(r){ return r.u_lump; }), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.15)', tension: 0.3, borderWidth: 2.5, fill: '+1' },
+        { label: 'u$/件/月 — 所內 only', data: ms.map(function(r){ return r.u_firm; }), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5 }
+      ]
+    },
+    options: _ccCommonOpts(function(v){ return v.toLocaleString(); })
+  });
+}
+
+function ccRenderTrendDur() {
+  var ms = caseCostData.monthly_series;
+  var labels = ms.map(function(r) { return r.fy_mo; });
+  var ctx = document.getElementById('ccTrendDur');
+  if (charts.ccTrendDur) charts.ccTrendDur.destroy();
+  charts.ccTrendDur = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '進案週期中位 (天)', data: ms.map(function(r){ return r.active_dur_median; }), borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5 },
+        { label: '結案週期中位 (天)', data: ms.map(function(r){ return r.closed_dur_median; }), borderColor: '#dc2626', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 }
+      ]
+    },
+    options: _ccCommonOpts(function(v){ return v + 'd'; })
+  });
+}
+
+function ccRenderTrendLifetime() {
+  var ms = caseCostData.monthly_series;
+  var labels = ms.map(function(r) { return r.fy_mo; });
+  var ctx = document.getElementById('ccTrendLifetime');
+  if (charts.ccTrendLifetime) charts.ccTrendLifetime.destroy();
+  charts.ccTrendLifetime = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'lifetime 成本/件 (元)', data: ms.map(function(r){ return r.lifetime_cost_per_case; }), borderColor: '#c9a84c', backgroundColor: 'rgba(201,168,76,0.2)', tension: 0.3, borderWidth: 2.5, fill: true }
+      ]
+    },
+    options: _ccCommonOpts(function(v){ return (v/1000).toFixed(0) + 'K'; })
+  });
+}
+
+function ccRenderAgeDist() {
+  var ad = caseCostData.age_distribution;
+  var labels = ad.map(function(r) { return r.fy_mo; });
+  var ctx = document.getElementById('ccAgeDist');
+  if (charts.ccAgeDist) charts.ccAgeDist.destroy();
+  charts.ccAgeDist = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '<90 天', data: ad.map(function(r){ return r['<90']; }), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.6)', fill: 'origin', tension: 0.2, borderWidth: 1, pointRadius: 0 },
+        { label: '90-365 天', data: ad.map(function(r){ return r['90-365']; }), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.6)', fill: '-1', tension: 0.2, borderWidth: 1, pointRadius: 0 },
+        { label: '1-2 年', data: ad.map(function(r){ return r['1-2yr']; }), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.6)', fill: '-1', tension: 0.2, borderWidth: 1, pointRadius: 0 },
+        { label: '> 2 年', data: ad.map(function(r){ return r['>2yr']; }), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.6)', fill: '-1', tension: 0.2, borderWidth: 1, pointRadius: 0 }
+      ]
+    },
+    options: Object.assign(_ccCommonOpts(function(v){ return v; }), {
+      scales: {
+        x: { stacked: true, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 9 }, maxRotation: 60, autoSkip: true, autoSkipPadding: 10 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { stacked: true, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    })
+  });
+}
+
+function ccRenderCaseType() {
+  var rows = caseCostData.case_type_breakdown.slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
+  var ctx = document.getElementById('ccCaseTypeBar');
+  if (charts.ccCaseTypeBar) charts.ccCaseTypeBar.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  charts.ccCaseTypeBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(function(r){ return r.case_type; }),
+      datasets: [
+        { label: 'lifetime 成本/件 (元)', data: rows.map(function(r){ return r.lifetime_cost_per_case; }), backgroundColor: '#c9a84c', borderRadius: 4, yAxisID: 'y' },
+        { label: 'active 件數', data: rows.map(function(r){ return r.active; }), backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 4, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+        tooltip: { callbacks: {
+          afterLabel: function(c) {
+            var r = rows[c.dataIndex];
+            return ['結案週期中位: ' + r.closed_dur_median + '天', '12mo 結案: ' + r.closed_in_12mo, '所內 ' + r.pure_firm + ' / 合署 ' + r.partner];
+          }
+        }}
+      },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 9 }, callback: function(v){ return (v/1000).toFixed(0) + 'K'; } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x1: { display: false },
+        y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y1: { display: false }
+      }
+    }
+  });
+}
+
+function ccRenderOffice() {
+  var rows = caseCostData.office_breakdown.slice().sort(function(a,b){ return b.lifetime_cost_per_case - a.lifetime_cost_per_case; });
+  var ctx = document.getElementById('ccOfficeBar');
+  if (charts.ccOfficeBar) charts.ccOfficeBar.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  charts.ccOfficeBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(function(r){ return r.office; }),
+      datasets: [
+        { label: 'lifetime 成本/件 (元)', data: rows.map(function(r){ return r.lifetime_cost_per_case; }), backgroundColor: '#4f8ef7', borderRadius: 4 },
+        { label: '結案週期中位 (天)', data: rows.map(function(r){ return r.closed_dur_median; }), backgroundColor: 'rgba(220,38,38,0.6)', borderRadius: 4, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+        tooltip: { callbacks: {
+          afterLabel: function(c) {
+            var r = rows[c.dataIndex];
+            return ['active: ' + r.active + ' 件', '12mo 結案: ' + r.closed_in_12mo, '所內 ' + r.pure_firm + ' / 合署 ' + r.partner];
+          }
+        }}
+      },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 9 }, callback: function(v){ return (v/1000).toFixed(0) + 'K'; } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y1: { display: false }
+      }
+    }
+  });
+}
+
+function ccRenderLawyerTable() {
+  var rows = caseCostData.lawyer_ranking.slice();
+  var sort = document.getElementById('ccLawyerSort').value;
+  var onlyFirm = document.getElementById('ccLawyerOnlyFirm').checked;
+  if (onlyFirm) rows = rows.filter(function(r){ return !r.is_partner; });
+  if (sort === 'active') rows.sort(function(a,b){ return b.active_inventory - a.active_inventory; });
+  else if (sort === 'backlog') rows.sort(function(a,b){
+    var ba = a.backlog_ratio == null ? 9999 : a.backlog_ratio;
+    var bb = b.backlog_ratio == null ? 9999 : b.backlog_ratio;
+    return bb - ba;
+  });
+  else if (sort === 'closed') rows.sort(function(a,b){ return b.closed_in_12mo - a.closed_in_12mo; });
+  rows = rows.slice(0, 30);
+
+  var tbody = document.getElementById('ccLawyerTbody');
+  tbody.innerHTML = rows.map(function(r, i) {
+    var icon = r.is_partner ? '🤝' : '⚖️';
+    var brCell;
+    if (r.backlog_ratio == null) {
+      brCell = '<span style="color:var(--text-muted)">∞ (無結案)</span>';
+    } else {
+      var color = r.backlog_ratio > 3 ? '#ef4444' : (r.backlog_ratio > 2 ? '#f59e0b' : (r.backlog_ratio < 1 ? '#10b981' : 'var(--text)'));
+      brCell = '<span style="color:' + color + ';font-weight:600">' + r.backlog_ratio.toFixed(2) + '</span>';
+    }
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:8px 10px;color:var(--text-muted)">' + (i+1) + '</td>'
+      + '<td style="padding:8px 10px">' + icon + ' <strong>' + r.name + '</strong>' + (r.is_partner ? ' <span style="font-size:0.7rem;color:#f59e0b">合署</span>' : '') + '</td>'
+      + '<td style="padding:8px 10px;text-align:right">' + r.active_inventory + '</td>'
+      + '<td style="padding:8px 10px;text-align:right">' + r.closed_in_12mo + '</td>'
+      + '<td style="padding:8px 10px;text-align:right">' + (r.closed_dur_median ? r.closed_dur_median.toFixed(0) + 'd' : '—') + '</td>'
+      + '<td style="padding:8px 10px;text-align:right">' + brCell + '</td>'
+      + '</tr>';
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════
