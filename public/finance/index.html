@@ -916,6 +916,17 @@
           </div>
         </div>
 
+        <!-- Salary structure breakdown — 律師 vs 法務/行政 -->
+        <div class="table-card" id="ccSalaryStructureCard" style="margin:8px 0;border-left:3px solid var(--blue)">
+          <div style="padding:10px 14px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:0.82rem;margin-bottom:8px">
+              <span>👥 <strong>薪資結構</strong> <span style="color:var(--text-muted);font-size:0.75rem">(<span id="ccSalAsofLabel">—</span> 該月，排 010+金貝殼)</span></span>
+              <span style="margin-left:auto;color:var(--text-muted);font-size:0.72rem">律師判定：WEBSITE_LAWYERS 66 人白名單；其餘=法務/行政</span>
+            </div>
+            <div id="ccSalaryStructure" style="font-size:0.85rem"></div>
+          </div>
+        </div>
+
         <!-- KPI Row 3: Diagnostic — 週期 + 老化 -->
         <div class="kpi-row">
           <div class="kpi-card blue">
@@ -4704,6 +4715,7 @@ function renderCaseCost() {
   ccRenderCaseType();
   ccRenderOffice();
   ccRenderLawyerTable();
+  ccRenderSalaryStructure();
 
   // Bind interactivity (once)
   if (!renderCaseCost._bound) {
@@ -4927,6 +4939,65 @@ function ccRenderOffice() {
       }
     }
   });
+}
+
+function ccRenderSalaryStructure() {
+  var ss = caseCostData.salary_structure && caseCostData.salary_structure[ccFilterOffice];
+  var label = document.getElementById('ccSalAsofLabel');
+  if (label) label.textContent = caseCostData.meta.asof_fy_mo;
+  var host = document.getElementById('ccSalaryStructure');
+  if (!ss) { host.innerHTML = '<span class="text-muted">無資料</span>'; return; }
+  var lawyer = ss['律師'] || {headcount:0, total_salary:0, people:[]};
+  var support = ss['法務/行政'] || {headcount:0, total_salary:0, people:[]};
+  var total = lawyer.total_salary + support.total_salary;
+  var totalHC = lawyer.headcount + support.headcount;
+  function fmt(n){ return (n||0).toLocaleString('en-US'); }
+  function pct(a,b){ return b ? (a/b*100).toFixed(1) + '%' : '—'; }
+  function avgPerHead(role){
+    return role.headcount ? Math.round(role.total_salary / role.headcount) : 0;
+  }
+  var rows = '';
+  rows += '<table style="width:100%;border-collapse:collapse">'
+    + '<thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.78rem">'
+    + '<th style="text-align:left;padding:6px 8px">角色</th>'
+    + '<th style="text-align:right;padding:6px 8px">人數</th>'
+    + '<th style="text-align:right;padding:6px 8px">月薪總</th>'
+    + '<th style="text-align:right;padding:6px 8px">人均</th>'
+    + '<th style="text-align:right;padding:6px 8px">佔比</th>'
+    + '<th style="text-align:left;padding:6px 8px;color:var(--text-muted)">明細 (薪資高→低)</th>'
+    + '</tr></thead><tbody>';
+  function namesLine(role, max){
+    var ppl = role.people || [];
+    var top = ppl.slice(0, max).map(function(p){ return p.name + ' ' + fmt(Math.round(p.salary/1000)) + 'K'; });
+    var more = ppl.length > max ? ' …+' + (ppl.length - max) + ' 人' : '';
+    return top.join(' / ') + more;
+  }
+  rows += '<tr style="border-bottom:1px solid var(--border)">'
+    + '<td style="padding:8px;color:#10b981">⚖️ 律師</td>'
+    + '<td style="padding:8px;text-align:right">' + lawyer.headcount + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(lawyer.total_salary) + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(avgPerHead(lawyer)) + '</td>'
+    + '<td style="padding:8px;text-align:right">' + pct(lawyer.total_salary, total) + '</td>'
+    + '<td style="padding:8px;color:var(--text-muted);font-size:0.78rem">' + namesLine(lawyer, 12) + '</td>'
+    + '</tr>';
+  rows += '<tr style="border-bottom:1px solid var(--border)">'
+    + '<td style="padding:8px;color:#a78bfa">📋 法務/行政</td>'
+    + '<td style="padding:8px;text-align:right">' + support.headcount + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(support.total_salary) + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(avgPerHead(support)) + '</td>'
+    + '<td style="padding:8px;text-align:right">' + pct(support.total_salary, total) + '</td>'
+    + '<td style="padding:8px;color:var(--text-muted);font-size:0.78rem">' + namesLine(support, 12) + '</td>'
+    + '</tr>';
+  rows += '<tr style="font-weight:600">'
+    + '<td style="padding:8px">合計</td>'
+    + '<td style="padding:8px;text-align:right">' + totalHC + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(total) + '</td>'
+    + '<td style="padding:8px;text-align:right">' + fmt(totalHC ? Math.round(total/totalHC) : 0) + '</td>'
+    + '<td style="padding:8px;text-align:right">100%</td>'
+    + '<td></td>'
+    + '</tr>';
+  rows += '</tbody></table>';
+  host.innerHTML = rows;
 }
 
 function ccRenderLawyerTable() {

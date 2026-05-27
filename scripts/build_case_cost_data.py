@@ -39,17 +39,10 @@ PARTNER_SINCE = {
 PARTNER_SINCE_DT = {k: datetime.strptime(v, '%Y-%m-%d').date() for k, v in PARTNER_SINCE.items()}
 EXCLUDE_DEPTS_010 = {'北所010', '北所金貝殼'}
 
-# Office → department mapping (薪資分子)
-# 跨所共用 dept (其他/公司/法顧/None) 只在 '全所' 算
-OFFICE_DEPTS = {
-    '台北所': {'北所吉他', '北所(接案、行政、工讀)', '北所四部'},
-    '桃園所': {'桃所'},
-    '新竹所': {'竹所'},
-    '台中所': {'中所'},
-    '台南所': {'南所'},
-    '高雄所': {'雄所'},
-}
-OFFICES_ORDERED = ['全所', '台北所', '桃園所', '新竹所', '台中所', '台南所', '高雄所']
+# finance_employees_monthly.office 已直接帶 6 所 (台北所/桃園所/...)
+# office=None 的 row (跨所共用: 其他/公司/法顧) 只進「全所」aggregate
+PHYSICAL_OFFICES = ['台北所', '桃園所', '新竹所', '台中所', '台南所', '高雄所']
+OFFICES_ORDERED = ['全所'] + PHYSICAL_OFFICES
 
 # 律師權威名單 — 來自 zhelu.tw/about 官網（66 位）+ revenue dashboard WEBSITE_LAWYERS
 # 不在這名單但出現在案件 5 個律師 role 的人 → 視為法務（同 revenue tab 邏輯）
@@ -154,7 +147,7 @@ def is_la(c):
     return sn.startswith('LA') or '法律顧問' in (c.get('cause_of_action') or '')
 
 print('=== Loading data ===')
-fin_rows = fetch_all(f'{SB_URL}/finance_employees_monthly?select=fiscal_year,month,name,department,salary_subtotal')
+fin_rows = fetch_all(f'{SB_URL}/finance_employees_monthly?select=fiscal_year,month,name,department,office,salary_subtotal')
 print(f'  finance: {len(fin_rows)} rows')
 
 case_cols = ('case_id,serial_number,aasm_state,'
@@ -225,18 +218,21 @@ for fy in [111, 112, 113, 114, 115]:
         months.append((fy, m, month_start(y, m), month_end(y, m)))
 LATEST_ASOF = months[-1][3]
 
-# Salary aggregation: 全所 = 全部排 010；個別所 = OFFICE_DEPTS mapping
+# Salary aggregation: 全所 = 全部排 010；個別所 = finance_employees_monthly.office 直接判
 sal_all_by_mo = defaultdict(float)
-sal_office_by_mo = {o: defaultdict(float) for o in OFFICE_DEPTS}
+sal_office_by_mo = {o: defaultdict(float) for o in PHYSICAL_OFFICES}
+# 也建 salary_structure: 每月每所 by role (律師/法務+行政) → 用最新月給 UI 顯示
+sal_structure_rows = []  # 留原始 row 等下用最新月做 breakdown
 for r in fin_rows:
     dept = r.get('department')
     if dept in EXCLUDE_DEPTS_010: continue
     fm = (r['fiscal_year'], r['month'])
     amt = r['salary_subtotal'] or 0
     sal_all_by_mo[fm] += amt
-    for off, depts in OFFICE_DEPTS.items():
-        if dept in depts:
-            sal_office_by_mo[off][fm] += amt
+    off = r.get('office')
+    if off in sal_office_by_mo:
+        sal_office_by_mo[off][fm] += amt
+    sal_structure_rows.append(r)
 
 # Booking: 用 consultation_cases is_signed=true 的 revenue 加總 by case_date 月
 # 全所 = 全部 signed booking；個別所 = lawyer_id 對應到該所的 booking
@@ -272,7 +268,7 @@ for off, names in LAWYERS_BY_OFFICE.items():
 print(f'  name -> office mapped: {len(NAME_TO_PRIMARY_OFFICE)} names')
 
 booking_by_mo_all = defaultdict(float)
-booking_by_mo_office = {o: defaultdict(float) for o in OFFICE_DEPTS}
+booking_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}
 unmapped_revenue = 0.0
 unmapped_lawyers = Counter()
 for r in cons_rows:
@@ -520,7 +516,7 @@ by_office = {}
 print('\n=== Computing 全所 ===')
 by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo, booking_by_mo_all)
 
-for off in OFFICE_DEPTS:
+for off in PHYSICAL_OFFICES:
     print(f'=== Computing {off} ===')
     by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off], booking_by_mo_office[off])
 
@@ -556,18 +552,51 @@ for o, d in sorted(by_office_agg.items(), key=lambda x: -x[1]['active']):
         'lifetime_cost_per_case': round(lifetime),
     })
 
+# ============ Salary structure breakdown — 最新月 by office × role ============
+print('=== Salary structure (latest month) ===')
+salary_structure = {}
+latest_fm = (latest_fy, latest_m)
+for off in OFFICES_ORDERED:
+    lawyers = []  # 律師
+    support = []  # 法務/行政
+    for r in sal_structure_rows:
+        if (r['fiscal_year'], r['month']) != latest_fm: continue
+        if off == '全所':
+            # 排 010 + 金貝殼 (跟 sal_all_by_mo 一致)
+            pass
+        else:
+            if r.get('office') != off: continue
+        nm = r.get('name') or '(無名)'
+        amt = r.get('salary_subtotal') or 0
+        bucket = lawyers if nm in WEBSITE_LAWYERS else support
+        bucket.append({'name': nm, 'salary': amt, 'department': r.get('department'), 'office': r.get('office')})
+    salary_structure[off] = {
+        '律師': {
+            'headcount': len(lawyers),
+            'total_salary': sum(x['salary'] for x in lawyers),
+            'people': sorted(lawyers, key=lambda x: -x['salary']),
+        },
+        '法務/行政': {
+            'headcount': len(support),
+            'total_salary': sum(x['salary'] for x in support),
+            'people': sorted(support, key=lambda x: -x['salary']),
+        },
+    }
+    print(f'  {off:8} 律師 {len(lawyers):>2} ({salary_structure[off]["律師"]["total_salary"]:>10,})  法務/行政 {len(support):>2} ({salary_structure[off]["法務/行政"]["total_salary"]:>10,})')
+
 # ============ Output ============
 output = {
     'meta': {
         'generated_at': datetime.utcnow().isoformat() + 'Z',
         'asof_date': latest_asof.isoformat(),
         'asof_fy_mo': f'{latest_fy}-{latest_m:02d}',
-        '口徑': '分子薪資=律師+法務+行政（排010+金貝殼）; 分母案件=一般案件（排法顧）; 個別所薪資只算 OFFICE_DEPTS mapping，跨所/共用 dept 只在全所',
+        '口徑': '分子薪資=律師+法務+行政（排010+金貝殼）; 分母案件=一般案件（排法顧）; 個別所薪資用 finance_employees_monthly.office 直接判，跨所共用 dept (office=NULL) 只進「全所」',
         'window': f'{months[0][0]}-{months[0][1]:02d} ~ {months[-1][0]}-{months[-1][1]:02d}',
         'fiscal_years': sorted({m_t[0] for m_t in months}),
     },
     'offices': OFFICES_ORDERED,
     'office_breakdown': office_breakdown,
+    'salary_structure': salary_structure,
     'by_office': by_office,
 }
 
