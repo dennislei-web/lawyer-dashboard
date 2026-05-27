@@ -1526,6 +1526,9 @@
             <button class="year-btn active" data-aging-group="all">全部</button>
             <button class="year-btn" data-aging-group="firm">所內</button>
             <button class="year-btn" data-aging-group="partner">合署</button>
+            <span class="filter-label" style="margin-left:12px;" title="預設排除已離職律師（lawyers.departed_at 不為空）。關掉看 CRM 殘留全貌。">離職律師：</span>
+            <button class="year-btn active" data-aging-departed="hide">排除</button>
+            <button class="year-btn" data-aging-departed="show">顯示</button>
             <span class="filter-label" style="margin-left:12px;">排序：</span>
             <button class="year-btn active" data-aging-sort="old_count">僵案數 (&gt;180天)</button>
             <button class="year-btn" data-aging-sort="old_pct">老案佔比</button>
@@ -4658,7 +4661,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
 // 每位律師當下 appointed 案件按建案至今天數分桶，含合署律師
 // 案型 normalize：每件案 (年齡 / 該部門結案週期中位) 的中位
 // ─────────────────────────────────────────────────────────────
-var _agingState = { group: 'all', sort: 'old_count', rows: null, asof: null, deptMedian: null };
+var _agingState = { group: 'all', sort: 'old_count', departed: 'hide', rows: null, asof: null, deptMedian: null };
 
 function _median(arr) {
   if (!arr.length) return 0;
@@ -4722,6 +4725,7 @@ function _renderCasesLawyerAging(rows, statesAtAsof, asofDate) {
           name: name,
           cases: [],
           isPartner: partnerSet.has(name),
+          isDeparted: _isDepartedByAt(name, asofDate),
           primaryOffice: _lawyerPrimaryOffice[name] || '—'
         };
       }
@@ -4775,8 +4779,10 @@ function _redrawCasesLawyerAging() {
   var group = _agingState.group;
   var sort = _agingState.sort;
 
-  // 分群過濾
+  // 分群 + 離職過濾
+  var hideDeparted = _agingState.departed === 'hide';
   var filtered = lawyers.filter(function(l){
+    if (hideDeparted && l.isDeparted) return false;
     if (group === 'firm') return !l.isPartner;
     if (group === 'partner') return l.isPartner;
     return true;
@@ -4807,8 +4813,10 @@ function _redrawCasesLawyerAging() {
     return '<span style="color:'+color+';font-weight:600;">' + r.toFixed(2) + '×</span>';
   }
   function badge(l) {
-    if (l.isPartner) return ' <span style="background:#7c3aed33;color:#a78bfa;font-size:0.65rem;padding:1px 6px;border-radius:8px;margin-left:4px;">合署</span>';
-    return '';
+    var s = '';
+    if (l.isPartner) s += ' <span style="background:#7c3aed33;color:#a78bfa;font-size:0.65rem;padding:1px 6px;border-radius:8px;margin-left:4px;">合署</span>';
+    if (l.isDeparted) s += ' <span style="background:#ef444433;color:#fca5a5;font-size:0.65rem;padding:1px 6px;border-radius:8px;margin-left:4px;" title="lawyers.departed_at 不為空">已離職</span>';
+    return s;
   }
 
   var html = filtered.map(function(l){
@@ -5200,6 +5208,14 @@ document.querySelectorAll('[data-aging-sort]').forEach(function(btn){
     document.querySelectorAll('[data-aging-sort]').forEach(function(b){ b.classList.remove('active'); });
     btn.classList.add('active');
     _agingState.sort = btn.getAttribute('data-aging-sort');
+    _redrawCasesLawyerAging();
+  });
+});
+document.querySelectorAll('[data-aging-departed]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('[data-aging-departed]').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    _agingState.departed = btn.getAttribute('data-aging-departed');
     _redrawCasesLawyerAging();
   });
 });
