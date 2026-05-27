@@ -860,41 +860,46 @@
           </div>
         </div>
 
-        <!-- KPI Row 1 -->
+        <!-- KPI Row 1: Hero — lifetime 主指標 -->
         <div class="kpi-row">
-          <div class="kpi-card blue">
-            <div class="kpi-label">u$/件/月 — 全所 lump <span style="opacity:.6;font-size:0.7rem" title="月薪資 ÷ 月底全所承辦中一般案件數">ℹ️</span></div>
-            <div class="kpi-value blue" id="ccKpiULump">-</div>
-            <div class="kpi-sub" id="ccKpiULumpSub"></div>
+          <div class="kpi-card gold">
+            <div class="kpi-label">🎯 lifetime 成本/件 <span style="opacity:.6;font-size:0.7rem" title="u_firm × 該月結案週期中位(月)。每件案件從建案到結案累積吃掉的人事成本 proxy">ℹ️</span></div>
+            <div class="kpi-value gold" id="ccKpiLifetime">-</div>
+            <div class="kpi-sub" id="ccKpiLifetimeSub"></div>
           </div>
           <div class="kpi-card green">
             <div class="kpi-label">u$/件/月 — 所內 only</div>
             <div class="kpi-value green" id="ccKpiUFirm">-</div>
             <div class="kpi-sub" id="ccKpiUFirmSub"></div>
           </div>
+          <div class="kpi-card blue">
+            <div class="kpi-label">u$/件/月 — 全所 lump <span style="opacity:.6;font-size:0.7rem" title="月薪資 ÷ 月底全所承辦中一般案件數">ℹ️</span></div>
+            <div class="kpi-value blue" id="ccKpiULump">-</div>
+            <div class="kpi-sub" id="ccKpiULumpSub"></div>
+          </div>
           <div class="kpi-card orange">
             <div class="kpi-label">合署 absorb gap</div>
             <div class="kpi-value orange" id="ccKpiGap">-</div>
             <div class="kpi-sub" id="ccKpiGapSub"></div>
           </div>
-          <div class="kpi-card gold">
-            <div class="kpi-label">lifetime 成本/件 <span style="opacity:.6;font-size:0.7rem" title="u_firm × 該月結案週期中位(月)">ℹ️</span></div>
-            <div class="kpi-value gold" id="ccKpiLifetime">-</div>
-            <div class="kpi-sub" id="ccKpiLifetimeSub"></div>
-          </div>
         </div>
 
-        <!-- KPI Row 2 -->
+        <!-- KPI Row 2: Diagnostic — 週期 + 老化 -->
         <div class="kpi-row">
           <div class="kpi-card blue">
-            <div class="kpi-label">進案週期中位 (active appointed age)</div>
+            <div class="kpi-label">處理中案件週期中位 <span style="opacity:.6;font-size:0.7rem" title="當下 active appointed 案件從建案至今的天數中位。庫存老化指標">ℹ️</span></div>
             <div class="kpi-value blue" id="ccKpiActiveDur">-</div>
             <div class="kpi-sub" id="ccKpiActiveDurSub"></div>
           </div>
           <div class="kpi-card orange">
-            <div class="kpi-label">結案週期中位 (closed cases)</div>
+            <div class="kpi-label">結案週期中位 <span style="opacity:.6;font-size:0.7rem" title="該月結案案件從建案到結案的天數中位。吞吐速度指標">ℹ️</span></div>
             <div class="kpi-value orange" id="ccKpiClosedDur">-</div>
             <div class="kpi-sub" id="ccKpiClosedDurSub"></div>
+          </div>
+          <div class="kpi-card" id="ccKpiAgingCard" style="border-color:var(--text-muted)">
+            <div class="kpi-label">📊 庫存老化指數 <span style="opacity:.6;font-size:0.7rem" title="= 2 × 處理中案件週期中位 / 結案週期中位。= 1 表案件流均勻，&gt; 1 表 inventory 偏老化">ℹ️</span></div>
+            <div class="kpi-value" id="ccKpiAging">-</div>
+            <div class="kpi-sub" id="ccKpiAgingSub"></div>
           </div>
         </div>
 
@@ -909,7 +914,7 @@
         <!-- Chart 2: 週期 + lifetime -->
         <div class="chart-row">
           <div class="chart-card">
-            <div class="chart-title">案件週期中位 — 進案 vs 結案</div>
+            <div class="chart-title">案件週期中位 — 處理中案件 vs 結案</div>
             <div class="chart-container" style="height:280px"><canvas id="ccTrendDur"></canvas></div>
           </div>
           <div class="chart-card">
@@ -4510,13 +4515,33 @@ function renderCaseCost() {
   document.getElementById('ccKpiLifetime').textContent = _fmtNum(latest.lifetime_cost_per_case);
   document.getElementById('ccKpiLifetimeSub').innerHTML = '元/件 · 起點 ' + _fmtNum(first.lifetime_cost_per_case) + ' → ' + (lifetimeDelta >= 0 ? '+' : '') + _fmtPct(lifetimeDelta, 1);
 
-  // KPI Row 2
+  // KPI Row 2 — Diagnostic
   var adurDelta = (latest.active_dur_median - first.active_dur_median) / first.active_dur_median;
   var cdurDelta = (latest.closed_dur_median - first.closed_dur_median) / first.closed_dur_median;
   document.getElementById('ccKpiActiveDur').textContent = latest.active_dur_median.toFixed(0) + ' 天';
   document.getElementById('ccKpiActiveDurSub').innerHTML = '起點 ' + first.active_dur_median.toFixed(0) + ' 天 → ' + (adurDelta >= 0 ? '+' : '') + _fmtPct(adurDelta, 1);
   document.getElementById('ccKpiClosedDur').textContent = latest.closed_dur_median.toFixed(0) + ' 天';
   document.getElementById('ccKpiClosedDurSub').innerHTML = '起點 ' + first.closed_dur_median.toFixed(0) + ' 天 → ' + (cdurDelta >= 0 ? '+' : '') + _fmtPct(cdurDelta, 1);
+
+  // 老化指數 = 2 × active_dur / closed_dur
+  function _aging(r) { return r.closed_dur_median > 0 ? (2 * r.active_dur_median / r.closed_dur_median) : 0; }
+  var agingNow = _aging(latest);
+  var agingFirst = _aging(first);
+  var agingEl = document.getElementById('ccKpiAging');
+  var agingSubEl = document.getElementById('ccKpiAgingSub');
+  var agingCard = document.getElementById('ccKpiAgingCard');
+  agingEl.textContent = agingNow.toFixed(2);
+  var agingDelta = (agingNow - agingFirst) / agingFirst;
+  var verdict;
+  if (agingNow > 1.5) verdict = '🔴 嚴重老化';
+  else if (agingNow > 1.2) verdict = '🟠 偏老化';
+  else if (agingNow > 0.9) verdict = '🟢 均勻';
+  else verdict = '🔵 inventory 年輕';
+  agingSubEl.innerHTML = verdict + ' · 起點 ' + agingFirst.toFixed(2) + ' → ' + (agingDelta >= 0 ? '+' : '') + _fmtPct(agingDelta, 1);
+  // colour
+  var agingColor = agingNow > 1.5 ? '#ef4444' : (agingNow > 1.2 ? '#f59e0b' : (agingNow > 0.9 ? '#10b981' : '#3b82f6'));
+  agingEl.style.color = agingColor;
+  agingCard.style.borderLeftColor = agingColor;
 
   // Charts
   ccRenderTrendCost();
@@ -4577,7 +4602,7 @@ function ccRenderTrendDur() {
     data: {
       labels: labels,
       datasets: [
-        { label: '進案週期中位 (天)', data: ms.map(function(r){ return r.active_dur_median; }), borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5 },
+        { label: '處理中案件週期中位 (天)', data: ms.map(function(r){ return r.active_dur_median; }), borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2.5 },
         { label: '結案週期中位 (天)', data: ms.map(function(r){ return r.closed_dur_median; }), borderColor: '#dc2626', backgroundColor: 'transparent', tension: 0.3, borderWidth: 2 }
       ]
     },
