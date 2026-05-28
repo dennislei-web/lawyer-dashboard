@@ -8,7 +8,7 @@
   <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="../lawyer-departments.js?v=20260528a"></script>
+  <script src="../lawyer-departments.js?v=20260528b"></script>
   <style>
     :root {
       --bg-main:    #020b18;
@@ -4352,21 +4352,33 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   // 法務分母 = 該範圍內「實際有 appointed 案件分配」的 distinct 法務人數
   // （rows 已套接案所/部門 filter，activeLegalStaff 是這些案件涉及的法務 union）
   var legalDenom = activeLegalStaff.size;
+  // dept filter 啟用時，額外列出該 finance dept 的法務編制數作為對照
+  var legalHeadcountInDept = (financeDept && headcount) ? ((headcount.legalStaffPerDept || {})[financeDept] || 0) : null;
+
+  var lawyerLine, legalLine = '';
   if (lawyerDenom > 0) {
-    var perLawyer = inP.pure_firm / lawyerDenom;
-    document.getElementById('casesKpiPerLawyer').textContent = perLawyer.toFixed(1);
-    var perLegalLine = '';
-    if (legalDenom > 0) {
-      var perLegal = (inP.legal_staff_only / legalDenom).toFixed(1);
-      perLegalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 位有承辦的法務 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
-    }
-    document.getElementById('casesKpiPerLawyerSub').innerHTML =
-      '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人' + perLegalLine + '<br>'
-      + '<span style="opacity:.7;font-size:0.78rem;">' + denomLabel + '</span>';
+    var perLawyer = (inP.pure_firm / lawyerDenom).toFixed(1);
+    document.getElementById('casesKpiPerLawyer').textContent = perLawyer;
+    lawyerLine = '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ ' + lawyerDenom + ' 人';
+  } else if (financeDept) {
+    document.getElementById('casesKpiPerLawyer').textContent = inP.pure_firm > 0 ? '∞' : '-';
+    lawyerLine = '律師承辦 ' + inP.pure_firm.toLocaleString() + ' ÷ <span style="color:#ef4444">0 律師</span>（' + denomLabel + '）';
   } else {
     document.getElementById('casesKpiPerLawyer').textContent = '-';
-    document.getElementById('casesKpiPerLawyerSub').textContent = officeFilter ? (officeFilter + ' 該月無人力資料') : '無人力資料';
+    lawyerLine = denomLabel || (officeFilter ? (officeFilter + ' 該月無人力資料') : '無人力資料');
   }
+
+  if (legalDenom > 0) {
+    var perLegal = (inP.legal_staff_only / legalDenom).toFixed(1);
+    legalLine = '<br>📋 法務 ' + inP.legal_staff_only.toLocaleString() + ' ÷ ' + legalDenom + ' 位有承辦的法務 <span style="color:#a78bfa;font-weight:600;">= ' + perLegal + '</span>';
+    if (legalHeadcountInDept !== null) {
+      legalLine += '<span style="opacity:.7;font-size:0.78rem;"> (' + financeDept + ' 編制 ' + legalHeadcountInDept + ' 人)</span>';
+    }
+  }
+
+  document.getElementById('casesKpiPerLawyerSub').innerHTML =
+    lawyerLine + legalLine
+    + (lawyerDenom > 0 ? ('<br><span style="opacity:.7;font-size:0.78rem;">' + denomLabel + '</span>') : '');
   document.getElementById('casesKpiNewMonth').textContent = newThisMonth.toLocaleString();
   document.getElementById('casesKpiNewMonthSub').textContent = (isToday?'本月':asofMonth+' 月') + '結案 ' + closedThisMonth.toLocaleString();
 
