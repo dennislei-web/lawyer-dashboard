@@ -204,8 +204,9 @@ for c in general_cases + la_cases:
     c['_office'] = c.get('council_office_name') or '(未標示)'
 
 def is_active_state(s):
-    """承辦中 = appointed (已委任) + canceled (待追，業務定義為承辦中但暫無急迫事項)"""
-    return s in ('appointed', 'canceled')
+    """承辦中 = appointed (已委任) + pending (待追，業務定義為承辦中但暫無急迫事項)。
+    注意 CRM 後端 code 跟 UI 字面語意對不上：pending=待追、canceled=待結案。以 UI 為準。"""
+    return s in ('appointed', 'pending')
 
 
 def state_at(c, asof, latest_asof=None):
