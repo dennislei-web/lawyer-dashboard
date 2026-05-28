@@ -8,7 +8,7 @@
   <script src="../shared/view-as.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="../lawyer-departments.js?v=20260513e"></script>
+  <script src="../lawyer-departments.js?v=20260528a"></script>
   <style>
     :root {
       --bg-main:    #020b18;
@@ -3721,7 +3721,7 @@ async function _loadHeadcountHistory() {
   var from = 0, BATCH = 1000;
   while (true) {
     var r = await sb.from('finance_employees_monthly')
-      .select('name,office,fiscal_year,month,base_salary')
+      .select('name,office,department,fiscal_year,month,base_salary')
       .range(from, from + BATCH - 1);
     if (!r.data || !r.data.length) break;
     all = all.concat(r.data);
@@ -3732,8 +3732,8 @@ async function _loadHeadcountHistory() {
   // 為了 override 不雙算，每個 (ym) 維護一個 lawyerNames set
   function ensureYM(k) {
     if (!byYM[k]) byYM[k] = {
-      lawyerTotal: 0, lawyerPerOffice: {},
-      legalStaffTotal: 0, legalStaffPerOffice: {},
+      lawyerTotal: 0, lawyerPerOffice: {}, lawyerPerDept: {},
+      legalStaffTotal: 0, legalStaffPerOffice: {}, legalStaffPerDept: {},
       lawyerNames: new Set()
     };
     return byYM[k];
@@ -3750,10 +3750,12 @@ async function _loadHeadcountHistory() {
     if (cls === 'lawyer') {
       b.lawyerTotal++;
       b.lawyerPerOffice[e.office] = (b.lawyerPerOffice[e.office] || 0) + 1;
+      if (e.department) b.lawyerPerDept[e.department] = (b.lawyerPerDept[e.department] || 0) + 1;
       b.lawyerNames.add(e.name);
     } else if (cls === 'legalStaff') {
       b.legalStaffTotal++;
       b.legalStaffPerOffice[e.office] = (b.legalStaffPerOffice[e.office] || 0) + 1;
+      if (e.department) b.legalStaffPerDept[e.department] = (b.legalStaffPerDept[e.department] || 0) + 1;
     }
   });
 
@@ -3768,6 +3770,7 @@ async function _loadHeadcountHistory() {
       if (byYM[k].lawyerNames.has(name)) return;  // 已在某 office 計入，不再重複
       byYM[k].lawyerTotal++;
       byYM[k].lawyerPerOffice[o.office] = (byYM[k].lawyerPerOffice[o.office] || 0) + 1;
+      if (o.department) byYM[k].lawyerPerDept[o.department] = (byYM[k].lawyerPerDept[o.department] || 0) + 1;
       byYM[k].lawyerNames.add(name);
     });
   });
@@ -3814,6 +3817,7 @@ async function _loadHeadcountSnapshot(asofDate) {
   }
   await _loadPartners();
   var perOffice = {}, lawyerPerOffice = {}, legalStaffPerOffice = {};
+  var lawyerPerDept = {}, legalStaffPerDept = {};
   var lawyerNames = new Set();
   var total = 0, lawyerTotal = 0, legalStaffTotal = 0;
   data.forEach(function(e){
@@ -3823,10 +3827,12 @@ async function _loadHeadcountSnapshot(asofDate) {
     var cls = _classifyEmployee(e, asofDate);
     if (cls === 'lawyer') {
       lawyerPerOffice[e.office] = (lawyerPerOffice[e.office] || 0) + 1;
+      if (e.department) lawyerPerDept[e.department] = (lawyerPerDept[e.department] || 0) + 1;
       lawyerTotal++;
       lawyerNames.add(e.name);
     } else if (cls === 'legalStaff') {
       legalStaffPerOffice[e.office] = (legalStaffPerOffice[e.office] || 0) + 1;
+      if (e.department) legalStaffPerDept[e.department] = (legalStaffPerDept[e.department] || 0) + 1;
       legalStaffTotal++;
     }
   });
@@ -3838,13 +3844,14 @@ async function _loadHeadcountSnapshot(asofDate) {
     if (ym < sP[0] * 12 + sP[1]) return;
     if (lawyerNames.has(name)) return;
     lawyerPerOffice[o.office] = (lawyerPerOffice[o.office] || 0) + 1;
+    if (o.department) lawyerPerDept[o.department] = (lawyerPerDept[o.department] || 0) + 1;
     lawyerTotal++;
     lawyerNames.add(name);
   });
   return {
     perOffice: perOffice, total: total,
-    lawyerPerOffice: lawyerPerOffice, lawyerTotal: lawyerTotal,
-    legalStaffPerOffice: legalStaffPerOffice, legalStaffTotal: legalStaffTotal,
+    lawyerPerOffice: lawyerPerOffice, lawyerTotal: lawyerTotal, lawyerPerDept: lawyerPerDept,
+    legalStaffPerOffice: legalStaffPerOffice, legalStaffTotal: legalStaffTotal, legalStaffPerDept: legalStaffPerDept,
     fiscalYear: rocYear, month: month, fallback: fallback
   };
 }
@@ -4050,6 +4057,10 @@ async function _fetchAllCrmCases() {
   var legalStaff = _legalStaffSet || new Set();
   var lawyerOfficeCounts = {};  // name → { office: count }
   all.forEach(function(r){
+    // group_name normalize：北所三部 (moneyback brand 舊案) → 北所四部
+    if (typeof CASE_DEPT_NORMALIZE !== 'undefined' && CASE_DEPT_NORMALIZE[r.group_name]) {
+      r.group_name = CASE_DEPT_NORMALIZE[r.group_name];
+    }
     // transitions 預排序 desc
     var trans = [];
     if (r.closed_at)      trans.push([new Date(r.closed_at), 'closed']);
@@ -4316,11 +4327,20 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.canceled.toLocaleString();
   // 律師人均承辦中 = inP.pure_firm / 該快照月律師人數
-  // 若有接案所 filter → 分母用該所人數；無 filter → 全所總數
+  // 優先序：有 dept filter → 用 finance dept 律師人數；否則有 office filter → 該所；否則全所
   var officeFilter = document.getElementById('casesOfficeFilter').value;
+  var deptFilter = document.getElementById('casesDeptFilter').value;
+  var financeDept = deptFilter ? getFinanceDeptForCaseDept(deptFilter) : null;
   var lawyerDenom = 0, denomLabel = '';
   if (headcount) {
-    if (officeFilter) {
+    if (financeDept) {
+      lawyerDenom = (headcount.lawyerPerDept || {})[financeDept] || 0;
+      denomLabel = headcount.fiscalYear + '年' + headcount.month + '月 ' + deptFilter + '（finance: ' + financeDept + '）律師 ' + lawyerDenom + ' 人';
+    } else if (deptFilter) {
+      // dept filter 啟用但沒對應 finance dept（如合署 / 法顧）→ 顯示 '-'
+      lawyerDenom = 0;
+      denomLabel = deptFilter + ' 無對應 finance 部別，律師人均不適用（合署用獨立 KPI）';
+    } else if (officeFilter) {
       lawyerDenom = (headcount.lawyerPerOffice || {})[officeFilter] || 0;
       denomLabel = headcount.fiscalYear + '年' + headcount.month + '月 ' + officeFilter + '在職律師 ' + lawyerDenom + ' 人';
     } else {
@@ -4537,15 +4557,37 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
     byOffice[office].total++;
   });
   var lawyerPerOffice = (headcount && headcount.lawyerPerOffice) || {};
+  var lawyerPerDept = (headcount && headcount.lawyerPerDept) || {};
+  // 若 dept filter 啟用：律師人數改用對應 finance dept 數量，且只算 dept 所屬所
+  var deptFilterTable = document.getElementById('casesDeptFilter').value;
+  var financeDeptTable = deptFilterTable ? getFinanceDeptForCaseDept(deptFilterTable) : null;
   function dashOrNum(v) { return v > 0 ? v : '<span style="color:var(--text-muted)">-</span>'; }
   function ratioStr(num, denom) {
     return denom > 0 ? (num / denom).toFixed(1) : '<span style="color:var(--text-muted)">-</span>';
   }
+  // 推斷 dept 屬於哪個所（從 dept 名稱前 1 字 + '所'，e.g. 北所010 → 台北所、中所 → 台中所）
+  function _deptOffice(financeDept) {
+    if (!financeDept) return null;
+    if (financeDept.indexOf('北所') === 0) return '台北所';
+    if (financeDept.indexOf('中所') === 0) return '台中所';
+    if (financeDept.indexOf('桃所') === 0) return '桃園所';
+    if (financeDept.indexOf('竹所') === 0) return '新竹所';
+    if (financeDept.indexOf('南所') === 0) return '台南所';
+    if (financeDept.indexOf('雄所') === 0) return '高雄所';
+    return null;
+  }
+  var deptOfficeTable = _deptOffice(financeDeptTable);
   var rowsHtml = Object.keys(byOffice).sort(function(a,b){return byOffice[b].total-byOffice[a].total;}).map(function(o){
     var s = byOffice[o];
     var engaged = s.inProgress + s.la_appointed;
     var closure = s.canceled + s.closed;
-    var lawyers = lawyerPerOffice[o] || 0;
+    // 若 dept filter 啟用：只有 dept 所屬所那一列顯示律師人數，其他所顯示 0（dept 案件可能跨所但律師只歸 1 所）
+    var lawyers;
+    if (financeDeptTable) {
+      lawyers = (o === deptOfficeTable) ? (lawyerPerDept[financeDeptTable] || 0) : 0;
+    } else {
+      lawyers = lawyerPerOffice[o] || 0;
+    }
     var legals = s.activeLegal.size;  // 實際有承辦案件的法務 distinct 數
     return '<tr><td>'+o+'</td>'
       + '<td class="text-right text-gold">'+s.inProgress.toLocaleString()+'</td>'
@@ -5137,9 +5179,13 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory, partnerRows) {
 
   // 圖 3：律師人均 + 法務人均 + 合署人均承辦中 — 月底快照
   var officeFilter = document.getElementById('casesOfficeFilter').value;
+  var deptFilter = document.getElementById('casesDeptFilter').value;
+  var financeDeptForChart = deptFilter ? getFinanceDeptForCaseDept(deptFilter) : null;
   var lawyerCounts = rocKeys.map(function(k){
     var hc = (headcountHistory || {})[k];
     if (!hc) return null;
+    if (financeDeptForChart) return (hc.lawyerPerDept || {})[financeDeptForChart] || 0;
+    if (deptFilter) return 0;  // dept 無 finance 對應（合署等）
     return officeFilter ? (hc.lawyerPerOffice[officeFilter] || 0) : hc.lawyerTotal;
   });
   // 法務分母改用每月實際有承辦案件的 distinct 法務 count（不用 headcountHistory）
@@ -5194,7 +5240,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory, partnerRows) {
       plugins: {
         legend: { position: 'top' },
         tooltip: { mode: 'index', intersect: false, callbacks: { afterLabel: bdAfterLabel } },
-        title: { display: true, text: (officeFilter ? officeFilter : '全所') + ' ・ 律師 vs 法務 vs 合署 分開計算', font: { size: 11 }, color: '#94a3b8' }
+        title: { display: true, text: (deptFilter ? deptFilter + (financeDeptForChart ? ' (finance: ' + financeDeptForChart + ')' : '') : (officeFilter || '全所')) + ' ・ 律師 vs 法務 vs 合署 分開計算', font: { size: 11 }, color: '#94a3b8' }
       },
       scales: {
         y: { beginAtZero: true, title: { display: true, text: '人均承辦中 (件 / 人)', color: '#94a3b8' } }

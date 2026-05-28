@@ -135,6 +135,36 @@ var REFERRAL_DEPT_OVERRIDE = {
   "163713b3-50bc-4ef3-a1f2-dc811749569e": "台北",  // 陳璽仲
 };
 
+// CRM 案件 group_name (案件部門) → finance_employees_monthly.department (員工部門) 映射
+// 用於「案件狀態」頁的 dept filter：選 北所一部 時，律師人均分母要用「北所010」的律師數，
+// 而非整個台北所 20 人。
+//
+// 北所映射：一部=010、二部=吉他、四部=純法務組（無律師）
+// 其他所只有一個 finance dept，CRM 一部直接 1-to-1
+// 合署 (X律師) group_names 不對應 finance dept — 合署人均另由 PARTNER_LAWYERS 算
+var CASE_DEPT_TO_FINANCE_DEPT = {
+  // 台北所
+  '北所一部': '北所010',
+  '北所二部': '北所吉他',
+  '北所四部': '北所四部',  // 純法務組，律師=0
+  // 其他所
+  '中所一部': '中所',
+  '桃所一部': '桃所',
+  '雄所一部': '雄所',
+  '南所一部': '南所',
+  '竹所一部': '竹所',
+};
+
+// CRM group_name normalize：北所三部 (moneyback brand 舊案) → 合併到北所四部
+var CASE_DEPT_NORMALIZE = {
+  '北所三部': '北所四部',
+};
+
+function getFinanceDeptForCaseDept(caseDept) {
+  if (!caseDept) return null;
+  return CASE_DEPT_TO_FINANCE_DEPT[caseDept] || null;
+}
+
 function getDeptForLawyer(lawyerId, dateOrMonth) {
   var hist = LAWYER_DEPT_HISTORY[lawyerId];
   if (hist && dateOrMonth) {
