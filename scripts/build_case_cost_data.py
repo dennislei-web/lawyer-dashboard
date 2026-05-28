@@ -121,6 +121,9 @@ def parse_names(field):
     return []
 
 LAWYER_ROLE_FIELDS = ['council_lawyers','litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers']
+# 承辦欄位（排除 council_lawyers / 諮詢律師欄）— 律師 backlog 排行只算這 4 個
+# 只掛在 council_lawyers 的案子算「諮詢」性質、不是這位律師承辦的案子
+HANDLING_ROLE_FIELDS = ['litigation_lawyers','in_court_lawyers','pleading_lawyers','complaint_lawyers']
 
 # 案型 normalize
 SUBSTANTIVE_CASE_TYPES = [
@@ -483,8 +486,12 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
             lawyer_role_names = set()
             for fld in LAWYER_ROLE_FIELDS:
                 lawyer_role_names.update(parse_names(c.get(fld)))
+            handling_lawyer_names = set()
+            for fld in HANDLING_ROLE_FIELDS:
+                handling_lawyer_names.update(parse_names(c.get(fld)))
             legal_staff_names = set(parse_names(c.get('assigned_members')))
-            case_lawyers = (lawyer_role_names & WEBSITE_LAWYERS) - NON_CONSULTING_LAWYERS
+            # 律師排行：只算 4 個承辦欄位（排除 council_lawyers / 諮詢律師欄）
+            case_lawyers = (handling_lawyer_names & WEBSITE_LAWYERS) - NON_CONSULTING_LAWYERS
             case_legal_staff = (legal_staff_names | (lawyer_role_names - WEBSITE_LAWYERS)) - NON_CONSULTING_LAWYERS - WEBSITE_LAWYERS
 
             for name in case_lawyers:
