@@ -607,6 +607,16 @@ def parse_alt_profit_sections(rows, lawyer, year, month):
                 side = 'zhelu_handled'
                 note = '11504-zhelu-collected'
 
+            # 對齊 senior_profit_share.csv 的 ratio 慣例（見 tier_from_ratio）：
+            #   左表 tier（諮詢成案/喆律轉案/諮詢/成案獎金）→ ratio = 律師 share
+            #   右表 tier（自案/法律010轉案/其他-自案） → ratio = 喆律 share
+            # alt parser 原本直接寫 Excel 原值（payable/amt = 喆律 share），對左表會寫反。
+            if amt > 0:
+                if tier in ('諮詢成案', '喆律轉案', '諮詢', '成案獎金'):
+                    ratio = round(lawyer_amt / amt, 4)
+                else:
+                    ratio = round(zhelu_amt / amt, 4)
+
             out.append({
                 'lawyer': lawyer, 'year': year, 'month': month,
                 'side': side, 'tier': tier,
