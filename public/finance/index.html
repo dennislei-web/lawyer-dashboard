@@ -1048,7 +1048,7 @@
             • <strong>合署 since date</strong>：18 位律師逐一 hardcoded（含司法官受雇 3 人 since 2023-11-01）。資料源：revenue dashboard。<br>
             • <strong>律師 vs 法務分類</strong>：律師排行只算 WEBSITE_LAWYERS 66 人白名單（含合署），且案子要有人掛在 4 個承辦欄位（litigation/in_court/pleading/complaint_lawyers）之一；<u>只掛在 council_lawyers（諮詢律師欄）的案子算諮詢、不計入該律師的承辦/結案</u>。不在白名單但出現在 5 個律師 role 的人 + assigned_members 視為法務。<br>
             • <strong>案型分類</strong>：3 階段判定 — (1) 純諮詢 cause（無分隔符後綴）→ 諮詢；(2) 含實質案型 keyword（家事/民事/刑事...）→ 對應案型；(3) 含諮詢 keyword 但 mixed → 「混合服務」（諮詢+小型法律服務套餐）。<br>
-            • <strong>Active 案件判定</strong>：最新月用 CRM <code>aasm_state == 'appointed'</code> 直接過濾（避免 ghost-active）。歷史月份用 transition timestamps best-effort 推（crm_cases schema 沒 unappointed_at，appointed→unappointed 的 transition 推不到，所以歷史 active 可能系統性 over-count，但 trend 方向不變）。<br>
+            • <strong>Active 案件判定</strong>：最新月用 CRM <code>aasm_state ∈ {'appointed','canceled'}</code> 直接過濾（待追=canceled 業務上歸承辦中，只是無急迫事項；避免 ghost-active）。歷史月份用 transition timestamps best-effort 推（crm_cases schema 沒 unappointed_at，appointed→unappointed 的 transition 推不到，所以歷史 active 可能系統性 over-count，但 trend 方向不變）。<br>
             • <strong>真實 P&L 比值（薪資÷新成案 / 薪資÷結案數）</strong>：用流量÷流量、避開存量稀釋陷阱。新成案金額來自 consultation_cases.revenue (is_signed=true 加總 by case_date)；結案數來自該月 crm_cases.closed_at；薪資=律師+法務+行政（排010）。用 12 個月滾動平均消除單月 noise（諮詢→簽約有 lag）。<br>
             • <strong>115-05 已排除</strong>：薪資補齊週期晚於月底，會造成 end-point 虛降。<br>
             • <strong>所別 filter</strong>：分母用 <code>council_office_name</code> 篩；分子薪資只算該所對應 department（北所=北所吉他/北所(接案、行政、工讀)/北所四部；桃=桃所；竹=竹所；中=中所；南=南所；雄=雄所）。「其他/公司/法顧/None」這類跨所共用 dept 只在「全所」算進去，個別所視圖會略低估。<br>

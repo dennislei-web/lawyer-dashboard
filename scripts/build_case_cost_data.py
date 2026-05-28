@@ -203,6 +203,11 @@ for c in general_cases + la_cases:
     c['_case_type'] = classify_case_type(c)
     c['_office'] = c.get('council_office_name') or '(未標示)'
 
+def is_active_state(s):
+    """承辦中 = appointed (已委任) + canceled (待追，業務定義為承辦中但暫無急迫事項)"""
+    return s in ('appointed', 'canceled')
+
+
 def state_at(c, asof, latest_asof=None):
     """
     回傳 case 在 asof 時的 state。
@@ -338,7 +343,7 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
         active_durs = []
         age_buckets = {'<90':0, '90-365':0, '1-2yr':0, '>2yr':0}
         for c in general_subset:
-            if state_at(c, asof, LATEST_ASOF) != 'appointed': continue
+            if not is_active_state(state_at(c, asof, LATEST_ASOF)): continue
             ot = owner_type(c, asof)
             counts[ot] += 1
             if c['_created']:
@@ -451,7 +456,7 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
         by_type = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
         for c in general_subset:
             t = c['_case_type']
-            if state_at(c, asof_e, LATEST_ASOF) == 'appointed':
+            if is_active_state(state_at(c, asof_e, LATEST_ASOF)):
                 by_type[t]['active'] += 1
                 ot = owner_type(c, asof_e)
                 if ot in ('pure_firm','legal_staff_only'): by_type[t]['pure_firm'] += 1
@@ -498,14 +503,14 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
                 person_stats[name]['as_lawyer'] = True
                 if PARTNER_SINCE_DT.get(name) and PARTNER_SINCE_DT[name] <= asof_e:
                     person_stats[name]['is_partner'] = True
-                if s == 'appointed':
+                if is_active_state(s):
                     person_stats[name]['active'] += 1
                 if closed_this_year and c['_created']:
                     person_stats[name]['closed_in_12mo'] += 1
                     person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
             for name in case_legal_staff:
                 person_stats[name]['as_legal_staff'] = True
-                if s == 'appointed':
+                if is_active_state(s):
                     person_stats[name]['active'] += 1
                 if closed_this_year and c['_created']:
                     person_stats[name]['closed_in_12mo'] += 1
@@ -557,7 +562,7 @@ latest_u_firm_all = by_office['全所']['monthly_series'][-1]['u_firm']
 by_office_agg = defaultdict(lambda: {'active':0, 'closed_in_12mo':0, 'closed_durs':[], 'pure_firm':0, 'partner':0})
 for c in general_cases:
     o = c['_office']
-    if state_at(c, latest_asof, LATEST_ASOF) == 'appointed':
+    if is_active_state(state_at(c, latest_asof, LATEST_ASOF)):
         by_office_agg[o]['active'] += 1
         ot = owner_type(c, latest_asof)
         if ot in ('pure_firm','legal_staff_only'): by_office_agg[o]['pure_firm'] += 1

@@ -1401,7 +1401,7 @@
       <!-- KPI 大類 -->
       <div class="kpi-row">
         <div class="kpi-card gold">
-          <div class="kpi-label">所內承辦中（已委任）<span id="casesAsofLabel" style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;"></span></div>
+          <div class="kpi-label" title="aasm_state=appointed（已委任）+ canceled（待追，業務定義為承辦中但暫無急迫事項）">所內承辦中（含待追）<span id="casesAsofLabel" style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;"></span></div>
           <div class="kpi-value gold" id="casesKpiInProgress">-</div>
           <div class="kpi-sub" id="casesKpiInProgressSub"></div>
         </div>
@@ -4249,6 +4249,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   // 按 asof 狀態 + 案件擁有者類別統計
   var c = {appointed:0, pending:0, closed:0, unappointed:0, unconcluded:0, canceled:0, notyet:0};
   var inP = {pure_firm:0, mixed:0, pure_partner:0, legal_staff_only:0, no_one:0};
+  var canceledNoOwner = 0;  // 待追案件中無承辦人的（多半正常，獨立計避免污染「無承辦人」警示）
   var activeLegalStaff = new Set();  // 在 appointed 案件中實際分配到的法務 distinct 名單（不論案件 owner type）
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
@@ -4256,7 +4257,11 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     if (s in c) c[s]++;
     if (_isActive(s)) {
       var owner = _caseOwnerType(r, asofDate);
-      inP[owner] = (inP[owner] || 0) + 1;
+      if (s === 'canceled' && owner === 'no_one') {
+        canceledNoOwner++;  // 待追無承辦人 → 不污染 inP.no_one 警示
+      } else {
+        inP[owner] = (inP[owner] || 0) + 1;
+      }
       _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(n){ activeLegalStaff.add(n); });
     }
   });
@@ -4293,15 +4298,18 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   var newThisMonth = rows.filter(function(r){ return r.appointed_at && r.appointed_at.startsWith(asofMonth) && new Date(r.appointed_at) <= asofDate; }).length;
   var closedThisMonth = rows.filter(function(r){ return r.closed_at && r.closed_at.startsWith(asofMonth) && new Date(r.closed_at) <= asofDate; }).length;
 
-  // 所內承辦中 = 律師承辦 (pure_firm) + 法務承辦 (legal_staff_only)
-  var firmTotal = inP.pure_firm + inP.legal_staff_only;
+  // 所內承辦中 = 律師承辦 (pure_firm) + 法務承辦 (legal_staff_only) + 待追無承辦人（暫無急迫=無分配是預期）
+  var firmTotal = inP.pure_firm + inP.legal_staff_only + canceledNoOwner;
   document.getElementById('casesKpiInProgress').textContent = firmTotal.toLocaleString();
   var firmBreakdown = '律師承辦 ' + inP.pure_firm.toLocaleString() + '・📋 法務承辦 ' + inP.legal_staff_only.toLocaleString();
+  var canceledInfo = c.canceled > 0
+    ? '・<span title="待追=暫無急迫事項的承辦中案件；多半無分配承辦人是正常的">⏸️ 待追 ' + c.canceled.toLocaleString() + '</span>'
+    : '';
   var orphanInfo = inP.no_one > 0
-    ? '<br><span style="opacity:.85;font-size:0.78rem;color:#ef4444;" title="CRM 5 個承辦角色欄位（承辦人員/訴訟/出庭/寫狀/起訴律師）全空，需請承辦助理補資料">⚠️ 無承辦人 ' + inP.no_one.toLocaleString() + '（待補資料）</span>'
+    ? '<br><span style="opacity:.85;font-size:0.78rem;color:#ef4444;" title="appointed 案件中 CRM 5 個承辦角色欄位全空（已排除待追，待追無分配是正常的）">⚠️ 無承辦人 ' + inP.no_one.toLocaleString() + '（待補資料）</span>'
     : '';
   document.getElementById('casesKpiInProgressSub').innerHTML =
-    firmBreakdown + (isToday?'':('・'+asofMonth+' 快照')) + orphanInfo;
+    firmBreakdown + canceledInfo + (isToday?'':('・'+asofMonth+' 快照')) + orphanInfo;
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
   // 律師人均承辦中 = inP.pure_firm / 該快照月律師人數
@@ -5021,7 +5029,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory, partnerRows) {
       var isPartner = (owner === 'pure_partner' || owner === 'mixed');
       // 注意：legal_staff_only / pure_firm / no_one 都歸所內側
       var s = _stateAtTime(r, d);
-      if (s === 'appointed') {
+      if (_isActive(s)) {
         if (isPartner) c.partner++; else c.firm++;
         if (owner === 'pure_firm') pureFirmCount++;
         else if (owner === 'legal_staff_only') legalStaffCount++;
@@ -5049,7 +5057,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory, partnerRows) {
     var pTotalTouches = 0;
     (partnerRows || rows).forEach(function(r){
       var s = _stateAtTime(r, d);
-      if (s !== 'appointed') return;
+      if (!_isActive(s)) return;
       var ownerP = _caseOwnerType(r, d);
       if (ownerP !== 'pure_partner' && ownerP !== 'mixed') return;
       pTotalTouches++;
@@ -5092,7 +5100,7 @@ function _renderCasesSnapshot(rows, laRows, headcountHistory, partnerRows) {
     },
     options: Object.assign({}, commonOptions, {
       plugins: Object.assign({}, commonOptions.plugins, {
-        title: { display: true, text: '當月底 aasm_state = appointed 的案件', font: { size: 11 }, color: '#94a3b8' }
+        title: { display: true, text: '當月底 aasm_state ∈ {appointed, canceled[待追]} 的案件', font: { size: 11 }, color: '#94a3b8' }
       })
     })
   });
