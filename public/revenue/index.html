@@ -1570,6 +1570,7 @@
               <thead>
                 <tr>
                   <th>案號</th>
+                  <th>當事人</th>
                   <th>部門</th>
                   <th>接案所</th>
                   <th class="text-right">建案至今</th>
@@ -4019,7 +4020,7 @@ async function _fetchAllCrmCases() {
   if (!sb) return [];
   var t0 = performance.now();
   var pageSize = 1000;
-  var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,group_name,'
+  var COLS = 'case_id,serial_number,aasm_state,state_category,council_office_name,department_name,group_name,clients,'
            + 'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
            + 'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at';
 
@@ -4746,6 +4747,7 @@ function _renderCasesLawyerAging(rows, statesAtAsof, asofDate) {
         serial: r.serial_number,
         dept: dept,
         office: r.council_office_name || '—',
+        clients: r.clients || '',
         age: age,
         apptAge: apptAge,
         deptMed: deptMed,
@@ -4874,9 +4876,15 @@ function _openAgingDetail(name) {
     var color = r >= 2 ? '#ef4444' : (r >= 1 ? '#f59e0b' : (r >= 0.5 ? '#10b981' : '#3b82f6'));
     return '<span style="color:'+color+';font-weight:600;">' + r.toFixed(2) + '×</span>';
   }
+  function _esc(s){ return String(s).replace(/[&<>"]/g, function(ch){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]; }); }
   body.innerHTML = cases.map(function(c){
+    var clientsRaw = c.clients || '';
+    var clientsHtml = clientsRaw
+      ? '<span title="'+_esc(clientsRaw)+'">'+_esc(clientsRaw.length > 18 ? clientsRaw.slice(0,18) + '…' : clientsRaw)+'</span>'
+      : '<span class="text-muted">—</span>';
     return '<tr>'
       + '<td style="font-family:monospace;font-size:0.85rem;">'+(c.serial || c.case_id)+'</td>'
+      + '<td>'+clientsHtml+'</td>'
       + '<td>'+c.dept+'</td>'
       + '<td class="text-muted">'+c.office+'</td>'
       + '<td class="text-right" style="color:'+ageColor2(c.age)+';font-weight:600;">'+c.age+' 天</td>'
