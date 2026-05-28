@@ -4150,6 +4150,9 @@ function _statesAtTime(rows, asof) {
   return out;
 }
 
+// 「承辦中」= 已委任 (appointed) + 待追 (canceled)。待追是業務定義上的承辦中，只是暫時無急迫處理事項。
+function _isActive(s) { return s === 'appointed' || s === 'canceled'; }
+
 async function _loadCasesSyncStatus() {
   if (!sb) return;
   var r = await sb.from('sync_status').select('*').eq('id', 'crm_cases').single();
@@ -4251,7 +4254,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     var s = statesAtAsof[r.case_id];
     if (s === null) { c.notyet++; return; }
     if (s in c) c[s]++;
-    if (s === 'appointed') {
+    if (_isActive(s)) {
       var owner = _caseOwnerType(r, asofDate);
       inP[owner] = (inP[owner] || 0) + 1;
       _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(n){ activeLegalStaff.add(n); });
@@ -4263,7 +4266,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   var partnerTouchedAll = 0;
   (rowsNoOfficeFilter || rows).forEach(function(r){
     var s = (statesNoOfficeFilter || statesAtAsof)[r.case_id];
-    if (s !== 'appointed') return;
+    if (!_isActive(s)) return;
     var owner = _caseOwnerType(r, asofDate);
     if (owner !== 'pure_partner' && owner !== 'mixed') return;
     partnerTouchedAll++;
@@ -4283,7 +4286,7 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
     else if (s !== null) la.other++;
   });
   var completed  = c.pending + c.closed;
-  var pre        = c.unappointed + c.unconcluded + c.canceled;
+  var pre        = c.unappointed + c.unconcluded;  // 待追 (canceled) 已歸入承辦中，不算 pre
 
   // 本月新委任 + 結案（用 asof 所在月份）
   var asofMonth = asofDate.toISOString().substring(0, 7);
@@ -4294,13 +4297,11 @@ function _renderCasesKpi(rows, statesAtAsof, asofDate, isToday, laRows, statesAt
   var firmTotal = inP.pure_firm + inP.legal_staff_only;
   document.getElementById('casesKpiInProgress').textContent = firmTotal.toLocaleString();
   var firmBreakdown = '律師承辦 ' + inP.pure_firm.toLocaleString() + '・📋 法務承辦 ' + inP.legal_staff_only.toLocaleString();
-  var partnerInfo = '合署共辦 ' + inP.mixed.toLocaleString() + '・純合署 ' + inP.pure_partner.toLocaleString();
   var orphanInfo = inP.no_one > 0
-    ? '・<span style="color:#ef4444;" title="CRM 5 個承辦角色欄位（承辦人員/訴訟/出庭/寫狀/起訴律師）全空，需請承辦助理補資料">⚠️ 無承辦人 ' + inP.no_one.toLocaleString() + '</span>'
+    ? '<br><span style="opacity:.85;font-size:0.78rem;color:#ef4444;" title="CRM 5 個承辦角色欄位（承辦人員/訴訟/出庭/寫狀/起訴律師）全空，需請承辦助理補資料">⚠️ 無承辦人 ' + inP.no_one.toLocaleString() + '（待補資料）</span>'
     : '';
   document.getElementById('casesKpiInProgressSub').innerHTML =
-    firmBreakdown + (isToday?'':('・'+asofMonth+' 快照')) +
-    '<br><span style="opacity:.7;font-size:0.78rem;">' + partnerInfo + orphanInfo + '</span>';
+    firmBreakdown + (isToday?'':('・'+asofMonth+' 快照')) + orphanInfo;
   document.getElementById('casesKpiCompleted').textContent = completed.toLocaleString();
   document.getElementById('casesKpiCompletedSub').textContent = '結案 ' + c.closed.toLocaleString() + ' + 待結案 ' + c.pending.toLocaleString();
   // 律師人均承辦中 = inP.pure_firm / 該快照月律師人數
@@ -4463,7 +4464,7 @@ function _renderCasesTrend(rows, asofDate) {
 function _renderCasesByOffice(rows, statesAtAsof, highlightOffice) {
   var byOffice = {};
   rows.forEach(function(r){
-    if (statesAtAsof[r.case_id] !== 'appointed') return;
+    if (!_isActive(statesAtAsof[r.case_id])) return;
     var k = r.council_office_name || '(未指定)';
     byOffice[k] = (byOffice[k] || 0) + 1;
   });
@@ -4503,7 +4504,7 @@ function _renderCasesOfficeTable(rows, statesAtAsof, laRows, statesAtAsofLA, hea
     if (s === null) return;
     var office = r.council_office_name || '(未指定)';
     ensureOffice(office);
-    if (s === 'appointed') {
+    if (_isActive(s)) {
       byOffice[office].inProgress++;
       var owner = _caseOwnerType(r, asofDate);
       if (owner === 'pure_firm') byOffice[office].pureFirm++;
@@ -4568,7 +4569,7 @@ function _renderCasesLawyerTable(rows, statesAtAsof, highlightOffice, laRows, st
     _handlingFilteredAt(r, asofDate).handling.forEach(function(name){
       if (partnerSet.has(name)) return;
       ensureLawyer(name);
-      if (s === 'appointed') byLawyer[name].inProgress++;
+      if (_isActive(s)) byLawyer[name].inProgress++;
       else if (s === 'pending') byLawyer[name].pending++;
       else if (s === 'closed') byLawyer[name].closed++;
       else if (s === 'unconcluded') byLawyer[name].unconcluded++;
@@ -4622,7 +4623,7 @@ function _renderCasesLegalStaffTable(rows, statesAtAsof, highlightOffice, laRows
     if (s === null) return;
     _handlingFilteredAt(r, asofDate).handlingLegal.forEach(function(name){
       ensureStaff(name);
-      if (s === 'appointed') byStaff[name].inProgress++;
+      if (_isActive(s)) byStaff[name].inProgress++;
       else if (s === 'pending') byStaff[name].pending++;
       else if (s === 'closed') byStaff[name].closed++;
       else if (s === 'unconcluded') byStaff[name].unconcluded++;
@@ -4701,7 +4702,7 @@ function _renderCasesLawyerAging(rows, statesAtAsof, asofDate) {
   var byLawyer = {};   // name → { active_cases: [{case, age}], isPartner, primaryOffice }
   rows.forEach(function(r){
     var s = statesAtAsof[r.case_id];
-    if (s !== 'appointed') return;
+    if (!_isActive(s)) return;
     if (!r._created) return;
     var age = Math.floor((asofDate - r._created) / 86400000);
     if (age < 0) return;
@@ -4943,10 +4944,10 @@ var _pctLabelPlugin = {
   }
 };
 
-// 進案週期分布：現存承辦中 (asof 時是 appointed) 的案件，從建案到 asof 的天數
+// 進案週期分布：現存承辦中 (asof 時是 appointed 或 canceled[待追]) 的案件，從建案到 asof 的天數
 function _renderCasesOpenCycle(rows, statesAtAsof, asofDate) {
   var openRows = rows.filter(function(r){
-    return statesAtAsof[r.case_id] === 'appointed' && r.crm_created_at;
+    return _isActive(statesAtAsof[r.case_id]) && r.crm_created_at;
   });
   var buckets = {
     '<30 天': 0, '30-60 天': 0, '60-90 天': 0, '90-180 天': 0,
