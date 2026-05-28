@@ -750,6 +750,7 @@ if (window.location.search.indexOf('embed=1') > -1) {
             <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>律師自招案件，劉/方 10/90、孫/許 5/95 分</td></tr>
             <tr><td colspan="3" style="background:var(--bg-row); color:var(--gold-light); font-weight:600; padding:6px 10px">— 資深轉合署 —</td></tr>
             <tr><td>諮詢成案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>律師諮詢後自己承辦的案件，30/70 分</td></tr>
+            <tr><td>合署律師諮詢轉喆律處理案件</td><td><span class="badge badge-green">承辦（喆律側）</span></td><td>合署律師諮詢成案後，由喆律端他人實際承辦：95% 案件收入歸喆律。喆律算實際承辦人。對應律師側的 5% 成案獎金</td></tr>
             <tr><td>喆律轉案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>喆律轉入由資深律師承辦，40/60 分</td></tr>
             <tr><td>法律010轉案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>法律010 品牌轉入的案件，30/70 分（部分律師後調為 35/65）</td></tr>
             <tr><td>自案(喆律/律師)</td><td><span class="badge badge-green">承辦</span></td><td>資深律師自招案件，10/90 分</td></tr>
@@ -761,7 +762,7 @@ if (window.location.search.indexOf('embed=1') > -1) {
             <tr><td>協力處理案件(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>律師被別的承辦律師雇來協助處理（如協助開庭、寫狀、研究等），領勞務費；該案不是孫律的，他只是協力者</td></tr>
             <tr><td>續委(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>舊客戶後續委任衍生的分潤</td></tr>
             <tr><td>合作(喆律/律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>多律師合作案的分潤</td></tr>
-            <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>（資深諮詢律師）諮詢後由他人承辦，抽成 5% 獎金</td></tr>
+            <tr><td>成案獎金(律師)</td><td><span class="badge badge-blue">非承辦</span></td><td>合署律師諮詢成案、由喆律端他人承辦時，諮詢律師抽 5% 獎金（對應喆律側「合署律師諮詢轉喆律處理案件」的 95%）</td></tr>
             <tr><td>其他（左表）</td><td><span class="badge badge-blue">非承辦</span></td><td>資深律師端的左表（喆律收款）比例非標準 0.7 / 0.6 / 1.0 的案件，僅 11 筆（主要陳璽仲 115/3 的 0.4 案、蕭予馨 2 筆 0.9 等）</td></tr>
             <tr><td>其他-自案（右表）</td><td><span class="badge badge-blue">非承辦</span></td><td>資深律師端右表（律師收款付喆律）但比例既非 0.1（標準自案）也非 0.3 / 0.35（法律010 轉案）的案件，全庫僅 5 筆：4 筆 40%（含林昀法扶舊案、退款、吳柏慶/蕭予馨各 1 筆）+ 1 筆 60%（陳璽仲王斯弘特殊協議）</td></tr>
           </tbody>
@@ -1650,7 +1651,7 @@ function renderDrill() {
     own_source: '律師主案案源',
     all_from_own: '全部來自主案分潤',
     self_z_tip: '律師自帶案件，喆律抽 10% 平台費（不計入主案分潤）',
-    zhelu_principal_tip: '本律師主案中，喆律端的案件分潤（不含 諮詢律師諮詢、由他人主辦 那類成案獎金）',
+    zhelu_principal_tip: '本律師主案中，喆律端的案件分潤（不含「合署律師諮詢轉喆律處理案件」那類由喆律他人實際承辦的 95% 案件收入）',
     own_total_tip: '主案案件金額 = 處理費 D + 喆律案件分潤 + 律師主案 + 喆律自案 10% 平台費',
   } : {
     zhelu_principal: '喆律承辦',
@@ -1663,7 +1664,7 @@ function renderDrill() {
     own_source: '律師承辦案源',
     all_from_own: '全部來自承辦分潤',
     self_z_tip: '律師自帶案件，喆律抽 10% 平台費（不算喆律承辦）',
-    zhelu_principal_tip: '本律師主辦案件中, 喆律端的分潤（不含 諮詢律師諮詢、由他人承辦 那類成案獎金）',
+    zhelu_principal_tip: '本律師主辦案件中, 喆律端的分潤（不含「合署律師諮詢轉喆律處理案件」那類由喆律他人實際承辦的 95% 案件收入）',
     own_total_tip: '承辦案件金額 = 處理費 D + 喆律承辦 + 律師承辦 + 喆律自案 10% 平台費',
   };
   // 司法官 tier 名稱在地化（顯示用，內部 key 不變）
@@ -1695,7 +1696,10 @@ function renderDrill() {
       if (OWN_Z_TIERS.indexOf(k) !== -1) {
         ztOwn += v;
         if (MAIN_Z_SET.has(k)) ztMain += v;
-        const base = k.replace('(喆律)', '');
+        let base = k.replace('(喆律)', '');
+        // 喆律側「成案獎金」名實不符：那是律師諮詢後喆律端他人承辦的 95% 案件收入，
+        // 不是獎金（5% 獎金在律師側）。顯示時改用實質名稱。
+        if (base === '成案獎金') base = '合署律師諮詢轉喆律處理案件';
         zOwnBreak[base] = (zOwnBreak[base] || 0) + v;
       }
       else if (OWN_L_TIERS.indexOf(k) !== -1) ltOwn += v;
@@ -1715,7 +1719,8 @@ function renderDrill() {
   // 附屬 tier 的 hover 解釋
   const TIER_TIP = {
     '諮詢': '諮詢費（100% 歸律師），通常 $2,000/場',
-    '成案獎金': '諮詢律師諮詢成案、由他人承辦：諮詢律師抽 5% 獎金；剩餘 95% 歸喆律（喆律端算承辦——案件由喆律體系實際處理）',
+    '成案獎金': '律師諮詢成案、由喆律端他人承辦：律師抽 5% 獎金（此 row 即該 5%）',
+    '合署律師諮詢轉喆律處理案件': '合署律師諮詢成案後，由喆律端他人實際承辦的案件：95% 案件收入歸喆律（喆律算實際承辦人）；該諮詢律師另在律師端拿 5% 成案獎金',
     '介紹': '律師介紹給他人承辦，取 10%（自然人）/ 20%（公司）佣金',
     '追溯': '過去介紹費事後補/扣的修正',
     '受僱': '律師替他人承辦的案件分潤',
