@@ -4131,9 +4131,15 @@ function _ymKey(iso) {
 
 // 計算指定時間點 (asof Date 物件) 該案件的狀態
 // 使用預快取的 row._trans (已排序 desc) 跟 row._created，避免重複 new Date()
+// asof >= 今天 → 直接信 aasm_state；歷史 asof 才 timestamp 重建
+// 原因：unappointed 無對應時間戳，appointed→unappointed 後 timestamp 仍停在 appointed_at，
+// 重建會把已退回未委任的案誤判為 appointed → 進而被當成「無承辦人」假孤兒
 function _stateAtTime(row, asof) {
   if (!row._created) return null;
   if (row._created > asof) return null;
+  if (asof.getTime() >= Date.now() - 86400000) {
+    return row.aasm_state || 'unappointed';
+  }
   var trans = row._trans;
   if (trans && trans.length) {
     for (var i = 0; i < trans.length; i++) {
