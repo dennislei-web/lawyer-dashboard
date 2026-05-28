@@ -28,7 +28,7 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 90  # refresh-open 最久 ~10 分；full 最久 ~80 分
+    timeout-minutes: 180  # refresh-open ~10 分；full 實測 >90 分鐘還沒跑完，給 3 小時 buffer
     steps:
       - uses: actions/checkout@v4
 
