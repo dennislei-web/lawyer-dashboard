@@ -194,10 +194,11 @@ for c in general_cases + la_cases:
     c['_unconc'] = to_date(c.get('unconcluded_at'))
     c['_pending'] = to_date(c.get('pending_at'))
     # 結案 = 正式結案(closed) + 待結案(canceled，UI 字面，後端 code 為 canceled)，兩者都是離開承辦存量的終結。
-    # 舊遷移案有 closed/canceled 狀態卻無對應 transition 時間戳 → 退回 crm_updated_at 當近似結案日，
-    # 否則這 ~1,400 件會整批從結案數消失。未成案(unconcluded)依業務定義不算結案。
-    c['_terminal'] = (c['_closed'] or c['_canceled']
-                      or (to_date(c.get('crm_updated_at')) if c.get('aasm_state') in ('closed', 'canceled') else None))
+    # 未成案(unconcluded)依業務定義不算結案。
+    # 注意：closed/canceled 狀態但無 transition 時間戳的 ~1,400 件舊遷移案，其唯一時間戳 crm_updated_at
+    # 是一次性批次更新日（983 件擠在 2023-02-08），不是真實結案日；硬塞會在 112-02 製造假結案潮並
+    # 扭曲老化指數，故不放入月度時間序列（這批落在 112，也不影響近 12 個月 KPI）。
+    c['_terminal'] = c['_closed'] or c['_canceled']
     handling = set()
     for fld in LAWYER_ROLE_FIELDS:
         handling.update(parse_names(c.get(fld)))
@@ -642,7 +643,7 @@ output = {
         'asof_date': latest_asof.isoformat(),
         'asof_fy_mo': f'{latest_fy}-{latest_m:02d}',
         '口徑': '分子薪資=律師+法務+行政（排010+金貝殼）; 分母案件=一般案件（排法顧）; 個別所薪資用 finance_employees_monthly.office 直接判，跨所共用 dept (office=NULL) 只進「全所」',
-        '結案口徑': '結案=正式結案(closed)+待結案(canceled)，不含未成案(unconcluded)；closed/canceled 狀態但無 transition 時間戳的舊案以 crm_updated_at 為近似結案日',
+        '結案口徑': '結案=正式結案(closed)+待結案(canceled)，不含未成案(unconcluded)；closed/canceled 狀態但無 transition 時間戳的 ~1,400 件舊遷移案因唯一時間戳是批次更新日(非真實結案日)，不放入月度時間序列',
         'window': f'{months[0][0]}-{months[0][1]:02d} ~ {months[-1][0]}-{months[-1][1]:02d}',
         'fiscal_years': sorted({m_t[0] for m_t in months}),
     },
