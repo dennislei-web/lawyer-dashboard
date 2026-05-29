@@ -974,6 +974,14 @@
           </div>
         </div>
 
+        <!-- Chart 2.5: 老化指數趨勢 -->
+        <div class="chart-row">
+          <div class="chart-card" style="grid-column: 1 / -1">
+            <div class="chart-title">庫存老化指數月度趨勢 <span style="opacity:.6;font-size:0.75rem;font-weight:400">= 2 × 處理中週期中位 ÷ 結案週期中位 · &gt;1 偏老化 / &gt;1.5 嚴重</span></div>
+            <div class="chart-container" style="height:280px"><canvas id="ccTrendAging"></canvas></div>
+          </div>
+        </div>
+
         <!-- Chart 3: 案件年齡分布 -->
         <div class="chart-row">
           <div class="chart-card" style="grid-column: 1 / -1">
@@ -4710,6 +4718,7 @@ function renderCaseCost() {
   ccRenderTrendFlowRatio();
   ccRenderTrendCost();
   ccRenderTrendDur();
+  ccRenderTrendAging();
   ccRenderTrendLifetime();
   ccRenderAgeDist();
   ccRenderCaseType();
@@ -4817,6 +4826,40 @@ function ccRenderTrendDur() {
       ]
     },
     options: _ccCommonOpts(function(v){ return v + 'd'; })
+  });
+}
+
+function ccRenderTrendAging() {
+  var ms = ccView.monthly_series;
+  var labels = ms.map(function(r) { return r.fy_mo; });
+  var data = ms.map(function(r){ return r.closed_dur_median > 0 ? (2 * r.active_dur_median / r.closed_dur_median) : null; });
+  var ctx = document.getElementById('ccTrendAging');
+  if (charts.ccTrendAging) charts.ccTrendAging.destroy();
+  var cs = getComputedStyle(document.documentElement);
+  // annotation plugin 未載入，門檻線改用扁平 dataset 畫
+  charts.ccTrendAging = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '庫存老化指數', data: data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.15)', tension: 0.3, borderWidth: 2.5, fill: true, spanGaps: true, pointRadius: 0,
+          segment: { borderColor: function(c){ var v = c.p1.parsed.y; return v > 1.5 ? '#ef4444' : (v > 1.2 ? '#f59e0b' : (v > 0.9 ? '#10b981' : '#3b82f6')); } } },
+        { label: '1.0 均勻', data: labels.map(function(){ return 1.0; }), borderColor: 'rgba(16,185,129,0.5)', borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0 },
+        { label: '1.5 嚴重', data: labels.map(function(){ return 1.5; }), borderColor: 'rgba(239,68,68,0.5)', borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { labels: { color: cs.getPropertyValue('--text').trim(), font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false, filter: function(c){ return c.datasetIndex === 0; }, callbacks: { label: function(c){ return '老化指數: ' + (c.parsed.y == null ? '—' : c.parsed.y.toFixed(2)); } } }
+      },
+      scales: {
+        x: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 9 }, maxRotation: 60, autoSkip: true, autoSkipPadding: 10 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: cs.getPropertyValue('--text-muted').trim(), font: { size: 10 }, callback: function(v){ return v.toFixed(1); } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
   });
 }
 
