@@ -34,6 +34,8 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from advisor_credits import bump_consultation_cases, bump_monthly_stats
+
 load_dotenv()
 
 # ─── 設定 ───────────────────────────────────────────────────
@@ -533,6 +535,11 @@ def update_supabase(target_months):
     # 從 consult_count / signed_count / revenue / collected 扣掉。
     rows = _adjust_for_lichong_cases(rows, headers)
 
+    # ── 法顧初次諮詢進案：把表一 credit 加到對應 (律師, 月) 的成案金額 ──
+    c_amt, c_n = bump_monthly_stats(rows)
+    if c_n:
+        print(f"  法顧諮詢成案 credit（monthly_stats）：{c_n} 筆 (lawyer,month)，加 {c_amt:,.0f}")
+
     # Upsert (分批 50 筆)
     with httpx.Client(timeout=30) as client:
         upsert_headers = {
@@ -605,6 +612,11 @@ def update_supabase(target_months):
             case_map[case_number] = case_row
 
     case_rows = list(case_map.values())
+
+    # ── 法顧初次諮詢進案：把表一 credit 加到「成案前最後一次諮詢」那列 ──
+    cc_amt, cc_n = bump_consultation_cases(case_rows)
+    if cc_n:
+        print(f"  法顧諮詢成案 credit（consultation_cases）：{cc_n} 列，加 {cc_amt:,.0f}")
 
     # Debug: 統計金額
     cases_with_amount = [r for r in case_rows if r.get("collected", 0) > 0 or r.get("revenue", 0) > 0]
