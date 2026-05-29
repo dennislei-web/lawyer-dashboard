@@ -176,7 +176,7 @@ print(f'  finance: {len(fin_rows)} rows')
 
 case_cols = ('case_id,serial_number,aasm_state,'
              'council_lawyers,assigned_members,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers,'
-             'crm_created_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at,'
+             'crm_created_at,crm_updated_at,appointed_at,closed_at,canceled_at,unconcluded_at,pending_at,'
              'cause_of_action,department_name,council_office_name')
 cases = fetch_all(f'{SB_URL}/crm_cases?select={case_cols}')
 print(f'  crm_cases: {len(cases)}')
@@ -193,6 +193,11 @@ for c in general_cases + la_cases:
     c['_canceled'] = to_date(c.get('canceled_at'))
     c['_unconc'] = to_date(c.get('unconcluded_at'))
     c['_pending'] = to_date(c.get('pending_at'))
+    # 結案 = 正式結案(closed) + 待結案(canceled，UI 字面，後端 code 為 canceled)，兩者都是離開承辦存量的終結。
+    # 舊遷移案有 closed/canceled 狀態卻無對應 transition 時間戳 → 退回 crm_updated_at 當近似結案日，
+    # 否則這 ~1,400 件會整批從結案數消失。未成案(unconcluded)依業務定義不算結案。
+    c['_terminal'] = (c['_closed'] or c['_canceled']
+                      or (to_date(c.get('crm_updated_at')) if c.get('aasm_state') in ('closed', 'canceled') else None))
     handling = set()
     for fld in LAWYER_ROLE_FIELDS:
         handling.update(parse_names(c.get(fld)))
@@ -359,8 +364,8 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
 
         closed_durs = []
         for c in general_subset:
-            if c['_closed'] and mstart <= c['_closed'] <= asof and c['_created']:
-                closed_durs.append((c['_closed'] - c['_created']).days)
+            if c['_terminal'] and mstart <= c['_terminal'] <= asof and c['_created']:
+                closed_durs.append((c['_terminal'] - c['_created']).days)
 
         firm = counts['pure_firm'] + counts['legal_staff_only']
         part = counts['pure_partner'] + counts['mixed']
@@ -462,9 +467,9 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
                 ot = owner_type(c, asof_e)
                 if ot in ('pure_firm','legal_staff_only'): by_type[t]['pure_firm'] += 1
                 elif ot in ('pure_partner','mixed'): by_type[t]['partner'] += 1
-            if c['_closed'] and tw_start <= c['_closed'] <= tw_end and c['_created']:
+            if c['_terminal'] and tw_start <= c['_terminal'] <= tw_end and c['_created']:
                 by_type[t]['closed_in_12mo'] += 1
-                by_type[t]['closed_durs'].append((c['_closed'] - c['_created']).days)
+                by_type[t]['closed_durs'].append((c['_terminal'] - c['_created']).days)
 
         type_rows = []
         for t, d in sorted(by_type.items(), key=lambda x: -x[1]['active']):
@@ -488,7 +493,7 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
                                             'is_partner':False, 'as_lawyer':False, 'as_legal_staff':False})
         for c in general_subset:
             s = state_at(c, asof_e, LATEST_ASOF)
-            closed_this_year = c['_closed'] and tw_start <= c['_closed'] <= tw_end
+            closed_this_year = c['_terminal'] and tw_start <= c['_terminal'] <= tw_end
             lawyer_role_names = set()
             for fld in LAWYER_ROLE_FIELDS:
                 lawyer_role_names.update(parse_names(c.get(fld)))
@@ -508,14 +513,14 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
                     person_stats[name]['active'] += 1
                 if closed_this_year and c['_created']:
                     person_stats[name]['closed_in_12mo'] += 1
-                    person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+                    person_stats[name]['closed_durs'].append((c['_terminal'] - c['_created']).days)
             for name in case_legal_staff:
                 person_stats[name]['as_legal_staff'] = True
                 if is_active_state(s):
                     person_stats[name]['active'] += 1
                 if closed_this_year and c['_created']:
                     person_stats[name]['closed_in_12mo'] += 1
-                    person_stats[name]['closed_durs'].append((c['_closed'] - c['_created']).days)
+                    person_stats[name]['closed_durs'].append((c['_terminal'] - c['_created']).days)
 
         def build_ranking(filter_role):
             out = []
@@ -568,9 +573,9 @@ for c in general_cases:
         ot = owner_type(c, latest_asof)
         if ot in ('pure_firm','legal_staff_only'): by_office_agg[o]['pure_firm'] += 1
         elif ot in ('pure_partner','mixed'): by_office_agg[o]['partner'] += 1
-    if c['_closed'] and twelve_mo_ago <= c['_closed'] <= latest_asof and c['_created']:
+    if c['_terminal'] and twelve_mo_ago <= c['_terminal'] <= latest_asof and c['_created']:
         by_office_agg[o]['closed_in_12mo'] += 1
-        by_office_agg[o]['closed_durs'].append((c['_closed'] - c['_created']).days)
+        by_office_agg[o]['closed_durs'].append((c['_terminal'] - c['_created']).days)
 
 office_breakdown = []
 for o, d in sorted(by_office_agg.items(), key=lambda x: -x[1]['active']):
@@ -637,6 +642,7 @@ output = {
         'asof_date': latest_asof.isoformat(),
         'asof_fy_mo': f'{latest_fy}-{latest_m:02d}',
         '口徑': '分子薪資=律師+法務+行政（排010+金貝殼）; 分母案件=一般案件（排法顧）; 個別所薪資用 finance_employees_monthly.office 直接判，跨所共用 dept (office=NULL) 只進「全所」',
+        '結案口徑': '結案=正式結案(closed)+待結案(canceled)，不含未成案(unconcluded)；closed/canceled 狀態但無 transition 時間戳的舊案以 crm_updated_at 為近似結案日',
         'window': f'{months[0][0]}-{months[0][1]:02d} ~ {months[-1][0]}-{months[-1][1]:02d}',
         'fiscal_years': sorted({m_t[0] for m_t in months}),
     },
