@@ -121,19 +121,71 @@ def apply_monthly_stats(credits, do_write, force):
     return miss == 0
 
 
+def revert(credits, do_write):
+    """還原成 base：consultation_cases 設回 base_collected/base_revenue（絕對）；
+    monthly_stats 減掉 marker 記錄的 per-bucket credit；刪 marker。"""
+    print("[REVERT] consultation_cases → base（絕對）")
+    for c in credits:
+        cn = c["case_number"]
+        bcol = int(round(c["base_collected"]))
+        brev = int(round(c["base_revenue"]))
+        print(f"  {c['lawyer']:<4}{c['client'][:14]:<14} {cn} → col {bcol} rev {brev}")
+        if do_write:
+            httpx.patch(f"{URL}/rest/v1/consultation_cases",
+                        params={"case_number": f"eq.{cn}"},
+                        json={"collected": bcol, "revenue": brev},
+                        headers={**HDR, "Content-Type": "application/json", "Prefer": "return=minimal"},
+                        timeout=30).raise_for_status()
+
+    print("\n[REVERT] monthly_stats −= per-bucket credit")
+    if not MARKER.exists():
+        print("  無 marker → monthly_stats 未曾加 credit，跳過")
+    else:
+        by_month = defaultdict(float)
+        for c in credits:
+            by_month[(c["lawyer_id"], c["month"])] += c["add_amount"]
+        for (lid, month), add in by_month.items():
+            add = int(round(add))
+            r = httpx.get(f"{URL}/rest/v1/monthly_stats",
+                          params={"lawyer_id": f"eq.{lid}", "month": f"eq.{month}",
+                                  "select": "collected,revenue"}, headers=HDR, timeout=30)
+            r.raise_for_status()
+            found = r.json()
+            if not found:
+                continue
+            cur = found[0]
+            tcol = (cur.get("collected") or 0) - add
+            trev = (cur.get("revenue") or 0) - add
+            print(f"  ({lid[:8]}, {month}) -{add:>8,}  col {cur.get('collected')}→{tcol}")
+            if do_write:
+                httpx.patch(f"{URL}/rest/v1/monthly_stats",
+                            params={"lawyer_id": f"eq.{lid}", "month": f"eq.{month}"},
+                            json={"collected": tcol, "revenue": trev},
+                            headers={**HDR, "Content-Type": "application/json", "Prefer": "return=minimal"},
+                            timeout=30).raise_for_status()
+        if do_write:
+            MARKER.unlink(missing_ok=True)
+            print(f"  刪除 marker：{MARKER.name}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--revert", action="store_true",
+                    help="把目前 credits 檔對應的 materialization 還原成 base")
     ap.add_argument("--force-monthly", action="store_true",
                     help="忽略 marker，強制重套用 monthly_stats 加性更新")
     args = ap.parse_args()
 
     credits = load_credits()
     print(f"credits: {len(credits)} 筆，合計 {sum(c['add_amount'] for c in credits):,.0f}")
-    print(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'}\n")
+    print(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'}{' (REVERT)' if args.revert else ''}\n")
 
-    apply_consultation_cases(credits, args.apply)
-    apply_monthly_stats(credits, args.apply, args.force_monthly)
+    if args.revert:
+        revert(credits, args.apply)
+    else:
+        apply_consultation_cases(credits, args.apply)
+        apply_monthly_stats(credits, args.apply, args.force_monthly)
 
     if not args.apply:
         print("DRY-RUN：未寫 DB。確認無誤後加 --apply。")
