@@ -151,6 +151,12 @@
 
     <div class="kpi-row" id="kpiRow"></div>
 
+    <div class="card" id="scenarioCard" style="margin-bottom:18px;">
+      <h3>三情境比較</h3>
+      <div class="cap">同一套轉型/成本假設下，市場與案件效率的三種情境（套用你目前的轉換/成本設定）。藍底=目前套用的情境。</div>
+      <div style="overflow-x:auto;"><table id="scenarioTable"></table></div>
+    </div>
+
     <div class="layout">
       <div class="panel" id="paramPanel"></div>
       <div class="charts">
@@ -314,20 +320,19 @@ function defaultsFromBaseline(){
   };
 }
 
-// 情境 preset = 對 base defaults 的覆寫
-function presetParams(name){
-  var p=Object.assign({}, DEF);
-  if(name==='optimistic'){
-    p.closeRate=Math.min(1,DEF.closeRate+0.05); p.avgCaseAmount=DEF.avgCaseAmount*1.10;
-    p.sessionsGrowth=DEF.sessionsGrowth+0.03; p.fa010Growth=DEF.fa010Growth+0.05; p.partnerGrowth=DEF.partnerGrowth+0.10;
-    p.closeDaysYoY=-0.03; p.agingHaircut=0; p.convertRatio=0.80;
-  } else if(name==='conservative'){
-    p.closeRate=Math.max(.3,DEF.closeRate-0.05); p.sessionsGrowth=DEF.sessionsGrowth-0.02;
-    p.fa010Growth=Math.max(-.1,DEF.fa010Growth-0.05); p.partnerGrowth=0; p.advisorGrowth=0.05;
-    p.closeDaysYoY=0.08; p.agingHaircut=0.05;
-  }
-  return p;
+// 情境 preset = 對 base defaults 的「營收/案件效率」覆寫（不動轉型/成本結構）
+function presetOverrides(name){
+  if(name==='optimistic') return {
+    closeRate:Math.min(1,DEF.closeRate+0.05), avgCaseAmount:DEF.avgCaseAmount*1.10,
+    sessionsGrowth:DEF.sessionsGrowth+0.03, fa010Growth:DEF.fa010Growth+0.05, partnerGrowth:DEF.partnerGrowth+0.10,
+    closeDaysYoY:-0.03, agingHaircut:0, convertRatio:0.80 };
+  if(name==='conservative') return {
+    closeRate:Math.max(.3,DEF.closeRate-0.05), avgCaseAmount:71000,   // 39% 簽約率 + 客單 7.1萬(類 2026：少簽但客單高)
+    sessionsGrowth:DEF.sessionsGrowth-0.02, fa010Growth:Math.max(-.1,DEF.fa010Growth-0.05),
+    partnerGrowth:0, advisorGrowth:0.05, closeDaysYoY:0.08, agingHaircut:0.05 };
+  return {};
 }
+function presetParams(name){ return Object.assign({}, DEF, presetOverrides(name)); }
 
 // 推估核心
 function computeForecast(p){
@@ -625,9 +630,33 @@ function renderTables(R){
 }
 
 var _lastR=null;
-function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderCharts(R); renderTables(R);
+function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderCharts(R); renderTables(R); renderScenarioCompare();
   var ce=document.getElementById('consultEff'); if(ce) ce.textContent='→ 隱含諮詢效益 '+Math.round(P.closeRate*P.avgCaseAmount).toLocaleString()+' 元/諮詢（看板 $29,809）';
   syncURL(); }
+// 三情境比較：套用目前結構參數 + 各情境的營收/案件覆寫
+function renderScenarioCompare(){
+  var by=BASE.defaults.base.year;
+  var defs=[['conservative','🔻 保守'],['base','基準'],['optimistic','🔺 樂觀']];
+  var cols=defs.map(function(d){
+    var p=Object.assign({}, P, presetOverrides(d[0]));
+    var R=computeForecast(p), lastI=R.years.length-1, cumR=0,cumP=0;
+    R.years.forEach(function(y,j){ if(y>by){ cumR+=R.total[j]; cumP+=R.profit[j]; } });
+    var revN=R.total[lastI], rev0=R.total[R.years.indexOf(by)];
+    return {name:d[0],label:d[1],cumR:cumR,cumP:cumP,margin:R.margin[lastI],
+      cagr:Math.pow(revN/rev0,1/HORIZON)-1,endRev:revN,endY:R.years[lastI]};
+  });
+  var hl=function(c){ return c.name===_activePreset?' style="background:rgba(79,142,247,0.14)"':''; };
+  var row=function(label,fmt,sign){ return '<tr><td>'+label+'</td>'+cols.map(function(c){
+    var v=fmt(c); var cls=sign?((sign(c)>=0)?'pos':'neg'):''; return '<td class="'+cls+'"'+hl(c)+'>'+v+'</td>'; }).join('')+'</tr>'; };
+  var endY=cols[0].endY;
+  document.getElementById('scenarioTable').innerHTML=
+    '<tr><th>指標（'+(by+1)+'–'+endY+'）</th>'+cols.map(function(c){return '<th'+hl(c)+'>'+c.label+'</th>';}).join('')+'</tr>'+
+    row(HORIZON+' 年累計營收', function(c){return fmtYi(c.cumR)+' 億';})+
+    row(HORIZON+' 年累計獲利', function(c){return fmtYi(c.cumP)+' 億';}, function(c){return c.cumP;})+
+    row(endY+' 淨利率', function(c){return (c.margin*100).toFixed(1)+'%';}, function(c){return c.margin;})+
+    row('營收 CAGR', function(c){return (c.cagr*100).toFixed(1)+'%';}, function(c){return c.cagr;})+
+    row(endY+' 營收(萬)', function(c){return fmtWan(c.endRev);});
+}
 function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
 
 // ════════ CONTROLS ════════
@@ -688,8 +717,11 @@ function syncControlsFromP(){
   });
   syncBMode();
 }
+var _activePreset='base';
 function setActivePreset(name){
+  _activePreset=name;
   document.querySelectorAll('.preset-btn[data-preset]').forEach(function(b){ b.classList.toggle('active',b.getAttribute('data-preset')===name); });
+  if(_lastR) renderScenarioCompare();
 }
 function applyPreset(name){ P=presetParams(name); syncControlsFromP(); recompute(); setActivePreset(name); }
 
