@@ -128,13 +128,42 @@ for r in fetch_all('fact_010_monthly_team', {'select': 'year,month,total_revenue
             fa010_2026_m[int(r['month'])] += float(r.get('total_revenue') or 0)
 
 # 合署留存率（喆律分得/毛）— 從 partners embedded JSON 校準
-print('[3/6] partners JSON 合署留存率 ...')
+# 38.7% 的混合留存其實是兩個截然不同分潤層的加權，且權重逐年漂移：
+#   引案層（喆律轉案/委任/諮詢成案/010轉案）→ 喆律留 ~50%（第一年所案，抽 30-40%＋利潤分成）
+#   自帶/續委層（自案＋續委任）            → 喆律留 ~9%（律師自帶客戶／續委任改抽 10%）
+# 推估端不再凍結混合率，而是拆兩層、各自留存固定、由「低層占比」前推 → 見 forecast/index.html
+print('[3/6] partners JSON 合署留存率（兩層拆解）...')
 partner_retain_default = 0.55
+partner_high = 0.503; partner_low = 0.091; partner_low_share = 0.299  # 後備值（114 全年 judicial+senior）
 try:
     import re
     with open('public/partners/index.html', encoding='utf-8') as f:
         html = f.read()
     pj = json.loads(re.search(r'<script id="embedded-data"[^>]*>(.*?)</script>', html, re.DOTALL).group(1))
+    # tier 明細歸層：自案/續委 → 低留存層，其餘（喆律引案）→ 高留存層
+    LOW_BASES = {'自案', '其他-自案', '顯皓自案', '續委'}
+    tier_re = re.compile(r'^(.*)\((喆律|律師)\)$')
+
+    def split_year(target_minguo):
+        """回傳 (高層[喆律,律師], 低層[喆律,律師]) 萬元前的原值；target_minguo 如 114"""
+        hi = [0.0, 0.0]; lo = [0.0, 0.0]
+        for key in ('judicial', 'senior'):
+            for rec in pj.get('cohorts', {}).get(key, {}).get('monthly', []):
+                if target_minguo is not None and int(rec.get('year') or 0) != target_minguo:
+                    continue
+                for tk, v in (rec.get('tier') or {}).items():
+                    v = float(v or 0)
+                    if tk == '諮詢':            # 諮詢費（喆律側、無後綴）→ 高層
+                        hi[0] += v; continue
+                    m = tier_re.match(tk)
+                    if not m:                   # 月固定費(律師) 等 → 律師側、歸高層母數
+                        hi[1] += v; continue
+                    base, side = m.group(1), m.group(2)
+                    bucket = lo if base in LOW_BASES else hi
+                    bucket[0 if side == '喆律' else 1] += v
+        return hi, lo
+
+    # 混合留存（全年期，與舊版相容）
     g_gross = g_retain = 0.0
     for key in ('judicial', 'senior'):
         for rec in pj.get('cohorts', {}).get(key, {}).get('monthly', []):
@@ -142,9 +171,21 @@ try:
             g_retain += float(rec.get('zhelu_total') or 0)
     if g_gross > 0:
         partner_retain_default = round(g_retain / g_gross, 3)
-    print(f'    合署毛收 {g_gross/1e4:,.0f}萬 / 喆律分得 {g_retain/1e4:,.0f}萬 → 留存率 {partner_retain_default:.1%}')
+
+    # 兩層拆解：取最近一個完整民國年（自動偵測；fallback 114）
+    yrs = sorted({int(r.get('year') or 0) for k in ('judicial', 'senior')
+                  for r in pj.get('cohorts', {}).get(k, {}).get('monthly', [])})
+    full_year = yrs[-2] if len(yrs) >= 2 else (yrs[-1] if yrs else 114)  # 最後一年多半未滿，取倒數第二
+    hi, lo = split_year(full_year)
+    hg, lg = hi[0] + hi[1], lo[0] + lo[1]
+    if hg > 0 and lg > 0:
+        partner_high = round(hi[0] / hg, 3)
+        partner_low = round(lo[0] / lg, 3)
+        partner_low_share = round(lg / (hg + lg), 3)
+    print(f'    合署毛收 {g_gross/1e4:,.0f}萬 / 喆律分得 {g_retain/1e4:,.0f}萬 → 混合留存 {partner_retain_default:.1%}')
+    print(f'    兩層（民國{full_year}）：引案層留存 {partner_high:.1%} / 自帶續委層留存 {partner_low:.1%} / 低層占比 {partner_low_share:.1%}')
 except Exception as e:
-    print(f'    partners JSON 讀取失敗，用預設留存率 {partner_retain_default}: {e}')
+    print(f'    partners JSON 讀取失敗，用後備留存率 {partner_retain_default} / 高{partner_high} 低{partner_low} 占{partner_low_share}: {e}')
 
 # ════════ 4. 成本（人事 + OPEX） ════════
 print('[4/6] finance 成本 ...')
@@ -359,7 +400,10 @@ defaults = {
     'retention': {        # 各流喆律留存率（毛收中留下的比例；本所固薪故=1.0）
         'bensuo': 1.0,
         'fa010': FA010_FIRM_SHARE_DEFAULT,
-        'partner': partner_retain_default,
+        'partner': partner_retain_default,      # 混合留存（顯示/相容用；推估端改用下列兩層）
+        'partner_high': partner_high,           # 引案層留存（喆律轉案/委任/諮詢成案/010轉案）
+        'partner_low': partner_low,             # 自帶/續委層留存（自案＋續委任）
+        'partner_low_share': partner_low_share, # 低留存層占合署毛收比（推估起點，逐年由拉桿前推）
         'advisor': 0.85,
     },
     'growth': {           # 預設年成長率（成熟流用 CAGR；ramp 中/低信心流用保守固定值，皆 clamp）

@@ -279,6 +279,9 @@ var CONTROLS=[
  {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct,hint:'前 5 年成長率，之後到頂持平'},
  {g:'各流成長',k:'advisorGrowth',label:'法顧年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1},
  {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'起始率；每 3 年 −5% 至 10% 止（不含新轉入律師）'},
+ {g:'合署既有 留存拆解',k:'partnerLowShareEnd',label:'續委/自帶 終年占比',min:.10,max:.70,step:.01,disp:pct,lc:1,hint:'合署毛收拆兩層：引案層喆律留 50%、自帶/續委層僅留 9%。此=末年「低留存層」占比，現況~30%；拉高→25%成長多落在續委/自帶→喆律分得縮水'},
+ {g:'合署既有 留存拆解',k:'partnerHigh',label:'引案層留存',min:.30,max:.70,step:.01,disp:pct,hint:'喆律轉案/委任/諮詢成案/010轉案的喆律分得比（114 資料 ~50%）'},
+ {g:'合署既有 留存拆解',k:'partnerLow',label:'自帶/續委層留存',min:.05,max:.40,step:.01,disp:pct,hint:'律師自帶客戶＋續委任的喆律分得比（114 資料 ~9%）'},
  {g:'案件動態',k:'closeDaysYoY',label:'結案天數逐年變化',min:-.10,max:.20,step:.01,disp:pct,hint:'>0 = 結案拉長'},
  {g:'案件動態',k:'agingHaircut',label:'老化庫存折減',min:0,max:.20,step:.01,disp:pct,hint:'aged WIP 折減實現率'},
  {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
@@ -320,7 +323,12 @@ function defaultsFromBaseline(){
     minInHouseLawyers:20,            // 所內最少保留接案律師(處理本所新案intake)
 
     avgBillingPerConvert:perBensuo, avgSalaryPerConvert:avgSal,
-    partnerRetention:d.retention.partner,
+    partnerRetention:d.retention.partner,   // 轉入律師(家泓/蘇萱)書值的喆律留存
+    // 合署「既有」兩層留存（資料校準）：引案層 ~50% / 自帶續委層 ~9%，混合率由「低層占比」前推
+    partnerHigh:(d.retention.partner_high!=null?d.retention.partner_high:0.50),
+    partnerLow:(d.retention.partner_low!=null?d.retention.partner_low:0.09),
+    partnerLowShareNow:(d.retention.partner_low_share!=null?d.retention.partner_low_share:0.30),
+    partnerLowShareEnd:(d.retention.partner_low_share!=null?d.retention.partner_low_share:0.30),  // 預設=現況(凍結 mix)；拉高=續委漂移
     convertCaseShare:0.55,           // 書值真的轉合署的比例(家泓~50%/蘇萱100% blended)；其餘代庭/交接留所
     newCaseFirmShare:0.40,           // 帶走案件喆律留成(委任費×40%＋指定費)
     hearingsPerStaleCase:3,          // 每件老案/僵案剩餘庭數（假設，court 欄位空）
@@ -333,11 +341,13 @@ function presetOverrides(name){
   if(name==='optimistic') return {
     closeRate:Math.min(1,DEF.closeRate+0.05), avgCaseAmount:DEF.avgCaseAmount*1.10,
     sessionsGrowth:DEF.sessionsGrowth+0.03, fa010Growth:DEF.fa010Growth+0.05, partnerGrowth:DEF.partnerGrowth+0.10,
+    partnerLowShareEnd:Math.max(.10,DEF.partnerLowShareNow-0.05),   // 引案引擎強→低留存層占比不漲反縮
     closeDaysYoY:-0.03, agingHaircut:0 };
   if(name==='conservative') return {
     closeRate:Math.max(.3,DEF.closeRate-0.05), avgCaseAmount:71000,   // 39% 簽約率 + 客單 7.1萬(類 2026：少簽但客單高)
     sessionsGrowth:DEF.sessionsGrowth-0.02, fa010Growth:Math.max(-.1,DEF.fa010Growth-0.05),
-    partnerGrowth:0, advisorGrowth:0.05, closeDaysYoY:0.08, agingHaircut:0.05 };
+    partnerGrowth:0, advisorGrowth:0.05, partnerLowShareEnd:Math.min(.70,DEF.partnerLowShareNow+0.25),  // 成長多來自續委/自帶→喆律分得縮水
+    closeDaysYoY:0.08, agingHaircut:0.05 };
   return {};
 }
 function presetParams(name){ return Object.assign({}, DEF, presetOverrides(name)); }
@@ -383,11 +393,13 @@ function computeForecast(p){
     var ty=y-ANCHOR_YEAR;       // 從 2026 錨點起（各流成長複利用）
     var bensuo,fa010,advisor,partnerBase,personnel,opex,sessions,closeDays;
     var convCum=0, billingMoved=0, salarySaved=0, eligible=0, tingCount=0, tingRev=0, backfill=0;
+    var partnerExisting=0, convertedOutput=0;   // 合署 = 既有(兩層留存) + 轉入律師書值(partnerRetention)
     if(y<=by){ // 實際歷史
       bensuo=hist.revenue_streams.bensuo[idx(y)];
       fa010=hist.revenue_streams.fa010[idx(y)];
       advisor=hist.revenue_streams.advisor[idx(y)];
       partnerBase=hist.revenue_streams.partner[idx(y)];
+      partnerExisting=partnerBase;   // 歷史/base 年：全為既有，無轉入
       sessions=hist.consult.sessions[idx(y)];
       closeDays=hist.case_dynamics.close_days_median[idx(y)];
       personnel=(y===by)?b.personnel:null;
@@ -424,7 +436,7 @@ function computeForecast(p){
                    *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
       }
       // 帶走進合署的書值（真實轉移：同一筆金額從本所扣除、計入合署，不會憑空生出）
-      var convertedOutput=FS*convCum*p.avgBillingPerConvert;
+      convertedOutput=FS*convCum*p.avgBillingPerConvert;
       // 本所＝漏斗(可受人數成長) − 帶走的書值；floor 5% 避免歸零
       bensuo=Math.max(bensuoBase*0.05, bensuoBase*Math.pow(1+p.headcountGrowth,ty)-convertedOutput);
 
@@ -442,7 +454,8 @@ function computeForecast(p){
       // (4) 合署既有：成長率每 3 年 −5%，至 10%(或起始率)止；＋轉入律師書值(=本所扣除同一筆)
       var pFloor=Math.min(p.partnerGrowth,0.10), pCum=1;
       for(var kP=0;kP<ty;kP++){ pCum*=(1+Math.max(pFloor, p.partnerGrowth-0.05*Math.floor(kP/3))); }
-      partnerBase=anchor.partner*pCum+convertedOutput;
+      partnerExisting=anchor.partner*pCum;
+      partnerBase=partnerExisting+convertedOutput;
 
       // (5) 成本：人事＝(調薪×人數成長) − 轉出省下薪資 + 補人薪資(同轉出者)；OPEX 複利
       //     淨省 = (轉出 − 補人) × 人均薪資；補人維持所內最低處理人力
@@ -453,17 +466,26 @@ function computeForecast(p){
     }
     var total=bensuo+fa010+advisor+partnerBase;
     var split=null,cost=null,profit=null,margin=null,yearend=null;
+    // 合署既有「混合留存」逐年漂移：低留存層(自帶/續委)占比從現況前推到「終年占比」拉桿，
+    // 兩層留存固定(引案 partnerHigh、自帶/續委 partnerLow)→ 混合率隨書齡老化而下滑。
+    var lowSpan=Math.max(1,HORIZON-1);
+    var lowFrac=Math.min(1,Math.max(0,ty)/lowSpan);
+    var lowShare=p.partnerLowShareNow+(p.partnerLowShareEnd-p.partnerLowShareNow)*lowFrac;
+    var pExistRet=p.partnerHigh*(1-lowShare)+p.partnerLow*lowShare;   // 既有合署混合留存(逐年)
     var actualP=(y<=by && BASE.history.actual)?BASE.history.actual.consolidated_profit[idx(y)]:null;
     if(y<by){
       // 歷史非 base 年：用股東實際合併獲利（已發年終後，無成本拆解）
       if(actualP!=null){ profit=actualP; cost=total-actualP; margin=total?profit/total:0; }
     } else {
       // base year(已校準=實際) + 推估年：完整成本結構（含年終，隨在編薪資走）
-      split=fa010*(1-ret.fa010)+advisor*(1-ret.advisor)+partnerBase*(1-p.partnerRetention);
+      // 合署拆帳：既有用兩層混合留存 pExistRet；轉入律師書值仍用 partnerRetention
+      split=fa010*(1-ret.fa010)+advisor*(1-ret.advisor)
+            +partnerExisting*(1-pExistRet)+convertedOutput*(1-p.partnerRetention);
       yearend=p.yearEndMonths*personnel/12;
       cost=personnel+opex+split+yearend;
       profit=total-cost; margin=total?profit/total:0;
     }
+    R.partnerRet=R.partnerRet||[]; R.partnerRet.push(partnerBase?((partnerExisting*pExistRet+convertedOutput*p.partnerRetention)/partnerBase):pExistRet);
     R.bensuo.push(bensuo); R.fa010.push(fa010); R.advisor.push(advisor); R.partner.push(partnerBase);
     R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split); R.yearend.push(yearend);
     R.cost.push(cost); R.profit.push(profit); R.margin.push(margin);
@@ -489,6 +511,7 @@ function renderKPIs(R){
     {lbl:R.years[lastI]+' 淨利率',val:pct(endMargin),sub:'終年',cls:endMargin>=0?'green':'red'},
     {lbl:'營收 CAGR',val:pct(cagr),sub:by+'→'+R.years[lastI]},
     {lbl:'終年合署占比',val:pct(endPartnerShare),sub:'合署/總營收'},
+    {lbl:'終年合署留存率',val:pct((R.partnerRet&&R.partnerRet[lastI])||0),sub:'喆律實得/合署毛收（兩層混合）'},
   ];
   document.getElementById('kpiRow').innerHTML=k.map(function(x){
     return '<div class="kpi"><div class="lbl">'+x.lbl+'</div><div class="val '+(x.cls||'')+'">'+x.val+'</div><div class="sub">'+x.sub+'</div></div>';
@@ -627,7 +650,7 @@ function renderTables(R){
   var head=[{l:'年度'},{l:'本所'},{l:'010'},{l:'法顧'},{l:'合署'},{l:'營收合計'},
     {l:'人事',t:'律師固薪＋全體員工薪資。本所律師的人事成本在這欄，不在「律師/平台拆帳」'},
     {l:'OPEX',t:'非人事營運成本：6 所房租、行銷、行政、獎金等（已校準至股東實際損益）'},
-    {l:'律師/平台拆帳',t:'各流毛收中分給律師/平台、不歸喆律的部分 ＝ Σ 毛收×(1−留存率)。本所固薪→0；010 分 65%、法顧 分 15%、合署 分 61.3%'},
+    {l:'律師/平台拆帳',t:'各流毛收中分給律師/平台、不歸喆律的部分 ＝ Σ 毛收×(1−留存率)。本所固薪→0；010 分 65%、法顧 分 15%；合署拆兩層(引案層喆律留~50%／自帶續委層僅~9%)，喆律分得逐年隨「續委/自帶占比」漂移'},
     {l:'年終',t:'年終獎金 ＝ 月數 × 在編月薪資。股東實際含 1.5 個月，已從 OPEX 拆出可調；隨在編薪資走（轉合署人少→年終少）'},
     {l:'成本合計'},{l:'淨利'},{l:'淨利率'}];
   var rows=R.years.map(function(y,i){
@@ -644,7 +667,7 @@ function renderTables(R){
       return '<th'+(h.t?' title="'+h.t+'" style="cursor:help;text-decoration:underline dotted var(--text-muted)"':'')+'>'+h.l+(h.t?' ⓘ':'')+'</th>';
     }).join('')+'</tr>'+rows+
     '<tr style="font-size:.72rem;color:var(--text-muted);"><td colspan="13" style="text-align:left;line-height:1.6;">單位：萬元　|　'+
-    '<b style="color:var(--gold)">律師/平台拆帳</b>＝各流毛收分給律師/平台、不歸喆律的拆帳（本所固薪→0；010 65%、法顧 15%、合署 61.3%）。　|　'+
+    '<b style="color:var(--gold)">律師/平台拆帳</b>＝各流毛收分給律師/平台、不歸喆律的拆帳（本所固薪→0；010 65%、法顧 15%；合署兩層：引案層分 ~50%、自帶/續委層分 ~91%）。　|　'+
     '<b style="color:var(--gold)">年終</b>＝月數×在編月薪資，現況內含 1.5 個月（已從 OPEX 拆出可調）；獲利為<b>發年終後</b>。</td></tr>';
 }
 
@@ -689,13 +712,14 @@ function renderScenarioCompare(){
     prow('諮詢量成長','sessionsGrowth',pf)+
     prow('010 平台成長','fa010Growth',pf)+
     prow('合署既有成長','partnerGrowth',pf)+
+    prow('合署續委/自帶終年占比','partnerLowShareEnd',pf)+
     prow('法顧成長','advisorGrowth',pf)+
     prow('結案天數變化','closeDaysYoY',pf)+
     prow('老化庫存折減','agingHaircut',pf)+
     sec('▾ 共用策略假設（三情境相同，依你目前設定）')+
     srow('轉合署比例', pf(P.convertRatio))+
     srow('轉合署案件佔比', pf(P.convertCaseShare))+
-    srow('合署喆律留存率', pf(P.partnerRetention))+
+    srow('合署轉入律師留存率', pf(P.partnerRetention))+
     srow('所內最少保留律師', Math.round(P.minInHouseLawyers)+' 位')+
     srow('年調薪', pf(P.salaryRaise))+
     srow('人數成長(擴編)', pf(P.headcountGrowth))+
