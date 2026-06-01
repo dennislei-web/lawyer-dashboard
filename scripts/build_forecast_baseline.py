@@ -376,7 +376,7 @@ output = {
         'asof': today.isoformat(),
         'base_year': by,
         'unit': 'TWD',
-        'profit_basis': '總營收毛利（營收=毛收 amount；律師分潤=毛收×(1−留存率) 列成本）',
+        'profit_basis': '總營收毛利（營收=毛收 amount；律師/平台拆帳=毛收×(1−留存率) 列成本）',
         'caveats': {
             'advisor': '法顧多年資料來自 revenue_records client 切分；advisor_transactions 僅 1 年',
             'partner': '合署毛收 2023 起，僅 2-3 有效年，成長率低信心',
