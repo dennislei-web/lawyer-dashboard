@@ -266,6 +266,7 @@ var CONTROLS=[
  {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
  {g:'合署轉換',k:'tenureThreshold',label:'年資門檻(年)',min:1,max:6,step:1,disp:function(v){return v+' 年';}},
  {g:'合署轉換',k:'convertRatio',label:'轉合署比例',min:0,max:1,step:.05,disp:pct},
+ {g:'合署轉換',k:'minInHouseLawyers',label:'所內最少保留接案律師',min:0,max:40,step:1,disp:function(v){return v+' 位';},hint:'遇缺不補上限：處理本所新案intake(估~20位)，cap 累計轉換'},
  {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan',hint:'轉移：本所減同額、合署加同額（×轉合署佔比）'},
  {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
@@ -297,6 +298,8 @@ function defaultsFromBaseline(){
     reachingPerYear: (TENURE? null : 4),
     tenureThreshold:d.partner_conversion.tenure_threshold_years,
     convertRatio:d.partner_conversion.convert_ratio,
+    minInHouseLawyers:20,            // 所內最少保留接案律師(處理本所新案intake)
+
     avgBillingPerConvert:perBensuo, avgSalaryPerConvert:avgSal,
     partnerRetention:d.retention.partner,
     convertCaseShare:0.55,           // 書值真的轉合署的比例(家泓~50%/蘇萱100% blended)；其餘代庭/交接留所
@@ -354,7 +357,8 @@ function computeForecast(p){
     if(TENURE&&TENURE.eligibility){ var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
       var s=TENURE.eligibility[th]&&TENURE.eligibility[th][String(yy)]; if(s) el=s.count; }
     else el=Math.round(p.reachingPerYear||0)*(yy-by);
-    return Math.round(el*p.convertRatio*ramp);
+    // 遇缺不補上限：保留所內最少接案律師 → 累計轉換 ≤ 可轉基數 − 最少保留
+    return Math.min(Math.round(el*p.convertRatio*ramp), Math.max(0, EB-(p.minInHouseLawyers||0)));
   }
 
   years.forEach(function(y){
@@ -382,6 +386,8 @@ function computeForecast(p){
       var rampFrac=Math.min(1,(ty+1)/RAMP_YEARS);
       if(slot){ eligible=slot.count; convCum=Math.round(eligible*p.convertRatio*rampFrac); }
       else { eligible=Math.round(p.reachingPerYear||0)*t; convCum=Math.round((p.reachingPerYear||0)*p.convertRatio*rampFrac)*t; }
+      // 遇缺不補上限：保留所內最少接案律師
+      convCum=Math.min(convCum, Math.max(0, EB-(p.minInHouseLawyers||0)));
 
       sessions=b.sessions*Math.pow(1+p.sessionsGrowth,t);
       closeDays=closeBase*Math.pow(1+p.closeDaysYoY,t);
