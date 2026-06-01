@@ -164,11 +164,19 @@
             <div class="chart-box sm"><canvas id="chProfit"></canvas></div>
           </div>
         </div>
-        <div class="card">
-          <h3>本所毛利率崩落 vs 成本結構（實際）</h3>
-          <div class="cap">股東實際損益：長條=本所營收 vs 本所成本(實際支出)，折線=本所毛利率。成本追上營收 → 毛利率 5 年從 25% 崩到 0%。</div>
-          <div class="chart-box sm"><canvas id="chMargin"></canvas></div>
-          <div class="note" id="marginNote"></div>
+        <div class="grid2">
+          <div class="card">
+            <h3>本所毛利率崩落 vs 成本結構（實際）</h3>
+            <div class="cap">股東實際損益：長條=本所營收 vs 本所成本，折線=本所毛利率。成本追上營收 → 毛利率 5 年從 25% 崩到 0%。</div>
+            <div class="chart-box sm"><canvas id="chMargin"></canvas></div>
+            <div class="note" id="marginNote"></div>
+          </div>
+          <div class="card">
+            <h3>諮詢漏斗效率：簽約率 vs 客單</h3>
+            <div class="cap">諮詢看板實際：金線=簽約率(右軸 %)，紫線=平均簽約收款(左軸 元)。簽約率連年降、客單反升。</div>
+            <div class="chart-box sm"><canvas id="chSignTrend"></canvas></div>
+            <div class="note" id="signNote"></div>
+          </div>
         </div>
         <div class="card">
           <h3>合署轉換影響</h3>
@@ -524,6 +532,27 @@ function renderCharts(R){
     }});
     var n=aMargin.length;
     document.getElementById('marginNote').innerHTML='<b>結構性警訊：</b>本所成本從 '+aCost[0].toLocaleString()+'萬 漲到 '+aCost[n-1].toLocaleString()+'萬（×'+(aCost[n-1]/aCost[0]).toFixed(1)+'），同期營收只 ×'+(aRev[n-1]/aRev[0]).toFixed(1)+'，<b>毛利率 '+aMargin[0]+'% → '+aMargin[n-1]+'%</b>。固定成本（人力＋6 所）成長快過營收——這正是合署「把固薪轉變動分潤」要解的結構問題。';
+  }
+
+  // 諮詢漏斗效率：簽約率 vs 平均簽約收款（實際歷史）
+  var fn=BASE.defaults.funnel;
+  if(fn&&fn.sign_rate_trend){
+    var sYears=[],sRate=[],sAmt=[];
+    BASE.history.years.forEach(function(y){
+      var rt=fn.sign_rate_trend[String(y)], am=fn.sign_amount_trend[String(y)];
+      if(rt==null) return;
+      sYears.push(String(y)); sRate.push(+(rt*100).toFixed(1)); sAmt.push(am);
+    });
+    mkLine('chSignTrend',{labels:sYears,datasets:[
+      {type:'line',label:'平均簽約收款(元)',data:sAmt,borderColor:purple,backgroundColor:'transparent',tension:.25,yAxisID:'y',pointRadius:3,borderWidth:2},
+      {type:'line',label:'簽約率',data:sRate,borderColor:gold,backgroundColor:'transparent',tension:.25,yAxisID:'y1',pointRadius:3,borderWidth:2},
+    ]},{tt:{label:function(c){return c.dataset.label+': '+(c.dataset.yAxisID==='y1'?c.parsed.y+'%':c.parsed.y.toLocaleString()+'元');}},scales:{
+      x:{ticks:{color:muted},grid:{display:false}},
+      y:{position:'left',ticks:{color:purple,callback:function(v){return (v/1000)+'k';}},grid:{color:css('--border')}},
+      y1:{position:'right',ticks:{color:gold,callback:function(v){return v+'%';}},grid:{display:false}}
+    }});
+    var sn=sRate.length;
+    document.getElementById('signNote').innerHTML='<b>效率警訊：</b>簽約率 '+sRate[1]+'% → '+sRate[sn-1]+'%（諮詢轉換變差），但客單 '+Math.round(sAmt[1]/1000)+'k → '+Math.round(sAmt[sn-1]/1000)+'k（成交變大）。漏斗進來的人沒少、但簽得越來越少——與「諮詢量 4 年 plateau」同一結構問題。';
   }
 
   // AGING doughnut

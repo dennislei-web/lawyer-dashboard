@@ -317,6 +317,8 @@ for r in fetch_all('consultation_cases', {'select': 'case_date,is_signed,revenue
 close_rate = round(sign_s.get(by, 0) / sign_n[by], 4) if sign_n.get(by) else 0.0
 avg_case_amount = round(sign_rev.get(by, 0) / sign_s[by]) if sign_s.get(by) else 0
 sign_rate_trend = {str(y): round(sign_s.get(y, 0) / sign_n[y], 4) if sign_n.get(y) else None for y in YEARS}
+sign_amount_trend = {str(y): round(sign_rev.get(y, 0) / sign_s[y]) if sign_s.get(y) else None for y in YEARS}
+sign_count_trend = {str(y): sign_n.get(y, 0) for y in YEARS}
 
 defaults = {
     'base': base,
@@ -342,6 +344,8 @@ defaults = {
         'benefit_multiplier': 1.0,   # 效益值係數（續委任/客單放大）
         'sessions_growth': cagr(sessions_y, 2023, by),
         'sign_rate_trend': sign_rate_trend,       # 逐年簽約率（看板一致，呈現下降趨勢）
+        'sign_amount_trend': sign_amount_trend,   # 逐年平均簽約收款（上升）
+        'sign_count_trend': sign_count_trend,     # 逐年諮詢數
     },
     'case_dynamics': {
         'close_days_base': history['case_dynamics']['close_days_median'][YEARS.index(by)],
