@@ -243,7 +243,7 @@ var pct=function(v){ return (v*100).toFixed(1)+'%'; };
 // 參數定義：key, 群組, label, min, max, step, 單位顯示函式, hint, lowConfidence
 var CONTROLS=[
  {g:'全域成本',k:'salaryRaise',label:'年調薪',min:0,max:.10,step:.005,disp:pct},
- {g:'全域成本',k:'headcountGrowth',label:'人數年成長',min:-.05,max:.15,step:.005,disp:pct,hint:'律師+員工總人數擴張'},
+ {g:'全域成本',k:'headcountGrowth',label:'人數年成長(擴編)',min:-.05,max:.15,step:.005,disp:pct,hint:'預設 0=不擴編；合署轉出遇缺不補(轉出者薪資自動省下)'},
  {g:'全域成本',k:'opexGrowth',label:'非人事 OPEX 年成長',min:0,max:.12,step:.005,disp:pct,lc:1},
  {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
  {g:'諮詢 → 本所委任',k:'closeRate',label:'成案率',min:.3,max:1.0,step:.01,disp:pct},
@@ -279,7 +279,7 @@ function defaultsFromBaseline(){
     var s=TENURE.eligibility['3']['2026']; if(s.count_salary) avgSal=Math.round(s.sum_salary/s.count_salary);
   }
   return {
-    salaryRaise:d.salary_raise, headcountGrowth:0.03, opexGrowth:d.growth.opex,
+    salaryRaise:d.salary_raise, headcountGrowth:0, opexGrowth:d.growth.opex,
     sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
     avgCaseAmount:d.funnel.avg_case_amount, benefitMult:d.funnel.benefit_multiplier,
     fa010Growth:d.growth.fa010, advisorGrowth:d.growth.advisor, partnerGrowth:d.growth.partner,
