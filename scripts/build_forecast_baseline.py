@@ -34,6 +34,17 @@ LATEST_FULL_YEAR = 2025          # 最近一個完整年（base year）
 BATCH_POLLUTION_DATE = date(2023, 2, 8)   # 舊遷移案批次更新日，非真實結案日
 FA010_FIRM_SHARE_DEFAULT = 0.35  # 法0 喆律分得比例（estimate_okr_profit FA0_SHARE）
 
+# ── 股東實際損益（營運數據(股東).xlsx，現金制 實際收入−實際支出，已排除合計欄）──
+# 用來校準 OPEX（我的 bottom-up 成本低估）並畫真實歷史獲利線。2021-2025 為完整年（12月）。
+# 喆律本所毛利率逐年崩：25.4%→15.4%→8.4%→3.1%→-0.0%；合併總盈虧含 010/公司/北冥。
+ACTUAL_PNL_WAN = {   # 萬元
+    2021: {'bensuo_profit': 2370, 'consolidated_profit': 1437, 'bensuo_rev': 9312},
+    2022: {'bensuo_profit': 1852, 'consolidated_profit': 2860, 'bensuo_rev': 12016},
+    2023: {'bensuo_profit': 1277, 'consolidated_profit': 2186, 'bensuo_rev': 15251},
+    2024: {'bensuo_profit':  533, 'consolidated_profit': 2229, 'bensuo_rev': 17156},
+    2025: {'bensuo_profit':   -3, 'consolidated_profit': 1416, 'bensuo_rev': 17197},
+}
+
 
 def fetch_all(table, params=None, page=1000):
     rows, offset = [], 0
@@ -251,12 +262,33 @@ base = {
     'sessions': round(sessions_y.get(by, 0)),
     'appointed': appointed_y.get(by, 0),
 }
-# OPEX 年化：取覆蓋月數最完整的年
+# OPEX 年化：取覆蓋月數最完整的年（僅作參考，下面用實際損益校準）
 opex_best_year = max((y for y in YEARS if opex_months.get(y)), key=lambda y: len(opex_months[y]), default=None)
+opex_runrate = 0
 if opex_best_year:
     m = len(opex_months[opex_best_year])
-    base['opex'] = round(opex_y[opex_best_year] / m * 12) if m else 0
-    base['opex_source'] = f'{opex_best_year}年×{m}月年化'
+    opex_runrate = round(opex_y[opex_best_year] / m * 12) if m else 0
+
+# ── OPEX 校準至股東實際損益 ──
+# bottom-up(人事+finance OPEX) 嚴重低估真實成本（房租×6所/行銷/行政/獎金）。
+# 反推 base year OPEX，使「2025 模型合併獲利 = 股東實際合併盈虧」。
+#   profit = Σ毛收 − personnel − opex − 律師分潤  →  opex = Σ毛收 − personnel − 分潤 − 實際獲利
+rev_2025 = bensuo_y.get(by,0)+fa010_y.get(by,0)+advisor_y.get(by,0)+partner_gross_y.get(by,0)
+split_2025 = (fa010_y.get(by,0)*(1-FA010_FIRM_SHARE_DEFAULT)
+              + advisor_y.get(by,0)*(1-0.85)
+              + partner_gross_y.get(by,0)*(1-partner_retain_default))
+actual_profit_2025 = ACTUAL_PNL_WAN[by]['consolidated_profit'] * 10000
+opex_calibrated = round(rev_2025 - personnel_y.get(by,0) - split_2025 - actual_profit_2025)
+base['opex'] = opex_calibrated
+base['opex_runrate'] = opex_runrate
+base['opex_source'] = f'校準至股東實際合併獲利{ACTUAL_PNL_WAN[by]["consolidated_profit"]}萬(finance OPEX 年化僅{round(opex_runrate/10000)}萬，低估真實房租/行銷/行政/獎金)'
+
+# 真實歷史獲利線（合併總盈虧, 元）+ 本所實際盈虧
+history['actual'] = {
+    'consolidated_profit': [ACTUAL_PNL_WAN.get(y,{}).get('consolidated_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
+    'bensuo_profit':       [ACTUAL_PNL_WAN.get(y,{}).get('bensuo_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
+    'source': '營運數據(股東).xlsx 現金制 實際收入−實際支出',
+}
 
 # 2026 今年 YTD 年化 run-rate（推估起點錨定用）
 rm = len(rev_months_2026); fm = len(fa010_months_2026)

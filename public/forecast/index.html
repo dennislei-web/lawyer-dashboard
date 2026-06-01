@@ -151,7 +151,7 @@
       <div class="charts">
         <div class="card">
           <h3>營收 / 成本 / 獲利（毛利口徑）</h3>
-          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。成本/獲利自 base year 2025 起（更早年度無非人事 OPEX 歷史）。</div>
+          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。獲利線為股東實際合併損益（現金制）；OPEX 已校準至實際，base 2025 = 實際 1,416 萬。</div>
           <div class="chart-box"><canvas id="chMain"></canvas></div>
         </div>
         <div class="grid2">
@@ -400,8 +400,12 @@ function computeForecast(p){
     }
     var total=bensuo+fa010+advisor+partnerBase;
     var split=null,cost=null,profit=null,margin=null;
-    if(personnel!=null){
-      // 分潤成本 = Σ 毛收×(1−留存率)；本所留存率=1（固薪），合署用 slider
+    var actualP=(y<=by && BASE.history.actual)?BASE.history.actual.consolidated_profit[idx(y)]:null;
+    if(y<by){
+      // 歷史非 base 年：用股東實際合併獲利（無成本拆解）
+      if(actualP!=null){ profit=actualP; cost=total-actualP; margin=total?profit/total:0; }
+    } else {
+      // base year(已校準=實際) + 推估年：完整成本結構
       split=fa010*(1-ret.fa010)+advisor*(1-ret.advisor)+partnerBase*(1-p.partnerRetention);
       cost=personnel+opex+split;
       profit=total-cost; margin=total?profit/total:0;
@@ -611,7 +615,8 @@ async function showDashboard(){
     document.getElementById('footNote').innerHTML='<b>口徑：</b>'+BASE.meta.profit_basis+'。'+
       '<b>推估起點：</b>錨定 2026 今年 YTD 年化 run-rate（'+(rr.months_rev||'?')+' 個月年化：本所 '+fmtWan(rr.bensuo||0)+'萬 / 010 '+fmtWan(rr.fa010||0)+'萬 / 合署 '+fmtWan(rr.partner||0)+'萬），各成長率由此複利；成案率/成案金額等 slider 為相對倍率。'+
       '<b>本所×合署：</b>本所＝諮詢漏斗 × 在編接案律師產能份額（轉合署減、新進律師補回）；合署＝既有成長＋轉入律師 book。轉換目標比例 5 年線性 ramp-in。'+
-      '<b>注意：</b>法顧/合署/OPEX 歷史短（標「低信心」）請依實況校調；結案天數已排除 2023-02-08 批次汙染件。'+
+      '<b>成本校準：</b>OPEX 已校準至股東實際損益＝'+fmtWan(BASE.defaults.base.opex)+'萬（bottom-up finance OPEX 僅 '+fmtWan(BASE.defaults.base.opex_runrate||0)+'萬，低估房租/行銷/行政/獎金）；本所實際毛利率已從 2021 的 25% 崩到 2025 的 ~0%，模型不再假設高毛利。'+
+      '<b>注意：</b>結案天數已排除 2023-02-08 批次汙染件。'+
       (TENURE&&TENURE.meta?'合署可轉池依到職日清單精算（在編接案律師基數 '+(TENURE.meta.total_current_lawyers-TENURE.meta.managers_excluded_count-TENURE.meta.already_partner_excluded_count)+' 位＝現職'+TENURE.meta.total_current_lawyers+'−主管'+TENURE.meta.managers_excluded_count+'−已合署'+TENURE.meta.already_partner_excluded_count+'）。':'尚未載入 tenure，合署轉換為聚合假設。');
     recompute();
   }catch(e){ document.getElementById('dashboard').innerHTML='<div style="padding:40px;color:var(--red)">載入 forecast-baseline.json 失敗：'+e.message+'</div>'; }
