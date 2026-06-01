@@ -615,7 +615,11 @@ function renderTables(R){
 
   // 逐年明細
   var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];
-  var head=['年度','本所','010','法顧','合署','營收合計','人事','OPEX','律師分潤','成本合計','淨利','淨利率'];
+  var head=[{l:'年度'},{l:'本所'},{l:'010'},{l:'法顧'},{l:'合署'},{l:'營收合計'},
+    {l:'人事',t:'律師固薪＋全體員工薪資。本所律師的人事成本在這欄，不在「律師分潤」'},
+    {l:'OPEX',t:'非人事營運成本：6 所房租、行銷、行政、獎金等（已校準至股東實際損益）'},
+    {l:'律師分潤',t:'各流毛收中分給律師/平台、不歸喆律的部分 ＝ Σ 毛收×(1−留存率)。本所固薪→0；010 分 65%、法顧 分 15%、合署 分 61.3%'},
+    {l:'成本合計'},{l:'淨利'},{l:'淨利率'}];
   var rows=R.years.map(function(y,i){
     var cell=function(v){return v==null?'—':fmtWan(v);};
     return '<tr>'+
@@ -626,7 +630,11 @@ function renderTables(R){
       '<td class="'+(R.profit[i]>=0?'pos':'neg')+'">'+cell(R.profit[i])+'</td>'+
       '<td>'+(R.margin[i]==null?'—':pct(R.margin[i]))+'</td></tr>';
   }).join('');
-  document.getElementById('detailTable').innerHTML='<tr>'+head.map(function(h){return '<th>'+h+'</th>';}).join('')+'</tr>'+rows+'<tr style="font-size:.7rem;color:var(--text-muted);"><td colspan="12">單位：萬元</td></tr>';
+  document.getElementById('detailTable').innerHTML='<tr>'+head.map(function(h){
+      return '<th'+(h.t?' title="'+h.t+'" style="cursor:help;text-decoration:underline dotted var(--text-muted)"':'')+'>'+h.l+(h.t?' ⓘ':'')+'</th>';
+    }).join('')+'</tr>'+rows+
+    '<tr style="font-size:.72rem;color:var(--text-muted);"><td colspan="12" style="text-align:left;line-height:1.6;">單位：萬元　|　'+
+    '<b style="color:var(--gold)">律師分潤</b>＝各流毛收中「分給律師/平台、不歸喆律」的拆帳成本（本所固薪 → 0；010 分潤 65%、法顧 15%、合署 61.3%）。本所律師的人事成本列在「人事」欄，不在此。合署留存率越高、這欄越小、淨利越大。</td></tr>';
 }
 
 var _lastR=null;
