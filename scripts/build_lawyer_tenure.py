@@ -224,7 +224,7 @@ def pool_aggregate(year, threshold):
             'count_salary': cnt_sal, 'sum_salary': round(sum_sal), 'sum_stale': sum_stale}
 
 # threshold 1..6 × 推估年 base+1..base+6 的池彙總（公開版只含這張表，無個人列）
-FC_YEARS = list(range(THIS_YEAR, THIS_YEAR + 6))
+FC_YEARS = list(range(THIS_YEAR, THIS_YEAR + 11))   # 推估延長至 10 年(2026-2035)+緩衝
 eligibility = {str(th): {str(y): pool_aggregate(y, th) for y in FC_YEARS} for th in range(1, 7)}
 summary = {str(y): eligibility['3'][str(y)]['count'] for y in FC_YEARS}   # tenure>=3 達標數（顯示用）
 

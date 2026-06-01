@@ -151,7 +151,7 @@
       <div class="charts">
         <div class="card">
           <h3>營收 / 成本 / 獲利（毛利口徑）</h3>
-          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。獲利線為股東官方合併損益(盈虧分紅)；OPEX 已校準至實際，base 2025 = 實際 2,334 萬。</div>
+          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2035)。獲利線為股東官方合併損益(盈虧分紅)；OPEX 已校準至實際，base 2025 = 實際 2,334 萬。<b>注意：</b>2031 後為 10 年長推估，010/合署成長率複利放大、不確定性高。</div>
           <div class="chart-box"><canvas id="chMain"></canvas></div>
         </div>
         <div class="grid2">
@@ -241,7 +241,8 @@ try{ var st=localStorage.getItem('dash-theme'); if(st) applyTheme(st); }catch(e)
 
 // ════════ MODEL ════════
 var BASE=null, TENURE=null, P={}, DEF={}, charts={};
-var HORIZON=5;
+var HORIZON=10;        // 推估年數（2026–2035）
+var RAMP_YEARS=5;      // 合署轉換 ramp-in 完成年數（固定 5 年，不隨 HORIZON）
 var css=function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
 var W=function(v){ return Math.round(v/10000); };               // 元→萬
 var fmtWan=function(v){ return (v/10000).toLocaleString('en-US',{maximumFractionDigits:0}); };
@@ -349,7 +350,7 @@ function computeForecast(p){
   // 累積轉換人數（給定 y）— 供算「當年新轉」做待庭費 wind-down
   function convCumFor(yy){
     if(yy<=by) return 0;
-    var ramp=Math.min(1,(yy-ANCHOR_YEAR+1)/HORIZON), el=0;
+    var ramp=Math.min(1,(yy-ANCHOR_YEAR+1)/RAMP_YEARS), el=0;
     if(TENURE&&TENURE.eligibility){ var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
       var s=TENURE.eligibility[th]&&TENURE.eligibility[th][String(yy)]; if(s) el=s.count; }
     else el=Math.round(p.reachingPerYear||0)*(yy-by);
@@ -378,7 +379,7 @@ function computeForecast(p){
         slot=TENURE.eligibility[th] && TENURE.eligibility[th][String(y)];
       }
       // 轉換線性 ramp-in：目標比例在 HORIZON 年內逐步達成（避免年 1 就把現有資深全轉，與今年實際背離）
-      var rampFrac=Math.min(1,(ty+1)/HORIZON);
+      var rampFrac=Math.min(1,(ty+1)/RAMP_YEARS);
       if(slot){ eligible=slot.count; convCum=Math.round(eligible*p.convertRatio*rampFrac); }
       else { eligible=Math.round(p.reachingPerYear||0)*t; convCum=Math.round((p.reachingPerYear||0)*p.convertRatio*rampFrac)*t; }
 
@@ -455,8 +456,8 @@ function renderKPIs(R){
   var cagr=Math.pow(revN/rev0,1/HORIZON)-1;
   var endPartnerShare=R.partner[lastI]/revN;
   var k=[
-    {lbl:'5 年累計營收',val:fmtYi(cumRev)+' 億',sub:by+1+'–'+R.years[lastI]+'（毛收）'},
-    {lbl:'5 年累計獲利',val:fmtYi(cumProfit)+' 億',sub:'毛利口徑',cls:cumProfit>=0?'green':'red'},
+    {lbl:HORIZON+' 年累計營收',val:fmtYi(cumRev)+' 億',sub:by+1+'–'+R.years[lastI]+'（毛收）'},
+    {lbl:HORIZON+' 年累計獲利',val:fmtYi(cumProfit)+' 億',sub:'毛利口徑',cls:cumProfit>=0?'green':'red'},
     {lbl:R.years[lastI]+' 淨利率',val:pct(endMargin),sub:'終年',cls:endMargin>=0?'green':'red'},
     {lbl:'營收 CAGR',val:pct(cagr),sub:by+'→'+R.years[lastI]},
     {lbl:'終年合署占比',val:pct(endPartnerShare),sub:'合署/總營收'},
