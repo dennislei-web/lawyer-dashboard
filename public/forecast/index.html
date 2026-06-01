@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律 × 010 五年營收獲利推估</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root{
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a; --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --green:#4caf82; --red:#e05c5c; --orange:#e0954a; --purple:#9b7fe0;
+      --header-bg:rgba(10,22,40,0.95); --login-shadow:rgba(0,0,0,0.5);
+    }
+    [data-theme="light"]{
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e; --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --green:#15803d; --red:#dc2626; --orange:#d97706; --purple:#7c3aed;
+      --header-bg:rgba(255,255,255,0.95); --login-shadow:rgba(0,0,0,0.12);
+    }
+    .embed-mode .header{display:none !important;}
+    .embed-mode #loginPage{display:none !important;}
+    .embed-mode #dashboard{display:block !important;}
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main);color:var(--text);min-height:100vh;font-size:14px;}
+    ::-webkit-scrollbar{width:7px;height:7px;}
+    ::-webkit-scrollbar-track{background:var(--bg-main);}
+    ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
+    ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
+
+    /* LOGIN */
+    #loginPage{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+    .login-card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:44px 40px;width:100%;max-width:420px;box-shadow:0 24px 64px var(--login-shadow);}
+    .login-logo{text-align:center;margin-bottom:24px;}
+    .login-logo .firm-name{font-size:1.5rem;font-weight:700;color:var(--gold-light);letter-spacing:2px;}
+    .login-logo .subtitle{margin-top:6px;font-size:.82rem;color:var(--text-muted);}
+    .form-group{margin-bottom:16px;}
+    .form-group label{display:block;font-size:.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px;}
+    .form-group input{width:100%;padding:12px 16px;background:var(--bg-row);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.95rem;}
+    .form-group input:focus{outline:none;border-color:var(--gold);}
+    .btn-login{width:100%;padding:13px;background:linear-gradient(135deg,var(--gold),#b8942e);color:#0a0a0a;font-weight:700;border:none;border-radius:8px;cursor:pointer;margin-top:6px;}
+    .btn-login:disabled{opacity:.5;cursor:not-allowed;}
+    .login-error{color:var(--red);font-size:.85rem;margin-top:12px;text-align:center;display:none;}
+    #noAccessPage{display:none;align-items:center;justify-content:center;min-height:100vh;text-align:center;flex-direction:column;gap:14px;padding:20px;}
+
+    /* HEADER */
+    .header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;background:var(--header-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+    .header-brand{font-size:1.05rem;font-weight:700;color:var(--gold-light);letter-spacing:1px;}
+    .header-sub{font-size:.76rem;color:var(--text-muted);margin-left:10px;}
+    .btn-icon{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);cursor:pointer;padding:6px 12px;font-size:.85rem;}
+    .btn-icon:hover{color:var(--text);}
+
+    #dashboard{display:none;}
+    .wrap{max-width:1500px;margin:0 auto;padding:18px 20px 60px;}
+
+    /* TOOLBAR */
+    .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px;}
+    .toolbar .title{font-size:1.15rem;font-weight:700;color:var(--gold-light);margin-right:auto;}
+    .preset-btn{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 14px;font-size:.85rem;cursor:pointer;font-weight:600;}
+    .preset-btn:hover{border-color:var(--gold);}
+    .preset-btn.active{background:var(--gold);color:#0a0a0a;border-color:var(--gold);}
+    .preset-btn.ghost{color:var(--text-muted);font-weight:500;}
+
+    /* KPI */
+    .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px;}
+    .kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+    .kpi .lbl{font-size:.75rem;color:var(--text-muted);margin-bottom:6px;}
+    .kpi .val{font-size:1.45rem;font-weight:700;color:var(--gold-light);line-height:1.1;}
+    .kpi .sub{font-size:.72rem;color:var(--text-muted);margin-top:4px;}
+    .kpi .val.green{color:var(--green);} .kpi .val.red{color:var(--red);}
+
+    /* LAYOUT */
+    .layout{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:start;}
+    .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:sticky;top:72px;max-height:calc(100vh - 90px);overflow-y:auto;}
+    .embed-mode .panel{top:8px;max-height:calc(100vh - 24px);}
+    .pgroup{margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px;}
+    .pgroup:last-child{border-bottom:none;}
+    .pgroup h4{font-size:.8rem;color:var(--gold);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+    .pgroup h4 .lc{font-size:.62rem;background:var(--orange);color:#000;border-radius:4px;padding:1px 5px;font-weight:700;letter-spacing:0;}
+    .ctrl{margin-bottom:12px;}
+    .ctrl .crow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+    .ctrl label{font-size:.8rem;color:var(--text);}
+    .ctrl .cval{font-size:.82rem;font-weight:700;color:var(--gold-light);font-variant-numeric:tabular-nums;}
+    .ctrl input[type=range]{width:100%;accent-color:var(--gold);cursor:pointer;}
+    .ctrl .hint{font-size:.68rem;color:var(--text-muted);margin-top:3px;}
+
+    .charts{display:flex;flex-direction:column;gap:16px;}
+    .card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;}
+    .card h3{font-size:.95rem;color:var(--text);margin-bottom:4px;}
+    .card .cap{font-size:.72rem;color:var(--text-muted);margin-bottom:12px;}
+    .chart-box{position:relative;height:300px;}
+    .chart-box.sm{height:240px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+    table{width:100%;border-collapse:collapse;font-size:.82rem;}
+    th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
+    th:first-child,td:first-child{text-align:left;}
+    th{color:var(--text-muted);font-weight:600;font-size:.76rem;}
+    td.pos{color:var(--green);} td.neg{color:var(--red);}
+    .tag{display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:4px;background:var(--bg-row);color:var(--text-muted);}
+    .note{font-size:.74rem;color:var(--text-muted);line-height:1.6;background:var(--bg-row);border-radius:8px;padding:10px 12px;margin-top:4px;}
+    .note b{color:var(--orange);}
+    @media(max-width:1100px){.layout{grid-template-columns:1fr;}.panel{position:static;max-height:none;}.kpi-row{grid-template-columns:repeat(2,1fr);}.grid2{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo"><div class="firm-name">喆律法律事務所</div><div class="subtitle">五年營收獲利推估</div></div>
+    <form id="loginForm">
+      <div class="form-group"><label>Email</label><input type="email" id="loginEmail" required autocomplete="username"></div>
+      <div class="form-group"><label>密碼</label><input type="password" id="loginPassword" required autocomplete="current-password"></div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<div id="noAccessPage">
+  <div style="font-size:1.2rem;color:var(--gold-light);font-weight:700;">無權限檢視</div>
+  <div style="color:var(--text-muted);">此頁僅限管理者 (<span id="noAccessUser"></span>)</div>
+  <button class="btn-icon" id="noAccessLogout">登出</button>
+</div>
+
+<div id="dashboard">
+  <div class="header">
+    <div><span class="header-brand">📈 五年營收獲利推估</span><span class="header-sub">喆律本所 × 法律010 × 法顧 × 合署</span></div>
+    <div><button class="btn-icon" id="themeToggle">🌓</button> <button class="btn-icon" id="logoutBtn">登出</button></div>
+  </div>
+
+  <div class="wrap">
+    <div class="toolbar">
+      <span class="title">情境</span>
+      <button class="preset-btn ghost" data-preset="conservative">保守</button>
+      <button class="preset-btn active" data-preset="base">基準</button>
+      <button class="preset-btn ghost" data-preset="optimistic">樂觀</button>
+      <button class="preset-btn" id="resetBtn" style="margin-left:14px;">↺ 還原預設</button>
+      <button class="preset-btn" id="shareBtn">🔗 複製情境連結</button>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="layout">
+      <div class="panel" id="paramPanel"></div>
+      <div class="charts">
+        <div class="card">
+          <h3>營收 / 成本 / 獲利（毛利口徑）</h3>
+          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。成本/獲利自 base year 2025 起（更早年度無非人事 OPEX 歷史）。</div>
+          <div class="chart-box"><canvas id="chMain"></canvas></div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h3>四流營收組成</h3><div class="cap">毛收堆疊（萬元）</div>
+            <div class="chart-box sm"><canvas id="chStreams"></canvas></div>
+          </div>
+          <div class="card">
+            <h3>逐年淨利 與 淨利率</h3><div class="cap">長條=淨利(萬)，折線=淨利率(%)</div>
+            <div class="chart-box sm"><canvas id="chProfit"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>合署轉換影響</h3>
+          <div class="cap" id="convCap"></div>
+          <table id="convTable"></table>
+          <div class="note" id="convNote"></div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h3>案件結案速度</h3><div class="cap">結案中位數天數（拉長→產能/現金實現折減）</div>
+            <div class="chart-box sm"><canvas id="chCloseDays"></canvas></div>
+          </div>
+          <div class="card">
+            <h3>承辦存量帳齡（最新快照）</h3><div class="cap">老化庫存折減實現率作用對象</div>
+            <div class="chart-box sm"><canvas id="chAging"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>逐年明細</h3>
+          <div style="overflow-x:auto;"><table id="detailTable"></table></div>
+        </div>
+        <div class="note" id="footNote"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════ 直開 redirect / embed ════════
+if (window.location.search.indexOf('embed=1') === -1 && window.self === window.top) {
+  window.location.replace('/lawyer-dashboard/#/forecast');
+  throw new Error('redirecting to shell');
+}
+if (window.location.search.indexOf('embed=1') > -1) document.documentElement.classList.add('embed-mode');
+
+var SUPABASE_URL='https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY='sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer;
+try{ sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); }catch(e){ sb=null; }
+
+// ════════ AUTH（forecast 僅 admin） ════════
+function hasAccess(){ return currentLawyer && currentLawyer.role==='admin'; }
+function showLogin(){ document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; document.getElementById('noAccessPage').style.display='none'; }
+function showNoAccess(){ document.getElementById('loginPage').style.display='none'; document.getElementById('dashboard').style.display='none'; var p=document.getElementById('noAccessPage'); p.style.display='flex'; document.getElementById('noAccessUser').textContent=currentLawyer?currentLawyer.name:''; }
+async function loadUserProfile(){ if(!sb||!currentUser) return; var r=await sb.from('lawyers').select('*').eq('auth_user_id',currentUser.id).single(); if(r.data) currentLawyer=window.ViewAs?window.ViewAs.apply(r.data):r.data; }
+async function checkSession(){ if(!sb) return showLogin(); var s=await sb.auth.getSession(); if(s.data.session){ currentUser=s.data.session.user; await loadUserProfile(); if(!hasAccess()){ showNoAccess(); return; } showDashboard(); } else showLogin(); }
+document.getElementById('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault(); var btn=document.getElementById('loginBtn'), err=document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try{ var r=await sb.auth.signInWithPassword({email:document.getElementById('loginEmail').value.trim(),password:document.getElementById('loginPassword').value}); if(r.error) throw r.error; currentUser=r.data.user; await loadUserProfile(); if(!hasAccess()){ showNoAccess(); return; } showDashboard(); }
+  catch(ex){ err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
+  finally{ btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function(){ if(sb) await sb.auth.signOut(); location.reload(); });
+document.getElementById('noAccessLogout').addEventListener('click', async function(){ if(sb) await sb.auth.signOut(); location.reload(); });
+
+// theme
+function applyTheme(t){ document.documentElement.setAttribute('data-theme',t==='light'?'light':''); try{localStorage.setItem('dash-theme',t);}catch(e){} setTimeout(rerenderCharts,30); }
+document.getElementById('themeToggle').addEventListener('click', function(){ var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'; applyTheme(cur==='light'?'dark':'light'); });
+window.addEventListener('message', function(e){ if(e.data&&e.data.type==='setTheme') applyTheme(e.data.theme); });
+try{ var st=localStorage.getItem('dash-theme'); if(st) applyTheme(st); }catch(e){}
+
+// ════════ MODEL ════════
+var BASE=null, TENURE=null, P={}, DEF={}, charts={};
+var HORIZON=5;
+var css=function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+var W=function(v){ return Math.round(v/10000); };               // 元→萬
+var fmtWan=function(v){ return (v/10000).toLocaleString('en-US',{maximumFractionDigits:0}); };
+var fmtYi=function(v){ return (v/1e8).toFixed(2); };            // 元→億
+var pct=function(v){ return (v*100).toFixed(1)+'%'; };
+
+// 參數定義：key, 群組, label, min, max, step, 單位顯示函式, hint, lowConfidence
+var CONTROLS=[
+ {g:'全域成本',k:'salaryRaise',label:'年調薪',min:0,max:.10,step:.005,disp:pct},
+ {g:'全域成本',k:'headcountGrowth',label:'人數年成長',min:-.05,max:.15,step:.005,disp:pct,hint:'律師+員工總人數擴張'},
+ {g:'全域成本',k:'opexGrowth',label:'非人事 OPEX 年成長',min:0,max:.12,step:.005,disp:pct,lc:1},
+ {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
+ {g:'諮詢 → 本所委任',k:'closeRate',label:'成案率',min:.3,max:1.0,step:.01,disp:pct},
+ {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
+ {g:'諮詢 → 本所委任',k:'benefitMult',label:'效益值係數',min:.7,max:1.6,step:.05,disp:function(v){return v.toFixed(2)+'×';},hint:'續委任/客單放大'},
+ {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct},
+ {g:'各流成長',k:'advisorGrowth',label:'法顧年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1},
+ {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'不含新轉入律師'},
+ {g:'案件動態',k:'closeDaysYoY',label:'結案天數逐年變化',min:-.10,max:.20,step:.01,disp:pct,hint:'>0 = 結案拉長'},
+ {g:'案件動態',k:'agingHaircut',label:'老化庫存折減',min:0,max:.20,step:.01,disp:pct,hint:'aged WIP 折減實現率'},
+ {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
+ {g:'合署轉換',k:'tenureThreshold',label:'年資門檻(年)',min:1,max:6,step:1,disp:function(v){return v+' 年';}},
+ {g:'合署轉換',k:'convertRatio',label:'轉合署比例',min:0,max:1,step:.05,disp:pct},
+ {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan'},
+ {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
+ {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
+];
+
+function defaultsFromBaseline(){
+  var d=BASE.defaults, b=d.base;
+  return {
+    salaryRaise:d.salary_raise, headcountGrowth:0.03, opexGrowth:d.growth.opex,
+    sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
+    avgCaseAmount:d.funnel.avg_case_amount, benefitMult:d.funnel.benefit_multiplier,
+    fa010Growth:d.growth.fa010, advisorGrowth:d.growth.advisor, partnerGrowth:d.growth.partner,
+    closeDaysYoY:d.case_dynamics.close_days_yoy, agingHaircut:d.case_dynamics.aging_haircut,
+    reachingPerYear: (TENURE? null : 4),
+    tenureThreshold:d.partner_conversion.tenure_threshold_years,
+    convertRatio:d.partner_conversion.convert_ratio,
+    avgBillingPerConvert:8000000, avgSalaryPerConvert:1500000,
+    partnerRetention:d.retention.partner,
+  };
+}
+
+// 情境 preset = 對 base defaults 的覆寫
+function presetParams(name){
+  var p=Object.assign({}, DEF);
+  if(name==='optimistic'){
+    p.closeRate=Math.min(1,DEF.closeRate+0.05); p.avgCaseAmount=DEF.avgCaseAmount*1.10; p.benefitMult=1.10;
+    p.sessionsGrowth=DEF.sessionsGrowth+0.03; p.fa010Growth=DEF.fa010Growth+0.05; p.partnerGrowth=DEF.partnerGrowth+0.10;
+    p.closeDaysYoY=-0.03; p.agingHaircut=0; p.convertRatio=0.80;
+  } else if(name==='conservative'){
+    p.closeRate=Math.max(.3,DEF.closeRate-0.05); p.sessionsGrowth=DEF.sessionsGrowth-0.02;
+    p.fa010Growth=Math.max(-.1,DEF.fa010Growth-0.05); p.partnerGrowth=0; p.advisorGrowth=0.05;
+    p.closeDaysYoY=0.08; p.agingHaircut=0.05; p.benefitMult=0.95;
+  }
+  return p;
+}
+
+// 推估核心
+function computeForecast(p){
+  var hist=BASE.history, by=BASE.defaults.base.year, ret=BASE.defaults.retention;
+  var histYears=hist.years.filter(function(y){return y<=by;});  // 2021..2025 actual
+  var fcYears=[]; for(var t=1;t<=HORIZON;t++) fcYears.push(by+t);
+  var years=histYears.concat(fcYears);
+  var idx=function(y){return hist.years.indexOf(y);};
+  var b=BASE.defaults.base;
+  var closeBase=BASE.defaults.case_dynamics.close_days_base||1;
+
+  var R={years:years,isFc:years.map(function(y){return y>by;}),
+    bensuo:[],fa010:[],advisor:[],partner:[],total:[],
+    personnel:[],opex:[],split:[],cost:[],profit:[],margin:[],
+    closeDays:[],sessions:[],conv:[]};
+
+  years.forEach(function(y){
+    var t=y-by;
+    var bensuo,fa010,advisor,partnerBase,personnel,opex,sessions,closeDays;
+    if(y<=by){ // actual from history
+      bensuo=hist.revenue_streams.bensuo[idx(y)];
+      fa010=hist.revenue_streams.fa010[idx(y)];
+      advisor=hist.revenue_streams.advisor[idx(y)];
+      partnerBase=hist.revenue_streams.partner[idx(y)];
+      sessions=hist.consult.sessions[idx(y)];
+      closeDays=hist.case_dynamics.close_days_median[idx(y)];
+      personnel=(y===by)?b.personnel:null;
+      opex=(y===by)?b.opex:null;
+    } else {
+      sessions=b.sessions*Math.pow(1+p.sessionsGrowth,t);
+      closeDays=closeBase*Math.pow(1+p.closeDaysYoY,t);
+      var capacity=Math.max(.6,Math.min(1.1, closeBase/closeDays));
+      bensuo=sessions*p.closeRate*p.avgCaseAmount*p.benefitMult*capacity*(1-p.agingHaircut);
+      fa010=b.fa010*Math.pow(1+p.fa010Growth,t);
+      advisor=b.advisor*Math.pow(1+p.advisorGrowth,t);
+      partnerBase=b.partner*Math.pow(1+p.partnerGrowth,t);
+      personnel=b.personnel*Math.pow(1+p.headcountGrowth,t)*Math.pow(1+p.salaryRaise,t);
+      opex=b.opex*Math.pow(1+p.opexGrowth,t);
+    }
+    // 合署轉換（僅推估年；累積）
+    var convCum=0, billingMoved=0, salarySaved=0, eligible=0;
+    if(y>by){
+      var slot=null;
+      if(TENURE && TENURE.eligibility){
+        var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
+        slot=TENURE.eligibility[th] && TENURE.eligibility[th][String(y)];
+      }
+      if(slot){
+        // 公開版只有「池級彙總」(count/sum_billing/sum_salary)，無個人列。
+        // 轉換比例套用在整池總額（faithful「達標的 X% 轉」、且單調）；
+        // billing/salary 缺漏的人用 slider 預設值補。
+        eligible=slot.count; convCum=Math.round(eligible*p.convertRatio);
+        var billPool=slot.sum_billing+(slot.count-slot.count_billing)*p.avgBillingPerConvert;
+        var salPool=slot.sum_salary+(slot.count-slot.count_salary)*p.avgSalaryPerConvert;
+        billingMoved=p.convertRatio*billPool;
+        salarySaved=p.convertRatio*salPool;
+      } else {
+        convCum=Math.round((p.reachingPerYear||0)*p.convertRatio)*t; // 每年新增一批，累積
+        billingMoved=convCum*p.avgBillingPerConvert;
+        salarySaved=convCum*p.avgSalaryPerConvert;
+      }
+      // 套用：billing 從本所移到合署，省下薪資
+      bensuo=Math.max(0,bensuo-billingMoved);
+      partnerBase=partnerBase+billingMoved;
+      personnel=Math.max(0,personnel-salarySaved);
+    }
+    var total=bensuo+fa010+advisor+partnerBase;
+    var split=null,cost=null,profit=null,margin=null;
+    if(personnel!=null){
+      // 分潤成本 = Σ 毛收×(1−留存率)；本所留存率=1（固薪），合署用 slider
+      split=fa010*(1-ret.fa010)+advisor*(1-ret.advisor)+partnerBase*(1-p.partnerRetention);
+      cost=personnel+opex+split;
+      profit=total-cost; margin=total?profit/total:0;
+    }
+    R.bensuo.push(bensuo); R.fa010.push(fa010); R.advisor.push(advisor); R.partner.push(partnerBase);
+    R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split);
+    R.cost.push(cost); R.profit.push(profit); R.margin.push(margin);
+    R.sessions.push(sessions); R.closeDays.push(closeDays);
+    R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved});
+  });
+  return R;
+}
+
+// ════════ RENDER ════════
+function renderKPIs(R){
+  var by=BASE.defaults.base.year;
+  var fcIdx=R.years.map(function(y,i){return y>by?i:-1;}).filter(function(i){return i>=0;});
+  var cumRev=0,cumProfit=0; fcIdx.forEach(function(i){cumRev+=R.total[i];cumProfit+=R.profit[i];});
+  var lastI=R.years.length-1;
+  var endMargin=R.margin[lastI];
+  var rev0=R.total[R.years.indexOf(by)], revN=R.total[lastI];
+  var cagr=Math.pow(revN/rev0,1/HORIZON)-1;
+  var endPartnerShare=R.partner[lastI]/revN;
+  var k=[
+    {lbl:'5 年累計營收',val:fmtYi(cumRev)+' 億',sub:by+1+'–'+R.years[lastI]+'（毛收）'},
+    {lbl:'5 年累計獲利',val:fmtYi(cumProfit)+' 億',sub:'毛利口徑',cls:cumProfit>=0?'green':'red'},
+    {lbl:R.years[lastI]+' 淨利率',val:pct(endMargin),sub:'終年',cls:endMargin>=0?'green':'red'},
+    {lbl:'營收 CAGR',val:pct(cagr),sub:by+'→'+R.years[lastI]},
+    {lbl:'終年合署占比',val:pct(endPartnerShare),sub:'合署/總營收'},
+  ];
+  document.getElementById('kpiRow').innerHTML=k.map(function(x){
+    return '<div class="kpi"><div class="lbl">'+x.lbl+'</div><div class="val '+(x.cls||'')+'">'+x.val+'</div><div class="sub">'+x.sub+'</div></div>';
+  }).join('');
+}
+
+function mkLine(id,cfgData,opts){
+  var ctx=document.getElementById(id); if(charts[id]) charts[id].destroy();
+  var grid=css('--border'), tick=css('--text-muted');
+  charts[id]=new Chart(ctx,{type:opts.type||'line',data:cfgData,options:Object.assign({
+    responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{color:tick,boxWidth:12,font:{size:11}}},tooltip:{callbacks:opts.tt||{}}},
+    scales:opts.scales||{x:{ticks:{color:tick},grid:{color:grid}},y:{ticks:{color:tick},grid:{color:grid}}}
+  },opts.extra||{})});
+}
+
+function renderCharts(R){
+  var by=BASE.defaults.base.year, labels=R.years.map(String);
+  var gold=css('--gold'),green=css('--green'),red=css('--red'),blue=css('--blue'),orange=css('--orange'),purple=css('--purple'),muted=css('--text-muted');
+  var splitAt=R.years.indexOf(by); // 實際/推估分界
+  // 為實線/虛線：用兩條 dataset（actual 到 base，forecast 從 base 起）
+  function seg(arr,fromFc){ return arr.map(function(v,i){ if(v==null) return null; if(fromFc) return i>=splitAt?W(v):null; return i<=splitAt?W(v):null; }); }
+  var wanTT={label:function(c){return c.dataset.label+': '+(c.parsed.y!=null?c.parsed.y.toLocaleString()+'萬':'—');}};
+
+  // MAIN
+  mkLine('chMain',{labels:labels,datasets:[
+    {label:'營收(實際)',data:seg(R.total,false),borderColor:gold,backgroundColor:'transparent',tension:.25,pointRadius:2},
+    {label:'營收(推估)',data:seg(R.total,true),borderColor:gold,borderDash:[6,4],backgroundColor:'transparent',tension:.25,pointRadius:2},
+    {label:'成本(推估)',data:seg(R.cost,true),borderColor:red,borderDash:[6,4],backgroundColor:'transparent',tension:.25,pointRadius:2},
+    {label:'成本',data:seg(R.cost,false),borderColor:red,backgroundColor:'transparent',tension:.25,pointRadius:2},
+    {label:'獲利(推估)',data:seg(R.profit,true),borderColor:green,borderDash:[6,4],backgroundColor:'transparent',tension:.25,pointRadius:2},
+    {label:'獲利',data:seg(R.profit,false),borderColor:green,backgroundColor:'transparent',tension:.25,pointRadius:2},
+  ]},{tt:wanTT});
+
+  // STREAMS stacked
+  mkLine('chStreams',{labels:labels,datasets:[
+    {label:'本所',data:R.bensuo.map(W),backgroundColor:gold},
+    {label:'010',data:R.fa010.map(W),backgroundColor:blue},
+    {label:'法顧',data:R.advisor.map(W),backgroundColor:orange},
+    {label:'合署',data:R.partner.map(W),backgroundColor:purple},
+  ]},{type:'bar',tt:wanTT,scales:{x:{stacked:true,ticks:{color:muted},grid:{display:false}},y:{stacked:true,ticks:{color:muted},grid:{color:css('--border')}}}});
+
+  // PROFIT bar + margin line
+  mkLine('chProfit',{labels:labels,datasets:[
+    {type:'bar',label:'淨利(萬)',data:R.profit.map(function(v){return v==null?null:W(v);}),backgroundColor:R.profit.map(function(v){return v>=0?green:red;}),yAxisID:'y'},
+    {type:'line',label:'淨利率',data:R.margin.map(function(v){return v==null?null:+(v*100).toFixed(1);}),borderColor:gold,backgroundColor:'transparent',tension:.25,yAxisID:'y1',pointRadius:2},
+  ]},{scales:{
+    x:{ticks:{color:muted},grid:{display:false}},
+    y:{position:'left',ticks:{color:muted},grid:{color:css('--border')}},
+    y1:{position:'right',ticks:{color:gold,callback:function(v){return v+'%';}},grid:{display:false}}
+  }});
+
+  // CLOSE DAYS
+  mkLine('chCloseDays',{labels:labels,datasets:[
+    {label:'結案中位天數',data:R.closeDays.map(function(v){return v?Math.round(v):null;}),borderColor:orange,backgroundColor:'transparent',tension:.25,pointRadius:2,
+      segment:{borderDash:function(c){return c.p1DataIndex>splitAt?[6,4]:undefined;}}},
+  ]},{});
+
+  // AGING doughnut
+  var ag=BASE.wip_aging, ctxA=document.getElementById('chAging'); if(charts['chAging']) charts['chAging'].destroy();
+  charts['chAging']=new Chart(ctxA,{type:'doughnut',data:{labels:['<90天','90-365天','1-2年','>2年'],
+    datasets:[{data:[ag['<90'],ag['90-365'],ag['1-2yr'],ag['>2yr']],backgroundColor:[green,blue,orange,red],borderColor:css('--bg-card'),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:muted,font:{size:11}}}}}});
+}
+
+function renderTables(R){
+  var by=BASE.defaults.base.year;
+  // 合署轉換表
+  var fc=R.conv.filter(function(c){return c.year>by;});
+  var ret=P.partnerRetention;
+  var convRows=fc.map(function(c){
+    // 每位淨利 delta：合署(毛×留存) vs 原本(本所毛×1 − 薪資)
+    var perBill=c.convCum?c.billingMoved/c.convCum:0, perSal=c.convCum?c.salarySaved/c.convCum:0;
+    var perDelta=perBill*ret-(perBill-perSal); // = perBill*(ret-1)+perSal
+    return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td class="'+(perDelta>=0?'pos':'neg')+'">'+(perDelta>=0?'+':'')+fmtWan(perDelta)+'</td></tr>';
+  }).join('');
+  document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署毛收(萬)</th><th>省下薪資(萬)</th><th>每位淨利Δ(萬)</th></tr>'+convRows;
+  document.getElementById('convCap').textContent= TENURE? '依到職日清單精算達標律師':'聚合假設模式（尚未載入 lawyer-tenure.json，用每年達標律師數推估）';
+  var lastConv=fc[fc.length-1];
+  var perBill=lastConv&&lastConv.convCum?lastConv.billingMoved/lastConv.convCum:0, perSal=lastConv&&lastConv.convCum?lastConv.salarySaved/lastConv.convCum:0;
+  var perDelta=perBill*ret-(perBill-perSal);
+  document.getElementById('convNote').innerHTML='<b>關鍵權衡：</b>固薪資深律師的每位淨利 ≈ 帶走營收 − 年薪（'+fmtWan(perBill-perSal)+'萬）；轉合署後喆律僅留存毛收的 '+pct(ret)+' ≈ '+fmtWan(perBill*ret)+'萬。本模型下每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。若 Δ 為負，代表「省薪資 < 損失的所內利潤」——轉合署的價值需來自<b>留才、產能釋放或合署帶來的增量案源</b>，可調高留存率或帶走營收驗證。';
+
+  // 逐年明細
+  var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];
+  var head=['年度','本所','010','法顧','合署','營收合計','人事','OPEX','律師分潤','成本合計','淨利','淨利率'];
+  var rows=R.years.map(function(y,i){
+    var cell=function(v){return v==null?'—':fmtWan(v);};
+    return '<tr>'+
+      '<td>'+y+(R.isFc[i]?' <span class="tag">推估</span>':'')+'</td>'+
+      '<td>'+cell(R.bensuo[i])+'</td><td>'+cell(R.fa010[i])+'</td><td>'+cell(R.advisor[i])+'</td><td>'+cell(R.partner[i])+'</td>'+
+      '<td><b>'+cell(R.total[i])+'</b></td>'+
+      '<td>'+cell(R.personnel[i])+'</td><td>'+cell(R.opex[i])+'</td><td>'+cell(R.split[i])+'</td><td>'+cell(R.cost[i])+'</td>'+
+      '<td class="'+(R.profit[i]>=0?'pos':'neg')+'">'+cell(R.profit[i])+'</td>'+
+      '<td>'+(R.margin[i]==null?'—':pct(R.margin[i]))+'</td></tr>';
+  }).join('');
+  document.getElementById('detailTable').innerHTML='<tr>'+head.map(function(h){return '<th>'+h+'</th>';}).join('')+'</tr>'+rows+'<tr style="font-size:.7rem;color:var(--text-muted);"><td colspan="12">單位：萬元</td></tr>';
+}
+
+var _lastR=null;
+function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderCharts(R); renderTables(R); syncURL(); }
+function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
+
+// ════════ CONTROLS ════════
+function buildPanel(){
+  var groups={};
+  CONTROLS.forEach(function(c){ (groups[c.g]=groups[c.g]||[]).push(c); });
+  var html='';
+  Object.keys(groups).forEach(function(g){
+    var anyLc=groups[g].some(function(c){return c.lc;});
+    html+='<div class="pgroup"><h4>'+g+(anyLc?' <span class="lc">部分低信心</span>':'')+'</h4>';
+    groups[g].forEach(function(c){
+      var disabled=(c.k==='reachingPerYear'&&TENURE)?' disabled':'';
+      html+='<div class="ctrl" data-k="'+c.k+'">'+
+        '<div class="crow"><label>'+c.label+(c.lc?' <span class="tag" style="color:var(--orange)">低信心</span>':'')+'</label><span class="cval" id="cv-'+c.k+'"></span></div>'+
+        '<input type="range" id="ip-'+c.k+'" min="'+c.min+'" max="'+c.max+'" step="'+c.step+'"'+disabled+'>'+
+        (c.hint?'<div class="hint">'+c.hint+'</div>':'')+'</div>';
+    });
+    html+='</div>';
+  });
+  document.getElementById('paramPanel').innerHTML=html;
+  CONTROLS.forEach(function(c){
+    var ip=document.getElementById('ip-'+c.k);
+    ip.addEventListener('input',function(){
+      var raw=parseFloat(ip.value);
+      P[c.k]= c.store==='wan'? raw*10000 : raw;
+      updateCval(c); recompute(); setActivePreset(null);
+    });
+  });
+}
+function ctrlDisplayVal(c){ var v=P[c.k]; return c.store==='wan'? v/10000 : v; }
+function updateCval(c){ var el=document.getElementById('cv-'+c.k); if(el) el.textContent=c.disp(ctrlDisplayVal(c)); }
+function syncControlsFromP(){
+  CONTROLS.forEach(function(c){
+    var ip=document.getElementById('ip-'+c.k); if(!ip) return;
+    if(P[c.k]==null){ ip.disabled=true; document.getElementById('cv-'+c.k).textContent='依清單'; return; }
+    ip.value= c.store==='wan'? P[c.k]/10000 : P[c.k];
+    updateCval(c);
+  });
+}
+function setActivePreset(name){
+  document.querySelectorAll('.preset-btn[data-preset]').forEach(function(b){ b.classList.toggle('active',b.getAttribute('data-preset')===name); });
+}
+function applyPreset(name){ P=presetParams(name); syncControlsFromP(); recompute(); setActivePreset(name); }
+
+document.querySelectorAll('.preset-btn[data-preset]').forEach(function(b){ b.addEventListener('click',function(){ applyPreset(b.getAttribute('data-preset')); }); });
+document.getElementById('resetBtn').addEventListener('click',function(){ applyPreset('base'); });
+document.getElementById('shareBtn').addEventListener('click',function(){
+  syncURL(); var url=location.href;
+  navigator.clipboard&&navigator.clipboard.writeText(url); var b=document.getElementById('shareBtn'); var t=b.textContent; b.textContent='✓ 已複製'; setTimeout(function(){b.textContent=t;},1500);
+});
+
+// URL 情境序列化
+function syncURL(){
+  try{ var q=CONTROLS.map(function(c){ return c.k+'='+(P[c.k]==null?'':(+P[c.k].toFixed(c.store==='wan'?0:4))); }).join('&');
+    history.replaceState(null,'','?embed=1&'+q); }catch(e){}
+}
+function loadFromURL(){
+  var sp=new URLSearchParams(location.search), any=false;
+  CONTROLS.forEach(function(c){ if(sp.has(c.k)&&sp.get(c.k)!==''){ P[c.k]=parseFloat(sp.get(c.k)); any=true; } });
+  return any;
+}
+
+// ════════ BOOT ════════
+async function showDashboard(){
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  try{
+    BASE=await (await fetch('./forecast-baseline.json?t='+Date.now())).json();
+    try{ TENURE=await (await fetch('./lawyer-tenure.json?t='+Date.now())).json(); }catch(e){ TENURE=null; }
+    DEF=defaultsFromBaseline(); P=Object.assign({},DEF);
+    buildPanel();
+    var fromUrl=loadFromURL(); if(fromUrl){ syncControlsFromP(); setActivePreset(null);} else { syncControlsFromP(); setActivePreset('base'); }
+    document.getElementById('footNote').innerHTML='<b>口徑：</b>'+BASE.meta.profit_basis+'。Base year '+BASE.defaults.base.year+'。'+
+      '<b>注意：</b>法顧/合署/OPEX 歷史短（標「低信心」），預設成長率保守，請依實況校調；結案天數已排除 2023-02-08 批次汙染件，逐年上升部分含早年資料覆蓋偏差。'+
+      (TENURE?'已載入律師到職日清單，合署轉換為精算模式。':'尚未載入 lawyer-tenure.json，合署轉換為聚合假設模式。');
+    recompute();
+  }catch(e){ document.getElementById('dashboard').innerHTML='<div style="padding:40px;color:var(--red)">載入 forecast-baseline.json 失敗：'+e.message+'</div>'; }
+}
+
+checkSession();
+</script>
+</body>
+</html>

@@ -235,6 +235,7 @@
         <a class="nav-link" data-route="funnel" data-restricted="1" href="#/funnel" onclick="switchRoute('funnel');return false;">委前漏斗</a>
         <a class="nav-link" data-route="law010" data-restricted="1" href="#/law010" onclick="switchRoute('law010');return false;">法律 010</a>
         <a id="navOkr" class="nav-link" data-route="okr" data-admin-only="1" href="#/okr" onclick="switchRoute('okr');return false;" style="display:none">📊 OKR 追蹤</a>
+        <a id="navForecast" class="nav-link" data-route="forecast" data-admin-only="1" href="#/forecast" onclick="switchRoute('forecast');return false;" style="display:none">📈 五年推估</a>
         <a id="navAdmin" class="nav-link" data-route="admin" data-admin-only="1" href="#/admin" onclick="switchRoute('admin');return false;" style="display:none">🔑 帳號管理</a>
         <a id="navMaintenance" class="nav-link" data-route="maintenance" data-admin-only="1" href="#/maintenance" onclick="switchRoute('maintenance');return false;" style="display:none">🛠 維運清單</a>
       </div>
@@ -255,6 +256,7 @@
     <iframe class="route-frame" data-route="funnel"       src="" title="funnel"></iframe>
     <iframe class="route-frame" data-route="law010"          src="" title="law010"></iframe>
     <iframe class="route-frame" data-route="okr"          src="" title="okr"></iframe>
+    <iframe class="route-frame" data-route="forecast"     src="" title="forecast"></iframe>
     <iframe class="route-frame" data-route="admin"        src="" title="admin"></iframe>
     <iframe class="route-frame" data-route="maintenance"  src="" title="maintenance"></iframe>
   </div>
@@ -303,6 +305,7 @@ var ROUTES = {
   funnel:       BASE + '/funnel/?embed=1'       + CACHE_BUST,
   law010:          BASE + '/010/?embed=1'          + CACHE_BUST,
   okr:          BASE + '/okr/?embed=1'          + CACHE_BUST,
+  forecast:     BASE + '/forecast/?embed=1'     + CACHE_BUST,
   admin:        BASE + '/admin/?embed=1'        + CACHE_BUST,
   maintenance:  BASE + '/maintenance/?embed=1'  + CACHE_BUST,
 };
@@ -359,7 +362,7 @@ function switchRoute(route) {
 function canAccessRoute(route) {
   if (!currentLawyer) return false;
   var role = currentLawyer.role;
-  if (route === 'admin' || route === 'okr' || route === 'maintenance') return role === 'admin';
+  if (route === 'admin' || route === 'okr' || route === 'maintenance' || route === 'forecast') return role === 'admin';
   if (role === 'admin') return true;
   if (route === 'consultation' && role === 'lawyer') return true;
   if (role === 'manager') {
