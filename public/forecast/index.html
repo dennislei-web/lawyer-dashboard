@@ -271,7 +271,7 @@ var CONTROLS=[
  {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
  {g:'合署轉換',k:'tenureThreshold',label:'年資門檻(年)',min:1,max:6,step:1,disp:function(v){return v+' 年';}},
  {g:'合署轉換',k:'convertRatio',label:'轉合署比例',min:0,max:1,step:.05,disp:pct},
- {g:'合署轉換',k:'minInHouseLawyers',label:'所內最少保留接案律師',min:0,max:40,step:1,disp:function(v){return v+' 位';},hint:'遇缺不補上限：處理本所新案intake(估~20位)，cap 累計轉換'},
+ {g:'合署轉換',k:'minInHouseLawyers',label:'所內最少保留接案律師',min:0,max:40,step:1,disp:function(v){return v+' 位';},hint:'維持本所新案處理人力(估~20位)；不足時補新人(薪資同轉出者)，不 cap 轉換'},
  {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan',hint:'轉移：本所減同額、合署加同額（×轉合署佔比）'},
  {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
@@ -362,15 +362,14 @@ function computeForecast(p){
     if(TENURE&&TENURE.eligibility){ var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
       var s=TENURE.eligibility[th]&&TENURE.eligibility[th][String(yy)]; if(s) el=s.count; }
     else el=Math.round(p.reachingPerYear||0)*(yy-by);
-    // 遇缺不補上限：保留所內最少接案律師 → 累計轉換 ≤ 可轉基數 − 最少保留
-    return Math.min(Math.round(el*p.convertRatio*ramp), Math.max(0, EB-(p.minInHouseLawyers||0)));
+    return Math.round(el*p.convertRatio*ramp);   // 3年以上皆可轉(不設上限)；人力不足以補人解決
   }
 
   years.forEach(function(y){
     var t=y-by;                 // 從 2025 起（歷史/結案天數用）
     var ty=y-ANCHOR_YEAR;       // 從 2026 錨點起（各流成長複利用）
     var bensuo,fa010,advisor,partnerBase,personnel,opex,sessions,closeDays;
-    var convCum=0, billingMoved=0, salarySaved=0, eligible=0, tingCount=0, tingRev=0;
+    var convCum=0, billingMoved=0, salarySaved=0, eligible=0, tingCount=0, tingRev=0, backfill=0;
     if(y<=by){ // 實際歷史
       bensuo=hist.revenue_streams.bensuo[idx(y)];
       fa010=hist.revenue_streams.fa010[idx(y)];
@@ -391,8 +390,8 @@ function computeForecast(p){
       var rampFrac=Math.min(1,(ty+1)/RAMP_YEARS);
       if(slot){ eligible=slot.count; convCum=Math.round(eligible*p.convertRatio*rampFrac); }
       else { eligible=Math.round(p.reachingPerYear||0)*t; convCum=Math.round((p.reachingPerYear||0)*p.convertRatio*rampFrac)*t; }
-      // 遇缺不補上限：保留所內最少接案律師
-      convCum=Math.min(convCum, Math.max(0, EB-(p.minInHouseLawyers||0)));
+      // 補人：轉出使所內接案律師低於最低水位時補新人(薪資=轉出者)；不 cap 轉換
+      backfill=Math.max(0, (p.minInHouseLawyers||0)-(EB-convCum));
 
       sessions=b.sessions*Math.pow(1+p.sessionsGrowth,t);
       closeDays=closeBase*Math.pow(1+p.closeDaysYoY,t);
@@ -432,10 +431,11 @@ function computeForecast(p){
       for(var kP=0;kP<ty;kP++){ pCum*=(1+Math.max(pFloor, p.partnerGrowth-0.05*Math.floor(kP/3))); }
       partnerBase=anchor.partner*pCum+convertedOutput;
 
-      // (5) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
-      personnel=Math.max(0, b.personnel*Math.pow(1+p.headcountGrowth,ty)*Math.pow(1+p.salaryRaise,ty)-convCum*p.avgSalaryPerConvert);
+      // (5) 成本：人事＝(調薪×人數成長) − 轉出省下薪資 + 補人薪資(同轉出者)；OPEX 複利
+      //     淨省 = (轉出 − 補人) × 人均薪資；補人維持所內最低處理人力
+      personnel=Math.max(0, b.personnel*Math.pow(1+p.headcountGrowth,ty)*Math.pow(1+p.salaryRaise,ty)-(convCum-backfill)*p.avgSalaryPerConvert);
       opex=b.opex*Math.pow(1+p.opexGrowth,ty);
-      billingMoved=convertedOutput; salarySaved=convCum*p.avgSalaryPerConvert;
+      billingMoved=convertedOutput; salarySaved=(convCum-backfill)*p.avgSalaryPerConvert;   // 淨省薪資
       R._ting=(R._ting||0)+tingCount; R._tingRev=(R._tingRev||0)+tingRev;
     }
     var total=bensuo+fa010+advisor+partnerBase;
@@ -454,7 +454,7 @@ function computeForecast(p){
     R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split);
     R.cost.push(cost); R.profit.push(profit); R.margin.push(margin);
     R.sessions.push(sessions); R.closeDays.push(closeDays);
-    R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved,tingCount:tingCount,tingRev:tingRev});
+    R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved,tingCount:tingCount,tingRev:tingRev,backfill:backfill});
   });
   return R;
 }
@@ -593,11 +593,11 @@ function renderTables(R){
   var totTing=0, totTingRev=0;
   var convRows=fc.map(function(c){
     totTing+=c.tingCount||0; totTingRev+=c.tingRev||0;
-    return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td>'+Math.round(c.tingCount||0).toLocaleString()+'</td><td>'+fmtWan(c.tingRev||0)+'</td></tr>';
+    return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+Math.round(c.backfill||0)+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td>'+Math.round(c.tingCount||0).toLocaleString()+'</td><td>'+fmtWan(c.tingRev||0)+'</td></tr>';
   }).join('');
-  document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署新案(萬)</th><th>省下薪資(萬)</th><th>老案庭數(估)</th><th>待庭費(萬)</th></tr>'+convRows
-    +'<tr style="font-weight:700;border-top:2px solid var(--border-light)"><td>5年合計</td><td>—</td><td>—</td><td>—</td><td>—</td><td>'+Math.round(totTing).toLocaleString()+' 庭</td><td>'+fmtWan(totTingRev)+'</td></tr>';
-  document.getElementById('convCap').textContent= (TENURE? '依到職日清單精算達標律師（在職≥門檻、非主管、未轉合署）':'聚合假設模式')+'；轉換目標比例 5 年線性 ramp-in，本所依在編接案律師產能份額調整（新進律師補回）';
+  document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>補人</th><th>移入合署新案(萬)</th><th>淨省薪資(萬)</th><th>老案庭數(估)</th><th>待庭費(萬)</th></tr>'+convRows
+    +'<tr style="font-weight:700;border-top:2px solid var(--border-light)"><td>合計</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>'+Math.round(totTing).toLocaleString()+' 庭</td><td>'+fmtWan(totTingRev)+'</td></tr>';
+  document.getElementById('convCap').textContent= (TENURE? '依到職日清單精算達標律師（在職≥門檻、非主管、未轉合署，3年以上皆可轉）':'聚合假設模式')+'；轉換 5 年線性 ramp-in；轉出致所內人力不足時補新人(薪資同轉出者)維持最低處理人力';
   var perOut=P.avgBillingPerConvert, perSal=P.avgSalaryPerConvert, ccs=P.convertCaseShare, fsf=P.newCaseFirmShare;
   // 真實規則(家泓/蘇萱)：代庭/交接(1−轉合署佔比)喆律全留；轉合署佔比中 40%留所、60%進合署×留存
   var stayFirm=(1-ccs)*perOut + ccs*fsf*perOut, toPartner=ccs*(1-fsf)*perOut*ret;
