@@ -224,6 +224,13 @@ def cagr(vals_by_year, y0, y1, clamp=(-0.30, 0.60)):
     return round(max(clamp[0], min(clamp[1], g)), 4)
 
 
+# ── 法顧校準：revenue_records 只抓到法顧的一小片(128萬,漏儲值/現金流)，用股東 Excel 實際法顧現金 ──
+# 股東 Excel 喆律區塊「法顧」現金列：2024 607萬 / 2025 710萬 / 2026 年化 575萬。2021-23 法顧業務尚小。
+ADVISOR_ACTUAL_WAN = {2024: 607, 2025: 710}
+ADVISOR_RUNRATE_2026_WAN = 575
+for _y, _v in ADVISOR_ACTUAL_WAN.items():
+    advisor_y[_y] = _v * 10000          # 覆寫，使 history/base/OPEX校準 都用真實法顧
+
 history = {
     'years': YEARS,
     'revenue_streams': {
@@ -303,6 +310,7 @@ run_rate_2026 = {
     'partner': round(partner_gross_y.get(2026, 0) / rm * 12) if rm else None,
     'fa010':   round(fa010_y.get(2026, 0) / fm * 12) if fm else None,
 }
+run_rate_2026['advisor'] = ADVISOR_RUNRATE_2026_WAN * 10000   # 法顧用股東實際現金(revenue_records 漏儲值)
 base['run_rate_2026'] = run_rate_2026
 
 # 漏斗校準：用 consultation_cases 真實「簽約率 / 平均簽約收款」（與諮詢看板一致）
