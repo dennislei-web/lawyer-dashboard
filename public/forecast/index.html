@@ -258,9 +258,9 @@ var CONTROLS=[
  {g:'諮詢 → 本所委任',k:'closeRate',label:'簽約率(成案率)',min:.3,max:.7,step:.005,disp:pct,hint:'真實簽約率，逐年降：22年55%→25年44%→26年39%'},
  {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
  {g:'各流成長',k:'bensuoGrowth',label:'本所年成長',min:-.15,max:.20,step:.01,disp:pct,hint:'僅「直接成長率」模式生效（漏斗模式由諮詢量/簽約率/客單推導）'},
- {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct},
+ {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct,hint:'前 5 年成長率，之後到頂持平'},
  {g:'各流成長',k:'advisorGrowth',label:'法顧年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1},
- {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'不含新轉入律師'},
+ {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'起始率；每 3 年 −5% 至 10% 止（不含新轉入律師）'},
  {g:'案件動態',k:'closeDaysYoY',label:'結案天數逐年變化',min:-.10,max:.20,step:.01,disp:pct,hint:'>0 = 結案拉長'},
  {g:'案件動態',k:'agingHaircut',label:'老化庫存折減',min:0,max:.20,step:.01,disp:pct,hint:'aged WIP 折減實現率'},
  {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
@@ -413,10 +413,13 @@ function computeForecast(p){
       tingRev=tingCount*p.tingFee;
       bensuo+=tingRev;
 
-      fa010=anchor.fa010*Math.pow(1+p.fa010Growth,ty);
+      // 010：前 5 年成長，之後到頂持平
+      fa010=anchor.fa010*Math.pow(1+p.fa010Growth, Math.min(ty,5));
       advisor=anchor.advisor*Math.pow(1+p.advisorGrowth,ty);
-      // (4) 合署＝既有成長 ＋ 轉入律師帶來的書值(=本所扣除的同一筆)
-      partnerBase=anchor.partner*Math.pow(1+p.partnerGrowth,ty)+convertedOutput;
+      // (4) 合署既有：成長率每 3 年 −5%，至 10%(或起始率)止；＋轉入律師書值(=本所扣除同一筆)
+      var pFloor=Math.min(p.partnerGrowth,0.10), pCum=1;
+      for(var kP=0;kP<ty;kP++){ pCum*=(1+Math.max(pFloor, p.partnerGrowth-0.05*Math.floor(kP/3))); }
+      partnerBase=anchor.partner*pCum+convertedOutput;
 
       // (5) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
       personnel=Math.max(0, b.personnel*Math.pow(1+p.headcountGrowth,ty)*Math.pow(1+p.salaryRaise,ty)-convCum*p.avgSalaryPerConvert);
