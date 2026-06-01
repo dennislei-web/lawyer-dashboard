@@ -260,7 +260,8 @@ var CONTROLS=[
  {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
- {g:'合署轉換',k:'newCaseFirmShare',label:'轉合署後新案所內佔比',min:0,max:1,step:.05,disp:pct,hint:'其餘進合署（預設 40/60）'},
+ {g:'合署轉換',k:'convertCaseShare',label:'轉合署案件佔比',min:0,max:1,step:.05,disp:pct,hint:'書值真的帶走的比例，其餘代庭/交接留所（家泓~50%、蘇萱100%）'},
+ {g:'合署轉換',k:'newCaseFirmShare',label:'帶走案件所內留成',min:0,max:1,step:.05,disp:pct,hint:'委任費×40%留所＋指定費（家泓/蘇萱實際規則）'},
  {g:'老案/僵案 待庭費',k:'hearingsPerStaleCase',label:'每件老案/僵案剩餘庭數',min:0,max:10,step:.5,disp:function(v){return v+' 庭';},hint:'court_record 欄位為空無法實算，為假設值'},
  {g:'老案/僵案 待庭費',k:'tingFee',label:'待庭費 / 庭',min:0,max:20000,step:500,disp:function(v){return Math.round(v).toLocaleString()+' 元';}},
 ];
@@ -288,7 +289,8 @@ function defaultsFromBaseline(){
     convertRatio:d.partner_conversion.convert_ratio,
     avgBillingPerConvert:perBensuo, avgSalaryPerConvert:avgSal,
     partnerRetention:d.retention.partner,
-    newCaseFirmShare:0.40,           // 轉合署後新案 40% 所內 / 60% 合署
+    convertCaseShare:0.55,           // 書值真的轉合署的比例(家泓~50%/蘇萱100% blended)；其餘代庭/交接留所
+    newCaseFirmShare:0.40,           // 帶走案件喆律留成(委任費×40%＋指定費)
     hearingsPerStaleCase:3,          // 每件老案/僵案剩餘庭數（假設，court 欄位空）
     tingFee:5000,                    // 待庭費/庭
   };
@@ -376,8 +378,9 @@ function computeForecast(p){
       var capacity=Math.max(.6,Math.min(1.1, closeBase/closeDays));
 
       // (2) 本所＝漏斗(2026 run-rate 錨定、slider 為相對倍率) × 在編接案律師「產能份額」
-      //     轉合署後新案 40% 留所內 → 只有 60%(FS) 的轉換律師產能離開本所；新進律師補回
-      var FS=1-p.newCaseFirmShare;   // 合署佔新案比例（預設 0.60）
+      //     真實規則(家泓/蘇萱表)：只有「轉合署案件佔比」的書真的帶走，其上合署拿60%、喆律留40%；
+      //     其餘(代庭/交接)喆律幾乎全留。故離開本所的有效比例 FS = 轉合署佔比 ×(1−新案所內佔比)
+      var FS=p.convertCaseShare*(1-p.newCaseFirmShare);   // 家泓~50%×0.6=0.30；蘇萱100%×0.6=0.60
       var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)*p.benefitMult
                      *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
       var employed=EB*Math.pow(1+p.headcountGrowth,ty)-FS*convCum;
@@ -541,12 +544,15 @@ function renderTables(R){
   document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署新案(萬)</th><th>省下薪資(萬)</th><th>老案庭數(估)</th><th>待庭費(萬)</th></tr>'+convRows
     +'<tr style="font-weight:700;border-top:2px solid var(--border-light)"><td>5年合計</td><td>—</td><td>—</td><td>—</td><td>—</td><td>'+Math.round(totTing).toLocaleString()+' 庭</td><td>'+fmtWan(totTingRev)+'</td></tr>';
   document.getElementById('convCap').textContent= (TENURE? '依到職日清單精算達標律師（在職≥門檻、非主管、未轉合署）':'聚合假設模式')+'；轉換目標比例 5 年線性 ramp-in，本所依在編接案律師產能份額調整（新進律師補回）';
-  var perOut=P.avgBillingPerConvert, perSal=P.avgSalaryPerConvert, fs=1-P.newCaseFirmShare, fsf=P.newCaseFirmShare;
-  // 員工：全額產值×1 − 薪資；轉合署：新案 40%留所內×1 + 60%進合署×留存 − 0 薪資
-  var asEmp=perOut-perSal, asConv=perOut*fsf + perOut*fs*ret, perDelta=asConv-asEmp;
-  document.getElementById('convNote').innerHTML='<b>每位轉換律師經濟性（新案 '+pct(fsf)+' 所內 / '+pct(fs)+' 合署）：</b>年產值約 '+fmtWan(perOut)+'萬、原年薪 '+fmtWan(perSal)+'萬。'+
-    '當員工＝產值−薪資 ≈ '+fmtWan(asEmp)+'萬；轉合署＝'+pct(fsf)+'留本所('+fmtWan(perOut*fsf)+'萬) ＋ '+pct(fs)+'進合署×留存'+pct(ret)+'('+fmtWan(perOut*fs*ret)+'萬)，無薪資 ≈ '+fmtWan(asConv)+'萬。'+
-    '<b>每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。</b>（40/60 拆分後比全轉合署溫和很多。）老案/僵案另以待庭費 '+Math.round(P.tingFee).toLocaleString()+'元/庭計（<b>老案數＝可轉池實際承辦案 CRM 資料</b>，每件剩餘庭數為假設值——court 欄位無資料）。要讓轉換轉正：調高「合署留存率」（38.7% 是含司法官 cohort 混合值）或「新案所內佔比」。';
+  var perOut=P.avgBillingPerConvert, perSal=P.avgSalaryPerConvert, ccs=P.convertCaseShare, fsf=P.newCaseFirmShare;
+  // 真實規則(家泓/蘇萱)：代庭/交接(1−轉合署佔比)喆律全留；轉合署佔比中 40%留所、60%進合署×留存
+  var stayFirm=(1-ccs)*perOut + ccs*fsf*perOut, toPartner=ccs*(1-fsf)*perOut*ret;
+  var asEmp=perOut-perSal, asConv=stayFirm+toPartner, perDelta=asConv-asEmp;
+  document.getElementById('convNote').innerHTML='<b>每位轉換律師經濟性（依家泓/蘇萱實際規則）：</b>年產值約 '+fmtWan(perOut)+'萬、原年薪 '+fmtWan(perSal)+'萬。'+
+    '其中僅 '+pct(ccs)+' 真的轉合署（家泓~50%/蘇萱100%），其餘代庭/交接喆律幾乎全留。'+
+    '當員工＝產值−薪資 ≈ '+fmtWan(asEmp)+'萬；轉合署後喆律＝留本所 '+fmtWan(stayFirm)+'萬(代庭/交接全留＋轉合署40%留成) ＋ 合署分得 '+fmtWan(toPartner)+'萬，且<b>省下整筆薪資</b> ≈ '+fmtWan(asConv)+'萬。'+
+    '<b>每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。</b>'+(perDelta>=0?'<b style="color:var(--green)">轉合署對事務所是淨正貢獻</b>——因為書值大多留所(代庭/交接)＋卸掉固定薪資。':'')+
+    ' 代庭以待庭費 '+Math.round(P.tingFee).toLocaleString()+'元/庭計(規則證實=5,000/次)。';
 
   // 逐年明細
   var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];
