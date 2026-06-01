@@ -256,7 +256,6 @@ var CONTROLS=[
  {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
  {g:'諮詢 → 本所委任',k:'closeRate',label:'簽約率(成案率)',min:.3,max:.7,step:.005,disp:pct,hint:'真實簽約率，逐年降：22年55%→25年44%→26年39%'},
  {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
- {g:'諮詢 → 本所委任',k:'benefitMult',label:'效益值係數',min:.7,max:1.6,step:.05,disp:function(v){return v.toFixed(2)+'×';},hint:'續委任/客單放大'},
  {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct},
  {g:'各流成長',k:'advisorGrowth',label:'法顧年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1},
  {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'不含新轉入律師'},
@@ -289,7 +288,7 @@ function defaultsFromBaseline(){
   return {
     salaryRaise:d.salary_raise, headcountGrowth:0, opexGrowth:d.growth.opex,
     sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
-    avgCaseAmount:d.funnel.avg_case_amount, benefitMult:d.funnel.benefit_multiplier,
+    avgCaseAmount:d.funnel.avg_case_amount,
     fa010Growth:d.growth.fa010, advisorGrowth:d.growth.advisor, partnerGrowth:d.growth.partner,
     closeDaysYoY:d.case_dynamics.close_days_yoy, agingHaircut:d.case_dynamics.aging_haircut,
     reachingPerYear: (TENURE? null : 4),
@@ -308,13 +307,13 @@ function defaultsFromBaseline(){
 function presetParams(name){
   var p=Object.assign({}, DEF);
   if(name==='optimistic'){
-    p.closeRate=Math.min(1,DEF.closeRate+0.05); p.avgCaseAmount=DEF.avgCaseAmount*1.10; p.benefitMult=1.10;
+    p.closeRate=Math.min(1,DEF.closeRate+0.05); p.avgCaseAmount=DEF.avgCaseAmount*1.10;
     p.sessionsGrowth=DEF.sessionsGrowth+0.03; p.fa010Growth=DEF.fa010Growth+0.05; p.partnerGrowth=DEF.partnerGrowth+0.10;
     p.closeDaysYoY=-0.03; p.agingHaircut=0; p.convertRatio=0.80;
   } else if(name==='conservative'){
     p.closeRate=Math.max(.3,DEF.closeRate-0.05); p.sessionsGrowth=DEF.sessionsGrowth-0.02;
     p.fa010Growth=Math.max(-.1,DEF.fa010Growth-0.05); p.partnerGrowth=0; p.advisorGrowth=0.05;
-    p.closeDaysYoY=0.08; p.agingHaircut=0.05; p.benefitMult=0.95;
+    p.closeDaysYoY=0.08; p.agingHaircut=0.05;
   }
   return p;
 }
@@ -389,7 +388,7 @@ function computeForecast(p){
       //     真實規則(家泓/蘇萱表)：只有「轉合署案件佔比」的書真的帶走，其上合署拿60%、喆律留40%；
       //     其餘(代庭/交接)喆律幾乎全留。故離開本所的有效比例 FS = 轉合署佔比 ×(1−新案所內佔比)
       var FS=p.convertCaseShare*(1-p.newCaseFirmShare);   // 家泓~50%×0.6=0.30；蘇萱100%×0.6=0.60
-      var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)*p.benefitMult
+      var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)
                      *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
       var employed=EB*Math.pow(1+p.headcountGrowth,ty)-FS*convCum;
       var employedShare=Math.max(.05,Math.min(3, employed/EB));
@@ -602,7 +601,9 @@ function renderTables(R){
 }
 
 var _lastR=null;
-function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderCharts(R); renderTables(R); syncURL(); }
+function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderCharts(R); renderTables(R);
+  var ce=document.getElementById('consultEff'); if(ce) ce.textContent='→ 隱含諮詢效益 '+Math.round(P.closeRate*P.avgCaseAmount).toLocaleString()+' 元/諮詢（看板 $29,809）';
+  syncURL(); }
 function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
 
 // ════════ CONTROLS ════════
@@ -620,6 +621,7 @@ function buildPanel(){
         '<input type="range" id="ip-'+c.k+'" min="'+c.min+'" max="'+c.max+'" step="'+c.step+'"'+disabled+'>'+
         (c.hint?'<div class="hint">'+c.hint+'</div>':'')+'</div>';
     });
+    if(g==='諮詢 → 本所委任') html+='<div class="hint" id="consultEff" style="color:var(--gold-light);font-weight:700;margin-top:2px;"></div>';
     html+='</div>';
   });
   document.getElementById('paramPanel').innerHTML=html;
