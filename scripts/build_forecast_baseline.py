@@ -295,11 +295,15 @@ rev_2025 = bensuo_y.get(by,0)+fa010_y.get(by,0)+advisor_y.get(by,0)+partner_gros
 split_2025 = (fa010_y.get(by,0)*(1-FA010_FIRM_SHARE_DEFAULT)
               + advisor_y.get(by,0)*(1-0.85)
               + partner_gross_y.get(by,0)*(1-partner_retain_default))
-actual_profit_2025 = ACTUAL_PNL_WAN[by]['consolidated_profit'] * 10000
+actual_profit_2025 = ACTUAL_PNL_WAN[by]['consolidated_profit'] * 10000   # 股東盈虧分紅=發年終後
 opex_calibrated = round(rev_2025 - personnel_y.get(by,0) - split_2025 - actual_profit_2025)
-base['opex'] = opex_calibrated
+# 年終獎金：股東 2,334 已含 1.5 個月年終 → 從 OPEX 拆出成獨立可調項(預設 1.5=不變)，且讓它跟著薪資走
+YEAREND_MONTHS_BASELINE = 1.5
+yearend_baseline = round(YEAREND_MONTHS_BASELINE * personnel_y.get(by,0) / 12)
+base['opex'] = opex_calibrated - yearend_baseline      # OPEX 去掉年終
+base['yearend_months'] = YEAREND_MONTHS_BASELINE
 base['opex_runrate'] = opex_runrate
-base['opex_source'] = f'校準至股東實際合併獲利{ACTUAL_PNL_WAN[by]["consolidated_profit"]}萬(finance OPEX 年化僅{round(opex_runrate/10000)}萬，低估真實房租/行銷/行政/獎金)'
+base['opex_source'] = f'校準至股東實際合併獲利{ACTUAL_PNL_WAN[by]["consolidated_profit"]}萬(已內含 {YEAREND_MONTHS_BASELINE} 個月年終，已拆成獨立項；finance OPEX 年化僅{round(opex_runrate/10000)}萬)'
 
 # 真實歷史獲利線（合併盈虧分紅, 元）+ 本所實際營收/盈虧(含公司成本) + 各年度公司成本
 history['actual'] = {

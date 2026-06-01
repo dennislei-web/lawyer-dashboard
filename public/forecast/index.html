@@ -271,6 +271,7 @@ var CONTROLS=[
  {g:'全域成本',k:'salaryRaise',label:'年調薪',min:0,max:.10,step:.005,disp:pct},
  {g:'全域成本',k:'headcountGrowth',label:'人數年成長(擴編)',min:-.05,max:.15,step:.005,disp:pct,hint:'預設 0=不擴編；合署轉出遇缺不補(轉出者薪資自動省下)'},
  {g:'全域成本',k:'opexGrowth',label:'非人事 OPEX 年成長',min:0,max:.12,step:.005,disp:pct,lc:1},
+ {g:'全域成本',k:'yearEndMonths',label:'年終獎金',min:0,max:4,step:.5,disp:function(v){return v+' 個月';},hint:'現況內含 1.5 個月；隨在編薪資走（轉合署人少→年終少）'},
  {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
  {g:'諮詢 → 本所委任',k:'closeRate',label:'簽約率(成案率)',min:.3,max:.7,step:.005,disp:pct,hint:'真實簽約率，逐年降：22年55%→25年44%→26年39%'},
  {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
@@ -307,6 +308,7 @@ function defaultsFromBaseline(){
   }
   return {
     salaryRaise:d.salary_raise, headcountGrowth:0, opexGrowth:d.growth.opex,
+    yearEndMonths:(b.yearend_months!=null?b.yearend_months:1.5),   // 年終獎金月數（已內含1.5，可調0-4）
     bensuoMode:'funnel', bensuoGrowth:0,    // 本所驅動：漏斗 or 直接成長率
     sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
     avgCaseAmount:d.funnel.avg_case_amount,
@@ -360,7 +362,7 @@ function computeForecast(p){
 
   var R={years:years,isFc:years.map(function(y){return y>by;}),
     bensuo:[],fa010:[],advisor:[],partner:[],total:[],
-    personnel:[],opex:[],split:[],cost:[],profit:[],margin:[],
+    personnel:[],opex:[],split:[],yearend:[],cost:[],profit:[],margin:[],
     closeDays:[],sessions:[],conv:[]};
 
   // 老案/僵案存量（承辦中 >1 年）→ 待庭費 wind-down 用
@@ -450,19 +452,20 @@ function computeForecast(p){
       R._ting=(R._ting||0)+tingCount; R._tingRev=(R._tingRev||0)+tingRev;
     }
     var total=bensuo+fa010+advisor+partnerBase;
-    var split=null,cost=null,profit=null,margin=null;
+    var split=null,cost=null,profit=null,margin=null,yearend=null;
     var actualP=(y<=by && BASE.history.actual)?BASE.history.actual.consolidated_profit[idx(y)]:null;
     if(y<by){
-      // 歷史非 base 年：用股東實際合併獲利（無成本拆解）
+      // 歷史非 base 年：用股東實際合併獲利（已發年終後，無成本拆解）
       if(actualP!=null){ profit=actualP; cost=total-actualP; margin=total?profit/total:0; }
     } else {
-      // base year(已校準=實際) + 推估年：完整成本結構
+      // base year(已校準=實際) + 推估年：完整成本結構（含年終，隨在編薪資走）
       split=fa010*(1-ret.fa010)+advisor*(1-ret.advisor)+partnerBase*(1-p.partnerRetention);
-      cost=personnel+opex+split;
+      yearend=p.yearEndMonths*personnel/12;
+      cost=personnel+opex+split+yearend;
       profit=total-cost; margin=total?profit/total:0;
     }
     R.bensuo.push(bensuo); R.fa010.push(fa010); R.advisor.push(advisor); R.partner.push(partnerBase);
-    R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split);
+    R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split); R.yearend.push(yearend);
     R.cost.push(cost); R.profit.push(profit); R.margin.push(margin);
     R.sessions.push(sessions); R.closeDays.push(closeDays);
     R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved,tingCount:tingCount,tingRev:tingRev,backfill:backfill});
@@ -625,6 +628,7 @@ function renderTables(R){
     {l:'人事',t:'律師固薪＋全體員工薪資。本所律師的人事成本在這欄，不在「律師/平台拆帳」'},
     {l:'OPEX',t:'非人事營運成本：6 所房租、行銷、行政、獎金等（已校準至股東實際損益）'},
     {l:'律師/平台拆帳',t:'各流毛收中分給律師/平台、不歸喆律的部分 ＝ Σ 毛收×(1−留存率)。本所固薪→0；010 分 65%、法顧 分 15%、合署 分 61.3%'},
+    {l:'年終',t:'年終獎金 ＝ 月數 × 在編月薪資。股東實際含 1.5 個月，已從 OPEX 拆出可調；隨在編薪資走（轉合署人少→年終少）'},
     {l:'成本合計'},{l:'淨利'},{l:'淨利率'}];
   var rows=R.years.map(function(y,i){
     var cell=function(v){return v==null?'—':fmtWan(v);};
@@ -632,15 +636,16 @@ function renderTables(R){
       '<td>'+y+(R.isFc[i]?' <span class="tag">推估</span>':'')+'</td>'+
       '<td>'+cell(R.bensuo[i])+'</td><td>'+cell(R.fa010[i])+'</td><td>'+cell(R.advisor[i])+'</td><td>'+cell(R.partner[i])+'</td>'+
       '<td><b>'+cell(R.total[i])+'</b></td>'+
-      '<td>'+cell(R.personnel[i])+'</td><td>'+cell(R.opex[i])+'</td><td>'+cell(R.split[i])+'</td><td>'+cell(R.cost[i])+'</td>'+
+      '<td>'+cell(R.personnel[i])+'</td><td>'+cell(R.opex[i])+'</td><td>'+cell(R.split[i])+'</td><td>'+cell(R.yearend[i])+'</td><td>'+cell(R.cost[i])+'</td>'+
       '<td class="'+(R.profit[i]>=0?'pos':'neg')+'">'+cell(R.profit[i])+'</td>'+
       '<td>'+(R.margin[i]==null?'—':pct(R.margin[i]))+'</td></tr>';
   }).join('');
   document.getElementById('detailTable').innerHTML='<tr>'+head.map(function(h){
       return '<th'+(h.t?' title="'+h.t+'" style="cursor:help;text-decoration:underline dotted var(--text-muted)"':'')+'>'+h.l+(h.t?' ⓘ':'')+'</th>';
     }).join('')+'</tr>'+rows+
-    '<tr style="font-size:.72rem;color:var(--text-muted);"><td colspan="12" style="text-align:left;line-height:1.6;">單位：萬元　|　'+
-    '<b style="color:var(--gold)">律師/平台拆帳</b>＝各流毛收中「分給律師/平台、不歸喆律」的拆帳成本（本所固薪 → 0；010 分潤 65%、法顧 15%、合署 61.3%）。本所律師的人事成本列在「人事」欄，不在此。合署留存率越高、這欄越小、淨利越大。</td></tr>';
+    '<tr style="font-size:.72rem;color:var(--text-muted);"><td colspan="13" style="text-align:left;line-height:1.6;">單位：萬元　|　'+
+    '<b style="color:var(--gold)">律師/平台拆帳</b>＝各流毛收分給律師/平台、不歸喆律的拆帳（本所固薪→0；010 65%、法顧 15%、合署 61.3%）。　|　'+
+    '<b style="color:var(--gold)">年終</b>＝月數×在編月薪資，現況內含 1.5 個月（已從 OPEX 拆出可調）；獲利為<b>發年終後</b>。</td></tr>';
 }
 
 var _lastR=null;
