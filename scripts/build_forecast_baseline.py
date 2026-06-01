@@ -283,10 +283,11 @@ base['opex'] = opex_calibrated
 base['opex_runrate'] = opex_runrate
 base['opex_source'] = f'校準至股東實際合併獲利{ACTUAL_PNL_WAN[by]["consolidated_profit"]}萬(finance OPEX 年化僅{round(opex_runrate/10000)}萬，低估真實房租/行銷/行政/獎金)'
 
-# 真實歷史獲利線（合併總盈虧, 元）+ 本所實際盈虧
+# 真實歷史獲利線（合併總盈虧, 元）+ 本所實際營收/盈虧（畫毛利率崩落用）
 history['actual'] = {
     'consolidated_profit': [ACTUAL_PNL_WAN.get(y,{}).get('consolidated_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
     'bensuo_profit':       [ACTUAL_PNL_WAN.get(y,{}).get('bensuo_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
+    'bensuo_rev':          [ACTUAL_PNL_WAN.get(y,{}).get('bensuo_rev',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
     'source': '營運數據(股東).xlsx 現金制 實際收入−實際支出',
 }
 

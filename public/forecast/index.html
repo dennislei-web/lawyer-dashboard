@@ -165,6 +165,12 @@
           </div>
         </div>
         <div class="card">
+          <h3>本所毛利率崩落 vs 成本結構（實際）</h3>
+          <div class="cap">股東實際損益：長條=本所營收 vs 本所成本(實際支出)，折線=本所毛利率。成本追上營收 → 毛利率 5 年從 25% 崩到 0%。</div>
+          <div class="chart-box sm"><canvas id="chMargin"></canvas></div>
+          <div class="note" id="marginNote"></div>
+        </div>
+        <div class="card">
           <h3>合署轉換影響</h3>
           <div class="cap" id="convCap"></div>
           <table id="convTable"></table>
@@ -492,6 +498,28 @@ function renderCharts(R){
     {label:'結案中位天數',data:R.closeDays.map(function(v){return v?Math.round(v):null;}),borderColor:orange,backgroundColor:'transparent',tension:.25,pointRadius:2,
       segment:{borderDash:function(c){return c.p1DataIndex>splitAt?[6,4]:undefined;}}},
   ]},{});
+
+  // 本所毛利率崩落 vs 成本結構（實際歷史）
+  var act=BASE.history.actual;
+  if(act&&act.bensuo_rev){
+    var aYears=[], aRev=[], aCost=[], aMargin=[];
+    BASE.history.years.forEach(function(y,i){
+      var rv=act.bensuo_rev[i], pf=act.bensuo_profit[i];
+      if(rv==null||pf==null) return;
+      aYears.push(String(y)); aRev.push(W(rv)); aCost.push(W(rv-pf)); aMargin.push(+(pf/rv*100).toFixed(1));
+    });
+    mkLine('chMargin',{labels:aYears,datasets:[
+      {type:'bar',label:'本所營收',data:aRev,backgroundColor:gold,yAxisID:'y'},
+      {type:'bar',label:'本所成本',data:aCost,backgroundColor:red,yAxisID:'y'},
+      {type:'line',label:'本所毛利率',data:aMargin,borderColor:green,backgroundColor:'transparent',tension:.25,yAxisID:'y1',pointRadius:3,borderWidth:2},
+    ]},{tt:{label:function(c){return c.dataset.label+': '+(c.dataset.yAxisID==='y1'?c.parsed.y+'%':c.parsed.y.toLocaleString()+'萬');}},scales:{
+      x:{ticks:{color:muted},grid:{display:false}},
+      y:{position:'left',ticks:{color:muted},grid:{color:css('--border')}},
+      y1:{position:'right',min:0,ticks:{color:green,callback:function(v){return v+'%';}},grid:{display:false}}
+    }});
+    var n=aMargin.length;
+    document.getElementById('marginNote').innerHTML='<b>結構性警訊：</b>本所成本從 '+aCost[0].toLocaleString()+'萬 漲到 '+aCost[n-1].toLocaleString()+'萬（×'+(aCost[n-1]/aCost[0]).toFixed(1)+'），同期營收只 ×'+(aRev[n-1]/aRev[0]).toFixed(1)+'，<b>毛利率 '+aMargin[0]+'% → '+aMargin[n-1]+'%</b>。固定成本（人力＋6 所）成長快過營收——這正是合署「把固薪轉變動分潤」要解的結構問題。';
+  }
 
   // AGING doughnut
   var ag=BASE.wip_aging, ctxA=document.getElementById('chAging'); if(charts['chAging']) charts['chAging'].destroy();
