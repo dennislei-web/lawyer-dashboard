@@ -89,6 +89,7 @@ bensuo_y = defaultdict(float)   # 本所委任（毛）
 advisor_y = defaultdict(float)  # 法顧（毛, 來自 records）
 partner_gross_y = defaultdict(float)  # 合署（毛, 客戶實付）
 rev_months_2026 = set()         # 2026 已涵蓋月份（年化 YTD 用）
+bensuo_2026_m = defaultdict(float); advisor_2026_m = defaultdict(float); partner_2026_m = defaultdict(float)  # 2026 逐月（完整月年化用）
 for r in rev_rows:
     rd = r.get('record_date')
     if not rd: continue
@@ -98,27 +99,33 @@ for r in rev_rows:
     sign = 1 if r.get('transaction_type') == 'PaymentTransaction' else (-1 if r.get('transaction_type') == 'RefundTransaction' else 0)
     if sign == 0: continue
     amt *= sign
+    m26 = int(rd[5:7]) if yr == 2026 else 0
     if yr == 2026:
-        rev_months_2026.add(int(rd[5:7]))
+        rev_months_2026.add(m26)
     grp = r.get('group_name') or ''
     cname = norm(r.get('client_name'))
     if '合署' in grp:
         partner_gross_y[yr] += amt
+        if yr == 2026: partner_2026_m[m26] += amt
     elif cname in advisor_clients:
         advisor_y[yr] += amt
+        if yr == 2026: advisor_2026_m[m26] += amt
     else:
         bensuo_y[yr] += amt
+        if yr == 2026: bensuo_2026_m[m26] += amt
 
 # 010 平台（毛）
 print('[2/6] fact_010_monthly_team ...')
 fa010_y = defaultdict(float)
 fa010_months_2026 = set()
+fa010_2026_m = defaultdict(float)
 for r in fetch_all('fact_010_monthly_team', {'select': 'year,month,total_revenue'}):
     yr = int(r['year'])
     if yr in YEARS:
         fa010_y[yr] += float(r.get('total_revenue') or 0)
         if yr == 2026:
             fa010_months_2026.add(int(r['month']))
+            fa010_2026_m[int(r['month'])] += float(r.get('total_revenue') or 0)
 
 # 合署留存率（喆律分得/毛）— 從 partners embedded JSON 校準
 print('[3/6] partners JSON 合署留存率 ...')
@@ -302,13 +309,22 @@ history['actual'] = {
 }
 
 # 2026 今年 YTD 年化 run-rate（推估起點錨定用）
-rm = len(rev_months_2026); fm = len(fa010_months_2026)
+# ⚠️ 只取「完整月份」年化：排除當月(剛開始、資料不全)，否則把半空的當月算成整月會把年化拉低
+_today = date.today()
+def _annualize_2026(by_month):
+    if _today.year > 2026:
+        comp = dict(by_month)
+    else:   # 當年=2026：只取早於當月的完整月
+        comp = {m: v for m, v in by_month.items() if m < _today.month}
+    n = len(comp)
+    return (round(sum(comp.values()) / n * 12) if n else None), n
+rr_bensuo, rm = _annualize_2026(bensuo_2026_m)
+rr_advisor, _ = _annualize_2026(advisor_2026_m)
+rr_partner, _ = _annualize_2026(partner_2026_m)
+rr_fa010, fm = _annualize_2026(fa010_2026_m)
 run_rate_2026 = {
     'months_rev': rm, 'months_010': fm,
-    'bensuo':  round(bensuo_y.get(2026, 0) / rm * 12) if rm else None,
-    'advisor': round(advisor_y.get(2026, 0) / rm * 12) if rm else None,
-    'partner': round(partner_gross_y.get(2026, 0) / rm * 12) if rm else None,
-    'fa010':   round(fa010_y.get(2026, 0) / fm * 12) if fm else None,
+    'bensuo': rr_bensuo, 'advisor': rr_advisor, 'partner': rr_partner, 'fa010': rr_fa010,
 }
 run_rate_2026['advisor'] = ADVISOR_RUNRATE_2026_WAN * 10000   # 法顧用股東實際現金(revenue_records 漏儲值)
 base['run_rate_2026'] = run_rate_2026
