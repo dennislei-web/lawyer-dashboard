@@ -258,6 +258,16 @@ var CONTROLS=[
 
 function defaultsFromBaseline(){
   var d=BASE.defaults, b=d.base;
+  // 在編接案律師基數 → 每位本所產值（取代捏造的 800 萬）
+  var EB=40;
+  if(TENURE&&TENURE.meta){ EB=Math.max(1,(TENURE.meta.total_current_lawyers||40)-(TENURE.meta.managers_excluded_count||0)-(TENURE.meta.already_partner_excluded_count||0)); }
+  var bensuoAnchor=(b.run_rate_2026&&b.run_rate_2026.bensuo)||b.bensuo;
+  var perBensuo=Math.round(bensuoAnchor/EB/10000)*10000;     // ≈ 366 萬/位
+  // 可轉池平均年薪（threshold 3、2026）→ 預設省下薪資
+  var avgSal=1500000;
+  if(TENURE&&TENURE.eligibility&&TENURE.eligibility['3']&&TENURE.eligibility['3']['2026']){
+    var s=TENURE.eligibility['3']['2026']; if(s.count_salary) avgSal=Math.round(s.sum_salary/s.count_salary);
+  }
   return {
     salaryRaise:d.salary_raise, headcountGrowth:0.03, opexGrowth:d.growth.opex,
     sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
@@ -267,7 +277,7 @@ function defaultsFromBaseline(){
     reachingPerYear: (TENURE? null : 4),
     tenureThreshold:d.partner_conversion.tenure_threshold_years,
     convertRatio:d.partner_conversion.convert_ratio,
-    avgBillingPerConvert:8000000, avgSalaryPerConvert:1500000,
+    avgBillingPerConvert:perBensuo, avgSalaryPerConvert:avgSal,
     partnerRetention:d.retention.partner,
   };
 }
@@ -296,6 +306,14 @@ function computeForecast(p){
   var idx=function(y){return hist.years.indexOf(y);};
   var b=BASE.defaults.base;
   var closeBase=BASE.defaults.case_dynamics.close_days_base||1;
+  // 推估起點錨定 2026 今年 YTD 年化 run-rate（缺則 fallback 2025 全年）
+  var rr=b.run_rate_2026||{};
+  var ANCHOR_YEAR=2026;
+  var anchor={bensuo:rr.bensuo||b.bensuo, fa010:rr.fa010||b.fa010, advisor:rr.advisor||b.advisor, partner:rr.partner||b.partner};
+  var cr0=DEF.closeRate||p.closeRate, ca0=DEF.avgCaseAmount||p.avgCaseAmount;   // 漏斗 slider 的校準基準（當相對倍率）
+  // 在編接案律師基數（總現職 − 主管 − 已合署）；轉換以此為分母，新進律師補回
+  var EB=40;
+  if(TENURE&&TENURE.meta){ EB=Math.max(1,(TENURE.meta.total_current_lawyers||40)-(TENURE.meta.managers_excluded_count||0)-(TENURE.meta.already_partner_excluded_count||0)); }
 
   var R={years:years,isFc:years.map(function(y){return y>by;}),
     bensuo:[],fa010:[],advisor:[],partner:[],total:[],
@@ -303,9 +321,11 @@ function computeForecast(p){
     closeDays:[],sessions:[],conv:[]};
 
   years.forEach(function(y){
-    var t=y-by;
+    var t=y-by;                 // 從 2025 起（歷史/結案天數用）
+    var ty=y-ANCHOR_YEAR;       // 從 2026 錨點起（各流成長複利用）
     var bensuo,fa010,advisor,partnerBase,personnel,opex,sessions,closeDays;
-    if(y<=by){ // actual from history
+    var convCum=0, billingMoved=0, salarySaved=0, eligible=0;
+    if(y<=by){ // 實際歷史
       bensuo=hist.revenue_streams.bensuo[idx(y)];
       fa010=hist.revenue_streams.fa010[idx(y)];
       advisor=hist.revenue_streams.advisor[idx(y)];
@@ -315,42 +335,39 @@ function computeForecast(p){
       personnel=(y===by)?b.personnel:null;
       opex=(y===by)?b.opex:null;
     } else {
-      sessions=b.sessions*Math.pow(1+p.sessionsGrowth,t);
-      closeDays=closeBase*Math.pow(1+p.closeDaysYoY,t);
-      var capacity=Math.max(.6,Math.min(1.1, closeBase/closeDays));
-      bensuo=sessions*p.closeRate*p.avgCaseAmount*p.benefitMult*capacity*(1-p.agingHaircut);
-      fa010=b.fa010*Math.pow(1+p.fa010Growth,t);
-      advisor=b.advisor*Math.pow(1+p.advisorGrowth,t);
-      partnerBase=b.partner*Math.pow(1+p.partnerGrowth,t);
-      personnel=b.personnel*Math.pow(1+p.headcountGrowth,t)*Math.pow(1+p.salaryRaise,t);
-      opex=b.opex*Math.pow(1+p.opexGrowth,t);
-    }
-    // 合署轉換（僅推估年；累積）
-    var convCum=0, billingMoved=0, salarySaved=0, eligible=0;
-    if(y>by){
+      // (1) 合署轉換：先算累積轉換人數（本所/合署/人事都依它調整）
       var slot=null;
       if(TENURE && TENURE.eligibility){
         var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
         slot=TENURE.eligibility[th] && TENURE.eligibility[th][String(y)];
       }
-      if(slot){
-        // 公開版只有「池級彙總」(count/sum_billing/sum_salary)，無個人列。
-        // 轉換比例套用在整池總額（faithful「達標的 X% 轉」、且單調）；
-        // billing/salary 缺漏的人用 slider 預設值補。
-        eligible=slot.count; convCum=Math.round(eligible*p.convertRatio);
-        var billPool=slot.sum_billing+(slot.count-slot.count_billing)*p.avgBillingPerConvert;
-        var salPool=slot.sum_salary+(slot.count-slot.count_salary)*p.avgSalaryPerConvert;
-        billingMoved=p.convertRatio*billPool;
-        salarySaved=p.convertRatio*salPool;
-      } else {
-        convCum=Math.round((p.reachingPerYear||0)*p.convertRatio)*t; // 每年新增一批，累積
-        billingMoved=convCum*p.avgBillingPerConvert;
-        salarySaved=convCum*p.avgSalaryPerConvert;
-      }
-      // 套用：billing 從本所移到合署，省下薪資
-      bensuo=Math.max(0,bensuo-billingMoved);
-      partnerBase=partnerBase+billingMoved;
-      personnel=Math.max(0,personnel-salarySaved);
+      // 轉換線性 ramp-in：目標比例在 HORIZON 年內逐步達成（避免年 1 就把現有資深全轉，與今年實際背離）
+      var rampFrac=Math.min(1,(ty+1)/HORIZON);
+      if(slot){ eligible=slot.count; convCum=Math.round(eligible*p.convertRatio*rampFrac); }
+      else { eligible=Math.round(p.reachingPerYear||0)*t; convCum=Math.round((p.reachingPerYear||0)*p.convertRatio*rampFrac)*t; }
+
+      sessions=b.sessions*Math.pow(1+p.sessionsGrowth,t);
+      closeDays=closeBase*Math.pow(1+p.closeDaysYoY,t);
+      var capacity=Math.max(.6,Math.min(1.1, closeBase/closeDays));
+
+      // (2) 本所＝漏斗(2026 run-rate 錨定、slider 為相對倍率) × 在編接案律師「產能份額」
+      //     份額 = (基數×人數成長^ty − 累積轉換)/基數 → 轉合署減、新進律師補回，不會超扣歸零
+      var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)*p.benefitMult
+                     *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
+      var employed=EB*Math.pow(1+p.headcountGrowth,ty)-convCum;
+      var employedShare=Math.max(.05,Math.min(3, employed/EB));
+      bensuo=bensuoBase*employedShare;
+
+      fa010=anchor.fa010*Math.pow(1+p.fa010Growth,ty);
+      advisor=anchor.advisor*Math.pow(1+p.advisorGrowth,ty);
+      // (3) 合署＝既有成長 ＋ 轉入律師帶來的 book（每位產值＝avgBillingPerConvert）
+      var convertedOutput=convCum*p.avgBillingPerConvert;
+      partnerBase=anchor.partner*Math.pow(1+p.partnerGrowth,ty)+convertedOutput;
+
+      // (4) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
+      personnel=Math.max(0, b.personnel*Math.pow(1+p.headcountGrowth,ty)*Math.pow(1+p.salaryRaise,ty)-convCum*p.avgSalaryPerConvert);
+      opex=b.opex*Math.pow(1+p.opexGrowth,ty);
+      billingMoved=convertedOutput; salarySaved=convCum*p.avgSalaryPerConvert;
     }
     var total=bensuo+fa010+advisor+partnerBase;
     var split=null,cost=null,profit=null,margin=null;
@@ -462,11 +479,11 @@ function renderTables(R){
     return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td class="'+(perDelta>=0?'pos':'neg')+'">'+(perDelta>=0?'+':'')+fmtWan(perDelta)+'</td></tr>';
   }).join('');
   document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署毛收(萬)</th><th>省下薪資(萬)</th><th>每位淨利Δ(萬)</th></tr>'+convRows;
-  document.getElementById('convCap').textContent= TENURE? '依到職日清單精算達標律師':'聚合假設模式（尚未載入 lawyer-tenure.json，用每年達標律師數推估）';
+  document.getElementById('convCap').textContent= (TENURE? '依到職日清單精算達標律師（在職≥門檻、非主管、未轉合署）':'聚合假設模式')+'；轉換目標比例 5 年線性 ramp-in，本所依在編接案律師產能份額調整（新進律師補回）';
   var lastConv=fc[fc.length-1];
   var perBill=lastConv&&lastConv.convCum?lastConv.billingMoved/lastConv.convCum:0, perSal=lastConv&&lastConv.convCum?lastConv.salarySaved/lastConv.convCum:0;
   var perDelta=perBill*ret-(perBill-perSal);
-  document.getElementById('convNote').innerHTML='<b>關鍵權衡：</b>固薪資深律師的每位淨利 ≈ 帶走營收 − 年薪（'+fmtWan(perBill-perSal)+'萬）；轉合署後喆律僅留存毛收的 '+pct(ret)+' ≈ '+fmtWan(perBill*ret)+'萬。本模型下每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。若 Δ 為負，代表「省薪資 < 損失的所內利潤」——轉合署的價值需來自<b>留才、產能釋放或合署帶來的增量案源</b>，可調高留存率或帶走營收驗證。';
+  document.getElementById('convNote').innerHTML='<b>關鍵權衡：</b>每位轉換律師帶走年營收 '+fmtWan(perBill)+'萬、原年薪 '+fmtWan(perSal)+'萬。當員工時對所淨利 ≈ 帶走營收 − 年薪 = '+fmtWan(perBill-perSal)+'萬；轉合署後喆律僅留存毛收的 '+pct(ret)+' ≈ '+fmtWan(perBill*ret)+'萬（無薪資）。每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。<b>Δ 為負</b>代表「省薪資 < 損失的所內利潤」——轉合署的價值需來自<b>留才、產能釋放、或合署帶來的增量案源</b>。想看轉換變正貢獻：把「合署喆律留存率」往上調到你認為真實的水準（目前 38.7% 是含司法官 cohort 的混合值，資深律師轉合署可能更高）。';
 
   // 逐年明細
   var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];
@@ -559,9 +576,12 @@ async function showDashboard(){
     DEF=defaultsFromBaseline(); P=Object.assign({},DEF);
     buildPanel();
     var fromUrl=loadFromURL(); if(fromUrl){ syncControlsFromP(); setActivePreset(null);} else { syncControlsFromP(); setActivePreset('base'); }
-    document.getElementById('footNote').innerHTML='<b>口徑：</b>'+BASE.meta.profit_basis+'。Base year '+BASE.defaults.base.year+'。'+
-      '<b>注意：</b>法顧/合署/OPEX 歷史短（標「低信心」），預設成長率保守，請依實況校調；結案天數已排除 2023-02-08 批次汙染件，逐年上升部分含早年資料覆蓋偏差。'+
-      (TENURE?'已載入律師到職日清單，合署轉換為精算模式。':'尚未載入 lawyer-tenure.json，合署轉換為聚合假設模式。');
+    var rr=BASE.defaults.base.run_rate_2026||{};
+    document.getElementById('footNote').innerHTML='<b>口徑：</b>'+BASE.meta.profit_basis+'。'+
+      '<b>推估起點：</b>錨定 2026 今年 YTD 年化 run-rate（'+(rr.months_rev||'?')+' 個月年化：本所 '+fmtWan(rr.bensuo||0)+'萬 / 010 '+fmtWan(rr.fa010||0)+'萬 / 合署 '+fmtWan(rr.partner||0)+'萬），各成長率由此複利；成案率/成案金額等 slider 為相對倍率。'+
+      '<b>本所×合署：</b>本所＝諮詢漏斗 × 在編接案律師產能份額（轉合署減、新進律師補回）；合署＝既有成長＋轉入律師 book。轉換目標比例 5 年線性 ramp-in。'+
+      '<b>注意：</b>法顧/合署/OPEX 歷史短（標「低信心」）請依實況校調；結案天數已排除 2023-02-08 批次汙染件。'+
+      (TENURE&&TENURE.meta?'合署可轉池依到職日清單精算（在編接案律師基數 '+(TENURE.meta.total_current_lawyers-TENURE.meta.managers_excluded_count-TENURE.meta.already_partner_excluded_count)+' 位＝現職'+TENURE.meta.total_current_lawyers+'−主管'+TENURE.meta.managers_excluded_count+'−已合署'+TENURE.meta.already_partner_excluded_count+'）。':'尚未載入 tenure，合署轉換為聚合假設。');
     recompute();
   }catch(e){ document.getElementById('dashboard').innerHTML='<div style="padding:40px;color:var(--red)">載入 forecast-baseline.json 失敗：'+e.message+'</div>'; }
 }

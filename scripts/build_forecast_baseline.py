@@ -75,6 +75,7 @@ rev_rows = fetch_all('revenue_records', {
 bensuo_y = defaultdict(float)   # 本所委任（毛）
 advisor_y = defaultdict(float)  # 法顧（毛, 來自 records）
 partner_gross_y = defaultdict(float)  # 合署（毛, 客戶實付）
+rev_months_2026 = set()         # 2026 已涵蓋月份（年化 YTD 用）
 for r in rev_rows:
     rd = r.get('record_date')
     if not rd: continue
@@ -84,6 +85,8 @@ for r in rev_rows:
     sign = 1 if r.get('transaction_type') == 'PaymentTransaction' else (-1 if r.get('transaction_type') == 'RefundTransaction' else 0)
     if sign == 0: continue
     amt *= sign
+    if yr == 2026:
+        rev_months_2026.add(int(rd[5:7]))
     grp = r.get('group_name') or ''
     cname = norm(r.get('client_name'))
     if '合署' in grp:
@@ -96,10 +99,13 @@ for r in rev_rows:
 # 010 平台（毛）
 print('[2/6] fact_010_monthly_team ...')
 fa010_y = defaultdict(float)
+fa010_months_2026 = set()
 for r in fetch_all('fact_010_monthly_team', {'select': 'year,month,total_revenue'}):
     yr = int(r['year'])
     if yr in YEARS:
         fa010_y[yr] += float(r.get('total_revenue') or 0)
+        if yr == 2026:
+            fa010_months_2026.add(int(r['month']))
 
 # 合署留存率（喆律分得/毛）— 從 partners embedded JSON 校準
 print('[3/6] partners JSON 合署留存率 ...')
@@ -251,6 +257,17 @@ if opex_best_year:
     m = len(opex_months[opex_best_year])
     base['opex'] = round(opex_y[opex_best_year] / m * 12) if m else 0
     base['opex_source'] = f'{opex_best_year}年×{m}月年化'
+
+# 2026 今年 YTD 年化 run-rate（推估起點錨定用）
+rm = len(rev_months_2026); fm = len(fa010_months_2026)
+run_rate_2026 = {
+    'months_rev': rm, 'months_010': fm,
+    'bensuo':  round(bensuo_y.get(2026, 0) / rm * 12) if rm else None,
+    'advisor': round(advisor_y.get(2026, 0) / rm * 12) if rm else None,
+    'partner': round(partner_gross_y.get(2026, 0) / rm * 12) if rm else None,
+    'fa010':   round(fa010_y.get(2026, 0) / fm * 12) if fm else None,
+}
+base['run_rate_2026'] = run_rate_2026
 
 # 漏斗校準：成案率 = appointed/sessions；平均成案金額 = 本所毛收/appointed
 sess = base['sessions']; appt = base['appointed']
