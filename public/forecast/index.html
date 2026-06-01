@@ -265,7 +265,7 @@ var CONTROLS=[
  {g:'合署轉換',k:'reachingPerYear',label:'每年達標律師數',min:0,max:20,step:1,disp:function(v){return v+' 位';},hint:'在職≥門檻、非主管'},
  {g:'合署轉換',k:'tenureThreshold',label:'年資門檻(年)',min:1,max:6,step:1,disp:function(v){return v+' 年';}},
  {g:'合署轉換',k:'convertRatio',label:'轉合署比例',min:0,max:1,step:.05,disp:pct},
- {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan'},
+ {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan',hint:'轉移：本所減同額、合署加同額（×轉合署佔比）'},
  {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
  {g:'合署轉換',k:'convertCaseShare',label:'轉合署案件佔比',min:0,max:1,step:.05,disp:pct,hint:'書值真的帶走的比例，其餘代庭/交接留所（家泓~50%、蘇萱100%）'},
@@ -399,9 +399,10 @@ function computeForecast(p){
         bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)
                    *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
       }
-      var employed=EB*Math.pow(1+p.headcountGrowth,ty)-FS*convCum;
-      var employedShare=Math.max(.05,Math.min(3, employed/EB));
-      bensuo=bensuoBase*employedShare;
+      // 帶走進合署的書值（真實轉移：同一筆金額從本所扣除、計入合署，不會憑空生出）
+      var convertedOutput=FS*convCum*p.avgBillingPerConvert;
+      // 本所＝漏斗(可受人數成長) − 帶走的書值；floor 5% 避免歸零
+      bensuo=Math.max(bensuoBase*0.05, bensuoBase*Math.pow(1+p.headcountGrowth,ty)-convertedOutput);
 
       // (3) 待庭費：當年新轉律師帶走的老案/僵案 wind-down（5,000/庭），以待庭費計入本所
       //     每位老案數＝可轉池實際承辦(sum_stale/count)；無 tenure 時 fallback 全所÷在編
@@ -413,8 +414,7 @@ function computeForecast(p){
 
       fa010=anchor.fa010*Math.pow(1+p.fa010Growth,ty);
       advisor=anchor.advisor*Math.pow(1+p.advisorGrowth,ty);
-      // (4) 合署＝既有成長 ＋ 轉入律師帶來的新案 book(60%)
-      var convertedOutput=FS*convCum*p.avgBillingPerConvert;
+      // (4) 合署＝既有成長 ＋ 轉入律師帶來的書值(=本所扣除的同一筆)
       partnerBase=anchor.partner*Math.pow(1+p.partnerGrowth,ty)+convertedOutput;
 
       // (5) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
