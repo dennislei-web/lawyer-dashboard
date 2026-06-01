@@ -634,28 +634,44 @@ function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderC
   var ce=document.getElementById('consultEff'); if(ce) ce.textContent='→ 隱含諮詢效益 '+Math.round(P.closeRate*P.avgCaseAmount).toLocaleString()+' 元/諮詢（看板 $29,809）';
   syncURL(); }
 // 三情境比較：套用目前結構參數 + 各情境的營收/案件覆寫
+var PRESET_KEYS=['closeRate','avgCaseAmount','sessionsGrowth','fa010Growth','partnerGrowth','advisorGrowth','closeDaysYoY','agingHaircut','convertRatio'];
 function renderScenarioCompare(){
   var by=BASE.defaults.base.year;
   var defs=[['conservative','🔻 保守'],['base','基準'],['optimistic','🔺 樂觀']];
   var cols=defs.map(function(d){
-    var p=Object.assign({}, P, presetOverrides(d[0]));
+    // 結構參數沿用目前 P；營收/案件參數一律從乾淨 DEF 起算再套情境覆寫(不受目前套用的 preset 汙染)
+    var p=Object.assign({}, P); PRESET_KEYS.forEach(function(k){ p[k]=DEF[k]; }); p=Object.assign(p, presetOverrides(d[0]));
     var R=computeForecast(p), lastI=R.years.length-1, cumR=0,cumP=0;
     R.years.forEach(function(y,j){ if(y>by){ cumR+=R.total[j]; cumP+=R.profit[j]; } });
     var revN=R.total[lastI], rev0=R.total[R.years.indexOf(by)];
-    return {name:d[0],label:d[1],cumR:cumR,cumP:cumP,margin:R.margin[lastI],
+    return {name:d[0],label:d[1],p:p,cumR:cumR,cumP:cumP,margin:R.margin[lastI],
       cagr:Math.pow(revN/rev0,1/HORIZON)-1,endRev:revN,endY:R.years[lastI]};
   });
   var hl=function(c){ return c.name===_activePreset?' style="background:rgba(79,142,247,0.14)"':''; };
   var row=function(label,fmt,sign){ return '<tr><td>'+label+'</td>'+cols.map(function(c){
     var v=fmt(c); var cls=sign?((sign(c)>=0)?'pos':'neg'):''; return '<td class="'+cls+'"'+hl(c)+'>'+v+'</td>'; }).join('')+'</tr>'; };
+  var prow=function(label,key,fmt){ return '<tr><td style="color:var(--text-muted)">'+label+'</td>'+cols.map(function(c){
+    return '<td'+hl(c)+'>'+fmt(c.p[key])+'</td>'; }).join('')+'</tr>'; };
+  var pf=function(v){return (v*100).toFixed(1)+'%';}, wf=function(v){return (v/10000).toFixed(1)+'萬';};
+  var sec=function(t){ return '<tr><td colspan="4" style="background:var(--bg-row);color:var(--gold);font-weight:700;font-size:.78rem;padding:5px 9px;">'+t+'</td></tr>'; };
   var endY=cols[0].endY;
   document.getElementById('scenarioTable').innerHTML=
     '<tr><th>指標（'+(by+1)+'–'+endY+'）</th>'+cols.map(function(c){return '<th'+hl(c)+'>'+c.label+'</th>';}).join('')+'</tr>'+
+    sec('▾ 結果')+
     row(HORIZON+' 年累計營收', function(c){return fmtYi(c.cumR)+' 億';})+
     row(HORIZON+' 年累計獲利', function(c){return fmtYi(c.cumP)+' 億';}, function(c){return c.cumP;})+
     row(endY+' 淨利率', function(c){return (c.margin*100).toFixed(1)+'%';}, function(c){return c.margin;})+
     row('營收 CAGR', function(c){return (c.cagr*100).toFixed(1)+'%';}, function(c){return c.cagr;})+
-    row(endY+' 營收(萬)', function(c){return fmtWan(c.endRev);});
+    row(endY+' 營收(萬)', function(c){return fmtWan(c.endRev);})+
+    sec('▾ 假設參數（差異處）')+
+    prow('簽約率','closeRate',pf)+
+    prow('平均成案金額','avgCaseAmount',wf)+
+    prow('諮詢量成長','sessionsGrowth',pf)+
+    prow('010 平台成長','fa010Growth',pf)+
+    prow('合署既有成長','partnerGrowth',pf)+
+    prow('法顧成長','advisorGrowth',pf)+
+    prow('結案天數變化','closeDaysYoY',pf)+
+    prow('老化庫存折減','agingHaircut',pf);
 }
 function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
 
