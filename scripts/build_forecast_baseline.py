@@ -34,15 +34,17 @@ LATEST_FULL_YEAR = 2025          # 最近一個完整年（base year）
 BATCH_POLLUTION_DATE = date(2023, 2, 8)   # 舊遷移案批次更新日，非真實結案日
 FA010_FIRM_SHARE_DEFAULT = 0.35  # 法0 喆律分得比例（estimate_okr_profit FA0_SHARE）
 
-# ── 股東實際損益（營運數據(股東).xlsx，現金制 實際收入−實際支出，已排除合計欄）──
-# 用來校準 OPEX（我的 bottom-up 成本低估）並畫真實歷史獲利線。2021-2025 為完整年（12月）。
-# 喆律本所毛利率逐年崩：25.4%→15.4%→8.4%→3.1%→-0.0%；合併總盈虧含 010/公司/北冥。
+# ── 股東實際損益（營運數據(股東).xlsx，現金制；用官方合併列 總收入/總支出/盈虧分紅）──
+# 重要：早年部分喆律成本掛在「公司」帳(2021公司支出1671萬/2022 1436萬)，後續內部化進喆律。
+#   故 bensuo_profit = 喆律帳面盈虧 − 當年公司支出（把公司成本算回本所），呈現「真實薄毛利」而非帳面崩落。
+#   本所真實毛利率：7.5%→3.5%→3.9%→2.6%→-0.4%（一直薄，不是 25%→0%）。
+#   consolidated_profit = 總收入−總支出(盈虧分紅)，已含公司/010/全部成本。公司支出已降到~68萬(2025)，未來假設維持低檔不成長。
 ACTUAL_PNL_WAN = {   # 萬元
-    2021: {'bensuo_profit': 2370, 'consolidated_profit': 1437, 'bensuo_rev': 9312},
-    2022: {'bensuo_profit': 1852, 'consolidated_profit': 2860, 'bensuo_rev': 12016},
-    2023: {'bensuo_profit': 1277, 'consolidated_profit': 2186, 'bensuo_rev': 15251},
-    2024: {'bensuo_profit':  533, 'consolidated_profit': 2229, 'bensuo_rev': 17156},
-    2025: {'bensuo_profit':   -3, 'consolidated_profit': 1416, 'bensuo_rev': 17197},
+    2021: {'bensuo_profit': 699,  'consolidated_profit': 1437, 'bensuo_rev': 9312,  'company_cost': 1671},
+    2022: {'bensuo_profit': 416,  'consolidated_profit': 1294, 'bensuo_rev': 12016, 'company_cost': 1436},
+    2023: {'bensuo_profit': 597,  'consolidated_profit': 2195, 'bensuo_rev': 15251, 'company_cost': 680},
+    2024: {'bensuo_profit': 449,  'consolidated_profit': 2486, 'bensuo_rev': 17156, 'company_cost': 84},
+    2025: {'bensuo_profit': -71,  'consolidated_profit': 2334, 'bensuo_rev': 17197, 'company_cost': 68},
 }
 
 
@@ -283,12 +285,13 @@ base['opex'] = opex_calibrated
 base['opex_runrate'] = opex_runrate
 base['opex_source'] = f'校準至股東實際合併獲利{ACTUAL_PNL_WAN[by]["consolidated_profit"]}萬(finance OPEX 年化僅{round(opex_runrate/10000)}萬，低估真實房租/行銷/行政/獎金)'
 
-# 真實歷史獲利線（合併總盈虧, 元）+ 本所實際營收/盈虧（畫毛利率崩落用）
+# 真實歷史獲利線（合併盈虧分紅, 元）+ 本所實際營收/盈虧(含公司成本) + 各年度公司成本
 history['actual'] = {
     'consolidated_profit': [ACTUAL_PNL_WAN.get(y,{}).get('consolidated_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
     'bensuo_profit':       [ACTUAL_PNL_WAN.get(y,{}).get('bensuo_profit',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
     'bensuo_rev':          [ACTUAL_PNL_WAN.get(y,{}).get('bensuo_rev',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
-    'source': '營運數據(股東).xlsx 現金制 實際收入−實際支出',
+    'company_cost':        [ACTUAL_PNL_WAN.get(y,{}).get('company_cost',0)*10000 if y in ACTUAL_PNL_WAN else None for y in YEARS],
+    'source': '營運數據(股東).xlsx 官方合併列；本所盈虧已含公司成本(內部化前掛公司帳)',
 }
 
 # 2026 今年 YTD 年化 run-rate（推估起點錨定用）

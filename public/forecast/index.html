@@ -151,7 +151,7 @@
       <div class="charts">
         <div class="card">
           <h3>營收 / 成本 / 獲利（毛利口徑）</h3>
-          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。獲利線為股東實際合併損益（現金制）；OPEX 已校準至實際，base 2025 = 實際 1,416 萬。</div>
+          <div class="cap">實線=實際(2021–2025)，虛線=推估(2026–2030)。獲利線為股東官方合併損益(盈虧分紅)；OPEX 已校準至實際，base 2025 = 實際 2,334 萬。</div>
           <div class="chart-box"><canvas id="chMain"></canvas></div>
         </div>
         <div class="grid2">
@@ -166,8 +166,8 @@
         </div>
         <div class="grid2">
           <div class="card">
-            <h3>本所毛利率崩落 vs 成本結構（實際）</h3>
-            <div class="cap">股東實際損益：長條=本所營收 vs 本所成本，折線=本所毛利率。成本追上營收 → 毛利率 5 年從 25% 崩到 0%。</div>
+            <h3>本所真實毛利率（成本已含公司帳）</h3>
+            <div class="cap">本所成本已加回早年掛在「公司」帳的成本(2021 公司支出 1,671萬→2025 僅 68萬，已內部化)。校正後毛利率一直很薄(3–7%)、近年轉負，並非從 25% 崩落——那是成本內部化的帳面假象。</div>
             <div class="chart-box sm"><canvas id="chMargin"></canvas></div>
             <div class="note" id="marginNote"></div>
           </div>
@@ -536,10 +536,10 @@ function renderCharts(R){
     ]},{tt:{label:function(c){return c.dataset.label+': '+(c.dataset.yAxisID==='y1'?c.parsed.y+'%':c.parsed.y.toLocaleString()+'萬');}},scales:{
       x:{ticks:{color:muted},grid:{display:false}},
       y:{position:'left',ticks:{color:muted},grid:{color:css('--border')}},
-      y1:{position:'right',min:0,ticks:{color:green,callback:function(v){return v+'%';}},grid:{display:false}}
+      y1:{position:'right',ticks:{color:green,callback:function(v){return v+'%';}},grid:{display:false}}
     }});
     var n=aMargin.length;
-    document.getElementById('marginNote').innerHTML='<b>結構性警訊：</b>本所成本從 '+aCost[0].toLocaleString()+'萬 漲到 '+aCost[n-1].toLocaleString()+'萬（×'+(aCost[n-1]/aCost[0]).toFixed(1)+'），同期營收只 ×'+(aRev[n-1]/aRev[0]).toFixed(1)+'，<b>毛利率 '+aMargin[0]+'% → '+aMargin[n-1]+'%</b>。固定成本（人力＋6 所）成長快過營收——這正是合署「把固薪轉變動分潤」要解的結構問題。';
+    document.getElementById('marginNote').innerHTML='<b>結構性警訊：</b>校正公司帳後，本所毛利率一直很薄（'+aMargin[0]+'% → '+aMargin[n-1]+'%，近年轉負），不是從 25% 崩落——那是成本內部化的帳面假象。真相是<b>本所長期接近零毛利</b>：成本 ×'+(aCost[n-1]/aCost[0]).toFixed(1)+' vs 營收 ×'+(aRev[n-1]/aRev[0]).toFixed(1)+'。固定成本（人力＋6 所）吃光毛利——這正是合署「把固薪轉變動分潤」要解的結構問題。';
   }
 
   // 諮詢漏斗效率：簽約率 vs 平均簽約收款（實際歷史）
@@ -711,7 +711,7 @@ async function showDashboard(){
     document.getElementById('footNote').innerHTML='<b>口徑：</b>'+BASE.meta.profit_basis+'。'+
       '<b>推估起點：</b>錨定 2026 今年 YTD 年化 run-rate（'+(rr.months_rev||'?')+' 個月年化：本所 '+fmtWan(rr.bensuo||0)+'萬 / 010 '+fmtWan(rr.fa010||0)+'萬 / 合署 '+fmtWan(rr.partner||0)+'萬），各成長率由此複利；成案率/成案金額等 slider 為相對倍率。'+
       '<b>本所×合署：</b>本所＝諮詢漏斗 × 在編接案律師產能份額（轉合署減、新進律師補回）；合署＝既有成長＋轉入律師 book。轉換目標比例 5 年線性 ramp-in。'+
-      '<b>成本校準：</b>OPEX 已校準至股東實際損益＝'+fmtWan(BASE.defaults.base.opex)+'萬（bottom-up finance OPEX 僅 '+fmtWan(BASE.defaults.base.opex_runrate||0)+'萬，低估房租/行銷/行政/獎金）；本所實際毛利率已從 2021 的 25% 崩到 2025 的 ~0%，模型不再假設高毛利。'+
+      '<b>成本校準：</b>OPEX 已校準至股東實際損益＝'+fmtWan(BASE.defaults.base.opex)+'萬（bottom-up finance OPEX 僅 '+fmtWan(BASE.defaults.base.opex_runrate||0)+'萬，低估房租/行銷/行政/獎金）；早年部分喆律成本掛在「公司」帳(2021 公司支出 1,671萬→2025 僅 68萬，已內部化)，校正後本所毛利率長期僅 3–7%、近年轉負（非從 25% 崩落，那是帳面假象）。公司成本未來假設維持低檔不成長。'+
       '<b>注意：</b>結案天數已排除 2023-02-08 批次汙染件。'+
       (TENURE&&TENURE.meta?'合署可轉池依到職日清單精算（在編接案律師基數 '+(TENURE.meta.total_current_lawyers-TENURE.meta.managers_excluded_count-TENURE.meta.already_partner_excluded_count)+' 位＝現職'+TENURE.meta.total_current_lawyers+'−主管'+TENURE.meta.managers_excluded_count+'−已合署'+TENURE.meta.already_partner_excluded_count+'）。':'尚未載入 tenure，合署轉換為聚合假設。');
     recompute();
