@@ -325,7 +325,7 @@ function presetOverrides(name){
   if(name==='optimistic') return {
     closeRate:Math.min(1,DEF.closeRate+0.05), avgCaseAmount:DEF.avgCaseAmount*1.10,
     sessionsGrowth:DEF.sessionsGrowth+0.03, fa010Growth:DEF.fa010Growth+0.05, partnerGrowth:DEF.partnerGrowth+0.10,
-    closeDaysYoY:-0.03, agingHaircut:0, convertRatio:0.80 };
+    closeDaysYoY:-0.03, agingHaircut:0 };
   if(name==='conservative') return {
     closeRate:Math.max(.3,DEF.closeRate-0.05), avgCaseAmount:71000,   // 39% 簽約率 + 客單 7.1萬(類 2026：少簽但客單高)
     sessionsGrowth:DEF.sessionsGrowth-0.02, fa010Growth:Math.max(-.1,DEF.fa010Growth-0.05),
@@ -634,7 +634,7 @@ function recompute(){ var R=computeForecast(P); _lastR=R; renderKPIs(R); renderC
   var ce=document.getElementById('consultEff'); if(ce) ce.textContent='→ 隱含諮詢效益 '+Math.round(P.closeRate*P.avgCaseAmount).toLocaleString()+' 元/諮詢（看板 $29,809）';
   syncURL(); }
 // 三情境比較：套用目前結構參數 + 各情境的營收/案件覆寫
-var PRESET_KEYS=['closeRate','avgCaseAmount','sessionsGrowth','fa010Growth','partnerGrowth','advisorGrowth','closeDaysYoY','agingHaircut','convertRatio'];
+var PRESET_KEYS=['closeRate','avgCaseAmount','sessionsGrowth','fa010Growth','partnerGrowth','advisorGrowth','closeDaysYoY','agingHaircut'];
 function renderScenarioCompare(){
   var by=BASE.defaults.base.year;
   var defs=[['conservative','🔻 保守'],['base','基準'],['optimistic','🔺 樂觀']];
@@ -652,6 +652,7 @@ function renderScenarioCompare(){
     var v=fmt(c); var cls=sign?((sign(c)>=0)?'pos':'neg'):''; return '<td class="'+cls+'"'+hl(c)+'>'+v+'</td>'; }).join('')+'</tr>'; };
   var prow=function(label,key,fmt){ return '<tr><td style="color:var(--text-muted)">'+label+'</td>'+cols.map(function(c){
     return '<td'+hl(c)+'>'+fmt(c.p[key])+'</td>'; }).join('')+'</tr>'; };
+  var srow=function(label,val){ return '<tr><td style="color:var(--text-muted)">'+label+'</td><td colspan="3" style="text-align:center">'+val+'</td></tr>'; };
   var pf=function(v){return (v*100).toFixed(1)+'%';}, wf=function(v){return (v/10000).toFixed(1)+'萬';};
   var sec=function(t){ return '<tr><td colspan="4" style="background:var(--bg-row);color:var(--gold);font-weight:700;font-size:.78rem;padding:5px 9px;">'+t+'</td></tr>'; };
   var endY=cols[0].endY;
@@ -671,7 +672,15 @@ function renderScenarioCompare(){
     prow('合署既有成長','partnerGrowth',pf)+
     prow('法顧成長','advisorGrowth',pf)+
     prow('結案天數變化','closeDaysYoY',pf)+
-    prow('老化庫存折減','agingHaircut',pf);
+    prow('老化庫存折減','agingHaircut',pf)+
+    sec('▾ 共用策略假設（三情境相同，依你目前設定）')+
+    srow('轉合署比例', pf(P.convertRatio))+
+    srow('轉合署案件佔比', pf(P.convertCaseShare))+
+    srow('合署喆律留存率', pf(P.partnerRetention))+
+    srow('所內最少保留律師', Math.round(P.minInHouseLawyers)+' 位')+
+    srow('年調薪', pf(P.salaryRaise))+
+    srow('人數成長(擴編)', pf(P.headcountGrowth))+
+    srow('非人事 OPEX 成長', pf(P.opexGrowth));
 }
 function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
 
