@@ -302,10 +302,21 @@ run_rate_2026 = {
 }
 base['run_rate_2026'] = run_rate_2026
 
-# 漏斗校準：成案率 = appointed/sessions；平均成案金額 = 本所毛收/appointed
-sess = base['sessions']; appt = base['appointed']
-close_rate = round(appt / sess, 4) if sess else 0.0
-avg_case_amount = round(base['bensuo'] / appt) if appt else 0
+# 漏斗校準：用 consultation_cases 真實「簽約率 / 平均簽約收款」（與諮詢看板一致）
+# 舊版用 appointed/sessions=80% 是錯指標（appointed 含非諮詢來源案件，分子灌水）
+sign_n = defaultdict(int); sign_s = defaultdict(int); sign_rev = defaultdict(float)
+for r in fetch_all('consultation_cases', {'select': 'case_date,is_signed,revenue'}):
+    cd = r.get('case_date')
+    if not cd: continue
+    y = int(str(cd)[:4])
+    if y not in YEARS: continue
+    sign_n[y] += 1
+    if r.get('is_signed'):
+        sign_s[y] += 1; sign_rev[y] += float(r.get('revenue') or 0)
+# base year 簽約率/平均簽約收款
+close_rate = round(sign_s.get(by, 0) / sign_n[by], 4) if sign_n.get(by) else 0.0
+avg_case_amount = round(sign_rev.get(by, 0) / sign_s[by]) if sign_s.get(by) else 0
+sign_rate_trend = {str(y): round(sign_s.get(y, 0) / sign_n[y], 4) if sign_n.get(y) else None for y in YEARS}
 
 defaults = {
     'base': base,
@@ -326,10 +337,11 @@ defaults = {
     },
     'low_confidence': ['advisor', 'partner', 'opex'],
     'funnel': {
-        'close_rate': close_rate,
-        'avg_case_amount': avg_case_amount,
+        'close_rate': close_rate,                # 真實簽約率（consultation_cases）
+        'avg_case_amount': avg_case_amount,       # 真實平均簽約收款
         'benefit_multiplier': 1.0,   # 效益值係數（續委任/客單放大）
         'sessions_growth': cagr(sessions_y, 2023, by),
+        'sign_rate_trend': sign_rate_trend,       # 逐年簽約率（看板一致，呈現下降趨勢）
     },
     'case_dynamics': {
         'close_days_base': history['case_dynamics']['close_days_median'][YEARS.index(by)],

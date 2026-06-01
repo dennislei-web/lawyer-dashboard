@@ -160,7 +160,7 @@
             <div class="chart-box sm"><canvas id="chStreams"></canvas></div>
           </div>
           <div class="card">
-            <h3>逐年淨利 與 淨利率</h3><div class="cap">長條=淨利(萬)，折線=淨利率(%)</div>
+            <h3>逐年淨利、淨利率 與 人事成本</h3><div class="cap">長條=淨利(萬)，金線=淨利率(%)，紫線=人事成本(萬)。遇缺不補→人事逐年降。</div>
             <div class="chart-box sm"><canvas id="chProfit"></canvas></div>
           </div>
         </div>
@@ -246,7 +246,7 @@ var CONTROLS=[
  {g:'全域成本',k:'headcountGrowth',label:'人數年成長(擴編)',min:-.05,max:.15,step:.005,disp:pct,hint:'預設 0=不擴編；合署轉出遇缺不補(轉出者薪資自動省下)'},
  {g:'全域成本',k:'opexGrowth',label:'非人事 OPEX 年成長',min:0,max:.12,step:.005,disp:pct,lc:1},
  {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
- {g:'諮詢 → 本所委任',k:'closeRate',label:'成案率',min:.3,max:1.0,step:.01,disp:pct},
+ {g:'諮詢 → 本所委任',k:'closeRate',label:'簽約率(成案率)',min:.3,max:.7,step:.005,disp:pct,hint:'真實簽約率，逐年降：22年55%→25年44%→26年39%'},
  {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
  {g:'諮詢 → 本所委任',k:'benefitMult',label:'效益值係數',min:.7,max:1.6,step:.05,disp:function(v){return v.toFixed(2)+'×';},hint:'續委任/客單放大'},
  {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct},
@@ -488,8 +488,10 @@ function renderCharts(R){
 
   // PROFIT bar + margin line
   mkLine('chProfit',{labels:labels,datasets:[
-    {type:'bar',label:'淨利(萬)',data:R.profit.map(function(v){return v==null?null:W(v);}),backgroundColor:R.profit.map(function(v){return v>=0?green:red;}),yAxisID:'y'},
-    {type:'line',label:'淨利率',data:R.margin.map(function(v){return v==null?null:+(v*100).toFixed(1);}),borderColor:gold,backgroundColor:'transparent',tension:.25,yAxisID:'y1',pointRadius:2},
+    {type:'bar',label:'淨利(萬)',data:R.profit.map(function(v){return v==null?null:W(v);}),backgroundColor:R.profit.map(function(v){return v>=0?green:red;}),yAxisID:'y',order:3},
+    {type:'line',label:'人事成本(萬)',data:R.personnel.map(function(v){return v==null?null:W(v);}),borderColor:purple,backgroundColor:'transparent',tension:.25,yAxisID:'y',pointRadius:2,borderWidth:2,order:1,
+      segment:{borderDash:function(c){return c.p1DataIndex>splitAt?[5,3]:undefined;}}},
+    {type:'line',label:'淨利率',data:R.margin.map(function(v){return v==null?null:+(v*100).toFixed(1);}),borderColor:gold,backgroundColor:'transparent',tension:.25,yAxisID:'y1',pointRadius:2,order:2},
   ]},{scales:{
     x:{ticks:{color:muted},grid:{display:false}},
     y:{position:'left',ticks:{color:muted},grid:{color:css('--border')}},
