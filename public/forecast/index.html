@@ -256,6 +256,7 @@ var CONTROLS=[
  {g:'諮詢 → 本所委任',k:'sessionsGrowth',label:'諮詢量年成長',min:-.05,max:.20,step:.005,disp:pct,hint:'歷史 ~3,900/年 plateau'},
  {g:'諮詢 → 本所委任',k:'closeRate',label:'簽約率(成案率)',min:.3,max:.7,step:.005,disp:pct,hint:'真實簽約率，逐年降：22年55%→25年44%→26年39%'},
  {g:'諮詢 → 本所委任',k:'avgCaseAmount',label:'平均成案金額',min:2,max:12,step:.1,disp:function(v){return v.toFixed(1)+'萬';},store:'wan'},
+ {g:'各流成長',k:'bensuoGrowth',label:'本所年成長',min:-.15,max:.20,step:.01,disp:pct,hint:'僅「直接成長率」模式生效（漏斗模式由諮詢量/簽約率/客單推導）'},
  {g:'各流成長',k:'fa010Growth',label:'010 平台年成長',min:-.10,max:.30,step:.01,disp:pct},
  {g:'各流成長',k:'advisorGrowth',label:'法顧年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1},
  {g:'各流成長',k:'partnerGrowth',label:'合署既有年成長',min:-.10,max:.50,step:.01,disp:pct,lc:1,hint:'不含新轉入律師'},
@@ -287,6 +288,7 @@ function defaultsFromBaseline(){
   }
   return {
     salaryRaise:d.salary_raise, headcountGrowth:0, opexGrowth:d.growth.opex,
+    bensuoMode:'funnel', bensuoGrowth:0,    // 本所驅動：漏斗 or 直接成長率
     sessionsGrowth:d.funnel.sessions_growth, closeRate:d.funnel.close_rate,
     avgCaseAmount:d.funnel.avg_case_amount,
     fa010Growth:d.growth.fa010, advisorGrowth:d.growth.advisor, partnerGrowth:d.growth.partner,
@@ -388,8 +390,15 @@ function computeForecast(p){
       //     真實規則(家泓/蘇萱表)：只有「轉合署案件佔比」的書真的帶走，其上合署拿60%、喆律留40%；
       //     其餘(代庭/交接)喆律幾乎全留。故離開本所的有效比例 FS = 轉合署佔比 ×(1−新案所內佔比)
       var FS=p.convertCaseShare*(1-p.newCaseFirmShare);   // 家泓~50%×0.6=0.30；蘇萱100%×0.6=0.60
-      var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)
-                     *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
+      var bensuoBase;
+      if(p.bensuoMode==='direct'){
+        // 直接成長率模式：本所 = 錨定 × (1+本所年成長)^t（仍受結案產能/老化）
+        bensuoBase=anchor.bensuo*Math.pow(1+p.bensuoGrowth,ty)*capacity*(1-p.agingHaircut);
+      } else {
+        // 漏斗模式：諮詢量×簽約率×客單（slider 為相對倍率）
+        bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)
+                   *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
+      }
       var employed=EB*Math.pow(1+p.headcountGrowth,ty)-FS*convCum;
       var employedShare=Math.max(.05,Math.min(3, employed/EB));
       bensuo=bensuoBase*employedShare;
@@ -614,6 +623,11 @@ function buildPanel(){
   Object.keys(groups).forEach(function(g){
     var anyLc=groups[g].some(function(c){return c.lc;});
     html+='<div class="pgroup"><h4>'+g+(anyLc?' <span class="lc">部分低信心</span>':'')+'</h4>';
+    if(g==='各流成長') html+='<div class="ctrl"><div class="crow"><label>本所驅動方式</label></div>'+
+      '<div style="display:flex;gap:6px;margin:4px 0;">'+
+      '<button type="button" class="preset-btn bmode" data-bmode="funnel" style="flex:1;padding:5px;font-size:.78rem;">漏斗</button>'+
+      '<button type="button" class="preset-btn bmode" data-bmode="direct" style="flex:1;padding:5px;font-size:.78rem;">直接成長率</button></div>'+
+      '<div class="hint">漏斗=諮詢量×簽約率×客單推導；直接=直接設本所年成長率</div></div>';
     groups[g].forEach(function(c){
       var disabled=(c.k==='reachingPerYear'&&TENURE)?' disabled':'';
       html+='<div class="ctrl" data-k="'+c.k+'">'+
@@ -633,6 +647,20 @@ function buildPanel(){
       updateCval(c); recompute(); setActivePreset(null);
     });
   });
+  document.querySelectorAll('.bmode').forEach(function(b){
+    b.addEventListener('click',function(){ P.bensuoMode=b.getAttribute('data-bmode'); syncBMode(); recompute(); setActivePreset(null); });
+  });
+}
+// 本所模式：切換 active 樣式、啟用/停用對應 slider
+function syncBMode(){
+  var direct=P.bensuoMode==='direct';
+  document.querySelectorAll('.bmode').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-bmode')===P.bensuoMode); });
+  var bg=document.getElementById('ip-bensuoGrowth'); if(bg) bg.disabled=!direct;
+  // 漏斗相關 slider 在直接模式下視覺淡化
+  ['closeRate','avgCaseAmount','sessionsGrowth'].forEach(function(k){
+    var el=document.querySelector('.ctrl[data-k="'+k+'"]'); if(el) el.style.opacity=direct?0.4:1;
+  });
+  var bgc=document.querySelector('.ctrl[data-k="bensuoGrowth"]'); if(bgc) bgc.style.opacity=direct?1:0.4;
 }
 function ctrlDisplayVal(c){ var v=P[c.k]; return c.store==='wan'? v/10000 : v; }
 function updateCval(c){ var el=document.getElementById('cv-'+c.k); if(el) el.textContent=c.disp(ctrlDisplayVal(c)); }
@@ -643,6 +671,7 @@ function syncControlsFromP(){
     ip.value= c.store==='wan'? P[c.k]/10000 : P[c.k];
     updateCval(c);
   });
+  syncBMode();
 }
 function setActivePreset(name){
   document.querySelectorAll('.preset-btn[data-preset]').forEach(function(b){ b.classList.toggle('active',b.getAttribute('data-preset')===name); });
