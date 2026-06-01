@@ -157,6 +157,12 @@
       <div style="overflow-x:auto;"><table id="scenarioTable"></table></div>
     </div>
 
+    <div class="card" id="anchorCard" style="margin-bottom:18px;">
+      <h3>推估起點（2026 錨點）對帳</h3>
+      <div class="cap">四流 2026 run-rate（只取完整月年化）vs 財務頁「預估獲利」2026 按達成率。本所/010/法顧 已對齊；合署為毛收口徑（財務頁僅列資深代收的留存窄口徑）。</div>
+      <div style="overflow-x:auto;"><table id="anchorTable"></table></div>
+    </div>
+
     <div class="layout">
       <div class="panel" id="paramPanel"></div>
       <div class="charts">
@@ -691,6 +697,24 @@ function renderScenarioCompare(){
     srow('非人事 OPEX 成長', pf(P.opexGrowth));
 }
 function rerenderCharts(){ if(_lastR) renderCharts(_lastR); }
+// 2026 錨點對帳（vs 財務頁 2026 按達成率，一次性驗證參考）
+function renderAnchorRecon(){
+  var rr=BASE.defaults.base.run_rate_2026; if(!rr||!document.getElementById('anchorTable')) return;
+  var w=function(v){return Math.round(v/1e4).toLocaleString();};
+  var rows=[
+    {s:'本所',mine:rr.bensuo,ref:147230000,src:'財務頁 KR1 喆律所內 14,723萬'},
+    {s:'010（毛收）',mine:rr.fa010,ref:65970000,src:'財務頁 法0 2,309÷35% 回推 6,597萬'},
+    {s:'法顧',mine:rr.advisor,ref:9260000,src:'財務頁 法顧現金流 926萬'},
+    {s:'合署（毛收）',mine:rr.partner,ref:null,src:'口徑不同：財務頁僅資深代收 1,272萬(留存窄口徑)；我為全合署客戶實付毛收'},
+  ];
+  var html='<tr><th>流</th><th>我的 run-rate(萬)</th><th>對帳基準(萬)</th><th>差異</th><th>來源/口徑</th></tr>';
+  rows.forEach(function(r){
+    var st; if(r.ref==null){ st='<span style="color:var(--orange)">口徑不同</span>'; }
+      else { var d=r.mine-r.ref; st=(Math.abs(d)/r.ref<0.02)?'<span class="pos">✓ 對齊 ('+(d>=0?'+':'')+w(d)+')</span>':'<span class="neg">'+(d>=0?'+':'')+w(d)+'</span>'; }
+    html+='<tr><td>'+r.s+'</td><td>'+w(r.mine)+'</td><td>'+(r.ref!=null?w(r.ref):'—')+'</td><td>'+st+'</td><td style="color:var(--text-muted);font-size:.72rem;text-align:left">'+r.src+'</td></tr>';
+  });
+  document.getElementById('anchorTable').innerHTML=html;
+}
 
 // ════════ CONTROLS ════════
 function buildPanel(){
@@ -801,7 +825,7 @@ async function showDashboard(){
       '<b>成本校準：</b>OPEX 已校準至股東實際損益＝'+fmtWan(BASE.defaults.base.opex)+'萬（bottom-up finance OPEX 僅 '+fmtWan(BASE.defaults.base.opex_runrate||0)+'萬，低估房租/行銷/行政/獎金）；早年部分喆律成本掛在「公司」帳(2021 公司支出 1,671萬→2025 僅 68萬，已內部化)，校正後本所毛利率長期僅 3–7%、近年轉負（非從 25% 崩落，那是帳面假象）。公司成本未來假設維持低檔不成長。'+
       '<b>注意：</b>結案天數已排除 2023-02-08 批次汙染件。'+
       (TENURE&&TENURE.meta?'合署可轉池依到職日清單精算（在編接案律師基數 '+(TENURE.meta.total_current_lawyers-TENURE.meta.managers_excluded_count-TENURE.meta.already_partner_excluded_count)+' 位＝現職'+TENURE.meta.total_current_lawyers+'−主管'+TENURE.meta.managers_excluded_count+'−已合署'+TENURE.meta.already_partner_excluded_count+'）。':'尚未載入 tenure，合署轉換為聚合假設。');
-    recompute();
+    recompute(); renderAnchorRecon();
   }catch(e){ document.getElementById('dashboard').innerHTML='<div style="padding:40px;color:var(--red)">載入 forecast-baseline.json 失敗：'+e.message+'</div>'; }
 }
 
