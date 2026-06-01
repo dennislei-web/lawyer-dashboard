@@ -234,7 +234,9 @@ def cagr(vals_by_year, y0, y1, clamp=(-0.30, 0.60)):
 # ── 法顧校準：revenue_records 只抓到法顧的一小片(128萬,漏儲值/現金流)，用股東 Excel 實際法顧現金 ──
 # 股東 Excel 喆律區塊「法顧」現金列：2024 607萬 / 2025 710萬 / 2026 年化 575萬。2021-23 法顧業務尚小。
 ADVISOR_ACTUAL_WAN = {2024: 607, 2025: 710}
-ADVISOR_RUNRATE_2026_WAN = 575
+# 2026 法顧 run-rate：用財務頁「法顧現金流」1-4月已實現 309萬 年化(309/4×12≈926萬)，
+# 口徑=CRM 所內法顧+法顧儲值(比股東 Excel 窄現金列完整)。原 575 是股東 2-月年化、太噪且低於 2025。
+ADVISOR_RUNRATE_2026_WAN = 926
 for _y, _v in ADVISOR_ACTUAL_WAN.items():
     advisor_y[_y] = _v * 10000          # 覆寫，使 history/base/OPEX校準 都用真實法顧
 
