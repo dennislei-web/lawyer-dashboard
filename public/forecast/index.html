@@ -142,6 +142,11 @@
       <button class="preset-btn ghost" data-preset="optimistic">樂觀</button>
       <button class="preset-btn" id="resetBtn" style="margin-left:14px;">↺ 還原預設</button>
       <button class="preset-btn" id="shareBtn">🔗 複製情境連結</button>
+      <span style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;">
+        <span style="font-size:.82rem;color:var(--text-muted);">推估年數</span>
+        <input type="range" id="horizonSlider" min="5" max="10" step="1" value="5" style="width:120px;accent-color:var(--gold);cursor:pointer;">
+        <span id="horizonVal" style="font-weight:700;color:var(--gold-light);min-width:54px;">5 年</span>
+      </span>
     </div>
 
     <div class="kpi-row" id="kpiRow"></div>
@@ -241,7 +246,7 @@ try{ var st=localStorage.getItem('dash-theme'); if(st) applyTheme(st); }catch(e)
 
 // ════════ MODEL ════════
 var BASE=null, TENURE=null, P={}, DEF={}, charts={};
-var HORIZON=10;        // 推估年數（2026–2035）
+var HORIZON=5;         // 推估年數（預設 5，可由拉桿調 5–10）
 var RAMP_YEARS=5;      // 合署轉換 ramp-in 完成年數（固定 5 年，不隨 HORIZON）
 var css=function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
 var W=function(v){ return Math.round(v/10000); };               // 元→萬
@@ -690,6 +695,11 @@ function applyPreset(name){ P=presetParams(name); syncControlsFromP(); recompute
 
 document.querySelectorAll('.preset-btn[data-preset]').forEach(function(b){ b.addEventListener('click',function(){ applyPreset(b.getAttribute('data-preset')); }); });
 document.getElementById('resetBtn').addEventListener('click',function(){ applyPreset('base'); });
+document.getElementById('horizonSlider').addEventListener('input',function(){
+  HORIZON=parseInt(this.value,10);
+  document.getElementById('horizonVal').textContent=HORIZON+' 年';
+  recompute();
+});
 document.getElementById('shareBtn').addEventListener('click',function(){
   syncURL(); var url=location.href;
   navigator.clipboard&&navigator.clipboard.writeText(url); var b=document.getElementById('shareBtn'); var t=b.textContent; b.textContent='✓ 已複製'; setTimeout(function(){b.textContent=t;},1500);
@@ -698,10 +708,12 @@ document.getElementById('shareBtn').addEventListener('click',function(){
 // URL 情境序列化
 function syncURL(){
   try{ var q=CONTROLS.map(function(c){ return c.k+'='+(P[c.k]==null?'':(+P[c.k].toFixed(c.store==='wan'?0:4))); }).join('&');
-    history.replaceState(null,'','?embed=1&'+q); }catch(e){}
+    history.replaceState(null,'','?embed=1&horizon='+HORIZON+'&'+q); }catch(e){}
 }
 function loadFromURL(){
   var sp=new URLSearchParams(location.search), any=false;
+  if(sp.has('horizon')){ var h=parseInt(sp.get('horizon'),10); if(h>=5&&h<=10){ HORIZON=h;
+    var hs=document.getElementById('horizonSlider'); if(hs) hs.value=h; var hv=document.getElementById('horizonVal'); if(hv) hv.textContent=h+' 年'; } }
   CONTROLS.forEach(function(c){ if(sp.has(c.k)&&sp.get(c.k)!==''){ P[c.k]=parseFloat(sp.get(c.k)); any=true; } });
   return any;
 }
