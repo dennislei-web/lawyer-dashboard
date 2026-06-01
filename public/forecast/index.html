@@ -379,8 +379,10 @@ function computeForecast(p){
       bensuo=bensuoBase*employedShare;
 
       // (3) 待庭費：當年新轉律師帶走的老案/僵案 wind-down（5,000/庭），以待庭費計入本所
+      //     每位老案數＝可轉池實際承辦(sum_stale/count)；無 tenure 時 fallback 全所÷在編
       var newConv=Math.max(0, convCum-convCumFor(y-1));
-      tingCount=newConv*stalePerEmployed*p.hearingsPerStaleCase;   // 估計庭數
+      var stalePerConv=(slot&&slot.count)?(slot.sum_stale/slot.count):stalePerEmployed;
+      tingCount=newConv*stalePerConv*p.hearingsPerStaleCase;   // 估計庭數
       tingRev=tingCount*p.tingFee;
       bensuo+=tingRev;
 
@@ -512,7 +514,7 @@ function renderTables(R){
   var asEmp=perOut-perSal, asConv=perOut*fsf + perOut*fs*ret, perDelta=asConv-asEmp;
   document.getElementById('convNote').innerHTML='<b>每位轉換律師經濟性（新案 '+pct(fsf)+' 所內 / '+pct(fs)+' 合署）：</b>年產值約 '+fmtWan(perOut)+'萬、原年薪 '+fmtWan(perSal)+'萬。'+
     '當員工＝產值−薪資 ≈ '+fmtWan(asEmp)+'萬；轉合署＝'+pct(fsf)+'留本所('+fmtWan(perOut*fsf)+'萬) ＋ '+pct(fs)+'進合署×留存'+pct(ret)+'('+fmtWan(perOut*fs*ret)+'萬)，無薪資 ≈ '+fmtWan(asConv)+'萬。'+
-    '<b>每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。</b>（40/60 拆分後比全轉合署溫和很多。）老案/僵案另以待庭費 '+Math.round(P.tingFee).toLocaleString()+'元/庭計（庭數為假設值，court 欄位無資料）。要讓轉換轉正：調高「合署留存率」（38.7% 是含司法官 cohort 混合值）或「新案所內佔比」。';
+    '<b>每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。</b>（40/60 拆分後比全轉合署溫和很多。）老案/僵案另以待庭費 '+Math.round(P.tingFee).toLocaleString()+'元/庭計（<b>老案數＝可轉池實際承辦案 CRM 資料</b>，每件剩餘庭數為假設值——court 欄位無資料）。要讓轉換轉正：調高「合署留存率」（38.7% 是含司法官 cohort 混合值）或「新案所內佔比」。';
 
   // 逐年明細
   var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];

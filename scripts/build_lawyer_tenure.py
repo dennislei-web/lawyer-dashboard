@@ -59,6 +59,7 @@ MANAGERS = {
 }
 
 ROC_OFFSET = 1911
+THIS_YEAR = 2026
 
 
 def parse_year(v):
@@ -149,6 +150,38 @@ while True:
     if len(chunk) < 1000: break
     off += 1000
 
+# ── 5. 每位律師「承辦中 >1 年」老案/僵案數（4 承辦欄位，排除 council 諮詢欄）──
+print('[5/5] 老案/僵案 per-lawyer（crm_cases 承辦中>1年）...')
+HANDLING_FIELDS = ['litigation_lawyers', 'in_court_lawyers', 'pleading_lawyers', 'complaint_lawyers']
+ACTIVE_STATES = {'appointed', 'pending'}
+AGE_CUTOFF = f'{THIS_YEAR - 1}-06-01'   # crm_created_at 早於此 = 承辦逾 1 年
+
+def parse_names(field):
+    if not field: return []
+    if isinstance(field, list): return [str(x).strip() for x in field if x]
+    if isinstance(field, str):
+        try: return [str(x).strip() for x in json.loads(field) if x]
+        except Exception: return [field.strip()]
+    return []
+
+stale_count = defaultdict(int)
+off = 0
+while True:
+    sel = 'aasm_state,crm_created_at,litigation_lawyers,in_court_lawyers,pleading_lawyers,complaint_lawyers'
+    chunk = requests.get(f'{SB_URL}/rest/v1/crm_cases?select={sel}&limit=1000&offset={off}', headers=H, timeout=60).json()
+    for c in chunk:
+        if c.get('aasm_state') not in ACTIVE_STATES: continue
+        cr = c.get('crm_created_at')
+        if not cr or str(cr)[:10] >= AGE_CUTOFF: continue   # 只算逾 1 年
+        names = set()
+        for fld in HANDLING_FIELDS:
+            names.update(parse_names(c.get(fld)))
+        for nm in (names & CURRENT_LAWYERS):
+            stale_count[nm] += 1
+    if len(chunk) < 1000: break
+    off += 1000
+print(f'    老案/僵案總承辦掛名數: {sum(stale_count.values())}（去重前，一案多掛重複計）')
+
 # ── 組裝 roster（只保留現職律師名單）──
 THIS_YEAR = 2026
 lawyers = []
@@ -169,24 +202,26 @@ for name in sorted(CURRENT_LAWYERS):
         'annual_salary': round(annual_salary.get(name, 0)) or None,
         'annual_billing': round(billing.get(name, 0)) or None,
         'billing_source': 'consultation_cases_2025' if billing.get(name) else None,
+        'stale_cases': stale_count.get(name, 0),     # 承辦中>1年老案/僵案數
     })
 
 # 可轉池彙總：在職、非主管、未轉合署、tenure>=threshold 的「池總額」（不輸出個人，避免 PII）
 def pool_aggregate(year, threshold):
     cnt = cnt_bill = cnt_sal = 0
-    sum_bill = sum_sal = 0
+    sum_bill = sum_sal = sum_stale = 0
     for L in lawyers:
         active = (not L['depart_year']) or L['depart_year'] >= year
         if not (active and L['is_lawyer'] and not L['is_manager'] and not L['already_partner']
                 and (year - L['hire_year']) >= threshold):
             continue
         cnt += 1
+        sum_stale += L.get('stale_cases', 0)
         if L['annual_billing']:
             cnt_bill += 1; sum_bill += L['annual_billing']
         if L['annual_salary']:
             cnt_sal += 1; sum_sal += L['annual_salary']
     return {'count': cnt, 'count_billing': cnt_bill, 'sum_billing': round(sum_bill),
-            'count_salary': cnt_sal, 'sum_salary': round(sum_sal)}
+            'count_salary': cnt_sal, 'sum_salary': round(sum_sal), 'sum_stale': sum_stale}
 
 # threshold 1..6 × 推估年 base+1..base+6 的池彙總（公開版只含這張表，無個人列）
 FC_YEARS = list(range(THIS_YEAR, THIS_YEAR + 6))
