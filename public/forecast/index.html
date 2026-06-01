@@ -254,6 +254,9 @@ var CONTROLS=[
  {g:'合署轉換',k:'avgBillingPerConvert',label:'每位帶走年營收',min:100,max:2000,step:50,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'avgSalaryPerConvert',label:'每位原年薪',min:80,max:600,step:10,disp:function(v){return v+'萬';},store:'wan'},
  {g:'合署轉換',k:'partnerRetention',label:'合署喆律留存率',min:.2,max:.9,step:.01,disp:pct,hint:'毛收中喆律分得比例'},
+ {g:'合署轉換',k:'newCaseFirmShare',label:'轉合署後新案所內佔比',min:0,max:1,step:.05,disp:pct,hint:'其餘進合署（預設 40/60）'},
+ {g:'老案/僵案 待庭費',k:'hearingsPerStaleCase',label:'每件老案/僵案剩餘庭數',min:0,max:10,step:.5,disp:function(v){return v+' 庭';},hint:'court_record 欄位為空無法實算，為假設值'},
+ {g:'老案/僵案 待庭費',k:'tingFee',label:'待庭費 / 庭',min:0,max:20000,step:500,disp:function(v){return Math.round(v).toLocaleString()+' 元';}},
 ];
 
 function defaultsFromBaseline(){
@@ -279,6 +282,9 @@ function defaultsFromBaseline(){
     convertRatio:d.partner_conversion.convert_ratio,
     avgBillingPerConvert:perBensuo, avgSalaryPerConvert:avgSal,
     partnerRetention:d.retention.partner,
+    newCaseFirmShare:0.40,           // 轉合署後新案 40% 所內 / 60% 合署
+    hearingsPerStaleCase:3,          // 每件老案/僵案剩餘庭數（假設，court 欄位空）
+    tingFee:5000,                    // 待庭費/庭
   };
 }
 
@@ -320,11 +326,24 @@ function computeForecast(p){
     personnel:[],opex:[],split:[],cost:[],profit:[],margin:[],
     closeDays:[],sessions:[],conv:[]};
 
+  // 老案/僵案存量（承辦中 >1 年）→ 待庭費 wind-down 用
+  var staleTotal=(BASE.wip_aging&&((BASE.wip_aging['1-2yr']||0)+(BASE.wip_aging['>2yr']||0)))||0;
+  var stalePerEmployed=staleTotal/EB;
+  // 累積轉換人數（給定 y）— 供算「當年新轉」做待庭費 wind-down
+  function convCumFor(yy){
+    if(yy<=by) return 0;
+    var ramp=Math.min(1,(yy-ANCHOR_YEAR+1)/HORIZON), el=0;
+    if(TENURE&&TENURE.eligibility){ var th=String(Math.max(1,Math.min(6,Math.round(p.tenureThreshold))));
+      var s=TENURE.eligibility[th]&&TENURE.eligibility[th][String(yy)]; if(s) el=s.count; }
+    else el=Math.round(p.reachingPerYear||0)*(yy-by);
+    return Math.round(el*p.convertRatio*ramp);
+  }
+
   years.forEach(function(y){
     var t=y-by;                 // 從 2025 起（歷史/結案天數用）
     var ty=y-ANCHOR_YEAR;       // 從 2026 錨點起（各流成長複利用）
     var bensuo,fa010,advisor,partnerBase,personnel,opex,sessions,closeDays;
-    var convCum=0, billingMoved=0, salarySaved=0, eligible=0;
+    var convCum=0, billingMoved=0, salarySaved=0, eligible=0, tingCount=0, tingRev=0;
     if(y<=by){ // 實際歷史
       bensuo=hist.revenue_streams.bensuo[idx(y)];
       fa010=hist.revenue_streams.fa010[idx(y)];
@@ -351,23 +370,31 @@ function computeForecast(p){
       var capacity=Math.max(.6,Math.min(1.1, closeBase/closeDays));
 
       // (2) 本所＝漏斗(2026 run-rate 錨定、slider 為相對倍率) × 在編接案律師「產能份額」
-      //     份額 = (基數×人數成長^ty − 累積轉換)/基數 → 轉合署減、新進律師補回，不會超扣歸零
+      //     轉合署後新案 40% 留所內 → 只有 60%(FS) 的轉換律師產能離開本所；新進律師補回
+      var FS=1-p.newCaseFirmShare;   // 合署佔新案比例（預設 0.60）
       var bensuoBase=anchor.bensuo*(p.closeRate/cr0)*(p.avgCaseAmount/ca0)*p.benefitMult
                      *Math.pow(1+p.sessionsGrowth,ty)*capacity*(1-p.agingHaircut);
-      var employed=EB*Math.pow(1+p.headcountGrowth,ty)-convCum;
+      var employed=EB*Math.pow(1+p.headcountGrowth,ty)-FS*convCum;
       var employedShare=Math.max(.05,Math.min(3, employed/EB));
       bensuo=bensuoBase*employedShare;
 
+      // (3) 待庭費：當年新轉律師帶走的老案/僵案 wind-down（5,000/庭），以待庭費計入本所
+      var newConv=Math.max(0, convCum-convCumFor(y-1));
+      tingCount=newConv*stalePerEmployed*p.hearingsPerStaleCase;   // 估計庭數
+      tingRev=tingCount*p.tingFee;
+      bensuo+=tingRev;
+
       fa010=anchor.fa010*Math.pow(1+p.fa010Growth,ty);
       advisor=anchor.advisor*Math.pow(1+p.advisorGrowth,ty);
-      // (3) 合署＝既有成長 ＋ 轉入律師帶來的 book（每位產值＝avgBillingPerConvert）
-      var convertedOutput=convCum*p.avgBillingPerConvert;
+      // (4) 合署＝既有成長 ＋ 轉入律師帶來的新案 book(60%)
+      var convertedOutput=FS*convCum*p.avgBillingPerConvert;
       partnerBase=anchor.partner*Math.pow(1+p.partnerGrowth,ty)+convertedOutput;
 
-      // (4) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
+      // (5) 成本：人事＝(調薪×人數成長) − 轉合署省下的薪資；OPEX 複利
       personnel=Math.max(0, b.personnel*Math.pow(1+p.headcountGrowth,ty)*Math.pow(1+p.salaryRaise,ty)-convCum*p.avgSalaryPerConvert);
       opex=b.opex*Math.pow(1+p.opexGrowth,ty);
       billingMoved=convertedOutput; salarySaved=convCum*p.avgSalaryPerConvert;
+      R._ting=(R._ting||0)+tingCount; R._tingRev=(R._tingRev||0)+tingRev;
     }
     var total=bensuo+fa010+advisor+partnerBase;
     var split=null,cost=null,profit=null,margin=null;
@@ -381,7 +408,7 @@ function computeForecast(p){
     R.total.push(total); R.personnel.push(personnel); R.opex.push(opex); R.split.push(split);
     R.cost.push(cost); R.profit.push(profit); R.margin.push(margin);
     R.sessions.push(sessions); R.closeDays.push(closeDays);
-    R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved});
+    R.conv.push({year:y,eligible:eligible,convCum:convCum,billingMoved:billingMoved,salarySaved:salarySaved,tingCount:tingCount,tingRev:tingRev});
   });
   return R;
 }
@@ -472,18 +499,20 @@ function renderTables(R){
   // 合署轉換表
   var fc=R.conv.filter(function(c){return c.year>by;});
   var ret=P.partnerRetention;
+  var totTing=0, totTingRev=0;
   var convRows=fc.map(function(c){
-    // 每位淨利 delta：合署(毛×留存) vs 原本(本所毛×1 − 薪資)
-    var perBill=c.convCum?c.billingMoved/c.convCum:0, perSal=c.convCum?c.salarySaved/c.convCum:0;
-    var perDelta=perBill*ret-(perBill-perSal); // = perBill*(ret-1)+perSal
-    return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td class="'+(perDelta>=0?'pos':'neg')+'">'+(perDelta>=0?'+':'')+fmtWan(perDelta)+'</td></tr>';
+    totTing+=c.tingCount||0; totTingRev+=c.tingRev||0;
+    return '<tr><td>'+c.year+'</td><td>'+(c.eligible||'—')+'</td><td>'+c.convCum+'</td><td>'+fmtWan(c.billingMoved)+'</td><td>'+fmtWan(c.salarySaved)+'</td><td>'+Math.round(c.tingCount||0).toLocaleString()+'</td><td>'+fmtWan(c.tingRev||0)+'</td></tr>';
   }).join('');
-  document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署毛收(萬)</th><th>省下薪資(萬)</th><th>每位淨利Δ(萬)</th></tr>'+convRows;
+  document.getElementById('convTable').innerHTML='<tr><th>年度</th><th>達標律師</th><th>累計轉換</th><th>移入合署新案(萬)</th><th>省下薪資(萬)</th><th>老案庭數(估)</th><th>待庭費(萬)</th></tr>'+convRows
+    +'<tr style="font-weight:700;border-top:2px solid var(--border-light)"><td>5年合計</td><td>—</td><td>—</td><td>—</td><td>—</td><td>'+Math.round(totTing).toLocaleString()+' 庭</td><td>'+fmtWan(totTingRev)+'</td></tr>';
   document.getElementById('convCap').textContent= (TENURE? '依到職日清單精算達標律師（在職≥門檻、非主管、未轉合署）':'聚合假設模式')+'；轉換目標比例 5 年線性 ramp-in，本所依在編接案律師產能份額調整（新進律師補回）';
-  var lastConv=fc[fc.length-1];
-  var perBill=lastConv&&lastConv.convCum?lastConv.billingMoved/lastConv.convCum:0, perSal=lastConv&&lastConv.convCum?lastConv.salarySaved/lastConv.convCum:0;
-  var perDelta=perBill*ret-(perBill-perSal);
-  document.getElementById('convNote').innerHTML='<b>關鍵權衡：</b>每位轉換律師帶走年營收 '+fmtWan(perBill)+'萬、原年薪 '+fmtWan(perSal)+'萬。當員工時對所淨利 ≈ 帶走營收 − 年薪 = '+fmtWan(perBill-perSal)+'萬；轉合署後喆律僅留存毛收的 '+pct(ret)+' ≈ '+fmtWan(perBill*ret)+'萬（無薪資）。每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。<b>Δ 為負</b>代表「省薪資 < 損失的所內利潤」——轉合署的價值需來自<b>留才、產能釋放、或合署帶來的增量案源</b>。想看轉換變正貢獻：把「合署喆律留存率」往上調到你認為真實的水準（目前 38.7% 是含司法官 cohort 的混合值，資深律師轉合署可能更高）。';
+  var perOut=P.avgBillingPerConvert, perSal=P.avgSalaryPerConvert, fs=1-P.newCaseFirmShare, fsf=P.newCaseFirmShare;
+  // 員工：全額產值×1 − 薪資；轉合署：新案 40%留所內×1 + 60%進合署×留存 − 0 薪資
+  var asEmp=perOut-perSal, asConv=perOut*fsf + perOut*fs*ret, perDelta=asConv-asEmp;
+  document.getElementById('convNote').innerHTML='<b>每位轉換律師經濟性（新案 '+pct(fsf)+' 所內 / '+pct(fs)+' 合署）：</b>年產值約 '+fmtWan(perOut)+'萬、原年薪 '+fmtWan(perSal)+'萬。'+
+    '當員工＝產值−薪資 ≈ '+fmtWan(asEmp)+'萬；轉合署＝'+pct(fsf)+'留本所('+fmtWan(perOut*fsf)+'萬) ＋ '+pct(fs)+'進合署×留存'+pct(ret)+'('+fmtWan(perOut*fs*ret)+'萬)，無薪資 ≈ '+fmtWan(asConv)+'萬。'+
+    '<b>每位淨利Δ = '+(perDelta>=0?'+':'')+fmtWan(perDelta)+'萬。</b>（40/60 拆分後比全轉合署溫和很多。）老案/僵案另以待庭費 '+Math.round(P.tingFee).toLocaleString()+'元/庭計（庭數為假設值，court 欄位無資料）。要讓轉換轉正：調高「合署留存率」（38.7% 是含司法官 cohort 混合值）或「新案所內佔比」。';
 
   // 逐年明細
   var cols=['year','bensuo','fa010','advisor','partner','total','personnel','opex','split','cost','profit','margin'];
