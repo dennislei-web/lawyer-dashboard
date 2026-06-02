@@ -3915,9 +3915,16 @@ function buildDeptButtons() {
   });
 }
 
+// 一筆 monthly_stats 在「當月」屬於哪個部門（處理跨轉律師：李昭萱轉合署前歸台中）
+function deptOfStat(s) {
+  return (typeof getDeptForLawyer !== 'undefined')
+    ? getDeptForLawyer(s.lawyer_id, s.month)
+    : (LAWYER_DEPARTMENTS[s.lawyer_id] || '');
+}
+
 function filterByDept(stats, dept) {
   if (!dept || dept === 'all') return stats;
-  return stats.filter(s => LAWYER_DEPARTMENTS[s.lawyer_id] === dept);
+  return stats.filter(s => deptOfStat(s) === dept);
 }
 
 function buildTrackingDeptButtons() {
@@ -4143,25 +4150,37 @@ function rateColor(rate) {
 }
 
 // Aggregate per lawyer from a stats array
-function buildLawyerRows(stats) {
-  const byLawyer = {};
+// segmented=true：跨轉律師（李昭萱）依「當月所屬部門」拆成多列，
+//   每列 name 帶期間標籤、dept 為當段部門；非跨轉律師仍是一列。
+//   segmented=false（預設）：維持一人一列、dept=現職部門，舊呼叫端不受影響。
+function buildLawyerRows(stats, segmented) {
+  const byKey = {};
   stats.forEach(s => {
-    if (!byLawyer[s.lawyer_id]) {
-      byLawyer[s.lawyer_id] = { consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
+    const seg = segmented ? deptOfStat(s) : null;
+    const key = segmented ? (s.lawyer_id + '|' + seg) : s.lawyer_id;
+    if (!byKey[key]) {
+      byKey[key] = { lawyer_id: s.lawyer_id, seg: seg, consult_count: 0, signed_count: 0, revenue: 0, collected: 0 };
     }
-    const r = byLawyer[s.lawyer_id];
+    const r = byKey[key];
     r.consult_count += s.consult_count || 0;
     r.signed_count  += s.signed_count  || 0;
     r.revenue       += s.revenue       || 0;
     r.collected     += s.collected     || 0;
   });
 
-  return Object.entries(byLawyer).map(([id, d]) => {
+  return Object.values(byKey).map(d => {
+    const id = d.lawyer_id;
     const lawyer = allLawyersMap[id] || resignedLawyersMap[id] || { name: '(未知)', office: '' };
+    const segDept = segmented ? (d.seg || '') : (LAWYER_DEPARTMENTS[id] || '');
+    let name = lawyer.name;
+    if (segmented && typeof LAWYER_DEPT_HISTORY !== 'undefined' && LAWYER_DEPT_HISTORY[id]) {
+      const pl = (typeof getDeptPeriodLabel !== 'undefined') ? getDeptPeriodLabel(id, segDept) : '';
+      if (pl) name = lawyer.name + '（' + pl + '）';
+    }
     return {
       id,
-      name:         lawyer.name,
-      dept:         LAWYER_DEPARTMENTS[id] || '',
+      name:         name,
+      dept:         segDept,
       consult_count: d.consult_count,
       signed_count:  d.signed_count,
       sign_rate:    d.consult_count > 0 ? d.signed_count / d.consult_count * 100 : 0,
@@ -4361,7 +4380,7 @@ function clearYoyPins() {
 }
 
 function renderRankingTable(stats) {
-  let rows = buildLawyerRows(stats).filter(r => !resignedLawyersMap[r.id]);
+  let rows = buildLawyerRows(stats, true).filter(r => !resignedLawyersMap[r.id]);
   rows = sortRows(rows, sortCol, sortDir);
 
   // Update column sort indicators
