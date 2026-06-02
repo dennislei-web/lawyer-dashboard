@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>里長開發追蹤</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
   :root{
     --bg:#0f1115; --card:#1a1d24; --card2:#22262f; --border:#2c313c;
@@ -124,7 +125,8 @@
           <button class="btn" id="oaSave" type="submit" style="width:auto;margin:0;padding:9px 16px">更新</button>
         </form>
       </div>
-      <div id="oaSpark" style="margin-top:12px"></div>
+      <div style="height:200px;margin-top:14px"><canvas id="oaChart"></canvas></div>
+      <div class="muted" id="oaSparkCap" style="font-size:.72rem;margin-top:6px"></div>
     </div>
 
     <div class="card">
@@ -252,13 +254,36 @@ function renderFollowers(hist){
     $('oaDelta').innerHTML = (d>=0?'<span style="color:var(--good)">▲ +'+d:'<span style="color:var(--bad)">▼ '+d)+'</span> <span class="muted">vs '+prev.date.slice(5)+'</span>'; }
   else $('oaDelta').textContent='';
   $('oaUpdated').textContent = '最後更新 '+last.date+(last.source==='line_api'?'（自動）':'（手動）');
-  var max=Math.max.apply(null, hist.map(function(h){return h.followers;}).concat([1]));
-  var recent=hist.slice(-14);
-  $('oaSpark').innerHTML =
-    '<div style="display:flex;align-items:flex-end;gap:4px;height:54px">' +
-    recent.map(function(h){ var ph=Math.round(h.followers/max*50);
-      return '<div title="'+h.date+'：'+h.followers+'" style="flex:1;min-width:6px;height:'+Math.max(ph,2)+'px;background:var(--accent);border-radius:2px"></div>'; }).join('') +
-    '</div><div class="muted" style="font-size:.72rem;margin-top:4px">近 '+recent.length+' 筆 · '+recent[0].date.slice(5)+' → '+recent[recent.length-1].date.slice(5)+'</div>';
+  $('oaSparkCap').textContent = hist.length+' 個資料點 · '+hist[0].date+' → '+last.date +
+    (hist.length<2 ? '（每天 09:00 自動新增一點，曲線會逐漸長出來）' : '');
+  renderFollowersChart(hist);
+}
+
+var oaChart = null;
+function renderFollowersChart(hist){
+  var ctx = document.getElementById('oaChart');
+  if(!ctx || !window.Chart) return;
+  var labels = hist.map(function(h){ return h.date; });
+  var data   = hist.map(function(h){ return h.followers; });
+  var ds = {
+    label:'好友數', data:data,
+    borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,.14)',
+    fill:true, tension:0.3, pointRadius:hist.length<=1?5:3, pointBackgroundColor:'#4f8ef7', borderWidth:2
+  };
+  if(oaChart){ oaChart.data.labels=labels; oaChart.data.datasets[0].data=data; oaChart.update(); return; }
+  oaChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels:labels, datasets:[ds] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ title:function(it){return it[0].label;}, label:function(it){return '好友 '+it.parsed.y;} } } },
+      scales:{
+        x:{ ticks:{color:'#8b93a1',maxTicksLimit:8,maxRotation:0}, grid:{color:'rgba(255,255,255,.05)'} },
+        y:{ ticks:{color:'#8b93a1',precision:0}, grid:{color:'rgba(255,255,255,.06)'}, beginAtZero:false }
+      }
+    }
+  });
 }
 
 function buildFilterOptions(){

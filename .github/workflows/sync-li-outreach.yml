@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: '0 1 * * *'
   workflow_dispatch:
+    inputs:
+      backfill_days:
+        description: '里民好友數回填天數(留空=只抓最新)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -43,6 +48,7 @@ jobs:
           LINE_LIMIN_OA_TOKEN: ${{ secrets.LINE_LIMIN_OA_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days }}
         run: |
           cd scripts
           python sync_li_oa_followers.py

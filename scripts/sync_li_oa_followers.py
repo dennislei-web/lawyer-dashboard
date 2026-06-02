@@ -52,41 +52,65 @@ def get_insight(date_yyyymmdd):
         return None
 
 
-def supa_upsert(row):
+def supa_upsert(rows):
+    if not rows:
+        return
     url = f"{SUPABASE_URL}/rest/v1/{TABLE}?on_conflict=date"
-    data = json.dumps([row], ensure_ascii=False).encode("utf-8")
+    data = json.dumps(rows, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST", headers={
         "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal",
     })
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=60) as r:
         r.read()
 
 
+def _row(d, res):
+    return {
+        "date": d.isoformat(),
+        "followers": int(res.get("followers") or 0),
+        "targeted_reaches": res.get("targetedReaches"),
+        "blocks": res.get("blocks"),
+        "source": "line_api",
+    }
+
+
+BACKFILL = int(os.environ.get("BACKFILL_DAYS", "0") or 0)
+
+
 def main():
-    # 以台北時間往回找最近一個 ready 的日期(最多回溯 5 天)
     now_tpe = datetime.now(timezone.utc) + timedelta(hours=8)
+
+    if BACKFILL > 0:
+        # 回填過去 N 天所有 ready 的 insight(insight 資料有起始日，太舊會 unready/no-data)
+        rows = []
+        for back in range(1, BACKFILL + 1):
+            d = (now_tpe - timedelta(days=back)).date()
+            res = get_insight(d.strftime("%Y%m%d"))
+            if res and res.get("status") == "ready" and res.get("followers") is not None:
+                rows.append(_row(d, res))
+        supa_upsert(rows)
+        if rows:
+            lo, hi = rows[-1]["date"], rows[0]["date"]
+            print(f"✓ 回填 {len(rows)} 天({lo} → {hi})")
+        else:
+            print("⚠ 回填區間內沒有 ready 資料", file=sys.stderr)
+        return
+
+    # 日常：往回找最近一個 ready 的日期(最多回溯 5 天)
     for back in range(1, 6):
         d = (now_tpe - timedelta(days=back)).date()
-        ymd = d.strftime("%Y%m%d")
-        res = get_insight(ymd)
+        res = get_insight(d.strftime("%Y%m%d"))
         if not res:
             continue
         status = res.get("status")
-        print(f"  {ymd}: status={status} followers={res.get('followers')}")
+        print(f"  {d.isoformat()}: status={status} followers={res.get('followers')}")
         if status == "ready":
-            row = {
-                "date": d.isoformat(),
-                "followers": int(res.get("followers") or 0),
-                "targeted_reaches": res.get("targetedReaches"),
-                "blocks": res.get("blocks"),
-                "source": "line_api",
-            }
-            supa_upsert(row)
-            print(f"✓ {d.isoformat()} 好友數 {row['followers']} 已寫入")
+            supa_upsert([_row(d, res)])
+            print(f"✓ {d.isoformat()} 好友數 {res.get('followers')} 已寫入")
             return
-    print("⚠ 最近 5 天都沒有 ready 的 insight 資料(可能剛啟用或好友數太少)，本次未寫入", file=sys.stderr)
+    print("⚠ 最近 5 天都沒有 ready 的 insight 資料，本次未寫入", file=sys.stderr)
 
 
 if __name__ == "__main__":
