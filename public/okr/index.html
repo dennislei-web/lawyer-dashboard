@@ -262,6 +262,8 @@
     .action-table tr:last-child td { border-bottom:none; }
     .action-table tr.action-row:hover { background:var(--bg-hover); }
     .action-table .col-title { font-weight:500; color:var(--text); }
+    .action-link { font-size:0.72rem; color:var(--blue); text-decoration:none; white-space:nowrap; margin-left:4px; }
+    .action-link:hover { color:var(--gold); text-decoration:underline; }
     .action-table .col-title .resolution { display:block; font-size:0.74rem; color:var(--text-muted);
       margin-top:4px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.4; }
     .action-table .col-owner { white-space:nowrap; }
@@ -2227,6 +2229,7 @@ function renderActionTable() {
     var overdueCls = (a.next_review_date && a.next_review_date < todayISO && ['done','dropped'].indexOf(a.status) < 0) ? ' overdue' : '';
     html += '<tr class="action-row" data-id="' + a.id + '">' +
       '<td class="col-title">' + escHtml(a.title) +
+        (a.link_url ? ' <a href="'+escHtml(a.link_url)+'" target="_blank" rel="noopener" class="action-link" onclick="event.stopPropagation()" title="開啟連結">🔗 開啟</a>' : '') +
         (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
       '</td>' +
       '<td>' + (function(){ var rt = a.recur_type || 'oneoff'; return '<span class="badge-recur '+rt+'">'+(rt==='ongoing'?'♻ 持續':'✓ 一次性')+'</span>'; })() + '</td>' +
@@ -2479,6 +2482,7 @@ function showActionModal(actionId) {
     '<div class="form-row"><label>來源會議</label><select id="afMeeting"><option value="">—</option>' +
       state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===a.source_meeting_id?'selected':'')+'>'+m.meeting_date+' '+MEETING_TYPE_LABEL[m.meeting_type]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>下次 Review</label><input type="date" id="afReview" value="'+(a.next_review_date||'')+'"></div>' +
+    '<div class="form-row"><label>連結</label><input id="afLink" value="'+escHtml(a.link_url||'')+'" placeholder="貼上儀表板/文件網址，會在項目旁顯示 🔗 開啟"></div>' +
     '<div class="form-row tall"><label>最新進度</label><textarea id="afResolution" placeholder="一句話最新狀況">'+escHtml(a.latest_resolution||'')+'</textarea></div>' +
     '<div class="form-row tall"><label>備註</label><textarea id="afNotes" placeholder="脈絡、相關連結...">'+escHtml(a.notes||'')+'</textarea></div>' +
     '<div class="form-actions">' +
@@ -2498,6 +2502,7 @@ function showActionModal(actionId) {
       recur_type: document.getElementById('afRecur').value,
       source_meeting_id: document.getElementById('afMeeting').value || null,
       next_review_date: document.getElementById('afReview').value || null,
+      link_url: document.getElementById('afLink').value.trim() || null,
       latest_resolution: document.getElementById('afResolution').value || null,
       notes: document.getElementById('afNotes').value || null
     };
