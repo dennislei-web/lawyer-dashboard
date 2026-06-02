@@ -14,7 +14,7 @@ Usage:  python sync_li_oa_followers.py
 from __future__ import annotations
 import os, sys, json, time
 import urllib.request, urllib.parse, urllib.error
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date as date_cls
 from pathlib import Path
 
 ENV_PATH = Path(__file__).parent / ".env"
@@ -87,6 +87,41 @@ def _row(d, res):
 BACKFILL = int(os.environ.get("BACKFILL_DAYS", "0") or 0)
 
 
+def db_min_date():
+    url = f"{SUPABASE_URL}/rest/v1/{TABLE}?select=date&order=date.asc&limit=1"
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Accept": "application/json"})
+    try:
+        data = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        return date_cls.fromisoformat(data[0]["date"]) if data else None
+    except Exception:
+        return None
+
+
+def extend_history(max_fill=4):
+    """從目前最早日往前，溫和補幾天(配額友善)。碰到 unready=已達 LINE 保留邊界就停。"""
+    mn = db_min_date()
+    if not mn:
+        return
+    filled = 0
+    for i in range(1, 15):
+        d = mn - timedelta(days=i)
+        res = get_insight(d.strftime("%Y%m%d"))
+        if res and res.get("status") == "ready" and res.get("followers") is not None:
+            supa_upsert([_row(d, res)]); filled += 1
+            print(f"  往前補 {d.isoformat()} = {res.get('followers')}")
+        elif res is not None:
+            print(f"  {d.isoformat()} status={res.get('status')} → 已達 LINE 保留邊界，停止往前")
+            break
+        else:
+            break  # 429/錯誤 → 留待下次
+        if filled >= max_fill:
+            break
+        time.sleep(1.5)
+    if filled:
+        print(f"✓ 本次往前延伸 {filled} 天")
+
+
 def main():
     now_tpe = datetime.now(timezone.utc) + timedelta(hours=8)
 
@@ -110,6 +145,7 @@ def main():
         return
 
     # 日常：往回找最近一個 ready 的日期(最多回溯 5 天)
+    wrote = False
     for back in range(1, 6):
         d = (now_tpe - timedelta(days=back)).date()
         res = get_insight(d.strftime("%Y%m%d"))
@@ -120,8 +156,12 @@ def main():
         if status == "ready":
             supa_upsert([_row(d, res)])
             print(f"✓ {d.isoformat()} 好友數 {res.get('followers')} 已寫入")
-            return
-    print("⚠ 最近 5 天都沒有 ready 的 insight 資料，本次未寫入", file=sys.stderr)
+            wrote = True
+            break
+    if not wrote:
+        print("⚠ 最近 5 天都沒有 ready 的 insight 資料，本次未寫入", file=sys.stderr)
+    # 每天溫和往前延伸歷史(配額友善)，直到碰到 LINE 保留邊界
+    extend_history(max_fill=4)
 
 
 if __name__ == "__main__":
