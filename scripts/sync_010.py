@@ -160,6 +160,25 @@ def supabase_upsert(table, rows, on_conflict="case_key"):
     return inserted
 
 
+def supabase_delete_all(table, key_col="case_key"):
+    """清空整張表（full reload 前先 wipe）。
+
+    raw_010_case / raw_010_installment_case 的 case_key 含 sheet_row，
+    而總表的列會隨新案插入往下位移 → 同一案每次 sync 拿到新 sheet_row →
+    case_key 改變 → merge-duplicates upsert 不覆蓋舊列 → 快照層層累積。
+    因為 fetch 每次都讀整張總表，最乾淨的做法是「先清表再重灌」。
+    """
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{key_col}=not.is.null"
+    req = urllib.request.Request(url, method="DELETE", headers={
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Prefer": "return=minimal",
+    })
+    with urllib.request.urlopen(req, timeout=180) as r:
+        r.read()
+    print(f"  deleted all rows from {table}")
+
+
 def supabase_rpc(fn, params=None):
     url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
     data = json.dumps(params or {}).encode("utf-8")
@@ -394,15 +413,25 @@ def main():
     args = ap.parse_args()
 
     if not args.skip_pull:
-        # 1. Pull + upsert 總表
+        # 1. Pull 總表 → 先清表再重灌（避免 sheet_row 位移造成快照累積）
         z = fetch_zonghyu()
-        print(f"\nupserting {len(z)} raw_010_case rows...")
-        supabase_upsert("raw_010_case", z)
+        if z:
+            print(f"\nclean reload raw_010_case...")
+            supabase_delete_all("raw_010_case")
+            print(f"upserting {len(z)} raw_010_case rows...")
+            supabase_upsert("raw_010_case", z)
+        else:
+            print("\n⚠ fetch_zonghyu 回傳空，跳過清表（保留現有資料）", file=sys.stderr)
 
-        # 2. Pull + upsert 分期付款
+        # 2. Pull 分期付款 → 同樣先清表再重灌
         i = fetch_installment()
-        print(f"\nupserting {len(i)} raw_010_installment_case rows...")
-        supabase_upsert("raw_010_installment_case", i)
+        if i:
+            print(f"\nclean reload raw_010_installment_case...")
+            supabase_delete_all("raw_010_installment_case")
+            print(f"upserting {len(i)} raw_010_installment_case rows...")
+            supabase_upsert("raw_010_installment_case", i)
+        else:
+            print("\n⚠ fetch_installment 回傳空，跳過清表（保留現有資料）", file=sys.stderr)
 
         # 3. Pull + upsert 律師目標
         t = fetch_lawyer_target()
