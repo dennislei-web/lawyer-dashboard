@@ -1955,6 +1955,22 @@
       <div id="detailYoyContent"></div>
     </div>
 
+    <!-- 個人月度比較（同期 / 個別月份，年 vs 年） -->
+    <div class="section" id="detailMonthlySection">
+      <div class="section-header">
+        <div class="section-title">個人月度比較</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="monYearA" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailMonthly(detailLawyerId)"></select>
+        <span style="color:var(--text-muted);">vs</span>
+        <select id="monYearB" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.85rem;" onchange="renderDetailMonthly(detailLawyerId)"></select>
+      </div>
+      <div class="year-filter-bar" id="monthlyPeriodBar" style="margin-bottom:12px;">
+        <span class="filter-label">期間</span>
+      </div>
+      <div id="detailMonthlyContent"></div>
+    </div>
+
     <!-- 成案金額區間分析 (from quality detail) -->
     <div class="section collected-only" style="margin-top:20px;">
       <div class="section-header">
@@ -4925,6 +4941,7 @@ function renderDetailContent() {
   renderDetailChart(filtered);
   renderDetailInsights(detailLawyerId);
   renderDetailYoy(detailLawyerId);
+  renderDetailMonthly(detailLawyerId);
   renderLawyerAmountRange(detailLawyerId);
 
   // Case cards
@@ -6129,6 +6146,113 @@ function renderDetailYoy(lawyerId) {
 
   content.innerHTML = `
     ${samePeriod && statsA.length > 0 ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">比較範圍：${yearA} 有 ${statsA.length} 個月資料，${yearB} 取同期 ${statsB.length} 個月${periodNote}</div>` : ''}
+    <div style="overflow-x:auto;">
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th class="num">${yearA}</th>
+            <th class="num">${yearB}</th>
+            <th class="num">變化</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderYoyRow('諮詢數', tA.consult_count, tB.consult_count, false)}
+          ${renderYoyRow('簽約數', tA.signed_count, tB.signed_count, false)}
+          ${renderYoyRow('簽約率', tA.sign_rate, tB.sign_rate, true)}
+          ${renderYoyRow('已收金額', tA.collected, tB.collected, false, 'collected-only')}
+          ${renderYoyRow('平均成案金額', tA.avg_collected, tB.avg_collected, false, 'collected-only')}
+          ${renderYoyRow('諮詢效益', tA.consult_eff, tB.consult_eff, false)}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ===================== 個人月度比較（同期 / 個別月份，年 vs 年同月） =====================
+let monthlyPeriod = 'ytd';  // 'ytd'（同期，已完成月份）或 'MM'（個別月份）
+
+function renderDetailMonthly(lawyerId) {
+  const content = document.getElementById('detailMonthlyContent');
+  const bar     = document.getElementById('monthlyPeriodBar');
+  const selectA = document.getElementById('monYearA');
+  const selectB = document.getElementById('monYearB');
+
+  const lawyerStats = allStats.filter(s => s.lawyer_id === lawyerId);
+
+  // 可選年度
+  const yearsSet = new Set();
+  lawyerStats.forEach(s => { if (s.month) yearsSet.add(s.month.slice(0, 4)); });
+  const years = Array.from(yearsSet).sort().reverse();
+
+  if (years.length < 2) {
+    content.innerHTML = '<div class="empty-state">需要至少兩個年度的資料才能比較</div>';
+    selectA.innerHTML = '';
+    selectB.innerHTML = '';
+    Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+    return;
+  }
+
+  // 年度下拉（保留有效選擇）
+  const prevA = selectA.value;
+  const prevB = selectB.value;
+  selectA.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  selectB.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  selectA.value = years.includes(prevA) ? prevA : years[0];
+  selectB.value = years.includes(prevB) ? prevB : years[1];
+
+  const yearA = selectA.value;
+  const yearB = selectB.value;
+
+  const statsAllA = lawyerStats.filter(s => s.month && s.month.startsWith(yearA));
+  const statsAllB = lawyerStats.filter(s => s.month && s.month.startsWith(yearB));
+
+  // yearA 有資料的月份 → chip
+  const monthsA = Array.from(new Set(statsAllA.map(s => s.month.slice(5, 7)))).sort();
+  if (monthlyPeriod !== 'ytd' && !monthsA.includes(monthlyPeriod)) monthlyPeriod = 'ytd';
+
+  // 期間 chip bar：同期 + 個別月份
+  Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+  const ytdBtn = document.createElement('button');
+  ytdBtn.className = 'year-btn' + (monthlyPeriod === 'ytd' ? ' active' : '');
+  ytdBtn.textContent = '同期';
+  ytdBtn.title = 'yearA 已完成月份對應到 yearB 同期月份';
+  ytdBtn.onclick = () => { monthlyPeriod = 'ytd'; renderDetailMonthly(lawyerId); };
+  bar.appendChild(ytdBtn);
+  monthsA.forEach(mm => {
+    const btn = document.createElement('button');
+    btn.className = 'year-btn' + (monthlyPeriod === mm ? ' active' : '');
+    btn.textContent = parseInt(mm) + '月';
+    btn.onclick = () => { monthlyPeriod = mm; renderDetailMonthly(lawyerId); };
+    bar.appendChild(btn);
+  });
+
+  // 依期間切片：同期＝yearA 月份集合對應 yearB；個別月份＝兩年同一月
+  let statsA, statsB, rangeNote;
+  if (monthlyPeriod === 'ytd') {
+    const monthsSet = new Set(monthsA);
+    statsA = statsAllA;
+    statsB = statsAllB.filter(s => monthsSet.has(s.month.slice(5, 7)));
+    const lo = monthsA.length ? parseInt(monthsA[0]) : '?';
+    const hi = monthsA.length ? parseInt(monthsA[monthsA.length - 1]) : '?';
+    rangeNote = `比較範圍：${yearA} ${lo}~${hi} 月 vs ${yearB} 同期`;
+  } else {
+    statsA = statsAllA.filter(s => s.month.slice(5, 7) === monthlyPeriod);
+    statsB = statsAllB.filter(s => s.month.slice(5, 7) === monthlyPeriod);
+    rangeNote = `比較範圍：${yearA} ${parseInt(monthlyPeriod)}月 vs ${yearB} ${parseInt(monthlyPeriod)}月`;
+  }
+
+  const tA = aggregateStats(statsA);
+  const tB = aggregateStats(statsB);
+
+  if (statsB.length === 0) {
+    content.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">${rangeNote}</div>`
+      + `<div class="empty-state">${yearB} 對應期間暫無資料</div>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">${rangeNote}</div>
     <div style="overflow-x:auto;">
       <table class="detail-table">
         <thead>
