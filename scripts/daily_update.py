@@ -424,9 +424,14 @@ def update_supabase(target_months):
     # 判斷簽約
     def is_signed(status):
         s = str(status).strip()
-        if s == "" or s == "nan" or "未" in s:
+        if s == "" or s == "nan":
             return False
-        return True
+        # 「已簽約未付款／事務所分期／貸款分期」等開頭為「已簽約」一律算已簽約，
+        # 不可被「未付款」的「未」字誤殺。
+        if s.startswith("已簽約"):
+            return True
+        # 其餘（未簽約／未填寫等）含「未」→ 未簽約
+        return "未" not in s
 
     df["已簽約"] = df["簽約狀態"].apply(is_signed)
 
@@ -579,7 +584,12 @@ def update_supabase(target_months):
             case_number = f"CRM_{lawyer_id[:8]}_{case_date_str}_{auto_idx}"
             auto_idx += 1
         sign_status = str(row.get("簽約狀態", "")).strip()
-        is_signed = sign_status != "" and sign_status != "nan" and "未" not in sign_status
+        # 「已簽約未付款／事務所分期／貸款分期」開頭為「已簽約」一律算已簽約，
+        # 不可被「未付款」的「未」字誤殺；其餘含「未」→ 未簽約。
+        is_signed = (
+            sign_status != "" and sign_status != "nan"
+            and (sign_status.startswith("已簽約") or "未" not in sign_status)
+        )
         client_name = str(row.get("當事人", "")).strip() if "當事人" in df.columns else ""
         if client_name == "nan":
             client_name = ""
