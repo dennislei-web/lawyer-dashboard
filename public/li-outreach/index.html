@@ -111,6 +111,22 @@
 
     <div class="kpis" id="kpis"></div>
 
+    <div class="card" id="oaCard">
+      <div class="row" style="align-items:flex-start">
+        <div>
+          <h3 style="margin-bottom:6px">里民 LINE 好友 <span class="hint">campaign 最終產出：里民加入「法律010🌸里民專屬法律諮詢」</span></h3>
+          <div><span id="oaNow" style="font-size:1.8rem;font-weight:700"></span> <span id="oaDelta" style="font-size:.85rem"></span></div>
+          <div class="muted" id="oaUpdated" style="font-size:.78rem;margin-top:3px"></div>
+        </div>
+        <form id="oaForm" class="row" style="gap:6px">
+          <input type="date" id="oaDate" style="width:auto;margin:0">
+          <input type="number" id="oaVal" placeholder="好友數" min="0" style="width:110px;margin:0">
+          <button class="btn" id="oaSave" type="submit" style="width:auto;margin:0;padding:9px 16px">更新</button>
+        </form>
+      </div>
+      <div id="oaSpark" style="margin-top:12px"></div>
+    </div>
+
     <div class="card">
       <h3>負責人進度 <span class="hint">每位同仁的漏斗（里長數 → 拜訪 → 完成洽談 → 採用 → 放文宣）</span></h3>
       <div style="overflow:auto"><table id="ownerTable"></table></div>
@@ -217,6 +233,32 @@ async function loadData(){
   $('meta').textContent = ALL.length+' 筆里長紀錄 · 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW') : '—')+' · 每天 09:00 自動更新';
   buildFilterOptions();
   render();
+  loadFollowers();
+}
+
+// ── 里民 LINE 好友數(手動填；之後可接 LINE API 自動寫同一張表) ──
+function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+async function loadFollowers(){
+  var r = await sb.from('bd_li_oa_followers').select('*').order('date',{ascending:true}).limit(400);
+  if(r.error){ $('oaCard').style.display='none'; return; }
+  renderFollowers(r.data || []);
+}
+function renderFollowers(hist){
+  if(!$('oaDate').value) $('oaDate').value = todayStr();
+  if(!hist.length){ $('oaNow').textContent='—'; $('oaUpdated').textContent='尚無資料，填入今天的好友數開始追蹤'; return; }
+  var last=hist[hist.length-1], prev=hist.length>1?hist[hist.length-2]:null;
+  $('oaNow').textContent = Number(last.followers).toLocaleString();
+  if(prev){ var d=last.followers-prev.followers;
+    $('oaDelta').innerHTML = (d>=0?'<span style="color:var(--good)">▲ +'+d:'<span style="color:var(--bad)">▼ '+d)+'</span> <span class="muted">vs '+prev.date.slice(5)+'</span>'; }
+  else $('oaDelta').textContent='';
+  $('oaUpdated').textContent = '最後更新 '+last.date+(last.source==='line_api'?'（自動）':'（手動）');
+  var max=Math.max.apply(null, hist.map(function(h){return h.followers;}).concat([1]));
+  var recent=hist.slice(-14);
+  $('oaSpark').innerHTML =
+    '<div style="display:flex;align-items:flex-end;gap:4px;height:54px">' +
+    recent.map(function(h){ var ph=Math.round(h.followers/max*50);
+      return '<div title="'+h.date+'：'+h.followers+'" style="flex:1;min-width:6px;height:'+Math.max(ph,2)+'px;background:var(--accent);border-radius:2px"></div>'; }).join('') +
+    '</div><div class="muted" style="font-size:.72rem;margin-top:4px">近 '+recent.length+' 筆 · '+recent[0].date.slice(5)+' → '+recent[recent.length-1].date.slice(5)+'</div>';
 }
 
 function buildFilterOptions(){
@@ -276,6 +318,17 @@ $('fSearch').addEventListener('input', render);
 $('fReset').addEventListener('click', function(){
   ['fOwner','fTier','fStage','fMonth'].forEach(function(id){ $(id).value=''; });
   $('fSearch').value=''; render();
+});
+
+$('oaForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var date=$('oaDate').value, val=parseInt($('oaVal').value,10);
+  if(!date || isNaN(val)){ alert('請填日期與好友數'); return; }
+  var btn=$('oaSave'); btn.disabled=true; btn.textContent='…';
+  var r = await sb.from('bd_li_oa_followers').upsert({date:date, followers:val, source:'manual'}, {onConflict:'date'});
+  btn.disabled=false; btn.textContent='更新';
+  if(r.error){ alert('更新失敗：'+r.error.message); return; }
+  $('oaVal').value=''; await loadFollowers();
 });
 
 function kpi(v,l,c){
