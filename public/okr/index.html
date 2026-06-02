@@ -254,6 +254,10 @@
     .action-table th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;
       color:var(--text-muted); font-weight:500; text-align:left; padding:10px 12px;
       border-bottom:1px solid var(--border); background:var(--bg-row); }
+    .action-table th.sortable { cursor:pointer; user-select:none; }
+    .action-table th.sortable:hover { color:var(--text); }
+    .action-table th.active { color:var(--gold); }
+    .action-table th .arr { font-size:0.65rem; }
     .action-table td { padding:11px 12px; border-bottom:1px solid var(--border-light); font-size:0.85rem; vertical-align:top; }
     .action-table tr:last-child td { border-bottom:none; }
     .action-table tr.action-row:hover { background:var(--bg-hover); }
@@ -2047,6 +2051,7 @@ async function saveAllEdits() {
 state.mt = {
   subtab: 'open',
   filters: { owner:'', kr:'', category:'', recur:'', search:'', showDone:false },
+  sort: { key:'carry_count', dir:'desc' },
   selectedMeetingId: null,
   meetings: [], actions: [], followups: []
 };
@@ -2161,7 +2166,7 @@ function renderOpenActions(container) {
   renderActionTable();
 
   var note = document.createElement('div'); note.className = 'mt-note';
-  note.innerHTML = '<b>用法：</b>每週開完會掃這張表，按「✓ 結案」「↻ Carry」「📝 follow-up」「⛔ 放棄」處理。Carry 自動 +1，紅色脈動 = carry≥3 老掛單。';
+  note.innerHTML = '<b>用法：</b>每週開完會掃這張表，按「✓ 結案」「↻ Carry」「📝 follow-up」「⛔ 放棄」處理。Carry 自動 +1，紅色脈動 = carry≥3 老掛單。點欄位標題可排序（再點一次反向）。';
   container.appendChild(note);
 }
 
@@ -2187,10 +2192,36 @@ function renderActionTable() {
     wrap.innerHTML = '<div class="loading-text">沒有符合條件的 actions</div>';
     return;
   }
+  // ─── Sort ───
+  var sort = state.mt.sort;
+  var STATUS_RANK = { blocked:0, in_progress:1, pending:2, done:3, dropped:4 };
+  function sortVal(a, key) {
+    if (key === 'carry_count') return a.carry_count || 0;
+    if (key === 'status') return STATUS_RANK[a.status] != null ? STATUS_RANK[a.status] : 9;
+    if (key === 'recur_type') return a.recur_type || 'oneoff';
+    if (key === 'next_review_date') return a.next_review_date || '9999-12-31';
+    return (a[key] || '').toString();
+  }
+  rows.sort(function(x, y) {
+    var vx = sortVal(x, sort.key), vy = sortVal(y, sort.key), cmp;
+    if (typeof vx === 'number') cmp = vx - vy;
+    else cmp = vx.localeCompare(vy, 'zh-Hant');
+    if (cmp === 0) cmp = (y.carry_count || 0) - (x.carry_count || 0); // tie-break: carry 高的在前
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
   var todayISO = new Date().toISOString().slice(0,10);
-  var html = '<table class="action-table"><thead><tr>' +
-    '<th style="width:36%;">行動項目</th><th>類型</th><th>類別</th><th>KR</th><th>Owner</th><th>狀態</th><th>Carry</th><th>下次 Review</th><th></th>' +
-    '</tr></thead><tbody>';
+  var COLS = [
+    { key:'title', label:'行動項目', width:'36%' }, { key:'recur_type', label:'類型' },
+    { key:'category', label:'類別' }, { key:'kr_code', label:'KR' }, { key:'owner', label:'Owner' },
+    { key:'status', label:'狀態' }, { key:'carry_count', label:'Carry' }, { key:'next_review_date', label:'下次 Review' }
+  ];
+  var thead = COLS.map(function(c) {
+    var active = sort.key === c.key;
+    var arr = active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return '<th class="sortable' + (active ? ' active' : '') + '" data-sort="' + c.key + '"' +
+      (c.width ? ' style="width:' + c.width + ';"' : '') + '>' + c.label + '<span class="arr">' + arr + '</span></th>';
+  }).join('') + '<th></th>';
+  var html = '<table class="action-table"><thead><tr>' + thead + '</tr></thead><tbody>';
   rows.forEach(function(a) {
     var carryLv = a.carry_count >= 3 ? 'lv3' : a.carry_count === 2 ? 'lv2' : a.carry_count === 1 ? 'lv1' : 'lv0';
     var overdueCls = (a.next_review_date && a.next_review_date < todayISO && ['done','dropped'].indexOf(a.status) < 0) ? ' overdue' : '';
@@ -2225,6 +2256,19 @@ function renderActionTable() {
   });
   wrap.querySelectorAll('tr.action-row').forEach(function(tr) {
     tr.addEventListener('click', function() { showActionModal(tr.dataset.id); });
+  });
+  // Bind sortable headers
+  wrap.querySelectorAll('th.sortable').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var key = th.dataset.sort;
+      if (state.mt.sort.key === key) {
+        state.mt.sort.dir = state.mt.sort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.mt.sort.key = key;
+        state.mt.sort.dir = (key === 'carry_count') ? 'desc' : 'asc'; // 數值預設高→低，其餘 A→Z / 早→晚
+      }
+      renderActionTable();
+    });
   });
 }
 
