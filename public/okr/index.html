@@ -272,6 +272,10 @@
     .badge-status.done        { background:var(--green-dim);  color:var(--green); }
     .badge-status.dropped     { background:var(--ghost-bg);   color:var(--text-muted); }
 
+    .badge-recur { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+    .badge-recur.ongoing { background:rgba(56,189,248,0.15); color:var(--blue); }
+    .badge-recur.oneoff  { background:var(--ghost-bg); color:var(--text-muted); }
+
     .badge-kr { display:inline-block; padding:2px 7px; border-radius:10px; font-size:0.7rem; font-weight:600; }
     .badge-kr.kr1 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
     .badge-kr.kr2 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
@@ -2042,7 +2046,7 @@ async function saveAllEdits() {
 // ═══════════════════════════════════════════════════════════════
 state.mt = {
   subtab: 'open',
-  filters: { owner:'', kr:'', category:'', search:'', showDone:false },
+  filters: { owner:'', kr:'', category:'', recur:'', search:'', showDone:false },
   selectedMeetingId: null,
   meetings: [], actions: [], followups: []
 };
@@ -2121,6 +2125,8 @@ function renderOpenActions(container) {
       '<option value="org">非 OKR (純營運)</option></select>' +
     '<label>類別</label><select id="mtFCat"><option value="">全部</option>' +
       CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('') + '</select>' +
+    '<label>類型</label><select id="mtFRecur"><option value="">全部</option>' +
+      '<option value="oneoff">一次性</option><option value="ongoing">持續關注</option></select>' +
     '<label><input type="checkbox" id="mtFDone" style="margin-right:4px;">含已結案</label>' +
     '<div class="spacer"></div>' +
     '<input id="mtFSearch" placeholder="🔍 搜尋..." style="width:180px;">' +
@@ -2131,15 +2137,17 @@ function renderOpenActions(container) {
   document.getElementById('mtFOwner').value = state.mt.filters.owner;
   document.getElementById('mtFKr').value = state.mt.filters.kr;
   document.getElementById('mtFCat').value = state.mt.filters.category;
+  document.getElementById('mtFRecur').value = state.mt.filters.recur;
   document.getElementById('mtFDone').checked = state.mt.filters.showDone;
   document.getElementById('mtFSearch').value = state.mt.filters.search;
 
-  ['mtFOwner','mtFKr','mtFCat','mtFSearch','mtFDone'].forEach(function(id) {
+  ['mtFOwner','mtFKr','mtFCat','mtFRecur','mtFSearch','mtFDone'].forEach(function(id) {
     var el = document.getElementById(id);
     el.addEventListener(id === 'mtFSearch' ? 'input' : 'change', function() {
       state.mt.filters.owner = document.getElementById('mtFOwner').value;
       state.mt.filters.kr    = document.getElementById('mtFKr').value;
       state.mt.filters.category = document.getElementById('mtFCat').value;
+      state.mt.filters.recur = document.getElementById('mtFRecur').value;
       state.mt.filters.search = document.getElementById('mtFSearch').value;
       state.mt.filters.showDone = document.getElementById('mtFDone').checked;
       renderActionTable();
@@ -2167,6 +2175,7 @@ function renderActionTable() {
     if (f.kr === 'org' && a.kr_code) return false;
     if (f.kr && f.kr !== 'org' && a.kr_code !== f.kr) return false;
     if (f.category && a.category !== f.category) return false;
+    if (f.recur && (a.recur_type || 'oneoff') !== f.recur) return false;
     if (f.search) {
       var s = f.search.toLowerCase();
       if ((a.title||'').toLowerCase().indexOf(s) < 0 &&
@@ -2180,7 +2189,7 @@ function renderActionTable() {
   }
   var todayISO = new Date().toISOString().slice(0,10);
   var html = '<table class="action-table"><thead><tr>' +
-    '<th style="width:38%;">行動項目</th><th>類別</th><th>KR</th><th>Owner</th><th>狀態</th><th>Carry</th><th>下次 Review</th><th></th>' +
+    '<th style="width:36%;">行動項目</th><th>類型</th><th>類別</th><th>KR</th><th>Owner</th><th>狀態</th><th>Carry</th><th>下次 Review</th><th></th>' +
     '</tr></thead><tbody>';
   rows.forEach(function(a) {
     var carryLv = a.carry_count >= 3 ? 'lv3' : a.carry_count === 2 ? 'lv2' : a.carry_count === 1 ? 'lv1' : 'lv0';
@@ -2189,6 +2198,7 @@ function renderActionTable() {
       '<td class="col-title">' + escHtml(a.title) +
         (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
       '</td>' +
+      '<td>' + (function(){ var rt = a.recur_type || 'oneoff'; return '<span class="badge-recur '+rt+'">'+(rt==='ongoing'?'♻ 持續':'✓ 一次性')+'</span>'; })() + '</td>' +
       '<td>' + (a.category ? '<span class="badge-kr org">'+escHtml(a.category)+'</span>' : '') + '</td>' +
       '<td>' + (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">非 OKR</span>') + '</td>' +
       '<td class="col-owner">' + escHtml(a.owner || '—') + '</td>' +
@@ -2408,7 +2418,7 @@ function renderMeetingList(container) {
 function showActionModal(actionId) {
   var a = actionId ? state.mt.actions.find(function(x){return x.id === actionId;}) : null;
   var isNew = !a;
-  if (!a) a = { title:'', category:'其他', kr_code:'', owner:'', status:'pending',
+  if (!a) a = { title:'', category:'其他', kr_code:'', owner:'', status:'pending', recur_type:'oneoff',
     source_meeting_id:(state.mt.meetings[0]||{}).id || '',
     next_review_date: nextWeekISO(), notes:'', latest_resolution:'' };
 
@@ -2419,6 +2429,9 @@ function showActionModal(actionId) {
       Object.keys(KR_LABEL).map(function(k){return '<option value="'+k+'" '+(k===a.kr_code?'selected':'')+'>'+KR_LABEL[k]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>Owner *</label><select id="afOwner">' + OWNER_CHOICES.map(function(o){return '<option '+(o===a.owner?'selected':'')+'>'+o+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>狀態</label><select id="afStatus">' + Object.keys(STATUS_LABEL).map(function(s){return '<option value="'+s+'" '+(s===a.status?'selected':'')+'>'+STATUS_LABEL[s]+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>類型</label><select id="afRecur">' +
+      '<option value="oneoff" '+((a.recur_type||'oneoff')==='oneoff'?'selected':'')+'>一次性（做完即結案）</option>' +
+      '<option value="ongoing" '+(a.recur_type==='ongoing'?'selected':'')+'>持續關注（成效/累積型，固定 review）</option></select></div>' +
     '<div class="form-row"><label>來源會議</label><select id="afMeeting"><option value="">—</option>' +
       state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===a.source_meeting_id?'selected':'')+'>'+m.meeting_date+' '+MEETING_TYPE_LABEL[m.meeting_type]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>下次 Review</label><input type="date" id="afReview" value="'+(a.next_review_date||'')+'"></div>' +
@@ -2438,6 +2451,7 @@ function showActionModal(actionId) {
       kr_code: document.getElementById('afKr').value || null,
       owner: document.getElementById('afOwner').value,
       status: document.getElementById('afStatus').value,
+      recur_type: document.getElementById('afRecur').value,
       source_meeting_id: document.getElementById('afMeeting').value || null,
       next_review_date: document.getElementById('afReview').value || null,
       latest_resolution: document.getElementById('afResolution').value || null,
