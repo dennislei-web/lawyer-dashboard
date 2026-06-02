@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>里長開發追蹤</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --card2:#22262f; --border:#2c313c;
+    --text:#e6e8ec; --muted:#8b93a1; --accent:#4f8ef7; --good:#3fb56b;
+    --warn:#e0954a; --bad:#e05a5a; --tierA:#3fb56b; --tierB:#e0954a; --tierC:#8b93a1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  a{color:var(--accent)}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:1.25rem;margin:0}
+  .sub{color:var(--muted);font-size:.82rem;margin-top:4px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  /* login */
+  #login{min-height:80vh;display:flex;align-items:center;justify-content:center}
+  .loginCard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:30px;width:340px;max-width:92vw}
+  .loginCard h2{margin:0 0 6px;font-size:1.1rem}
+  input{width:100%;padding:11px 12px;margin-top:10px;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.95rem}
+  button{cursor:pointer;border:none;border-radius:9px;font-size:.92rem;font-weight:600}
+  .btn{width:100%;padding:11px;margin-top:12px;background:var(--accent);color:#fff}
+  .btn:disabled{opacity:.5;cursor:default}
+  .msg{margin-top:12px;font-size:.84rem;padding:9px 11px;border-radius:8px;display:none}
+  .msg.show{display:block}
+  .msg.ok{background:rgba(63,181,107,.12);color:var(--good)}
+  .msg.err{background:rgba(224,90,90,.12);color:var(--bad)}
+  /* dashboard */
+  #dash{display:none}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:18px 0}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .kpi .v{font-size:1.5rem;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .kpi .c{font-size:.72rem;margin-top:5px}
+  .conv{color:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:.98rem}
+  .card h3 .hint{color:var(--muted);font-weight:400;font-size:.78rem;margin-left:8px}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:.78rem}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .bar{height:7px;border-radius:4px;background:var(--accent);display:inline-block;vertical-align:middle}
+  .pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:.74rem;font-weight:600}
+  .pA{background:rgba(63,181,107,.16);color:var(--tierA)}
+  .pB{background:rgba(224,149,74,.16);color:var(--tierB)}
+  .pC{background:rgba(139,147,161,.16);color:var(--tierC)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .topbar{padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px}
+  .ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:7px 12px}
+  .muted{color:var(--muted)}
+  .scroll{max-height:360px;overflow:auto}
+  @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- LOGIN -->
+  <div id="login">
+    <div class="loginCard">
+      <h2>里長開發追蹤</h2>
+      <div class="sub">輸入公司 email，我們寄一條登入連結給你（免密碼）。</div>
+      <form id="loginForm">
+        <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+        <button class="btn" id="loginBtn" type="submit">寄送登入連結</button>
+      </form>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash">
+    <div class="row topbar">
+      <div>
+        <h1>里長開發追蹤</h1>
+        <div class="sub" id="meta"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <span class="muted" id="who"></span>
+        <button class="ghost" id="logout">登出</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h3>負責人進度 <span class="hint">每位同仁的漏斗（里長數 → 拜訪 → 完成洽談 → 採用 → 放文宣）</span></h3>
+      <div style="overflow:auto"><table id="ownerTable"></table></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>維繫分級分佈 <span class="hint">A/B/C</span></h3>
+        <table id="tierTable"></table>
+      </div>
+      <div class="card">
+        <h3>採用後落地缺口 <span class="hint">里長已答應採用、但文宣還沒放</span></h3>
+        <div class="muted" id="gapSummary" style="margin-bottom:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>待辦清單：採用未放文宣 <span class="hint" id="wl1count"></span></h3>
+      <div class="scroll"><table id="worklist1"></table></div>
+    </div>
+
+    <div class="card">
+      <h3>待辦清單：已列名單尚未拜訪 <span class="hint" id="wl2count"></span></h3>
+      <div class="scroll"><table id="worklist2"></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb = null;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) {}
+
+var $ = function(id){ return document.getElementById(id); };
+function showLogin(){ $('login').style.display='flex'; $('dash').style.display='none'; }
+function showDash(){ $('login').style.display='none'; $('dash').style.display='block'; }
+function setMsg(el, text, kind){ el.className='msg show '+kind; el.textContent=text; }
+
+// ── AUTH (magic link) ──
+$('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=$('loginBtn'), m=$('loginMsg');
+  btn.disabled=true; btn.textContent='寄送中…';
+  try{
+    var r = await sb.auth.signInWithOtp({
+      email: $('email').value.trim(),
+      options: { emailRedirectTo: window.location.href.split('#')[0] }
+    });
+    if(r.error) throw r.error;
+    setMsg(m,'登入連結已寄出，請到信箱點開連結（同一個瀏覽器）。','ok');
+  }catch(ex){ setMsg(m,'寄送失敗：'+(ex.message||ex),'err'); }
+  finally{ btn.disabled=false; btn.textContent='寄送登入連結'; }
+});
+$('logout').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+
+async function checkAccess(){
+  // RLS：bd_li_access 只回傳自己那列；查得到 = 在白名單
+  var r = await sb.from('bd_li_access').select('email,name').limit(1);
+  if(r.error || !r.data || !r.data.length) return null;
+  return r.data[0];
+}
+
+async function init(){
+  if(!sb){ setMsg($('loginMsg'),'初始化失敗','err'); return; }
+  var s = await sb.auth.getSession();
+  if(!s.data.session){ showLogin(); return; }
+  var me = await checkAccess();
+  if(!me){
+    showLogin();
+    setMsg($('loginMsg'),'此帳號（'+s.data.session.user.email+'）尚未開通存取權，請聯絡管理者。','err');
+    await sb.auth.signOut();
+    return;
+  }
+  $('who').textContent = me.name || me.email;
+  showDash();
+  await loadData();
+}
+sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
+
+// ── DATA + RENDER ──
+function pct(a,b){ return b ? Math.round(a/b*100) : 0; }
+
+async function loadData(){
+  var r = await sb.from('bd_li_outreach').select('*').limit(5000);
+  if(r.error){ $('meta').textContent='讀取失敗：'+r.error.message; return; }
+  var rows = r.data || [];
+  var synced = rows.length ? rows[0].synced_at : null;
+  $('meta').textContent = rows.length+' 筆里長紀錄 · 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW') : '—')+' · 每天 09:00 自動更新';
+
+  var tot = rows.length;
+  var visited = rows.filter(function(x){ return x.visit1_date; }).length;
+  var talked  = rows.filter(function(x){ return x.talked; }).length;
+  var adopted = rows.filter(function(x){ return x.adopted; }).length;
+  var flyer   = rows.filter(function(x){ return x.flyer_placed; }).length;
+
+  $('kpis').innerHTML = [
+    kpi(tot,'里長總數',''),
+    kpi(visited,'有拜訪', pct(visited,tot)+'% of 名單'),
+    kpi(talked,'完成洽談', pct(talked,visited)+'% of 拜訪'),
+    kpi(adopted,'採用', pct(adopted,talked)+'% of 洽談'),
+    kpi(flyer,'放文宣', pct(flyer,adopted)+'% of 採用')
+  ].join('');
+
+  renderOwners(rows);
+  renderTiers(rows);
+  renderGap(rows, adopted, flyer);
+  renderWorklist1(rows);
+  renderWorklist2(rows);
+}
+
+function kpi(v,l,c){
+  return '<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div>'+
+         (c? '<div class="c conv">'+c+'</div>':'')+'</div>';
+}
+
+function renderOwners(rows){
+  var by = {};
+  rows.forEach(function(x){
+    var o = x.owner||'—';
+    by[o] = by[o] || {n:0,v:0,t:0,a:0,f:0};
+    by[o].n++;
+    if(x.visit1_date) by[o].v++;
+    if(x.talked) by[o].t++;
+    if(x.adopted) by[o].a++;
+    if(x.flyer_placed) by[o].f++;
+  });
+  var arr = Object.keys(by).map(function(k){ return Object.assign({owner:k}, by[k]); })
+                  .sort(function(a,b){ return b.a-a.a; });
+  var maxN = Math.max.apply(null, arr.map(function(x){return x.n;}).concat([1]));
+  var head = '<tr><th>負責人</th><th class="num">里長數</th><th class="num">有拜訪</th>'+
+             '<th class="num">完成洽談</th><th class="num">採用</th><th class="num">放文宣</th><th>規模</th></tr>';
+  var body = arr.map(function(x){
+    return '<tr><td><b>'+x.owner+'</b></td>'+
+      '<td class="num">'+x.n+'</td><td class="num">'+x.v+'</td>'+
+      '<td class="num">'+x.t+'</td><td class="num">'+x.a+'</td>'+
+      '<td class="num">'+x.f+'</td>'+
+      '<td><span class="bar" style="width:'+Math.round(x.n/maxN*120)+'px"></span></td></tr>';
+  }).join('');
+  $('ownerTable').innerHTML = head+body;
+}
+
+function renderTiers(rows){
+  var t = {A:0,B:0,C:0};
+  rows.forEach(function(x){ var v=(x.tier||'').toUpperCase(); if(t[v]!==undefined) t[v]++; });
+  var total=t.A+t.B+t.C||1;
+  function line(k,cls){ return '<tr><td><span class="pill '+cls+'">'+k+'</span></td>'+
+    '<td class="num">'+t[k]+'</td><td class="num muted">'+pct(t[k],total)+'%</td></tr>'; }
+  $('tierTable').innerHTML = '<tr><th>分級</th><th class="num">數量</th><th class="num">佔比</th></tr>'+
+    line('A','pA')+line('B','pB')+line('C','pC');
+}
+
+function renderGap(rows, adopted, flyer){
+  var gap = adopted - flyer;
+  $('gapSummary').innerHTML = '採用 <b style="color:var(--text)">'+adopted+'</b> · 已放文宣 <b style="color:var(--good)">'+flyer+
+    '</b> · <span style="color:var(--warn)">缺口 '+gap+' 個里長</span><br>'+
+    '<span style="font-size:.82rem">這是 campaign 真正的產出瓶頸：里長都答應了，文宣還沒落地。</span>';
+}
+
+function renderWorklist1(rows){
+  var list = rows.filter(function(x){ return x.adopted && !x.flyer_placed; })
+                 .sort(function(a,b){ return (a.owner||'').localeCompare(b.owner||''); });
+  $('wl1count').textContent = list.length+' 個';
+  var head='<tr><th>負責人</th><th>里</th><th>里長</th><th>分級</th><th>備註</th></tr>';
+  $('worklist1').innerHTML = head + (list.length? list.map(rowLine).join('') :
+    '<tr><td colspan="5" class="muted">無</td></tr>');
+}
+
+function renderWorklist2(rows){
+  var list = rows.filter(function(x){ return x.chief && !x.visit1_date && !x.talked; })
+                 .sort(function(a,b){ return (a.owner||'').localeCompare(b.owner||''); });
+  $('wl2count').textContent = list.length+' 個';
+  var head='<tr><th>負責人</th><th>里</th><th>里長</th><th>預計聯繫</th><th>追蹤</th></tr>';
+  $('worklist2').innerHTML = head + (list.length? list.map(function(x){
+    return '<tr><td>'+esc(x.owner)+'</td><td>'+esc(x.region)+'</td><td>'+esc(x.chief)+'</td>'+
+      '<td>'+esc(x.expected_contact)+'</td><td>'+esc(x.tracking)+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="muted">無</td></tr>');
+}
+
+function rowLine(x){
+  var t=(x.tier||'').toUpperCase();
+  var pill = t==='A'?'<span class="pill pA">A</span>':t==='B'?'<span class="pill pB">B</span>':t==='C'?'<span class="pill pC">C</span>':'';
+  return '<tr><td>'+esc(x.owner)+'</td><td>'+esc(x.region)+'</td><td>'+esc(x.chief)+'</td>'+
+    '<td>'+pill+'</td><td class="muted">'+esc(x.note||x.visit_result||'')+'</td></tr>';
+}
+function esc(s){ return s==null?'':String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+
+init();
+</script>
+</body>
+</html>
