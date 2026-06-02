@@ -56,6 +56,11 @@
   .ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:7px 12px}
   .muted{color:var(--muted)}
   .scroll{max-height:360px;overflow:auto}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 2px}
+  .filters select,.filters input{width:auto;margin:0;padding:8px 10px;font-size:.85rem}
+  .filters input[type=search]{min-width:170px}
+  .filters .ghost{padding:8px 12px}
+  #fCount{font-size:.8rem;margin-left:auto}
   @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -85,6 +90,23 @@
         <span class="muted" id="who"></span>
         <button class="ghost" id="logout">登出</button>
       </div>
+    </div>
+
+    <div class="filters" id="filters">
+      <select id="fOwner"><option value="">全部負責人</option></select>
+      <select id="fTier"><option value="">全部分級</option><option value="A">A 級</option><option value="B">B 級</option><option value="C">C 級</option></select>
+      <select id="fStage">
+        <option value="">全部階段</option>
+        <option value="visited">有拜訪/接觸</option>
+        <option value="talked">完成洽談</option>
+        <option value="adopted">採用</option>
+        <option value="gap">採用未放文宣</option>
+        <option value="notvisited">尚未拜訪</option>
+      </select>
+      <select id="fMonth"><option value="">全部拜訪月份</option></select>
+      <input id="fSearch" type="search" placeholder="搜尋 里 / 里長…">
+      <button class="ghost" id="fReset">清除</button>
+      <span class="muted" id="fCount"></span>
     </div>
 
     <div class="kpis" id="kpis"></div>
@@ -172,19 +194,69 @@ sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
 // ── DATA + RENDER ──
 function pct(a,b){ return b ? Math.round(a/b*100) : 0; }
 
+var ALL = [];
+
+// 從拜訪日(M/D 假設 2026，或完整日期)推月份；抓不到回 ''
+function visitMonth(x){
+  var cands = [x.visit2_date, x.visit1_date];
+  for(var i=0;i<cands.length;i++){
+    var v = (cands[i]||'').trim(); if(!v) continue;
+    var m = v.match(/^(\d{4})[-\/](\d{1,2})[-\/]\d{1,2}/);
+    if(m) return m[1]+'-'+('0'+m[2]).slice(-2);
+    m = v.match(/^(\d{1,2})\/(\d{1,2})/);
+    if(m) return '2026-'+('0'+m[1]).slice(-2);
+  }
+  return '';
+}
+
 async function loadData(){
   var r = await sb.from('bd_li_outreach').select('*').limit(5000);
   if(r.error){ $('meta').textContent='讀取失敗：'+r.error.message; return; }
-  var rows = r.data || [];
-  var synced = rows.length ? rows[0].synced_at : null;
-  $('meta').textContent = rows.length+' 筆里長紀錄 · 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW') : '—')+' · 每天 09:00 自動更新';
+  ALL = r.data || [];
+  var synced = ALL.length ? ALL[0].synced_at : null;
+  $('meta').textContent = ALL.length+' 筆里長紀錄 · 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW') : '—')+' · 每天 09:00 自動更新';
+  buildFilterOptions();
+  render();
+}
 
-  var tot = rows.length;
+function buildFilterOptions(){
+  var owners={}, months={};
+  ALL.forEach(function(x){
+    if(x.owner) owners[x.owner]=(owners[x.owner]||0)+1;
+    var mo=visitMonth(x); if(mo) months[mo]=(months[mo]||0)+1;
+  });
+  $('fOwner').innerHTML = '<option value="">全部負責人</option>' +
+    Object.keys(owners).sort().map(function(o){ return '<option value="'+esc(o)+'">'+esc(o)+'（'+owners[o]+'）</option>'; }).join('');
+  $('fMonth').innerHTML = '<option value="">全部拜訪月份</option>' +
+    Object.keys(months).sort().map(function(m){ return '<option value="'+m+'">'+m+'（'+months[m]+'）</option>'; }).join('') +
+    '<option value="__none">無明確日期</option>';
+}
+
+function applyFilters(){
+  var o=$('fOwner').value, t=$('fTier').value, st=$('fStage').value, mo=$('fMonth').value,
+      q=$('fSearch').value.trim().toLowerCase();
+  return ALL.filter(function(x){
+    if(o && x.owner!==o) return false;
+    if(t && (x.tier||'').toUpperCase()!==t) return false;
+    if(st==='visited'    && !x.visit1_date) return false;
+    if(st==='talked'     && !x.talked) return false;
+    if(st==='adopted'    && !x.adopted) return false;
+    if(st==='gap'        && !(x.adopted && !x.flyer_placed)) return false;
+    if(st==='notvisited' && (x.visit1_date || x.talked)) return false;
+    if(mo){ var vm=visitMonth(x); if(mo==='__none'){ if(vm) return false; } else if(vm!==mo) return false; }
+    if(q){ var hay=((x.region||'')+(x.chief||'')+(x.owner||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+}
+
+function render(){
+  var rows = applyFilters();
+  $('fCount').textContent = '顯示 '+rows.length+' / '+ALL.length+' 筆';
+  var tot=rows.length;
   var visited = rows.filter(function(x){ return x.visit1_date; }).length;
   var talked  = rows.filter(function(x){ return x.talked; }).length;
   var adopted = rows.filter(function(x){ return x.adopted; }).length;
   var flyer   = rows.filter(function(x){ return x.flyer_placed; }).length;
-
   $('kpis').innerHTML = [
     kpi(tot,'里長總數',''),
     kpi(visited,'有拜訪', pct(visited,tot)+'% of 名單'),
@@ -192,13 +264,19 @@ async function loadData(){
     kpi(adopted,'採用', pct(adopted,talked)+'% of 洽談'),
     kpi(flyer,'放文宣', pct(flyer,adopted)+'% of 採用')
   ].join('');
-
   renderOwners(rows);
   renderTiers(rows);
   renderGap(rows, adopted, flyer);
   renderWorklist1(rows);
   renderWorklist2(rows);
 }
+
+['fOwner','fTier','fStage','fMonth'].forEach(function(id){ $(id).addEventListener('change', render); });
+$('fSearch').addEventListener('input', render);
+$('fReset').addEventListener('click', function(){
+  ['fOwner','fTier','fStage','fMonth'].forEach(function(id){ $(id).value=''; });
+  $('fSearch').value=''; render();
+});
 
 function kpi(v,l,c){
   return '<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div>'+
