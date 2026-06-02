@@ -5306,9 +5306,19 @@ function setYoy(id, curr, prev, isPercent, display, prevDisplay, periodLabel) {
     changeEl.className = 'yoy-change flat';
     return;
   }
-  const diff   = isPercent ? (curr - prev) : (curr - prev) / prev * 100;
-  const sign   = diff > 0 ? '+' : '';
-  const label  = sign + diff.toFixed(1) + '%';
+  let label;
+  let diff;
+  if (isPercent) {
+    // 簽約率等百分比指標：主標相對變化（與客單、效益同口徑），括號補百分點差避免誤讀
+    const ptDiff  = curr - prev;
+    const relDiff = ptDiff / prev * 100;
+    diff = relDiff;
+    label = (relDiff > 0 ? '+' : '') + relDiff.toFixed(1) + '%'
+          + '（' + (ptDiff > 0 ? '+' : '') + ptDiff.toFixed(1) + 'pt）';
+  } else {
+    diff  = (curr - prev) / prev * 100;
+    label = (diff > 0 ? '+' : '') + diff.toFixed(1) + '%';
+  }
   changeEl.textContent = 'vs ' + prevPart + ' ' + label;
   changeEl.className   = 'yoy-change ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
 }
