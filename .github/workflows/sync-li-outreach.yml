@@ -37,3 +37,12 @@ jobs:
         run: |
           cd scripts
           python sync_li_outreach.py
+
+      - name: Run sync_li_oa_followers (里民 LINE 好友數)
+        env:
+          LINE_LIMIN_OA_TOKEN: ${{ secrets.LINE_LIMIN_OA_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd scripts
+          python sync_li_oa_followers.py
