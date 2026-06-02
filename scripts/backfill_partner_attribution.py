@@ -42,6 +42,17 @@ H = {
 }
 
 
+# 合署生效日：在某律師正式加入合署之前，其收款一律視為所內（firm_default，不套拆帳）。
+# 與 public/revenue/index.html 的 PARTNER_SINCE 對齊；此處只需含有 partner_terms 的律師。
+# 沒列在這裡的 partner 預設視為「一直都是合署」（不 gating），以保留舊行為。
+PARTNER_SINCE = {
+    "許煜婕": "2024-11-01",
+    "李昭萱": "2025-06-01",
+    "柯雪莉": "2025-09-01",
+    "黃顯皓": "2025-10-01",
+}
+
+
 def split_lawyers(s):
     if not s:
         return []
@@ -69,6 +80,13 @@ def attribute(rec, terms_map):
     partner_name = first_partner_in_list(lawyers, terms_map)
     if not partner_name:
         return base_amt, "firm_default", None
+
+    # 合署生效日 gating：紀錄日早於該 partner 轉合署日 → 當時是受雇/所內，整筆算所內
+    since = PARTNER_SINCE.get(partner_name)
+    rec_date = (rec.get("record_date") or "")[:10]
+    if since and rec_date and rec_date < since:
+        return base_amt, "firm_default", None
+
     terms = terms_map[partner_name]
 
     consult_fee_amount = float(terms.get("consult_fee_amount") or 0)
