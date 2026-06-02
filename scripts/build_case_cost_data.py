@@ -303,10 +303,18 @@ for off, names in LAWYERS_BY_OFFICE.items():
         NAME_TO_PRIMARY_OFFICE[n] = off
 print(f'  name -> office mapped: {len(NAME_TO_PRIMARY_OFFICE)} names')
 
-booking_by_mo_all = defaultdict(float)
-booking_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}
+# firm-only / partner 拆分：簽約律師在 case_date 當下若已是合署 partner → 該筆 booking 屬「合署層」，
+# 否則屬「所內 firm 層」。分子薪資只含受薪員工（合署 partner 多半不在薪資名冊、是拆帳非薪資），
+# 故「薪資÷新成案」應拿 firm-only booking 當分母才口徑一致；合署 booking 另列對照。
+booking_by_mo_all = defaultdict(float)        # 全部 signed（firm + 合署），保留供對照
+booking_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}          # 全部
+booking_firm_by_mo_all = defaultdict(float)
+booking_partner_by_mo_all = defaultdict(float)
+booking_firm_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}     # 所內 firm-only
+booking_partner_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}  # 合署層
 unmapped_revenue = 0.0
 unmapped_lawyers = Counter()
+partner_revenue = 0.0
 for r in cons_rows:
     if not r.get('is_signed'): continue
     rev = r.get('revenue')
@@ -320,23 +328,67 @@ for r in cons_rows:
     fy = dt.year - 1911
     key = (fy, dt.month)
     amt = float(rev)
-    booking_by_mo_all[key] += amt
     lid = r.get('lawyer_id')
     name = lawyer_id_to_name.get(lid) if lid else None
+    is_partner = bool(name) and PARTNER_SINCE_DT.get(name) is not None and PARTNER_SINCE_DT[name] <= dt
+    booking_by_mo_all[key] += amt
+    if not is_partner:
+        booking_firm_by_mo_all[key] += amt
+    else:
+        booking_partner_by_mo_all[key] += amt
+        partner_revenue += amt
     off = NAME_TO_PRIMARY_OFFICE.get(name) if name else None
     if off and off in booking_by_mo_office:
         booking_by_mo_office[off][key] += amt
+        if is_partner:
+            booking_partner_by_mo_office[off][key] += amt
+        else:
+            booking_firm_by_mo_office[off][key] += amt
     else:
         unmapped_revenue += amt
         unmapped_lawyers[name or f'(no-name id:{lid[:8] if lid else "?"})'] += amt
-print(f'  signed booking: total={sum(booking_by_mo_all.values()):,.0f}; unmapped={unmapped_revenue:,.0f} ({100*unmapped_revenue/sum(booking_by_mo_all.values()):.1f}%)')
+_tot = sum(booking_by_mo_all.values())
+print(f'  signed booking: total={_tot:,.0f}; firm-only={sum(booking_firm_by_mo_all.values()):,.0f}; '
+      f'合署={partner_revenue:,.0f} ({100*partner_revenue/_tot:.1f}%); '
+      f'unmapped={unmapped_revenue:,.0f} ({100*unmapped_revenue/_tot:.1f}%)')
 if unmapped_revenue > 0:
     print(f'  top 5 unmapped: {dict(unmapped_lawyers.most_common(5))}')
 
-def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
+# ─────────────────────────────────────────────────────────────────────────
+# 所內實收（含續委任）：revenue_records 是實際收款帳，涵蓋續委任 / 老客戶直接委任 /
+# 自帶案——這些都不會走諮詢漏斗、故不在 consultation_cases。firm_amount 已是「所內口徑」
+# （合署拆帳已扣掉），正好同時處理合署。用 record_date 月歸屬、office 欄直接分所。
+# 注意：這是收款口徑（含分期、含本期收到的舊約款），與諮詢「簽約合約額」概念不同，
+# 但要跟損益表對得起來本來就該用收款/認列口徑。
+print('=== Loading revenue_records for 所內實收 (含續委任) ===')
+rev_rows = fetch_all(f'{SB_URL}/revenue_records?select=record_date,firm_amount,office,is_void,transaction_type')
+firm_rev_by_mo_all = defaultdict(float)
+firm_rev_by_mo_office = {o: defaultdict(float) for o in PHYSICAL_OFFICES}
+for r in rev_rows:
+    if r.get('is_void'): continue
+    if r.get('transaction_type') != 'PaymentTransaction': continue
+    rd = r.get('record_date')
+    if not rd: continue
+    rdt = to_date(rd)
+    if not rdt: continue
+    fy = rdt.year - 1911
+    key = (fy, rdt.month)
+    amt = float(r.get('firm_amount') or 0)
+    firm_rev_by_mo_all[key] += amt
+    off = r.get('office')
+    if off in firm_rev_by_mo_office:
+        firm_rev_by_mo_office[off][key] += amt
+print(f'  所內實收 total={sum(firm_rev_by_mo_all.values()):,.0f}')
+
+def compute_office_slice(office, case_filter, sal_by_mo,
+                         booking_firm_by_mo=None, booking_partner_by_mo=None,
+                         firm_rev_by_mo=None):
     """
     case_filter: callable(case) -> bool
     sal_by_mo: dict (fy, m) -> salary
+    firm_rev_by_mo: 所內實收(含續委任) by (fy,m)，revenue_records.firm_amount，當「薪資÷所內實收」分母
+    booking_firm_by_mo: 所內 firm-only signed booking（分子薪資對齊的口徑，用作「薪資÷新成案」分母）
+    booking_partner_by_mo: 合署 partner signed booking（另列對照，不進分母；合署是拆帳非薪資）
     returns dict with monthly_series, age_distribution, case_type_breakdown, lawyer_ranking, legal_staff_ranking
     """
     general_subset = [c for c in general_cases if case_filter(c)]
@@ -382,9 +434,15 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
         lifetime_cost_per_case = u_firm * cdur_median / 30 if cdur_median else 0
 
         # 真實 P&L 比值 (flow/flow, 修正 stock-flow trap)
-        new_booking = (booking_by_mo or {}).get((fy, m), 0)
+        # 分母用 firm-only booking（與受薪薪資口徑一致）；合署 booking 另存對照。
+        new_booking_firm = (booking_firm_by_mo or {}).get((fy, m), 0)
+        new_booking_partner = (booking_partner_by_mo or {}).get((fy, m), 0)
+        new_booking = new_booking_firm  # 沿用既有欄名＝分母（firm-only）
+        new_booking_all = new_booking_firm + new_booking_partner
+        firm_revenue = (firm_rev_by_mo or {}).get((fy, m), 0)  # 所內實收(含續委任)
         n_closed = len(closed_durs)
         sal_to_booking_pct = round(sal / new_booking * 100, 1) if new_booking else 0
+        sal_to_revenue_pct = round(sal / firm_revenue * 100, 1) if firm_revenue else 0
         sal_per_closed_case = round(sal / n_closed) if n_closed else 0
         # 12 mo rolling 待後續迴圈外計算
 
@@ -400,7 +458,11 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
             'u_lump': round(u_lump),
             'u_firm': round(u_firm),
             'new_booking': round(new_booking),
+            'new_booking_partner': round(new_booking_partner),
+            'new_booking_all': round(new_booking_all),
+            'firm_revenue': round(firm_revenue),
             'sal_to_booking_pct': sal_to_booking_pct,
+            'sal_to_revenue_pct': sal_to_revenue_pct,
             'sal_per_closed_case': sal_per_closed_case,
             'active_dur_median': round(adur_median, 1),
             'active_dur_mean': round(adur_mean, 1),
@@ -419,10 +481,24 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
         window = monthly_series[max(0, i-11):i+1]
         sal_sum = sum(r['sal_office'] for r in window)
         booking_sum = sum(r['new_booking'] for r in window)
+        booking_partner_sum = sum(r['new_booking_partner'] for r in window)
+        booking_all_sum = sum(r['new_booking_all'] for r in window)
         closed_sum = sum(r['n_closed_in_month'] for r in window)
+        # 所內實收：revenue_records 只從 114-06 起有資料，早期月份 firm_revenue=0。
+        # 若用整 12 月薪資 ÷ 部分月份營收會虛胖比例，故分子薪資只取「該月有營收」的月份對齊；
+        # 至少要 6 個有效月才算（避免單月雜訊），否則留 0 讓前端略過。
+        rev_window = [r for r in window if r['firm_revenue'] > 0]
+        firm_rev_sum = sum(r['firm_revenue'] for r in rev_window)
+        sal_sum_rev = sum(r['sal_office'] for r in rev_window)
+        rev_valid = len(rev_window) >= 6 and firm_rev_sum > 0
         monthly_series[i]['sal_to_booking_pct_12mo'] = round(sal_sum / booking_sum * 100, 1) if booking_sum else 0
+        monthly_series[i]['sal_to_revenue_pct_12mo'] = round(sal_sum_rev / firm_rev_sum * 100, 1) if rev_valid else 0
+        monthly_series[i]['firm_revenue_months'] = len(rev_window)
         monthly_series[i]['sal_per_closed_case_12mo'] = round(sal_sum / closed_sum) if closed_sum else 0
         monthly_series[i]['new_booking_12mo'] = round(booking_sum)
+        monthly_series[i]['new_booking_partner_12mo'] = round(booking_partner_sum)
+        monthly_series[i]['new_booking_all_12mo'] = round(booking_all_sum)
+        monthly_series[i]['firm_revenue_12mo'] = round(firm_rev_sum)
         monthly_series[i]['n_closed_12mo'] = closed_sum
 
     # case_type / ranking 用 latest asof（最新月 / 各年的 year-end 由前端 derive）
@@ -554,11 +630,15 @@ def compute_office_slice(office, case_filter, sal_by_mo, booking_by_mo=None):
 # ============ Compute slices ============
 by_office = {}
 print('\n=== Computing 全所 ===')
-by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo, booking_by_mo_all)
+by_office['全所'] = compute_office_slice('全所', lambda c: True, sal_all_by_mo,
+                                         booking_firm_by_mo_all, booking_partner_by_mo_all,
+                                         firm_rev_by_mo_all)
 
 for off in PHYSICAL_OFFICES:
     print(f'=== Computing {off} ===')
-    by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off], booking_by_mo_office[off])
+    by_office[off] = compute_office_slice(off, lambda c, o=off: c['_office'] == o, sal_office_by_mo[off],
+                                          booking_firm_by_mo_office[off], booking_partner_by_mo_office[off],
+                                          firm_rev_by_mo_office[off])
 
 # ============ Office breakdown (全所 only) — 各分所 lifetime cost ranking ============
 print('\n=== Office breakdown ===')
