@@ -12,7 +12,7 @@ OA：法律010🌸里民專屬法律諮詢 (Channel ID 2009969674)
 Usage:  python sync_li_oa_followers.py
 """
 from __future__ import annotations
-import os, sys, json
+import os, sys, json, time
 import urllib.request, urllib.parse, urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,18 +38,26 @@ if not TOKEN:
 
 
 def get_insight(date_yyyymmdd):
+    """回傳 parsed json；遇 429(速率限制)自動退避重試。只印狀態碼，不印 body。"""
     url = "https://api.line.me/v2/bot/insight/followers?" + urllib.parse.urlencode({"date": date_yyyymmdd})
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        # 只印狀態碼 + 錯誤 type，不印 body 細節(避免任何外洩)
-        print(f"  insight {date_yyyymmdd}: HTTP {e.code}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"  insight {date_yyyymmdd}: {type(e).__name__}", file=sys.stderr)
-        return None
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait = 5 * (attempt + 1)
+                print(f"  insight {date_yyyymmdd}: HTTP 429，{wait}s 後重試({attempt+1}/5)", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(f"  insight {date_yyyymmdd}: HTTP {e.code}", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"  insight {date_yyyymmdd}: {type(e).__name__}", file=sys.stderr)
+            return None
+    print(f"  insight {date_yyyymmdd}: 連續 429，放棄", file=sys.stderr)
+    return None
 
 
 def supa_upsert(rows):
@@ -83,19 +91,22 @@ def main():
     now_tpe = datetime.now(timezone.utc) + timedelta(hours=8)
 
     if BACKFILL > 0:
-        # 回填過去 N 天所有 ready 的 insight(insight 資料有起始日，太舊會 unready/no-data)
-        rows = []
+        # 回填過去 N 天；節流避免 429。統計 ready / 非 ready(unready=超出 LINE 保留期)
+        rows, n_ready, n_unready = [], 0, 0
         for back in range(1, BACKFILL + 1):
             d = (now_tpe - timedelta(days=back)).date()
             res = get_insight(d.strftime("%Y%m%d"))
             if res and res.get("status") == "ready" and res.get("followers") is not None:
-                rows.append(_row(d, res))
+                rows.append(_row(d, res)); n_ready += 1
+            elif res is not None:
+                n_unready += 1  # status=unready/out_of_service → LINE 已無此日資料
+            time.sleep(0.35)  # 節流
         supa_upsert(rows)
         if rows:
             lo, hi = rows[-1]["date"], rows[0]["date"]
-            print(f"✓ 回填 {len(rows)} 天({lo} → {hi})")
+            print(f"✓ 回填 {n_ready} 天({lo} → {hi})；另有 {n_unready} 天 LINE 已無資料(保留期外)")
         else:
-            print("⚠ 回填區間內沒有 ready 資料", file=sys.stderr)
+            print(f"⚠ 區間內無 ready 資料(unready {n_unready} 天)", file=sys.stderr)
         return
 
     # 日常：往回找最近一個 ready 的日期(最多回溯 5 天)
