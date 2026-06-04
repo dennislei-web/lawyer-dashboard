@@ -108,7 +108,7 @@
     <div class="note" id="alertBox" style="display:none"></div>
 
     <div class="card">
-      <h3>轉化漏斗<span class="hint">報名 → 利衝建檔 → 聯繫完成 → 導入 LINE@ → 約成諮詢（百分比為占總報名數）</span></h3>
+      <h3>轉化漏斗<span class="hint">報名 → 利衝建檔 → 已分派 → 已聯繫處理 → 導入 LINE@ → 約成（占總報名數；「已聯繫處理」含有聯繫摘要者）</span></h3>
       <div class="funnel" id="funnel"></div>
     </div>
 
@@ -201,6 +201,9 @@ sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
 var LEADS=[];
 function isExcluded(r){ return /已委|已諮|利衝/.test(r.special_status||''); }
 function hasLine(r){ return !!(r.line_url && r.line_url.trim()); }
+function hasNotes(r){ return !!(r.contact_notes && r.contact_notes.trim()); }
+// 「聯繫完成」勾選欄常被漏勾，故有聯繫摘要(已寄信/致電…)也視為已聯繫處理
+function isContacted(r){ return !!(r.contacted || hasNotes(r)); }
 
 async function loadData(){
   var r = await sb.from('seminar_leads').select('*').order('row_index',{ascending:true});
@@ -218,7 +221,9 @@ function counts(){
   return {
     total:n,
     conflict:LEADS.filter(function(r){return r.conflict_filed;}).length,
-    contacted:LEADS.filter(function(r){return r.contacted;}).length,
+    assigned:LEADS.filter(function(r){return r.owner;}).length,
+    contacted:LEADS.filter(isContacted).length,
+    contactedFlag:LEADS.filter(function(r){return r.contacted;}).length,
     line:LEADS.filter(hasLine).length,
     booked:LEADS.filter(function(r){return r.booked;}).length,
     excl:LEADS.filter(isExcluded).length
@@ -229,7 +234,7 @@ function renderKPIs(){
   var c=counts();
   var k=[
     {cls:'acc', v:c.total, l:'報名總數', cc:'已利衝建檔 '+c.conflict+'（'+pct(c.conflict,c.total)+'%）'},
-    {cls:c.contacted? 'good':'warn', v:c.contacted, l:'已聯繫完成', cc:pct(c.contacted,c.total)+'% of 報名 ｜ 待聯繫 '+(c.total-c.contacted)},
+    {cls:c.contacted? 'good':'warn', v:c.contacted, l:'已聯繫處理', cc:pct(c.contacted,c.total)+'% ｜ 已分派 '+c.assigned+' ｜ 待聯繫 '+(c.total-c.contacted)},
     {cls:c.line? 'good':'', v:c.line, l:'已導入 LINE@', cc:pct(c.line,c.total)+'% of 報名'},
     {cls:c.booked? 'good':'bad', v:c.booked, l:'已約成諮詢', cc:pct(c.booked,c.total)+'% of 報名（最終轉化）'}
   ];
@@ -241,11 +246,12 @@ function renderKPIs(){
 function renderFunnel(){
   var c=counts(), n=c.total||1;
   var steps=[
-    {l:'報名',       v:c.total,    col:'var(--accent)'},
-    {l:'利衝建檔',   v:c.conflict, col:'var(--gold)'},
-    {l:'聯繫完成',   v:c.contacted,col:'var(--warn)'},
-    {l:'導入 LINE@', v:c.line,     col:'var(--line)'},
-    {l:'約成諮詢',   v:c.booked,   col:'var(--good)'}
+    {l:'報名',         v:c.total,    col:'var(--accent)'},
+    {l:'利衝建檔',     v:c.conflict, col:'var(--gold)'},
+    {l:'已分派同仁',   v:c.assigned, col:'#b974e0'},
+    {l:'已聯繫處理',   v:c.contacted,col:'var(--warn)'},
+    {l:'導入 LINE@',   v:c.line,     col:'var(--line)'},
+    {l:'約成諮詢',     v:c.booked,   col:'var(--good)'}
   ];
   $('funnel').innerHTML = steps.map(function(s){
     var p=Math.round(s.v/n*100);
@@ -257,8 +263,10 @@ function renderFunnel(){
 function renderAlert(){
   var c=counts(), msgs=[];
   var todo=c.total-c.contacted;
-  if(todo>0) msgs.push('🟡 <b>'+todo+' 筆已報名但尚未聯繫</b>（占 '+pct(todo,c.total)+'%）。其中已分派同仁的有 '+LEADS.filter(function(r){return r.owner && !r.contacted;}).length+' 筆，未分派 '+LEADS.filter(function(r){return !r.owner && !r.contacted;}).length+' 筆 — 未分派的請盡快指派負責人。');
-  var contactedNoLine=LEADS.filter(function(r){return r.contacted && !hasLine(r) && !r.booked;}).length;
+  var unassigned=LEADS.filter(function(r){return !r.owner;}).length;
+  var assignedTodo=LEADS.filter(function(r){return r.owner && !isContacted(r);}).length;
+  if(todo>0) msgs.push('🟡 <b>'+todo+' 筆尚未聯繫處理</b>（占 '+pct(todo,c.total)+'%）：未分派 '+unassigned+' 筆、已分派但還沒動 '+assignedTodo+' 筆 — 未分派的請盡快指派負責人。');
+  var contactedNoLine=LEADS.filter(function(r){return isContacted(r) && !hasLine(r) && !r.booked;}).length;
   if(contactedNoLine>0) msgs.push('🟠 <b>'+contactedNoLine+' 筆已聯繫但尚未導入 LINE@ 也未約成</b> — 聯繫後沒鎖下一步互動，最容易在這裡流失。');
   if(c.excl>0) msgs.push('ℹ️ <b>'+c.excl+' 筆為已委／已諮／利衝</b>，多半不可轉化，評估轉化率時可視情況排除（明細頁用「已委/已諮」篩選檢視）。');
   if(c.booked===0 && c.total>0) msgs.push('🔴 <b>目前約成 0 筆</b> — 整批仍卡在聯繫前段，轉化尚未啟動。');
@@ -272,7 +280,7 @@ function renderOwners(){
     var o=r.owner||'（未分派）';
     if(!map[o]) map[o]={tot:0,contacted:0,line:0,booked:0};
     map[o].tot++;
-    if(r.contacted) map[o].contacted++;
+    if(isContacted(r)) map[o].contacted++;
     if(hasLine(r)) map[o].line++;
     if(r.booked) map[o].booked++;
   });
@@ -326,8 +334,8 @@ function drawChannel(){
 var FILTER='all';
 function matchFilter(r){
   if(FILTER==='all') return true;
-  if(FILTER==='todo') return !r.contacted;
-  if(FILTER==='contacted') return r.contacted && !r.booked;
+  if(FILTER==='todo') return !isContacted(r);
+  if(FILTER==='contacted') return isContacted(r) && !r.booked;
   if(FILTER==='line') return hasLine(r);
   if(FILTER==='booked') return r.booked;
   if(FILTER==='excl') return isExcluded(r);
@@ -336,7 +344,7 @@ function matchFilter(r){
 function statusBadges(r){
   var b='';
   b+='<span class="badge '+(r.conflict_filed?'b-on':'b-off')+'">利衝</span>';
-  b+='<span class="badge '+(r.contacted?'b-on':'b-off')+'">聯繫</span>';
+  b+='<span class="badge '+(isContacted(r)?'b-on':'b-off')+'" title="'+(r.contacted?'已勾選聯繫完成':(hasNotes(r)?'有聯繫摘要':'尚未聯繫'))+'">聯繫</span>';
   if(hasLine(r)) b+='<a class="badge b-line" href="'+esc(r.line_url)+'" target="_blank" rel="noopener">LINE↗</a>';
   else b+='<span class="badge b-off">LINE</span>';
   b+='<span class="badge '+(r.booked?'b-on':'b-off')+'">約成</span>';
