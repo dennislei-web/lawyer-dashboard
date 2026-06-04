@@ -377,8 +377,8 @@ function renderKPIs(){
   k=k.concat([
     {cls:'acc', v:c.total, l:'有諮詢意願', cc:'已利衝建檔 '+c.conflict+'（'+pct(c.conflict,c.total)+'%）'},
     {cls:c.contacted? 'good':'warn', v:c.contacted, l:'已聯繫處理', cc:pct(c.contacted,c.total)+'% ｜ 已分派 '+c.assigned+' ｜ 待聯繫 '+(c.total-c.contacted)},
-    {cls:c.line? 'good':'', v:c.line, l:'已導入 LINE@', cc:pct(c.line,c.total)+'% of 報名'},
-    {cls:c.booked? 'good':'bad', v:c.booked, l:'已約成諮詢', cc:pct(c.booked,c.total)+'% of 報名（最終轉化）'}
+    {cls:c.line? 'good':'', v:c.line, l:'已導入 LINE@', cc:pct(c.line,c.total)+'% of 諮詢意願'},
+    {cls:c.booked? 'good':'bad', v:c.booked, l:'已約成諮詢', cc:pct(c.booked,c.total)+'% of 諮詢意願（最終轉化）'}
   ]);
   $('kpis').innerHTML = k.map(function(x){
     return '<div class="kpi '+x.cls+'"><div class="v">'+x.v+'</div><div class="l">'+x.l+'</div><div class="c">'+x.cc+'</div></div>';
