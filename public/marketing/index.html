@@ -51,6 +51,12 @@
   .ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:7px 12px}
   .muted{color:var(--muted)}
   .scroll{max-height:340px;overflow:auto}
+  table.overview td{padding:9px 11px}
+  table.overview tbody tr:hover{background:rgba(255,255,255,.03)}
+  td.barcell{position:relative}
+  td.barcell .bg{position:absolute;left:9px;bottom:3px;height:4px;border-radius:2px;opacity:.7}
+  td.barcell .t{position:relative}
+  .peak{font-size:.66rem;color:var(--good);margin-left:5px;vertical-align:middle}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .note{background:rgba(224,149,74,.10);border:1px solid rgba(224,149,74,.3);border-radius:10px;padding:12px 14px;font-size:.85rem;color:#e8c79a;margin-bottom:16px;line-height:1.55}
   @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
@@ -87,6 +93,11 @@
     <div class="kpis" id="kpis"></div>
 
     <div class="note" id="alertBox" style="display:none"></div>
+
+    <div class="card">
+      <h3>歷史總覽<span class="hint">每月一列 — 花費 → 名單 → CPL → 約訪，整條漏斗一眼看完（CPL 越低越好）</span></h3>
+      <div class="scroll"><table class="overview" id="tOverview"></table></div>
+    </div>
 
     <div class="card">
       <h3>廣告花費 vs 名單成本 (CPL)<span class="hint">每月 — 長條=總花費，折線=每名單成本，越低越好</span></h3>
@@ -181,7 +192,7 @@ async function loadData(){
   MON=m.data||[]; BIW=b.data||[]; APT=a.data||[];
   var synced = MON.length? MON[0].synced_at : null;
   $('meta').textContent = '資料來源：welly FB 投放報表 ｜ 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW'):'—')+' ｜ 每天 09:00 自動更新';
-  renderKPIs(); renderAlert(); renderTables();
+  renderKPIs(); renderAlert(); renderOverview(); renderTables();
   drawSpend(); drawLine(); drawAppt();
 }
 
@@ -224,6 +235,39 @@ function renderAlert(){
   if(la.appointments!=null && peak.appointments && la.appointments < peak.appointments*0.5)
     msgs.push('🟡 <b>約訪場次滑落</b>：'+la.month+' 只有 '+la.appointments+' 場，高峰是 '+peak.month+' 的 '+peak.appointments+' 場。名單成本還在改善，但最終約訪轉換掉了一半以上 — 瓶頸可能在名單品質或追約環節。');
   if(msgs.length){ $('alertBox').style.display='block'; $('alertBox').innerHTML = msgs.join('<hr style="border:none;border-top:1px solid rgba(224,149,74,.25);margin:10px 0">'); }
+}
+
+function renderOverview(){
+  var aptMap={}; APT.forEach(function(r){ aptMap[r.month]=r.appointments; });
+  var maxSpend=0,maxLeads=0,maxApt=0;
+  MON.forEach(function(r){ var s=r.total_spend||r.lead_spend||0; if(s>maxSpend)maxSpend=s; if((r.leads||0)>maxLeads)maxLeads=r.leads; });
+  APT.forEach(function(r){ if((r.appointments||0)>maxApt)maxApt=r.appointments; });
+  function bar(val,max,color){ var w=max&&val?Math.round(val/max*100):0; return '<span class="bg" style="width:calc('+w+'% - 18px);background:'+color+'"></span>'; }
+  var head='<tr><th>月份</th><th class="num">總花費</th><th class="num">名單數</th><th class="num">CPL（每名單）</th><th class="num">約訪場次</th></tr>';
+  var rows = MON.map(function(r,i){
+    var prev = MON[i-1]||{};
+    var spend = r.total_spend||r.lead_spend;
+    var apt = aptMap[r.month.replace(/\//g,'-')];
+    var cplCell = nt(r.cpl);
+    if(r.cpl!=null && prev.cpl!=null && prev.cpl!==0){
+      var d=r.cpl-prev.cpl, cls=d<0?'up':(d>0?'down':'flat'), ar=d<0?'▼':(d>0?'▲':'—');
+      cplCell += ' <span class="'+cls+'" style="font-size:.72rem">'+ar+Math.abs(Math.round(d/prev.cpl*100))+'%</span>';
+    }
+    var aptCell;
+    if(apt==null){ aptCell='<span class="muted">—</span>'; }
+    else{
+      var ac = apt>=15?'var(--good)':(apt>=8?'var(--warn)':'var(--bad)');
+      aptCell = bar(apt,maxApt,ac)+'<span class="t" style="color:'+ac+'">'+apt+' 場'+(apt===maxApt?'<span class="peak">高峰</span>':'')+'</span>';
+    }
+    return '<tr>'+
+      '<td><b>'+r.month+'</b></td>'+
+      '<td class="num barcell">'+bar(spend,maxSpend,'rgba(79,142,247,.55)')+'<span class="t">'+nt(spend)+'</span></td>'+
+      '<td class="num barcell">'+bar(r.leads,maxLeads,'rgba(63,181,107,.5)')+'<span class="t">'+num(r.leads)+(r.leads===maxLeads?'<span class="peak">最高</span>':'')+'</span></td>'+
+      '<td class="num">'+cplCell+'</td>'+
+      '<td class="num barcell">'+aptCell+'</td>'+
+    '</tr>';
+  }).join('');
+  $('tOverview').innerHTML = head+rows;
 }
 
 function renderTables(){
