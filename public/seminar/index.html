@@ -124,12 +124,12 @@
     <div class="note" id="alertBox" style="display:none"></div>
 
     <div class="card">
-      <h3>轉化漏斗<span class="hint">報名 → 利衝建檔 → 已分派 → 已聯繫處理 → 導入 LINE@ → 約成（占總報名數；「已聯繫處理」含有聯繫摘要者）</span></h3>
+      <h3>轉化漏斗<span class="hint">參加講座 → 有諮詢意願 → 利衝建檔 → 已分派 → 已聯繫處理 → 導入 LINE@ → 約成（百分比以參加人數為基準；「已聯繫處理」含有聯繫摘要者）</span></h3>
       <div class="funnel" id="funnel"></div>
     </div>
 
     <div class="card">
-      <h3>跨講座轉化比較<span class="hint">每場講座的報名→約成，看哪個主題最會轉化（點列可只看該場）</span></h3>
+      <h3>跨講座轉化比較<span class="hint">每場講座的成本→約成，看哪個主題最划算（總成本＝廣告費＋固定2萬；每約成成本以總成本計；點列可只看該場）</span></h3>
       <div class="scroll"><table id="tCompare"></table></div>
     </div>
 
@@ -220,8 +220,22 @@ sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
 
 // ── DATA ──
 var ALL=[], LEADS=[], SELSEM='all', SEMS=[], META={};
+var FIXED_COST=20000;   // 每辦一場講座的固定成本(場地等，廣告費外)
 function metaOf(s){ return META[s]||null; }
 function nt(n){ return n==null?'—':'$'+Math.round(n).toLocaleString(); }
+function scopeSeminars(){ return SELSEM==='all' ? SEMS.map(function(s){return s.name;}) : [SELSEM]; }
+// 參加講座人數(出席合計)；無出席資料回 null
+function participants(){
+  var s=0, any=false;
+  scopeSeminars().forEach(function(n){ var m=metaOf(n); if(m&&m.attend_count!=null){ s+=m.attend_count; any=true; } });
+  return any? s : null;
+}
+// 成本彙總：廣告費 + 已辦場次×固定2萬（以有出席數視為已辦）
+function costAgg(){
+  var ad=0, est=false, held=0;
+  scopeSeminars().forEach(function(n){ var m=metaOf(n); if(m){ ad+=(m.ad_spend||0); if(m.ad_spend_est)est=true; if(m.attend_count!=null)held++; } });
+  return { ad:ad, est:est, held:held, fixed:held*FIXED_COST, total:ad+held*FIXED_COST };
+}
 function isExcluded(r){ return /已委|已諮|利衝/.test(r.special_status||''); }
 function hasLine(r){ return !!(r.line_url && r.line_url.trim()); }
 function hasNotes(r){ return !!(r.contact_notes && r.contact_notes.trim()); }
@@ -266,28 +280,36 @@ function renderSemKpi(){
   var box=$('semKpi');
   function chip(l,v){ return '<span class="schip"><b>'+v+'</b> '+l+'</span>'; }
   if(SELSEM==='all'){
-    var spend=0,reg=0,est=false,booked=0,haveMeta=0;
-    SEMS.forEach(function(s){ var m=metaOf(s.name); if(m){ haveMeta++; spend+=(m.ad_spend||0); reg+=(m.reg_count||0); if(m.ad_spend_est)est=true; }});
+    var reg=0,haveMeta=0,booked=0;
+    SEMS.forEach(function(s){ var m=metaOf(s.name); if(m){ haveMeta++; reg+=(m.reg_count||0); }});
     ALL.forEach(function(r){ if(r.booked) booked++; });
     if(!haveMeta){ box.style.display='none'; return; }
+    var c=costAgg();
     box.style.display='flex';
-    box.innerHTML=chip('總廣告費'+(est?'*':''),nt(spend))+chip('講座報名合計',reg.toLocaleString())
-      +chip('約成',booked)+chip('每約成成本',booked?nt(spend/booked):'—')
-      +'<span class="small">（成效資料來自行銷會議記錄'+(est?'，* 含推估值':'')+'）</span>';
+    box.innerHTML=chip('總廣告費'+(c.est?'*':''),nt(c.ad))
+      +chip('固定成本（'+c.held+'場×2萬）',nt(c.fixed))
+      +chip('總成本',nt(c.total))
+      +chip('講座報名合計',reg.toLocaleString())
+      +chip('約成',booked)
+      +chip('每約成成本',booked?nt(c.total/booked):'—')
+      +'<span class="small">（成效來自行銷會議記錄；每場含固定成本 2 萬'+(c.est?'；* 廣告費含推估':'')+'）</span>';
     return;
   }
   var m=metaOf(SELSEM);
   if(!m){ box.style.display='none'; return; }
   var leads=ALL.filter(function(r){return r.seminar===SELSEM;});
   var booked=leads.filter(function(r){return r.booked;}).length;
+  var c=costAgg();
   box.style.display='flex';
   box.innerHTML=chip('廣告費'+(m.ad_spend_est?'*':''),nt(m.ad_spend))
+    +chip('固定成本',nt(c.fixed))
+    +chip('總成本',nt(c.total))
     +chip('講座報名',m.reg_count!=null?m.reg_count:'—')
     +chip('出席',m.attend_count!=null?(m.attend_count+(m.attend_rate?' ('+m.attend_rate+'%)':'')):'—')
     +chip('當日加LINE',m.line_signups!=null?m.line_signups:'—')
     +chip('CPL',nt(m.cpl))
-    +chip('每約成成本',booked?nt(m.ad_spend/booked):'—')
-    +(m.topic?'<span class="small">主題：'+esc(m.topic)+(m.ad_spend_est?'　* 廣告費為推估':'')+'</span>':'');
+    +chip('每約成成本',booked?nt(c.total/booked):'—')
+    +(m.topic?'<span class="small">主題：'+esc(m.topic)+(c.held===0?'　（尚未舉辦，不計固定成本）':'')+(m.ad_spend_est?'　* 廣告費為推估':'')+'</span>':'');
 }
 
 function renderCompare(){
@@ -302,16 +324,19 @@ function renderCompare(){
   });
   var arr=Object.keys(map).map(function(k){return [k,map[k]];})
     .sort(function(a,b){ return (b[1].date||'').localeCompare(a[1].date||''); });
-  var h='<tr><th>講座</th><th>日期</th><th class="num">廣告費</th><th class="num">講座報名</th><th class="num">出席率</th>'
+  var h='<tr><th>講座</th><th>日期</th><th class="num">廣告費</th><th class="num">總成本</th><th class="num">講座報名</th><th class="num">出席率</th>'
       + '<th class="num">有諮詢意願</th><th class="num">聯繫率</th><th class="num">導LINE</th><th class="num">約成</th><th class="num">每約成成本</th></tr>';
   $('tCompare').innerHTML=h+arr.map(function(x){
     var k=x[0],m=x[1], cr=pct(m.contacted,m.tot), mt=metaOf(k);
     var spend=mt?mt.ad_spend:null, est=mt&&mt.ad_spend_est;
-    var perBooked = (spend!=null && m.booked) ? spend/m.booked : null;
+    var fixed=(mt&&mt.attend_count!=null)?FIXED_COST:0;
+    var totalCost=(mt&&spend!=null)?(spend+fixed):null;
+    var perBooked=(totalCost!=null && m.booked) ? totalCost/m.booked : null;
     var hl=(SELSEM!=='all'&&k===SELSEM)?' class="hl"':'';
     return '<tr'+hl+' data-sem="'+esc(k)+'" style="cursor:pointer">'
       +'<td>'+esc(k)+'</td><td class="small">'+esc(m.date||'—')+'</td>'
       +'<td class="num">'+(spend!=null?(est?'≈':'')+nt(spend):'—')+'</td>'
+      +'<td class="num">'+(totalCost!=null?(est?'≈':'')+nt(totalCost):'—')+'</td>'
       +'<td class="num">'+(mt&&mt.reg_count!=null?mt.reg_count:'—')+'</td>'
       +'<td class="num">'+(mt&&mt.attend_rate!=null?mt.attend_rate+'%':'—')+'</td>'
       +'<td class="num">'+m.tot+'</td>'
@@ -350,19 +375,21 @@ function renderKPIs(){
 }
 
 function renderFunnel(){
-  var c=counts(), n=c.total||1;
-  var steps=[
-    {l:'報名',         v:c.total,    col:'var(--accent)'},
-    {l:'利衝建檔',     v:c.conflict, col:'var(--gold)'},
-    {l:'已分派同仁',   v:c.assigned, col:'#b974e0'},
-    {l:'已聯繫處理',   v:c.contacted,col:'var(--warn)'},
-    {l:'導入 LINE@',   v:c.line,     col:'var(--line)'},
-    {l:'約成諮詢',     v:c.booked,   col:'var(--good)'}
-  ];
+  var c=counts();
+  var part=participants();
+  var steps=[];
+  if(part!=null) steps.push({l:'參加講座人數', v:part, col:'#4dd0c5'});
+  steps.push({l: part!=null?'有諮詢意願':'報名', v:c.total, col:'var(--accent)'});
+  steps.push({l:'利衝建檔',   v:c.conflict, col:'var(--gold)'});
+  steps.push({l:'已分派同仁', v:c.assigned, col:'#b974e0'});
+  steps.push({l:'已聯繫處理', v:c.contacted,col:'var(--warn)'});
+  steps.push({l:'導入 LINE@', v:c.line,     col:'var(--line)'});
+  steps.push({l:'約成諮詢',   v:c.booked,   col:'var(--good)'});
+  var n=(part!=null? part : c.total)||1;
   $('funnel').innerHTML = steps.map(function(s){
     var p=Math.round(s.v/n*100);
     return '<div class="fstep"><div class="fl"><span>'+s.l+'</span><span><b>'+s.v+'</b> <span class="muted">'+p+'%</span></span></div>'+
-      '<div class="fbar"><span style="width:'+Math.max(p,2)+'%;background:'+s.col+'"></span></div></div>';
+      '<div class="fbar"><span style="width:'+Math.min(Math.max(p,2),100)+'%;background:'+s.col+'"></span></div></div>';
   }).join('');
 }
 
