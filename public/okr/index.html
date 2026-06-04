@@ -315,6 +315,10 @@
     .carry-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red); }
     .carry-card.lv2 { border-color:var(--orange); }
     .carry-card.lv2::before { background:var(--orange); }
+    .carry-card.ongoing { border-color:var(--blue); }
+    .carry-card.ongoing::before { background:var(--blue); }
+    .carry-card.ongoing.lv2 { border-color:var(--orange); }
+    .carry-card.ongoing.lv2::before { background:var(--orange); }
     .carry-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
     .carry-card-head .title { font-size:0.95rem; font-weight:600; color:var(--text); }
     .carry-card-meta { font-size:0.74rem; color:var(--text-muted); display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
@@ -510,7 +514,7 @@
     <div class="page-panel" id="pagePanel-meetings" style="display:none;">
       <div class="mt-subtabs" id="mtSubtabs">
         <button class="active" data-sub="open">📋 Open Actions <span class="count" id="mtOpenCount"></span></button>
-        <button data-sub="carry">🚨 老掛單 <span class="count" id="mtCarryCount"></span></button>
+        <button data-sub="ongoing">♻ 持續關注 <span class="count" id="mtOngoingCount"></span></button>
         <button data-sub="meetings">📅 會議列表</button>
         <button data-sub="add" style="margin-left:auto;">➕ 新增 Action</button>
         <button data-sub="addmeeting">📝 新增會議</button>
@@ -2080,10 +2084,10 @@ async function loadMeetingTracker() {
 
 function updateMtCounts() {
   var open = state.mt.actions.filter(function(a){ return ['pending','in_progress','blocked'].indexOf(a.status) >= 0; });
-  var carry = open.filter(function(a){ return a.carry_count >= 3; });
+  var ongoing = open.filter(function(a){ return a.recur_type === 'ongoing'; });
   setText('mtPageCount', open.length);
   setText('mtOpenCount', open.length);
-  setText('mtCarryCount', carry.length);
+  setText('mtOngoingCount', ongoing.length);
 }
 function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 
@@ -2117,7 +2121,7 @@ function renderMeetingTracker() {
   c.innerHTML = '';
   var sub = state.mt.subtab;
   if (sub === 'open')    renderOpenActions(c);
-  else if (sub === 'carry') renderCarryBoard(c);
+  else if (sub === 'ongoing') renderOngoingBoard(c);
   else if (sub === 'meetings') renderMeetingList(c);
 }
 
@@ -2168,7 +2172,7 @@ function renderOpenActions(container) {
   renderActionTable();
 
   var note = document.createElement('div'); note.className = 'mt-note';
-  note.innerHTML = '<b>用法：</b>每週開完會掃這張表，按「✓ 結案」「↻ Carry」「📝 follow-up」「⛔ 放棄」處理。Carry 自動 +1，紅色脈動 = carry≥3 老掛單。點欄位標題可排序（再點一次反向）。';
+  note.innerHTML = '<b>用法：</b>每週開完會掃這張表，按「✓ 結案」「↻ Carry」「📝 follow-up」「⛔ 放棄」處理。Carry 自動 +1，紅色脈動 = carry≥3（卡住需處理）。點欄位標題可排序（再點一次反向）。';
   container.appendChild(note);
 }
 
@@ -2323,29 +2327,29 @@ async function handleQuickAction(actionId, kind) {
   }
 }
 
-// ─── Carry-over board ───
-function renderCarryBoard(container) {
-  var carry = state.mt.actions.filter(function(a) {
-    return a.carry_count >= 3 && ['done','dropped'].indexOf(a.status) < 0;
+// ─── 持續關注 board ───
+function renderOngoingBoard(container) {
+  var ongoing = state.mt.actions.filter(function(a) {
+    return a.recur_type === 'ongoing' && ['done','dropped'].indexOf(a.status) < 0;
   });
-  carry.sort(function(a,b){ return b.carry_count - a.carry_count; });
+  ongoing.sort(function(a,b){ return b.carry_count - a.carry_count; });
 
-  var note = document.createElement('div'); note.className = 'mt-note warn';
-  note.innerHTML = '<b>視圖目的：</b>所有 <b>carry≥3</b> 的「老掛單」— 已被同個議題 carry over 3 次以上，代表「卡住」「責任不明」或「該放棄」。<br><b>看到紅色脈動 = 必須處理</b>。';
+  var note = document.createElement('div'); note.className = 'mt-note';
+  note.innerHTML = '<b>視圖目的：</b>所有「<b>持續關注</b>」項目 — 成效/累積型，固定 review、不會一次結案，需要持續追進度。<br>carry 越高代表追越久，<b>紅色脈動 = carry≥3 已卡住，需決策</b>。';
   container.appendChild(note);
 
-  if (carry.length === 0) {
+  if (ongoing.length === 0) {
     var ok = document.createElement('div'); ok.className = 'loading-text';
-    ok.style.color = 'var(--green)';
-    ok.textContent = '✓ 太好了！目前沒有 carry≥3 的老掛單';
+    ok.style.color = 'var(--text-muted)';
+    ok.textContent = '目前沒有持續關注的項目';
     container.appendChild(ok);
     return;
   }
 
   var grid = document.createElement('div'); grid.className = 'carry-grid';
-  carry.forEach(function(a) {
-    var card = document.createElement('div'); card.className = 'carry-card' + (a.carry_count === 2 ? ' lv2' : '');
-    var lvl = a.carry_count >= 3 ? 'lv3' : 'lv2';
+  ongoing.forEach(function(a) {
+    var card = document.createElement('div'); card.className = 'carry-card ongoing' + (a.carry_count >= 3 ? ' lv2' : '');
+    var lvl = a.carry_count >= 3 ? 'lv3' : a.carry_count === 2 ? 'lv2' : a.carry_count === 1 ? 'lv1' : 'lv0';
     var fups = state.mt.followups.filter(function(f){return f.action_item_id === a.id;});
     fups.sort(function(x,y){ return x.followup_date.localeCompare(y.followup_date); });
     var sourceMeeting = state.mt.meetings.find(function(m){return m.id === a.source_meeting_id;});
