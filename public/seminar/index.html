@@ -74,6 +74,9 @@
   .sembar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 2px}
   .sembar label{color:var(--muted);font-size:.82rem}
   tr.hl td{background:rgba(79,142,247,.10)}
+  .semkpi{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+  .schip{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:6px 11px;font-size:.82rem;color:var(--muted)}
+  .schip b{color:var(--text);font-size:1rem;font-weight:700;margin-right:4px}
   td .mini{display:inline-block;height:6px;border-radius:3px;background:var(--good);vertical-align:middle;margin-left:6px}
   .small{font-size:.78rem;color:var(--muted)}
   .clip{max-width:320px;white-space:normal;color:var(--muted);font-size:.8rem}
@@ -115,6 +118,8 @@
     </div>
 
     <div class="kpis" id="kpis"></div>
+
+    <div id="semKpi" class="semkpi" style="display:none"></div>
 
     <div class="note" id="alertBox" style="display:none"></div>
 
@@ -214,7 +219,9 @@ async function init(){
 sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
 
 // ── DATA ──
-var ALL=[], LEADS=[], SELSEM='all', SEMS=[];
+var ALL=[], LEADS=[], SELSEM='all', SEMS=[], META={};
+function metaOf(s){ return META[s]||null; }
+function nt(n){ return n==null?'—':'$'+Math.round(n).toLocaleString(); }
 function isExcluded(r){ return /已委|已諮|利衝/.test(r.special_status||''); }
 function hasLine(r){ return !!(r.line_url && r.line_url.trim()); }
 function hasNotes(r){ return !!(r.contact_notes && r.contact_notes.trim()); }
@@ -227,8 +234,10 @@ async function loadData(){
             .order('row_index',{ascending:true});
   if(r.error){ $('meta').textContent='讀取失敗：'+r.error.message; return; }
   ALL = r.data||[];
+  var mr = await sb.from('seminar_meta').select('*');
+  META={}; (mr.data||[]).forEach(function(m){ META[m.seminar]=m; });
   var synced = ALL.length? ALL[0].synced_at : null;
-  $('meta').textContent = '資料來源：Inbound Leads Pool（客服維護）｜ 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW'):'—')+' ｜ 每天 09:00 自動更新';
+  $('meta').textContent = '資料來源：Inbound Leads Pool（客服維護）+ 行銷會議記錄（場次成效）｜ 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW'):'—')+' ｜ 每天 09:00 自動更新';
   buildSeminarList();
   SELSEM='all'; $('semSel').value='all';
   applySeminar();
@@ -248,8 +257,37 @@ function applySeminar(){
   $('semMeta').textContent = SELSEM==='all'
     ? ('全部 '+ALL.length+' 筆 ／ '+SEMS.length+' 場')
     : (LEADS.length+' 筆');
-  renderKPIs(); renderFunnel(); renderAlert(); renderCompare(); renderOwners();
+  renderKPIs(); renderSemKpi(); renderFunnel(); renderAlert(); renderCompare(); renderOwners();
   drawTrend(); drawChannel(); renderLeads();
+}
+
+// 單場成效摘要（廣告費/報名/出席/加LINE/CPL/每約成成本）；全部檢視時顯示總計
+function renderSemKpi(){
+  var box=$('semKpi');
+  function chip(l,v){ return '<span class="schip"><b>'+v+'</b> '+l+'</span>'; }
+  if(SELSEM==='all'){
+    var spend=0,reg=0,est=false,booked=0,haveMeta=0;
+    SEMS.forEach(function(s){ var m=metaOf(s.name); if(m){ haveMeta++; spend+=(m.ad_spend||0); reg+=(m.reg_count||0); if(m.ad_spend_est)est=true; }});
+    ALL.forEach(function(r){ if(r.booked) booked++; });
+    if(!haveMeta){ box.style.display='none'; return; }
+    box.style.display='flex';
+    box.innerHTML=chip('總廣告費'+(est?'*':''),nt(spend))+chip('講座報名合計',reg.toLocaleString())
+      +chip('約成',booked)+chip('每約成成本',booked?nt(spend/booked):'—')
+      +'<span class="small">（成效資料來自行銷會議記錄'+(est?'，* 含推估值':'')+'）</span>';
+    return;
+  }
+  var m=metaOf(SELSEM);
+  if(!m){ box.style.display='none'; return; }
+  var leads=ALL.filter(function(r){return r.seminar===SELSEM;});
+  var booked=leads.filter(function(r){return r.booked;}).length;
+  box.style.display='flex';
+  box.innerHTML=chip('廣告費'+(m.ad_spend_est?'*':''),nt(m.ad_spend))
+    +chip('講座報名',m.reg_count!=null?m.reg_count:'—')
+    +chip('出席',m.attend_count!=null?(m.attend_count+(m.attend_rate?' ('+m.attend_rate+'%)':'')):'—')
+    +chip('當日加LINE',m.line_signups!=null?m.line_signups:'—')
+    +chip('CPL',nt(m.cpl))
+    +chip('每約成成本',booked?nt(m.ad_spend/booked):'—')
+    +(m.topic?'<span class="small">主題：'+esc(m.topic)+(m.ad_spend_est?'　* 廣告費為推估':'')+'</span>':'');
 }
 
 function renderCompare(){
@@ -264,13 +302,23 @@ function renderCompare(){
   });
   var arr=Object.keys(map).map(function(k){return [k,map[k]];})
     .sort(function(a,b){ return (b[1].date||'').localeCompare(a[1].date||''); });
-  var maxRate=Math.max.apply(null,arr.map(function(x){return x[1].tot?x[1].booked/x[1].tot:0;}).concat([0.001]));
-  var h='<tr><th>講座</th><th>日期</th><th class="num">報名</th><th class="num">聯繫率</th><th class="num">導LINE</th><th class="num">約成</th><th class="num">約成率</th></tr>';
+  var h='<tr><th>講座</th><th>日期</th><th class="num">廣告費</th><th class="num">講座報名</th><th class="num">出席率</th>'
+      + '<th class="num">有諮詢意願</th><th class="num">聯繫率</th><th class="num">導LINE</th><th class="num">約成</th><th class="num">每約成成本</th></tr>';
   $('tCompare').innerHTML=h+arr.map(function(x){
-    var k=x[0],m=x[1], cr=pct(m.contacted,m.tot), br=pct(m.booked,m.tot);
-    var bw=Math.round((m.tot?m.booked/m.tot:0)/maxRate*54);
+    var k=x[0],m=x[1], cr=pct(m.contacted,m.tot), mt=metaOf(k);
+    var spend=mt?mt.ad_spend:null, est=mt&&mt.ad_spend_est;
+    var perBooked = (spend!=null && m.booked) ? spend/m.booked : null;
     var hl=(SELSEM!=='all'&&k===SELSEM)?' class="hl"':'';
-    return '<tr'+hl+' data-sem="'+esc(k)+'" style="cursor:pointer"><td>'+esc(k)+'</td><td class="small">'+esc(m.date||'—')+'</td><td class="num">'+m.tot+'</td><td class="num">'+cr+'%</td><td class="num">'+m.line+'</td><td class="num">'+m.booked+'</td><td class="num">'+br+'%<span class="mini" style="width:'+bw+'px"></span></td></tr>';
+    return '<tr'+hl+' data-sem="'+esc(k)+'" style="cursor:pointer">'
+      +'<td>'+esc(k)+'</td><td class="small">'+esc(m.date||'—')+'</td>'
+      +'<td class="num">'+(spend!=null?(est?'≈':'')+nt(spend):'—')+'</td>'
+      +'<td class="num">'+(mt&&mt.reg_count!=null?mt.reg_count:'—')+'</td>'
+      +'<td class="num">'+(mt&&mt.attend_rate!=null?mt.attend_rate+'%':'—')+'</td>'
+      +'<td class="num">'+m.tot+'</td>'
+      +'<td class="num">'+cr+'%</td>'
+      +'<td class="num">'+m.line+'</td>'
+      +'<td class="num">'+m.booked+'</td>'
+      +'<td class="num">'+(perBooked!=null?nt(perBooked):'—')+'</td></tr>';
   }).join('');
 }
 
