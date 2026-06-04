@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>講座報名 轉化追蹤</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --card2:#22262f; --border:#2c313c;
+    --text:#e6e8ec; --muted:#8b93a1; --accent:#4f8ef7; --good:#3fb56b;
+    --warn:#e0954a; --bad:#e05a5a; --line:#06c755; --gold:#c9a84c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  a{color:var(--accent)}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:1.25rem;margin:0}
+  .sub{color:var(--muted);font-size:.82rem;margin-top:4px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  #login{min-height:80vh;display:flex;align-items:center;justify-content:center}
+  .loginCard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:30px;width:340px;max-width:92vw}
+  .loginCard h2{margin:0 0 6px;font-size:1.1rem}
+  input{width:100%;padding:11px 12px;margin-top:10px;background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.95rem}
+  button{cursor:pointer;border:none;border-radius:9px;font-size:.92rem;font-weight:600}
+  .btn{width:100%;padding:11px;margin-top:12px;background:var(--accent);color:#fff}
+  .btn:disabled{opacity:.5;cursor:default}
+  .msg{margin-top:12px;font-size:.84rem;padding:9px 11px;border-radius:8px;display:none}
+  .msg.show{display:block}
+  .msg.ok{background:rgba(63,181,107,.12);color:var(--good)}
+  .msg.err{background:rgba(224,90,90,.12);color:var(--bad)}
+  #dash{display:none}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;border-left:3px solid var(--border)}
+  .kpi.good{border-left-color:var(--good)} .kpi.warn{border-left-color:var(--warn)} .kpi.bad{border-left-color:var(--bad)} .kpi.acc{border-left-color:var(--accent)}
+  .kpi .v{font-size:1.6rem;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .kpi .c{font-size:.74rem;margin-top:6px;color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+  .card h3{margin:0 0 4px;font-size:.98rem}
+  .card .hint{color:var(--muted);font-weight:400;font-size:.78rem;margin-left:8px}
+  .chartbox{position:relative;height:260px;margin-top:12px}
+  .chartbox.sm{height:220px}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.76rem;white-space:nowrap}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .topbar{padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px}
+  .ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:7px 12px}
+  .muted{color:var(--muted)}
+  .scroll{max-height:480px;overflow:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .note{background:rgba(224,149,74,.10);border:1px solid rgba(224,149,74,.3);border-radius:10px;padding:12px 14px;font-size:.85rem;color:#e8c79a;margin-bottom:16px;line-height:1.55}
+  /* funnel */
+  .funnel{margin-top:8px}
+  .fstep{margin:9px 0}
+  .fstep .fl{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
+  .fstep .fl b{font-weight:700}
+  .fbar{height:26px;background:var(--card2);border-radius:7px;overflow:hidden}
+  .fbar > span{display:block;height:100%;border-radius:7px}
+  /* badges */
+  .badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:.72rem;font-weight:600;margin:1px 2px 1px 0;white-space:nowrap}
+  .b-on{background:rgba(63,181,107,.16);color:var(--good)}
+  .b-off{background:rgba(255,255,255,.05);color:var(--muted)}
+  .b-line{background:rgba(6,199,85,.16);color:var(--line)}
+  .b-excl{background:rgba(224,90,90,.14);color:var(--bad)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:7px;font-size:.78rem;background:var(--card2);color:var(--muted);cursor:pointer;border:1px solid var(--border)}
+  .pill.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 12px}
+  .filters input[type=text]{width:auto;flex:1;min-width:160px;margin:0}
+  .small{font-size:.78rem;color:var(--muted)}
+  .clip{max-width:320px;white-space:normal;color:var(--muted);font-size:.8rem}
+  @media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- LOGIN -->
+  <div id="login">
+    <div class="loginCard">
+      <h2>講座報名 轉化追蹤</h2>
+      <div class="sub">輸入公司 email，我們寄一條登入連結給你（免密碼）。</div>
+      <form id="loginForm">
+        <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+        <button class="btn" id="loginBtn" type="submit">寄送登入連結</button>
+      </form>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash">
+    <div class="row topbar">
+      <div>
+        <h1>講座報名 → 諮詢約成 轉化追蹤</h1>
+        <div class="sub" id="meta"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <span class="muted" id="who"></span>
+        <button class="ghost" id="logout">登出</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="note" id="alertBox" style="display:none"></div>
+
+    <div class="card">
+      <h3>轉化漏斗<span class="hint">報名 → 利衝建檔 → 聯繫完成 → 導入 LINE@ → 約成諮詢（百分比為占總報名數）</span></h3>
+      <div class="funnel" id="funnel"></div>
+    </div>
+
+    <div class="card">
+      <h3>負責同仁 follow-up 進度<span class="hint">已分派的線索，各同仁推進到哪一步</span></h3>
+      <div class="scroll"><table id="tOwner"></table></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>報名趨勢<span class="hint">每日報名數</span></h3>
+        <div class="chartbox sm"><canvas id="cTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>聯繫管道偏好<span class="hint">報名者勾選的管道（可複選）</span></h3>
+        <div class="chartbox sm"><canvas id="cChannel"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>線索明細<span class="hint" id="detailCount"></span></h3>
+      <div class="filters">
+        <span class="pill on" data-f="all">全部</span>
+        <span class="pill" data-f="todo">待聯繫</span>
+        <span class="pill" data-f="contacted">已聯繫未約</span>
+        <span class="pill" data-f="line">已導 LINE</span>
+        <span class="pill" data-f="booked">已約成</span>
+        <span class="pill" data-f="excl">已委/已諮</span>
+        <input type="text" id="q" placeholder="搜尋姓名 / email / 電話 / 負責同仁 / 需求…">
+      </div>
+      <div class="scroll"><table id="tLeads"></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb = null;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) {}
+
+var $ = function(id){ return document.getElementById(id); };
+function showLogin(){ $('login').style.display='flex'; $('dash').style.display='none'; }
+function showDash(){ $('login').style.display='none'; $('dash').style.display='block'; }
+function setMsg(el, text, kind){ el.className='msg show '+kind; el.textContent=text; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function pct(a,b){ return b? Math.round(a/b*100):0; }
+
+// ── AUTH (magic link) ──
+$('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var btn=$('loginBtn'), m=$('loginMsg');
+  btn.disabled=true; btn.textContent='寄送中…';
+  try{
+    var r = await sb.auth.signInWithOtp({
+      email: $('email').value.trim(),
+      options: { emailRedirectTo: window.location.href.split('#')[0] }
+    });
+    if(r.error) throw r.error;
+    setMsg(m,'登入連結已寄出，請到信箱點開連結（同一個瀏覽器）。','ok');
+  }catch(ex){ setMsg(m,'寄送失敗：'+(ex.message||ex),'err'); }
+  finally{ btn.disabled=false; btn.textContent='寄送登入連結'; }
+});
+$('logout').addEventListener('click', async function(){ await sb.auth.signOut(); location.reload(); });
+
+async function checkAccess(){
+  var r = await sb.from('seminar_access').select('email,name').limit(1);
+  if(r.error || !r.data || !r.data.length) return null;
+  return r.data[0];
+}
+
+async function init(){
+  if(!sb){ setMsg($('loginMsg'),'初始化失敗','err'); return; }
+  var s = await sb.auth.getSession();
+  if(!s.data.session){ showLogin(); return; }
+  var me = await checkAccess();
+  if(!me){
+    showLogin();
+    setMsg($('loginMsg'),'此帳號（'+s.data.session.user.email+'）尚未開通存取權，請聯絡管理者。','err');
+    await sb.auth.signOut();
+    return;
+  }
+  $('who').textContent = me.name || me.email;
+  showDash();
+  await loadData();
+}
+sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
+
+// ── DATA ──
+var LEADS=[];
+function isExcluded(r){ return /已委|已諮|利衝/.test(r.special_status||''); }
+function hasLine(r){ return !!(r.line_url && r.line_url.trim()); }
+
+async function loadData(){
+  var r = await sb.from('seminar_leads').select('*').order('row_index',{ascending:true});
+  if(r.error){ $('meta').textContent='讀取失敗：'+r.error.message; return; }
+  LEADS = r.data||[];
+  var synced = LEADS.length? LEADS[0].synced_at : null;
+  $('meta').textContent = '資料來源：講座報名表（客服維護）｜ 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW'):'—')+' ｜ 每天 09:00 自動更新';
+  renderKPIs(); renderFunnel(); renderAlert(); renderOwners();
+  drawTrend(); drawChannel();
+  renderLeads();
+}
+
+function counts(){
+  var n=LEADS.length;
+  return {
+    total:n,
+    conflict:LEADS.filter(function(r){return r.conflict_filed;}).length,
+    contacted:LEADS.filter(function(r){return r.contacted;}).length,
+    line:LEADS.filter(hasLine).length,
+    booked:LEADS.filter(function(r){return r.booked;}).length,
+    excl:LEADS.filter(isExcluded).length
+  };
+}
+
+function renderKPIs(){
+  var c=counts();
+  var k=[
+    {cls:'acc', v:c.total, l:'報名總數', cc:'已利衝建檔 '+c.conflict+'（'+pct(c.conflict,c.total)+'%）'},
+    {cls:c.contacted? 'good':'warn', v:c.contacted, l:'已聯繫完成', cc:pct(c.contacted,c.total)+'% of 報名 ｜ 待聯繫 '+(c.total-c.contacted)},
+    {cls:c.line? 'good':'', v:c.line, l:'已導入 LINE@', cc:pct(c.line,c.total)+'% of 報名'},
+    {cls:c.booked? 'good':'bad', v:c.booked, l:'已約成諮詢', cc:pct(c.booked,c.total)+'% of 報名（最終轉化）'}
+  ];
+  $('kpis').innerHTML = k.map(function(x){
+    return '<div class="kpi '+x.cls+'"><div class="v">'+x.v+'</div><div class="l">'+x.l+'</div><div class="c">'+x.cc+'</div></div>';
+  }).join('');
+}
+
+function renderFunnel(){
+  var c=counts(), n=c.total||1;
+  var steps=[
+    {l:'報名',       v:c.total,    col:'var(--accent)'},
+    {l:'利衝建檔',   v:c.conflict, col:'var(--gold)'},
+    {l:'聯繫完成',   v:c.contacted,col:'var(--warn)'},
+    {l:'導入 LINE@', v:c.line,     col:'var(--line)'},
+    {l:'約成諮詢',   v:c.booked,   col:'var(--good)'}
+  ];
+  $('funnel').innerHTML = steps.map(function(s){
+    var p=Math.round(s.v/n*100);
+    return '<div class="fstep"><div class="fl"><span>'+s.l+'</span><span><b>'+s.v+'</b> <span class="muted">'+p+'%</span></span></div>'+
+      '<div class="fbar"><span style="width:'+Math.max(p,2)+'%;background:'+s.col+'"></span></div></div>';
+  }).join('');
+}
+
+function renderAlert(){
+  var c=counts(), msgs=[];
+  var todo=c.total-c.contacted;
+  if(todo>0) msgs.push('🟡 <b>'+todo+' 筆已報名但尚未聯繫</b>（占 '+pct(todo,c.total)+'%）。其中已分派同仁的有 '+LEADS.filter(function(r){return r.owner && !r.contacted;}).length+' 筆，未分派 '+LEADS.filter(function(r){return !r.owner && !r.contacted;}).length+' 筆 — 未分派的請盡快指派負責人。');
+  var contactedNoLine=LEADS.filter(function(r){return r.contacted && !hasLine(r) && !r.booked;}).length;
+  if(contactedNoLine>0) msgs.push('🟠 <b>'+contactedNoLine+' 筆已聯繫但尚未導入 LINE@ 也未約成</b> — 聯繫後沒鎖下一步互動，最容易在這裡流失。');
+  if(c.excl>0) msgs.push('ℹ️ <b>'+c.excl+' 筆為已委／已諮／利衝</b>，多半不可轉化，評估轉化率時可視情況排除（明細頁用「已委/已諮」篩選檢視）。');
+  if(c.booked===0 && c.total>0) msgs.push('🔴 <b>目前約成 0 筆</b> — 整批仍卡在聯繫前段，轉化尚未啟動。');
+  if(msgs.length){ $('alertBox').style.display='block'; $('alertBox').innerHTML=msgs.join('<hr style="border:none;border-top:1px solid rgba(224,149,74,.25);margin:10px 0">'); }
+  else $('alertBox').style.display='none';
+}
+
+function renderOwners(){
+  var map={};
+  LEADS.forEach(function(r){
+    var o=r.owner||'（未分派）';
+    if(!map[o]) map[o]={tot:0,contacted:0,line:0,booked:0};
+    map[o].tot++;
+    if(r.contacted) map[o].contacted++;
+    if(hasLine(r)) map[o].line++;
+    if(r.booked) map[o].booked++;
+  });
+  var rows=Object.keys(map).map(function(o){return [o,map[o]];})
+    .sort(function(a,b){ return b[1].tot-a[1].tot; });
+  var h='<tr><th>負責同仁</th><th class="num">分派</th><th class="num">已聯繫</th><th class="num">聯繫率</th><th class="num">導LINE</th><th class="num">約成</th><th class="num">約成率</th></tr>';
+  $('tOwner').innerHTML=h+rows.map(function(x){
+    var o=x[0],m=x[1];
+    var cr=pct(m.contacted,m.tot), br=pct(m.booked,m.tot);
+    var crCls=cr>=60?'':'class="muted"';
+    return '<tr><td>'+esc(o)+'</td><td class="num">'+m.tot+'</td><td class="num">'+m.contacted+'</td><td class="num" '+crCls+'>'+cr+'%</td><td class="num">'+m.line+'</td><td class="num">'+m.booked+'</td><td class="num">'+br+'%</td></tr>';
+  }).join('');
+}
+
+// ── CHARTS ──
+var charts={};
+function mk(id,cfg){ if(charts[id])charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); }
+var GRID={color:'rgba(255,255,255,.06)'}, TICK={color:'#8b93a1',font:{size:11}};
+
+function drawTrend(){
+  var by={};
+  LEADS.forEach(function(r){ if(r.reg_date){ by[r.reg_date]=(by[r.reg_date]||0)+1; } });
+  var labels=Object.keys(by).sort();
+  mk('cTrend',{type:'bar',data:{labels:labels.map(function(d){return d.slice(5);}),datasets:[
+    {label:'報名數',data:labels.map(function(d){return by[d];}),backgroundColor:'rgba(79,142,247,.6)'}
+  ]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+    x:{grid:GRID,ticks:TICK},y:{grid:GRID,ticks:TICK,beginAtZero:true,precision:0}
+  }}});
+}
+
+function drawChannel(){
+  var by={};
+  LEADS.forEach(function(r){
+    (r.contact_channel||'').split(/[,，\/]/).forEach(function(p){
+      p=p.trim().replace(/^line$/i,'LINE'); if(!p)return;
+      if(/信箱|電子郵件|email|mail/i.test(p)) p='電子郵件';
+      else if(/line/i.test(p)) p='LINE';
+      else if(/電話|phone/i.test(p)) p='電話';
+      by[p]=(by[p]||0)+1;
+    });
+  });
+  var labels=Object.keys(by).sort(function(a,b){return by[b]-by[a];});
+  mk('cChannel',{type:'bar',data:{labels:labels,datasets:[
+    {label:'人次',data:labels.map(function(l){return by[l];}),backgroundColor:['rgba(6,199,85,.6)','rgba(79,142,247,.6)','rgba(224,149,74,.6)','rgba(185,116,224,.6)']}
+  ]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+    x:{grid:GRID,ticks:TICK,beginAtZero:true,precision:0},y:{grid:GRID,ticks:TICK}
+  }}});
+}
+
+// ── DETAIL TABLE ──
+var FILTER='all';
+function matchFilter(r){
+  if(FILTER==='all') return true;
+  if(FILTER==='todo') return !r.contacted;
+  if(FILTER==='contacted') return r.contacted && !r.booked;
+  if(FILTER==='line') return hasLine(r);
+  if(FILTER==='booked') return r.booked;
+  if(FILTER==='excl') return isExcluded(r);
+  return true;
+}
+function statusBadges(r){
+  var b='';
+  b+='<span class="badge '+(r.conflict_filed?'b-on':'b-off')+'">利衝</span>';
+  b+='<span class="badge '+(r.contacted?'b-on':'b-off')+'">聯繫</span>';
+  if(hasLine(r)) b+='<a class="badge b-line" href="'+esc(r.line_url)+'" target="_blank" rel="noopener">LINE↗</a>';
+  else b+='<span class="badge b-off">LINE</span>';
+  b+='<span class="badge '+(r.booked?'b-on':'b-off')+'">約成</span>';
+  if(isExcluded(r)) b+='<span class="badge b-excl">已委/已諮</span>';
+  return b;
+}
+function renderLeads(){
+  var q=($('q').value||'').trim().toLowerCase();
+  var rows=LEADS.filter(matchFilter).filter(function(r){
+    if(!q) return true;
+    return [r.name,r.email,r.phone,r.owner,r.help_needed,r.special_status,r.contact_notes,r.lead_no]
+      .some(function(v){return (v||'').toLowerCase().indexOf(q)>=0;});
+  });
+  $('detailCount').textContent='（顯示 '+rows.length+' / '+LEADS.length+' 筆）';
+  var h='<tr><th>編號</th><th>姓名</th><th>管道</th><th>負責</th><th>狀態</th><th>諮詢需求 / 特殊狀況</th><th>聯繫摘要</th></tr>';
+  $('tLeads').innerHTML=h+rows.map(function(r){
+    var need=esc((r.help_needed||'').slice(0,80))+((r.help_needed||'').length>80?'…':'');
+    var spec=r.special_status? '<div class="small" style="color:var(--bad)">'+esc(r.special_status)+'</div>':'';
+    return '<tr>'+
+      '<td class="small">'+esc(r.lead_no||'')+'</td>'+
+      '<td>'+esc(r.name||'')+'<div class="small">'+esc(r.email||'')+'</div></td>'+
+      '<td class="small">'+esc(r.contact_channel||'')+(r.line_id&&r.line_id!=='無'?'<div class="small">LINE: '+esc(r.line_id)+'</div>':'')+'</td>'+
+      '<td>'+(r.owner?esc(r.owner):'<span class="muted">—</span>')+'</td>'+
+      '<td>'+statusBadges(r)+'</td>'+
+      '<td class="clip">'+need+spec+'</td>'+
+      '<td class="clip">'+esc(r.contact_notes||'')+'</td>'+
+    '</tr>';
+  }).join('');
+}
+document.addEventListener('click',function(e){
+  var p=e.target.closest('.pill'); if(!p)return;
+  document.querySelectorAll('.pill').forEach(function(x){x.classList.remove('on');});
+  p.classList.add('on'); FILTER=p.dataset.f; renderLeads();
+});
+$('q').addEventListener('input', renderLeads);
+
+init();
+</script>
+</body>
+</html>
