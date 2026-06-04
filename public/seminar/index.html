@@ -219,7 +219,7 @@ async function init(){
 sb && sb.auth.onAuthStateChange(function(ev){ if(ev==='SIGNED_IN') init(); });
 
 // ── DATA ──
-var ALL=[], LEADS=[], SELSEM='all', SEMS=[], META={};
+var ALL=[], LEADS=[], CONV=[], SELSEM='all', SEMS=[], META={};
 var FIXED_COST=20000;   // 每辦一場講座的固定成本(場地等，廣告費外)
 function metaOf(s){ return META[s]||null; }
 function nt(n){ return n==null?'—':'$'+Math.round(n).toLocaleString(); }
@@ -269,9 +269,12 @@ function buildSeminarList(){
 
 function applySeminar(){
   LEADS = SELSEM==='all' ? ALL : ALL.filter(function(r){return r.seminar===SELSEM;});
-  $('semMeta').textContent = SELSEM==='all'
+  CONV = LEADS.filter(function(r){return !isExcluded(r);});  // 可轉化(排除已委/已諮/利衝)
+  var exclN = LEADS.length - CONV.length;
+  $('semMeta').textContent = (SELSEM==='all'
     ? ('全部 '+ALL.length+' 筆 ／ '+SEMS.length+' 場')
-    : (LEADS.length+' 筆');
+    : (LEADS.length+' 筆'))
+    + (exclN? '　｜ 轉化計算已排除 '+exclN+' 筆已委/已諮/利衝' : '');
   renderKPIs(); renderSemKpi(); renderFunnel(); renderAlert(); renderCompare(); renderOwners();
   drawTrend(); drawChannel(); renderLeads();
 }
@@ -283,7 +286,7 @@ function renderSemKpi(){
   if(SELSEM==='all'){
     var reg=0,haveMeta=0,booked=0;
     SEMS.forEach(function(s){ var m=metaOf(s.name); if(m){ haveMeta++; reg+=(m.reg_count||0); }});
-    ALL.forEach(function(r){ if(r.booked) booked++; });
+    ALL.forEach(function(r){ if(r.booked && !isExcluded(r)) booked++; });
     if(!haveMeta){ box.style.display='none'; return; }
     var c=costAgg();
     box.style.display='flex';
@@ -298,7 +301,7 @@ function renderSemKpi(){
   }
   var m=metaOf(SELSEM);
   if(!m){ box.style.display='none'; return; }
-  var leads=ALL.filter(function(r){return r.seminar===SELSEM;});
+  var leads=ALL.filter(function(r){return r.seminar===SELSEM && !isExcluded(r);});
   var booked=leads.filter(function(r){return r.booked;}).length;
   var c=costAgg();
   box.style.display='flex';
@@ -318,6 +321,7 @@ function renderCompare(){
   ALL.forEach(function(r){
     var k=r.seminar||'（未分類）';
     if(!map[k]) map[k]={date:r.seminar_date||'',tot:0,contacted:0,line:0,booked:0};
+    if(isExcluded(r)) return;   // 排除已委/已諮/利衝(講座仍列出)
     var m=map[k]; m.tot++;
     if(isContacted(r)) m.contacted++;
     if(hasLine(r)) m.line++;
@@ -349,16 +353,16 @@ function renderCompare(){
 }
 
 function counts(){
-  var n=LEADS.length;
+  var n=CONV.length;   // 轉化計算只看可轉化線索(已排除已委/已諮/利衝)
   return {
     total:n,
-    conflict:LEADS.filter(function(r){return r.conflict_filed;}).length,
-    assigned:LEADS.filter(function(r){return r.owner;}).length,
-    contacted:LEADS.filter(isContacted).length,
-    contactedFlag:LEADS.filter(function(r){return r.contacted;}).length,
-    line:LEADS.filter(hasLine).length,
-    booked:LEADS.filter(function(r){return r.booked;}).length,
-    excl:LEADS.filter(isExcluded).length
+    conflict:CONV.filter(function(r){return r.conflict_filed;}).length,
+    assigned:CONV.filter(function(r){return r.owner;}).length,
+    contacted:CONV.filter(isContacted).length,
+    contactedFlag:CONV.filter(function(r){return r.contacted;}).length,
+    line:CONV.filter(hasLine).length,
+    booked:CONV.filter(function(r){return r.booked;}).length,
+    excl:LEADS.length-CONV.length
   };
 }
 
@@ -405,12 +409,12 @@ function renderFunnel(){
 function renderAlert(){
   var c=counts(), msgs=[];
   var todo=c.total-c.contacted;
-  var unassigned=LEADS.filter(function(r){return !r.owner;}).length;
-  var assignedTodo=LEADS.filter(function(r){return r.owner && !isContacted(r);}).length;
+  var unassigned=CONV.filter(function(r){return !r.owner;}).length;
+  var assignedTodo=CONV.filter(function(r){return r.owner && !isContacted(r);}).length;
   if(todo>0) msgs.push('🟡 <b>'+todo+' 筆尚未聯繫處理</b>（占 '+pct(todo,c.total)+'%）：未分派 '+unassigned+' 筆、已分派但還沒動 '+assignedTodo+' 筆 — 未分派的請盡快指派負責人。');
-  var contactedNoLine=LEADS.filter(function(r){return isContacted(r) && !hasLine(r) && !r.booked;}).length;
+  var contactedNoLine=CONV.filter(function(r){return isContacted(r) && !hasLine(r) && !r.booked;}).length;
   if(contactedNoLine>0) msgs.push('🟠 <b>'+contactedNoLine+' 筆已聯繫但尚未導入 LINE@ 也未約成</b> — 聯繫後沒鎖下一步互動，最容易在這裡流失。');
-  if(c.excl>0) msgs.push('ℹ️ <b>'+c.excl+' 筆為已委／已諮／利衝</b>，多半不可轉化，評估轉化率時可視情況排除（明細頁用「已委/已諮」篩選檢視）。');
+  if(c.excl>0) msgs.push('ℹ️ 已排除 <b>'+c.excl+' 筆已委／已諮／利衝</b>（不列入轉化計算；明細頁用「已委/已諮」篩選可檢視）。');
   if(c.booked===0 && c.total>0) msgs.push('🔴 <b>目前約成 0 筆</b> — 整批仍卡在聯繫前段，轉化尚未啟動。');
   if(msgs.length){ $('alertBox').style.display='block'; $('alertBox').innerHTML=msgs.join('<hr style="border:none;border-top:1px solid rgba(224,149,74,.25);margin:10px 0">'); }
   else $('alertBox').style.display='none';
@@ -418,7 +422,7 @@ function renderAlert(){
 
 function renderOwners(){
   var map={};
-  LEADS.forEach(function(r){
+  CONV.forEach(function(r){
     var o=r.owner||'（未分派）';
     if(!map[o]) map[o]={tot:0,contacted:0,line:0,booked:0};
     map[o].tot++;
@@ -444,7 +448,7 @@ var GRID={color:'rgba(255,255,255,.06)'}, TICK={color:'#8b93a1',font:{size:11}};
 
 function drawTrend(){
   var by={};
-  LEADS.forEach(function(r){ if(r.reg_date){ by[r.reg_date]=(by[r.reg_date]||0)+1; } });
+  CONV.forEach(function(r){ if(r.reg_date){ by[r.reg_date]=(by[r.reg_date]||0)+1; } });
   var labels=Object.keys(by).sort();
   mk('cTrend',{type:'bar',data:{labels:labels.map(function(d){return d.slice(5);}),datasets:[
     {label:'報名數',data:labels.map(function(d){return by[d];}),backgroundColor:'rgba(79,142,247,.6)'}
@@ -455,7 +459,7 @@ function drawTrend(){
 
 function drawChannel(){
   var by={};
-  LEADS.forEach(function(r){
+  CONV.forEach(function(r){
     (r.contact_channel||'').split(/[,，\/]/).forEach(function(p){
       p=p.trim().replace(/^line$/i,'LINE'); if(!p)return;
       if(/信箱|電子郵件|email|mail/i.test(p)) p='電子郵件';
