@@ -317,6 +317,15 @@
     .carry-card.lv2::before { background:var(--orange); }
     .carry-card.ongoing { border-color:var(--blue); }
     .carry-card.ongoing::before { background:var(--blue); }
+    .card-dash-link { display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+      margin:10px 0 2px; padding:11px 14px; border-radius:9px; font-size:0.9rem; font-weight:700;
+      text-decoration:none; cursor:pointer; box-sizing:border-box; transition:filter .15s, transform .05s; }
+    .card-dash-link.has-link { background:var(--gold); color:#0a0a0a; border:1px solid var(--gold); }
+    .card-dash-link.has-link:hover { filter:brightness(1.08); }
+    .card-dash-link.has-link:active { transform:translateY(1px); }
+    .card-dash-link.empty { background:transparent; color:var(--text-muted); border:1px dashed var(--border);
+      font-weight:500; }
+    .card-dash-link.empty:hover { color:var(--text); border-color:var(--text-muted); }
     .carry-card.ongoing.lv2 { border-color:var(--orange); }
     .carry-card.ongoing.lv2::before { background:var(--orange); }
     .carry-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
@@ -2362,6 +2371,9 @@ function renderOngoingBoard(container) {
         '<span>首見 '+sourceDate+'</span>' +
         '<span><span class="badge-status '+a.status+'">'+STATUS_LABEL[a.status]+'</span></span>' +
       '</div>' +
+      (a.link_url
+        ? '<a class="card-dash-link has-link" href="'+escHtml(a.link_url)+'" target="_blank" rel="noopener">📊 看數據儀表板 →</a>'
+        : '<button class="card-dash-link empty" data-act="edit">🔗 設定數據連結</button>') +
       '<div class="carry-timeline">' +
         '<div class="row"><span class="date">'+(sourceDate||'').slice(5)+'</span><span class="what">新增 — '+escHtml((sourceMeeting&&sourceMeeting.title)||'')+'</span></div>' +
         fups.map(function(f) {
