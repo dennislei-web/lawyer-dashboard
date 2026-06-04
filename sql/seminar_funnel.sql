@@ -7,11 +7,13 @@
 -- ⚠️ 此檔需在 Supabase Dashboard → SQL Editor 手動執行一次（建表 + RLS）。
 --    執行後再跑 scripts/sync_seminar.py 灌資料。
 
--- ── 線索明細表（每位報名者一列） ──
+-- ── 線索明細表（每位報名者一列；跨多場講座合併） ──
 create table if not exists public.seminar_leads (
-  lead_key       text primary key,   -- 唯一鍵（原始編號，缺漏時用 seq_N）
+  lead_key       text primary key,   -- 唯一鍵 '{講座名}#{編號或seqN}'
+  seminar        text,               -- 講座(分頁名) '1150601講座聯繫'
+  seminar_date   date,               -- 講座日期(民國年7碼反推)
   lead_no        text,               -- 原始編號 '緩分1' / '16'
-  row_index      int,                -- 在試算表中的列序（排序用）
+  row_index      int,                -- 在分頁中的列序（排序用）
   reg_at         text,               -- 填表時間原字串 '2026/5/28 0:0:0'
   reg_date       date,               -- 解析後的報名日（趨勢用）
   name           text,               -- 姓名
@@ -36,7 +38,12 @@ create table if not exists public.seminar_leads (
   synced_at      timestamptz not null default now()
 );
 
+-- 既有表升級（多場講座欄位）— 重跑此檔可安全套用
+alter table public.seminar_leads add column if not exists seminar      text;
+alter table public.seminar_leads add column if not exists seminar_date date;
+
 create index if not exists seminar_leads_reg_date_idx on public.seminar_leads (reg_date);
+create index if not exists seminar_leads_seminar_idx  on public.seminar_leads (seminar);
 
 -- ── 存取白名單(email) ── RLS 用，與 lawyers 表解耦，與 mkt_access 同模式
 create table if not exists public.seminar_access (
