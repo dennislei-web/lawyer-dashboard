@@ -32,7 +32,11 @@
   .msg.ok{background:rgba(63,181,107,.12);color:var(--good)}
   .msg.err{background:rgba(224,90,90,.12);color:var(--bad)}
   #dash{display:none}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 4px}
+  .kpilabel{color:var(--muted);font-size:.78rem;font-weight:700;margin:16px 2px 8px;display:flex;align-items:center;gap:10px}
+  .kpilabel:first-child{margin-top:6px}
+  .kpilabel::after{content:"";flex:1;height:1px;background:var(--border)}
+  .kpilabel b{color:var(--text);font-weight:700}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;border-left:3px solid var(--border)}
   .kpi.good{border-left-color:var(--good)} .kpi.warn{border-left-color:var(--warn)} .kpi.bad{border-left-color:var(--bad)}
   .kpi .v{font-size:1.6rem;font-weight:700}
@@ -95,6 +99,10 @@
       </div>
     </div>
 
+    <div class="kpilabel"><b>歷史累計</b>2025/08 起整段累積</div>
+    <div class="kpis" id="kpisHist"></div>
+
+    <div class="kpilabel"><b>本月最新</b><span id="curMonth"></span></div>
     <div class="kpis" id="kpis"></div>
 
     <div class="note" id="alertBox" style="display:none"></div>
@@ -198,7 +206,7 @@ async function loadData(){
   MON=m.data||[]; BIW=b.data||[]; APT=a.data||[];
   var synced = MON.length? MON[0].synced_at : null;
   $('meta').textContent = '資料來源：welly FB 投放報表 ｜ 最後同步 '+(synced? new Date(synced).toLocaleString('zh-TW'):'—')+' ｜ 每天 09:00 自動更新';
-  renderKPIs(); renderAlert(); renderOverview(); renderTables();
+  renderKPIsHist(); renderKPIs(); renderAlert(); renderOverview(); renderTables();
   drawSpend(); drawLine(); drawAppt();
 }
 
@@ -211,8 +219,31 @@ function delta(cur, prev, lowerBetter){
   return '<span class="'+cls+'">'+arrow+' '+(d>0?'+':'')+pct+'%</span>';
 }
 
+function renderKPIsHist(){
+  var totalSpend=0,totalLeads=0,months=0,sumAppt=0,spendApt=0;
+  var aptMap={}; APT.forEach(function(r){ aptMap[r.month]=r.appointments; sumAppt+=r.appointments||0; });
+  MON.forEach(function(r){
+    var s=r.total_spend||r.lead_spend||0; totalSpend+=s; totalLeads+=r.leads||0; months++;
+    if(aptMap[r.month.replace(/\//g,'-')]!=null) spendApt+=s;
+  });
+  var avgCpl = totalLeads? totalSpend/totalLeads : null;
+  var lineTotal = BIW.length? BIW[BIW.length-1].line_total : null;
+  var costAppt = sumAppt? spendApt/sumAppt : null;
+  var span = MON.length? MON[0].month+'～'+MON[MON.length-1].month : '';
+  var k=[
+    {v:nt(avgCpl), l:'歷史平均 CPL（每名單成本）', c:'總花費 '+nt(totalSpend)+' ÷ 名單 '+num(totalLeads)},
+    {v:num(totalLeads), l:'累計名單數 · '+span, c:'月均 '+num(months?Math.round(totalLeads/months):0)+' 名單 / '+months+' 個月'},
+    {v:num(lineTotal), l:'LINE@ 累計人數', c:'目前官方帳號總人數'},
+    {v:num(sumAppt)+' 場', l:'累計約成場次', c:'平均每場 '+nt(costAppt)}
+  ];
+  $('kpisHist').innerHTML = k.map(function(x){
+    return '<div class="kpi"><div class="v">'+x.v+'</div><div class="l">'+x.l+'</div><div class="c flat">'+x.c+'</div></div>';
+  }).join('');
+}
+
 function renderKPIs(){
   var lm = MON[MON.length-1]||{}, pm = MON[MON.length-2]||{};
+  if($('curMonth')) $('curMonth').textContent = lm.month||'';
   var lb = BIW[BIW.length-1]||{}, pb = BIW[BIW.length-2]||{};
   var la = APT[APT.length-1]||{}, pa = APT[APT.length-2]||{};
   // CPL 狀態：跌=good
