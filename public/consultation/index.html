@@ -8358,20 +8358,17 @@ function renderUnsignedPage() {
   const totalCount = cases.length;
   const lawyerSet = new Set(cases.map(c => c.lawyer_id));
   writeUnsignedPriorityBanner();
-  // 🔁 Pipeline 漏斗：各階段件數（單一來源 pipeline_stage）
+  // 🔁 Pipeline 漏斗：各階段件數。階段「自動推導」(手動設定優先，其餘用現有訊號推導)。
   let funnelHtml = '';
   if (pipelineColsAvailable && totalCount > 0) {
     const counts = {};
     PIPELINE_STAGES.forEach(s => counts[s] = 0);
-    let untracked = 0;
-    cases.forEach(c => { if (c.pipeline_stage && counts[c.pipeline_stage] != null) counts[c.pipeline_stage]++; else untracked++; });
+    cases.forEach(c => { const st = derivePipelineStage(c); if (counts[st] != null) counts[st]++; });
     const chip = (label, n, color) => `<div style="text-align:center;padding:6px 14px;border-radius:8px;background:var(--ghost-bg);min-width:64px;">
         <div style="font-size:1.1rem;font-weight:700;color:${color};">${n}</div>
         <div style="font-size:0.7rem;color:var(--text-muted);">${label}</div></div>`;
     funnelHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
       <span style="font-size:0.76rem;color:var(--text-muted);margin-right:4px;">漏斗階段</span>
-      ${chip('未設定', untracked, 'var(--text-muted)')}
-      <span style="color:var(--text-muted);">›</span>
       ${chip('待跟進', counts['待跟進'], 'var(--text-muted)')}
       <span style="color:var(--text-muted);">›</span>
       ${chip('已聯繫', counts['已聯繫'], 'var(--blue)')}
@@ -8380,6 +8377,7 @@ function renderUnsignedPage() {
       <span style="color:var(--text-muted);">›</span>
       ${chip('成案', counts['成案'], 'var(--green)')}
       ${chip('放棄', counts['放棄'], 'var(--red)')}
+      <span style="font-size:0.68rem;color:var(--text-muted);margin-left:6px;">階段自動推導，斜體＝推導中、實線＝手動設定</span>
     </div>`;
   }
   document.getElementById('unsignedSummary').innerHTML =
@@ -8865,15 +8863,32 @@ const FOLLOWUP_FIELDS = new Set(['followup_day', 'followup_week', 'followup_fina
 const PIPELINE_STAGES = ['待跟進', '已聯繫', '已約二諮', '成案', '放棄'];
 const PIPELINE_STAGE_COLOR = { '待跟進':'var(--text-muted)', '已聯繫':'var(--blue)', '已約二諮':'var(--gold)', '成案':'var(--green)', '放棄':'var(--red)' };
 
+// 階段「自動推導」(顯示用，不寫 DB)：手動設定優先；否則用現有訊號推導。
+// 暫不追蹤原因→放棄；有 LINE 對話或任一追蹤勾選→已聯繫；其餘→待跟進。
+// 已約二諮/成案 需法務手動推進（沒有可靠訊號可推）。
+function derivePipelineStage(c) {
+  if (c.pipeline_stage) return c.pipeline_stage;
+  if (c.no_track_reason && c.no_track_reason.trim()) return '放棄';
+  if ((c.line_chat_url && c.line_chat_url.trim()) || c.followup_day || c.followup_week || c.followup_final) return '已聯繫';
+  return '待跟進';
+}
+
 function pipelineStageCellHtml(c) {
-  const cur = c.pipeline_stage || '';
-  const color = PIPELINE_STAGE_COLOR[cur] || 'var(--text-muted)';
+  const explicit = c.pipeline_stage || '';
+  const eff = derivePipelineStage(c);
+  const inferred = !explicit;
+  const color = PIPELINE_STAGE_COLOR[eff] || 'var(--text-muted)';
   const opts = ['<option value="">—</option>'].concat(
-    PIPELINE_STAGES.map(s => `<option value="${escHtml(s)}"${s === cur ? ' selected' : ''}>${escHtml(s)}</option>`)
+    PIPELINE_STAGES.map(s => `<option value="${escHtml(s)}"${s === eff ? ' selected' : ''}>${escHtml(s)}</option>`)
   ).join('');
-  return `<td style="vertical-align:middle;">
+  // 推導中：斜體 + 虛線框 + 半透明，與「手動設定」(實線)區分
+  const style = inferred
+    ? `color:${color};opacity:0.62;font-style:italic;border:1px dashed var(--border);`
+    : `color:${color};font-weight:600;border:1px solid ${color};`;
+  const title = inferred ? '依現有訊號自動推導（未手動設定）；點選即確認為手動' : '已手動設定';
+  return `<td style="vertical-align:middle;" title="${title}">
     <select onchange="savePipelineStage('${c.id}', this.value, this)"
-      style="width:100%;font-size:0.76rem;padding:3px 4px;border-radius:5px;border:1px solid var(--border);background:var(--bg-row);color:${color};cursor:pointer;">
+      style="width:100%;font-size:0.76rem;padding:3px 4px;border-radius:5px;background:var(--bg-row);cursor:pointer;${style}">
       ${opts}
     </select></td>`;
 }
