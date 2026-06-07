@@ -6508,7 +6508,8 @@ function renderLeadingConversion() {
         ${step('追蹤後成案', wonN, pct(wonN), 'var(--green)', '救回')}
       </div>
       <div style="font-size:0.68rem;color:var(--text-muted);margin-top:8px;line-height:1.5;">
-        「已聯繫」由現有訊號(LINE/追蹤勾選)自動推導；<b>「已約二諮」要法務在未成案頁手動標記階段才會有數字</b> — 這格正是你要法務主動推進的關鍵動作(已聯繫→約成二次諮詢)，標起來就能看到熱線索與它的成案轉化。
+        時間維度＝<b>諮詢日期</b>。「已聯繫」由現有訊號(LINE/追蹤勾選)自動推導；<b>「已約二諮」要法務手動標記階段才會有數字</b>(已聯繫→約成二次諮詢，正是要主動推進的關鍵動作)。
+        <span class="text-red">⚠️ 「追蹤後成案」只算有追蹤軌跡者，近期才開始記錄、目前低估；近月諮詢也還沒時間轉換(成熟度落差)。乾淨可靠的數字要靠階段標記普及後才成形。</span>
       </div>
       <div style="margin-top:14px;font-size:0.78rem;font-weight:600;color:var(--text-muted);">月度追蹤後成案率趨勢（近 6 個月）</div>
       ${trend}
@@ -8487,7 +8488,8 @@ function renderUnsignedPage() {
       ${convertedChip}
     </div>
     <div style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">
-      開放清單階段自動推導(斜體＝推導中、實線＝手動)。「追蹤後成案」＝原為未成案、追蹤後已轉簽約而離開本清單者(同窗口反查)，這才是後續轉換的去向。
+      開放清單階段自動推導(斜體＝推導中、實線＝手動)。「追蹤後成案」依<b>諮詢日期</b>(同上方時間範圍)反查：已簽約且留有追蹤軌跡(LINE/勾選/階段)者。
+      <span class="text-red">⚠️ 軌跡資料近期才開始記錄、目前稀疏會低估；隨階段標記普及才會準。</span>
     </div>`;
   }
   document.getElementById('unsignedSummary').innerHTML =
