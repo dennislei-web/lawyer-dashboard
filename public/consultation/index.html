@@ -2288,6 +2288,7 @@
       <select id="leadingLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderLeadingPage()"></select>
     </div>
     <div id="leadingSummary" style="margin-bottom:18px;"></div>
+    <div id="leadingConversion" style="margin-bottom:18px;"></div>
     <div id="leadingCoverage" style="margin-bottom:18px;"></div>
     <div id="leadingByLawyer"></div>
   </div>
@@ -6428,7 +6429,90 @@ function renderLeadingPage() {
   html += '</tbody></table></div></div>';
   document.getElementById('leadingByLawyer').innerHTML = html;
 
+  renderLeadingConversion();
   renderLeadingCoverage();
+}
+
+// 📈 追蹤轉化成效：未當場成案的諮詢，被追蹤後推進到哪、最後轉換多少。
+// cohort = 同窗口/律師的「非當場成案」= 仍開放未成案 + 追蹤後成案(is_signed且有追蹤訊號)。
+function leadingCohort(cutoff, end) {
+  const inWin = c => c.case_date && c.case_date >= cutoff && (!end || c.case_date < end) &&
+    (LEADING_STATE.lawyerId === 'all' || c.lawyer_id === LEADING_STATE.lawyerId);
+  const open = allCases.filter(c => !c.is_signed && inWin(c));
+  const converted = allCases.filter(c => c.is_signed && inWin(c) && caseHasFollowupSignal(c));
+  return { open, converted };
+}
+
+function renderLeadingConversion() {
+  const el = document.getElementById('leadingConversion');
+  if (!el) return;
+  const months = LEADING_STATE.range;
+  const now = new Date();
+  const d = new Date(now); d.setMonth(d.getMonth() - months);
+  const cutoff = d.toISOString().slice(0, 10);
+  const { open, converted } = leadingCohort(cutoff);
+  const cohortN = open.length + converted.length;
+
+  if (cohortN === 0) { el.innerHTML = ''; return; }
+
+  const contacted = open.filter(c => { const s = derivePipelineStage(c); return s === '已聯繫' || s === '已約二諮'; }).length + converted.length;
+  const hotN = open.filter(c => derivePipelineStage(c) === '已約二諮').length;  // 已約二諮(熱線索)，多半需手動標記
+  const wonN = converted.length;
+  const pct = a => cohortN ? Math.round(a / cohortN * 100) : 0;
+
+  // 月度趨勢：追蹤後成案率（近 6 個月）
+  const fmt = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-01';
+  const trendData = [];
+  for (let i = 5; i >= 0; i--) {
+    const a = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const b = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const co = leadingCohort(fmt(a), fmt(b));
+    const n = co.open.length + co.converted.length;
+    trendData.push({ ym: a.getFullYear() + '-' + String(a.getMonth() + 1).padStart(2, '0'), won: co.converted.length, n, rate: n ? Math.round(co.converted.length / n * 100) : 0 });
+  }
+  const barColor = p => p >= 40 ? 'var(--green)' : (p >= 20 ? 'var(--gold)' : 'var(--red)');
+  let trend = '<div style="display:flex;gap:6px;align-items:flex-end;height:90px;margin-top:8px;">';
+  trendData.forEach(m => {
+    const h = Math.max(4, Math.round(m.rate * 0.8));
+    trend += `<div style="flex:1;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;">
+      <div style="font-size:0.7rem;color:var(--text-muted);">${m.rate}%</div>
+      <div style="width:60%;background:${barColor(m.rate)};height:${h}px;border-radius:3px 3px 0 0;opacity:0.7;"></div>
+      <div style="font-size:0.65rem;color:var(--text-muted);margin-top:3px;">${m.ym.slice(2)}</div>
+      <div style="font-size:0.6rem;color:var(--text-muted);">${m.won}/${m.n}</div>
+    </div>`;
+  });
+  trend += '</div>';
+
+  // 漏斗：需追蹤 → 已聯繫 → 追蹤後成案（+ 已約二諮熱線索）
+  const step = (label, n, rate, color, note) => `
+    <div style="text-align:center;padding:8px 16px;border-radius:8px;background:var(--ghost-bg);min-width:96px;">
+      <div style="font-size:1.3rem;font-weight:700;color:${color};">${n}</div>
+      <div style="font-size:0.72rem;color:var(--text);">${label}</div>
+      ${rate != null ? `<div style="font-size:0.66rem;color:var(--text-muted);">${rate}%</div>` : ''}
+      ${note ? `<div style="font-size:0.6rem;color:var(--text-muted);">${note}</div>` : ''}
+    </div>`;
+
+  el.innerHTML = `
+    <div class="section">
+      <div class="section-title" style="margin-bottom:4px;">📈 追蹤轉化成效</div>
+      <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+        範圍＝近 ${months} 個月「非當場成案」的諮詢(仍開放未成案 ＋ 追蹤後成案)。看法務追蹤把案子推進多遠、最後救回多少。
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        ${step('需追蹤', cohortN, null, 'var(--text)')}
+        <span style="color:var(--text-muted);font-size:1.2rem;">›</span>
+        ${step('已聯繫', contacted, pct(contacted), 'var(--blue)', '有接觸')}
+        <span style="color:var(--text-muted);font-size:1.2rem;">›</span>
+        ${step('已約二諮', hotN, pct(hotN), 'var(--gold)', hotN === 0 ? '需手動標記' : '熱線索')}
+        <span style="color:var(--text-muted);font-size:1.2rem;">›</span>
+        ${step('追蹤後成案', wonN, pct(wonN), 'var(--green)', '救回')}
+      </div>
+      <div style="font-size:0.68rem;color:var(--text-muted);margin-top:8px;line-height:1.5;">
+        「已聯繫」由現有訊號(LINE/追蹤勾選)自動推導；<b>「已約二諮」要法務在未成案頁手動標記階段才會有數字</b> — 這格正是你要法務主動推進的關鍵動作(已聯繫→約成二次諮詢)，標起來就能看到熱線索與它的成案轉化。
+      </div>
+      <div style="margin-top:14px;font-size:0.78rem;font-weight:600;color:var(--text-muted);">月度追蹤後成案率趨勢（近 6 個月）</div>
+      ${trend}
+    </div>`;
 }
 
 // 📥 資料涵蓋率：SOP 引擎的可靠度取決於「未成案上傳+分析」的涵蓋率。
