@@ -8358,26 +8358,52 @@ function renderUnsignedPage() {
   const totalCount = cases.length;
   const lawyerSet = new Set(cases.map(c => c.lawyer_id));
   writeUnsignedPriorityBanner();
-  // 🔁 Pipeline 漏斗：各階段件數。階段「自動推導」(手動設定優先，其餘用現有訊號推導)。
+  // 🔁 Pipeline 漏斗：開放工作清單的階段(自動推導) + 追蹤後成案(離開清單者)。
   let funnelHtml = '';
   if (pipelineColsAvailable && totalCount > 0) {
     const counts = {};
     PIPELINE_STAGES.forEach(s => counts[s] = 0);
     cases.forEach(c => { const st = derivePipelineStage(c); if (counts[st] != null) counts[st]++; });
+
+    // 追蹤後成案：同窗口/律師/法務範圍內，is_signed=true 且有追蹤訊號(代表原為未成案、追蹤後翻 signed 離開清單)。
+    // 需全量資料才有 signed 案；priority 模式(只撈未成案)時略過。
+    let convertedCount = null;
+    if (!isPriorityMode && casesLoadState === 'loaded') {
+      let inWindow;
+      if (unsignedCustomRange) {
+        const { from, to } = unsignedCustomRange; inWindow = c => c.case_date >= from && c.case_date <= to;
+      } else {
+        const cf = new Date(now); cf.setMonth(cf.getMonth() - unsignedRange);
+        const cfs = cf.toISOString().slice(0, 10); inWindow = c => c.case_date >= cfs;
+      }
+      const lw = showAllData ? filterSelect.value : currentLawyer.id;
+      const stf = showAllData ? staffSelect.value : '';
+      convertedCount = allCases.filter(c => c.is_signed && c.case_date && inWindow(c) &&
+        (!lw || c.lawyer_id === lw) &&
+        (!stf || (c.tracking_staff && c.tracking_staff.includes(stf))) &&
+        caseHasFollowupSignal(c)).length;
+    }
+
     const chip = (label, n, color) => `<div style="text-align:center;padding:6px 14px;border-radius:8px;background:var(--ghost-bg);min-width:64px;">
         <div style="font-size:1.1rem;font-weight:700;color:${color};">${n}</div>
         <div style="font-size:0.7rem;color:var(--text-muted);">${label}</div></div>`;
+    const convertedChip = convertedCount === null ? '' :
+      `<span style="margin:0 4px;color:var(--border);font-size:1.2rem;">｜</span>
+       <div style="text-align:center;padding:6px 14px;border-radius:8px;background:rgba(34,197,94,0.12);min-width:84px;border:1px solid rgba(34,197,94,0.4);">
+        <div style="font-size:1.1rem;font-weight:700;color:var(--green);">${convertedCount}</div>
+        <div style="font-size:0.7rem;color:var(--text-muted);">✓ 追蹤後成案</div></div>`;
     funnelHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-      <span style="font-size:0.76rem;color:var(--text-muted);margin-right:4px;">漏斗階段</span>
+      <span style="font-size:0.76rem;color:var(--text-muted);margin-right:4px;">開放清單</span>
       ${chip('待跟進', counts['待跟進'], 'var(--text-muted)')}
       <span style="color:var(--text-muted);">›</span>
       ${chip('已聯繫', counts['已聯繫'], 'var(--blue)')}
       <span style="color:var(--text-muted);">›</span>
       ${chip('已約二諮', counts['已約二諮'], 'var(--gold)')}
-      <span style="color:var(--text-muted);">›</span>
-      ${chip('成案', counts['成案'], 'var(--green)')}
       ${chip('放棄', counts['放棄'], 'var(--red)')}
-      <span style="font-size:0.68rem;color:var(--text-muted);margin-left:6px;">階段自動推導，斜體＝推導中、實線＝手動設定</span>
+      ${convertedChip}
+    </div>
+    <div style="font-size:0.68rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">
+      開放清單階段自動推導(斜體＝推導中、實線＝手動)。「追蹤後成案」＝原為未成案、追蹤後已轉簽約而離開本清單者(同窗口反查)，這才是後續轉換的去向。
     </div>`;
   }
   document.getElementById('unsignedSummary').innerHTML =
@@ -8859,9 +8885,15 @@ async function saveLawyerNote(caseId, note, cellEl) {
 // ---- 三段 follow-up 勾選欄位（當天/一週/最後追蹤）----
 const FOLLOWUP_FIELDS = new Set(['followup_day', 'followup_week', 'followup_final']);
 
-// 🔁 Pipeline 狀態機：App 內單一來源的漏斗階段
-const PIPELINE_STAGES = ['待跟進', '已聯繫', '已約二諮', '成案', '放棄'];
-const PIPELINE_STAGE_COLOR = { '待跟進':'var(--text-muted)', '已聯繫':'var(--blue)', '已約二諮':'var(--gold)', '成案':'var(--green)', '放棄':'var(--red)' };
+// 🔁 Pipeline 狀態機：未成案追蹤工作清單的階段（只放「還沒贏」的）。
+// 成案不在此清單 — 因為轉成案＝同筆 is_signed 翻 true，會離開這個只抓 is_signed=false 的頁面。
+// 後續轉換另以「追蹤後成案」統計呈現（反查 is_signed=true 且有追蹤訊號者）。
+const PIPELINE_STAGES = ['待跟進', '已聯繫', '已約二諮', '放棄'];
+const PIPELINE_STAGE_COLOR = { '待跟進':'var(--text-muted)', '已聯繫':'var(--blue)', '已約二諮':'var(--gold)', '放棄':'var(--red)' };
+// 「有被追蹤過」的訊號（人為動作）：用來反查追蹤後成案、避免把當場成案算進來
+function caseHasFollowupSignal(c) {
+  return !!((c.line_chat_url && c.line_chat_url.trim()) || c.followup_day || c.followup_week || c.followup_final || c.pipeline_stage);
+}
 
 // 階段「自動推導」(顯示用，不寫 DB)：手動設定優先；否則用現有訊號推導。
 // 暫不追蹤原因→放棄；有 LINE 對話或任一追蹤勾選→已聯繫；其餘→待跟進。
