@@ -6060,17 +6060,22 @@ function renderSopPage() {
   const controllableN = controllableKeys.reduce((s, k) => s + buckets[k].length, 0);
   const ctrlPct = total ? Math.round(controllableN / total * 100) : 0;
 
-  // 可控成案率：把結構性不可控（需求不符/難度/個人因素）排除在分母外。
-  // 用與未成案相同的時間/律師篩選撈已成案數。
+  // ⚠️ 成案率必須用「全量未成案」當分母，不能只用有 LLM 分析的樣本（300/9492），
+  //    否則 全量成案 vs 樣本未成案 會失真成 ~97%。
   let signedCutoff = null;
   if (SOP_STATE.range > 0) { const d = new Date(); d.setMonth(d.getMonth() - SOP_STATE.range); signedCutoff = d.toISOString().slice(0, 10); }
-  const signedN = allCases.filter(c =>
-    c.is_signed &&
-    (!signedCutoff || (c.case_date && c.case_date >= signedCutoff)) &&
-    (SOP_STATE.lawyerId === 'all' || c.lawyer_id === SOP_STATE.lawyerId)
-  ).length;
-  const overallRate = (signedN + total) > 0 ? Math.round(signedN / (signedN + total) * 100) : 0;
-  const controllableRate = (signedN + controllableN) > 0 ? Math.round(signedN / (signedN + controllableN) * 100) : 0;
+  const inScope = c => (!signedCutoff || (c.case_date && c.case_date >= signedCutoff)) &&
+                       (SOP_STATE.lawyerId === 'all' || c.lawyer_id === SOP_STATE.lawyerId);
+  const signedN = allCases.filter(c => c.is_signed && inScope(c)).length;
+  const allUnsignedN = allCases.filter(c => !c.is_signed && inScope(c)).length;   // 全量未成案（不限有無分析）
+  const overallRate = (signedN + allUnsignedN) > 0 ? Math.round(signedN / (signedN + allUnsignedN) * 100) : 0;
+
+  // 失敗組成只能來自已分析樣本（total = sopFilteredCases）
+  const coveragePct = allUnsignedN > 0 ? Math.round(total / allUnsignedN * 100) : 0;
+  // 可控成案率（推估）：把樣本的可控占比套到全量未成案，排除結構性不可控案
+  const controllableProp = total > 0 ? controllableN / total : 0;
+  const estCtrlUnsigned = Math.round(allUnsignedN * controllableProp);
+  const controllableRate = (signedN + estCtrlUnsigned) > 0 ? Math.round(signedN / (signedN + estCtrlUnsigned) * 100) : 0;
 
   // summary banner
   const summary = document.getElementById('sopSummary');
@@ -6082,24 +6087,24 @@ function renderSopPage() {
   summary.innerHTML = `
     <div style="display:flex;gap:14px;flex-wrap:wrap;">
       <div class="kpi-card" style="flex:1;min-width:130px;">
-        <div class="kpi-label">整體成案率</div>
+        <div class="kpi-label">真實整體成案率</div>
         <div class="kpi-value">${overallRate}%</div>
-        <div class="kpi-sub">成 ${signedN} / 未 ${total}</div>
+        <div class="kpi-sub">成 ${signedN} / 未 ${allUnsignedN}（全量）</div>
       </div>
       <div class="kpi-card" style="flex:1;min-width:130px;border:1px solid var(--gold);">
-        <div class="kpi-label">可控成案率</div>
+        <div class="kpi-label">可控成案率 <span style="font-size:0.6rem;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:0 4px;vertical-align:middle;">推估</span></div>
         <div class="kpi-value text-gold">${controllableRate}%</div>
-        <div class="kpi-sub">排除結構性不可控案</div>
+        <div class="kpi-sub">排除不可控案（可控占比 ${ctrlPct}%）</div>
       </div>
       <div class="kpi-card" style="flex:1;min-width:130px;">
-        <div class="kpi-label">可控漏點占比</div>
-        <div class="kpi-value text-red">${ctrlPct}%</div>
-        <div class="kpi-sub">${controllableN} 件可優化</div>
+        <div class="kpi-label">已分析涵蓋率</div>
+        <div class="kpi-value ${coveragePct < 20 ? 'text-red' : ''}">${coveragePct}%</div>
+        <div class="kpi-sub">分析 ${total} / 未成 ${allUnsignedN}</div>
       </div>
-      <div class="kpi-card" style="flex:1.6;min-width:220px;justify-content:center;">
-        <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;">
-          <b class="text-gold">可控成案率</b>＝成案 ÷（成案＋可控類未成案），排除需求不符／難度／個人因素等結構性不可控案 —
-          這才是律師真正能優化的數字。把下方高頻類別的 AI 洞察寫成標準動作，再到 <b>🧪 實驗日誌</b> 驗證。
+      <div class="kpi-card" style="flex:1.7;min-width:240px;justify-content:center;">
+        <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;">
+          <b>真實成案率</b>用全量算（成案＋全部未成案）。<b class="text-gold">可控成案率（推估）</b>＝成案 ÷（成案＋全量未成案×可控占比），排除結構性不可控案。
+          ${coveragePct < 30 ? `<span class="text-red">⚠️ 目前只分析了 ${coveragePct}% 未成案，下方類型分布僅來自這 ${total} 件已上傳樣本，要更準需提高上傳涵蓋率。</span>` : '下方類型分布來自已分析樣本。'}
         </div>
       </div>
     </div>`;
@@ -6111,7 +6116,7 @@ function renderSopPage() {
     return buckets[b.key].length - buckets[a.key].length;
   });
 
-  let html = '';
+  let html = `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:10px;">失敗類型組成（基於已分析的 ${total} 件未成案樣本，下方百分比為樣本內占比）</div>`;
   ordered.forEach(cat => {
     const list = buckets[cat.key];
     if (list.length === 0) return;
