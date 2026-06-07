@@ -2288,6 +2288,7 @@
       <select id="leadingLawyerSelect" style="display:none;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:0.82rem;" onchange="renderLeadingPage()"></select>
     </div>
     <div id="leadingSummary" style="margin-bottom:18px;"></div>
+    <div id="leadingCoverage" style="margin-bottom:18px;"></div>
     <div id="leadingByLawyer"></div>
   </div>
 
@@ -6426,6 +6427,87 @@ function renderLeadingPage() {
   });
   html += '</tbody></table></div></div>';
   document.getElementById('leadingByLawyer').innerHTML = html;
+
+  renderLeadingCoverage();
+}
+
+// 📥 資料涵蓋率：SOP 引擎的可靠度取決於「未成案上傳+分析」的涵蓋率。
+// 這頁讓你每週盯著它往上爬 — 涵蓋率越高，SOP 引擎的失敗類型分布越接近全所真相。
+function caseHasDoc(c)      { return !!(c.doc_uploaded_at || (c.meeting_record && c.meeting_record.trim()) || (c.transcript && c.transcript.trim())); }
+function caseAnalyzed(c)    { return !!(c.llm_analyzed_at || (c.llm_analysis && c.llm_analysis.failure_reason)); }
+
+function coverageStats(cases) {
+  const n = cases.length;
+  const doc = cases.filter(caseHasDoc).length;
+  const ana = cases.filter(caseAnalyzed).length;
+  return { n, doc, ana, docPct: n ? Math.round(doc / n * 100) : 0, anaPct: n ? Math.round(ana / n * 100) : 0 };
+}
+
+function renderLeadingCoverage() {
+  const el = document.getElementById('leadingCoverage');
+  if (!el) return;
+  const months = LEADING_STATE.range;
+  const d = new Date(); d.setMonth(d.getMonth() - months);
+  const cutoff = d.toISOString().slice(0, 10);
+  const unsigned = allCases.filter(c => !c.is_signed && c.case_date && c.case_date >= cutoff &&
+    (LEADING_STATE.lawyerId === 'all' || c.lawyer_id === LEADING_STATE.lawyerId));
+  const s = coverageStats(unsigned);
+
+  // 月度趨勢（近 6 個月，固定，看是否往上爬）
+  const now = new Date();
+  const months6 = [];
+  for (let i = 5; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    // 用本地年月組字串，不用 toISOString（UTC+8 會把月初偏移到前一個月，對不上 case_date）
+    const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+    const monthCases = allCases.filter(c => !c.is_signed && c.case_date && c.case_date.slice(0, 7) === ym &&
+      (LEADING_STATE.lawyerId === 'all' || c.lawyer_id === LEADING_STATE.lawyerId));
+    months6.push({ ym, st: coverageStats(monthCases) });
+  }
+
+  const barColor = (p) => p >= 50 ? 'var(--green)' : (p >= 20 ? 'var(--gold)' : 'var(--red)');
+  let trend = `<div style="display:flex;gap:6px;align-items:flex-end;height:90px;margin-top:8px;">`;
+  months6.forEach(m => {
+    const h = Math.max(4, Math.round(m.st.anaPct * 0.8));
+    trend += `<div style="flex:1;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;">
+      <div style="font-size:0.7rem;color:var(--text-muted);">${m.st.anaPct}%</div>
+      <div style="width:60%;background:${barColor(m.st.anaPct)};height:${h}px;border-radius:3px 3px 0 0;opacity:0.7;"></div>
+      <div style="font-size:0.65rem;color:var(--text-muted);margin-top:3px;">${m.ym.slice(2)}</div>
+      <div style="font-size:0.6rem;color:var(--text-muted);">${m.st.ana}/${m.st.n}</div>
+    </div>`;
+  });
+  trend += '</div>';
+
+  // 各律師涵蓋率（未成案 analyzed%）
+  const ids = [...new Set(unsigned.map(c => c.lawyer_id))];
+  const rows = ids.map(id => ({ id, name: sopLawyerName(id), st: coverageStats(unsigned.filter(c => c.lawyer_id === id)) }))
+    .sort((a, b) => a.st.anaPct - b.st.anaPct);   // 最低的排前面（最該催）
+  let lawyerTbl = '';
+  if (rows.length) {
+    lawyerTbl = `<div style="margin-top:14px;font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">各律師未成案分析涵蓋率（低的最該催上傳）</div>
+      <div class="table-wrap"><table><thead><tr><th>律師</th><th style="text-align:right;">未成案</th><th style="text-align:right;">已上傳</th><th style="text-align:right;">已分析</th><th style="text-align:right;">分析涵蓋率</th></tr></thead><tbody>`;
+    rows.forEach(r => {
+      const c = r.st.anaPct >= 50 ? 'var(--green)' : (r.st.anaPct >= 20 ? 'var(--text)' : 'var(--red)');
+      lawyerTbl += `<tr><td>${escHtml(r.name)}</td><td style="text-align:right;">${r.st.n}</td><td style="text-align:right;">${r.st.doc}</td><td style="text-align:right;">${r.st.ana}</td><td style="text-align:right;color:${c};">${r.st.anaPct}%</td></tr>`;
+    });
+    lawyerTbl += '</tbody></table></div>';
+  }
+
+  el.innerHTML = `
+    <div class="section">
+      <div class="section-title" style="margin-bottom:4px;">📥 資料涵蓋率（SOP 引擎可靠度的根本）</div>
+      <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+        SOP 引擎的失敗類型分布只建立在「已分析的未成案」上。涵蓋率越高，洞察越接近全所真相。把這條當成你第一個要推的流程改善 — 盯著月度趨勢往上爬。
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div class="kpi-card" style="flex:1;min-width:140px;"><div class="kpi-label">未成案數</div><div class="kpi-value">${s.n}</div><div class="kpi-sub">近 ${months} 個月</div></div>
+        <div class="kpi-card" style="flex:1;min-width:140px;"><div class="kpi-label">文件上傳涵蓋率</div><div class="kpi-value" style="color:${barColor(s.docPct)};">${s.docPct}%</div><div class="kpi-sub">${s.doc} 件有會議記錄/逐字稿</div></div>
+        <div class="kpi-card" style="flex:1;min-width:140px;border:1px solid var(--gold);"><div class="kpi-label">分析涵蓋率</div><div class="kpi-value" style="color:${barColor(s.anaPct)};">${s.anaPct}%</div><div class="kpi-sub">${s.ana} 件已 AI 分析</div></div>
+      </div>
+      <div style="margin-top:14px;font-size:0.78rem;font-weight:600;color:var(--text-muted);">月度分析涵蓋率趨勢（近 6 個月）</div>
+      ${trend}
+      ${lawyerTbl}
+    </div>`;
 }
 
 // ==================== 1 on 1 會議季度評估 ====================
