@@ -13,6 +13,7 @@ Usage:  python sync_li_outreach.py
 from __future__ import annotations
 import os, sys, json
 import urllib.request, urllib.parse, urllib.error
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ENV_PATH = Path(__file__).parent / ".env"
@@ -241,6 +242,37 @@ def supa_insert(rows):
     return done
 
 
+SNAP_TABLE = "bd_li_outreach_snapshots"
+
+
+def supa_write_snapshot(rows):
+    """記一筆當天的 5 個 KPI 總數 → 每週進度的資料點（upsert，同一天覆蓋）。
+    口徑與前端一致：有拜訪 = visit1_date 有值；其餘為對應 bool。"""
+    snap = {
+        "snapshot_date": (datetime.now(timezone.utc) + timedelta(hours=8)).date().isoformat(),
+        "total":   len(rows),
+        "visited": sum(1 for r in rows if clean(r.get("visit1_date"))),
+        "talked":  sum(1 for r in rows if r.get("talked")),
+        "adopted": sum(1 for r in rows if r.get("adopted")),
+        "flyer":   sum(1 for r in rows if r.get("flyer_placed")),
+    }
+    url = f"{SUPABASE_URL}/rest/v1/{SNAP_TABLE}?on_conflict=snapshot_date"
+    data = json.dumps([snap], ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers={
+        "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            r.read()
+        print(f"  snapshot {snap['snapshot_date']}: "
+              f"total={snap['total']} visited={snap['visited']} talked={snap['talked']} "
+              f"adopted={snap['adopted']} flyer={snap['flyer']}")
+    except urllib.error.HTTPError as e:
+        print(f"  ERR snapshot: {e.code} {e.read().decode('utf-8')[:400]}", file=sys.stderr)
+
+
 def main():
     svc = sheets()
     meta = svc.get(spreadsheetId=SHEET_ID, fields="sheets.properties.title").execute()
@@ -255,6 +287,7 @@ def main():
     print(f"總計 {len(all_rows)} 列 → reload {TABLE}")
     supa_delete_all()
     supa_insert(all_rows)
+    supa_write_snapshot(all_rows)
     print("✓ done")
 
 

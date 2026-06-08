@@ -112,6 +112,11 @@
 
     <div class="kpis" id="kpis"></div>
 
+    <div class="card" id="weeklyCard" style="display:none">
+      <h3 style="margin-bottom:12px">本週進度 <span class="hint" id="weeklyRef"></span></h3>
+      <div class="kpis" id="weeklyKpis" style="margin:0"></div>
+    </div>
+
     <div class="card" id="oaCard">
       <div class="row" style="align-items:flex-start">
         <div>
@@ -231,6 +236,42 @@ async function loadData(){
   buildFilterOptions();
   render();
   loadFollowers();
+  loadWeekly();
+}
+
+// ── 本週進度（每日由 sync_li_outreach.py 寫入 bd_li_outreach_snapshots）──
+async function loadWeekly(){
+  var r = await sb.from('bd_li_outreach_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(400);
+  if(r.error){ $('weeklyCard').style.display='none'; return; }
+  renderWeekly(r.data || []);
+}
+// 參考點：取「不晚於最新日 -7 天」的最新一筆；還沒滿一週就用最早一筆
+function weeklyRef(hist){
+  var last = hist[hist.length-1];
+  var cutoff = new Date(last.snapshot_date+'T00:00:00'); cutoff.setDate(cutoff.getDate()-7);
+  var ref = null;
+  for(var i=0;i<hist.length-1;i++){
+    if(new Date(hist[i].snapshot_date+'T00:00:00') <= cutoff) ref = hist[i];
+  }
+  return ref || hist[0];
+}
+function renderWeekly(hist){
+  if(!hist.length){ $('weeklyCard').style.display='none'; return; }
+  $('weeklyCard').style.display='block';
+  var last = hist[hist.length-1], ref = weeklyRef(hist);
+  var sameDay = ref.snapshot_date === last.snapshot_date;
+  $('weeklyRef').textContent = sameDay
+    ? '每天記一筆，約一週後顯示週增量（目前資料累積中）'
+    : '對比 '+ref.snapshot_date+' → '+last.snapshot_date;
+  var items = [['total','里長總數'],['visited','有拜訪'],['talked','完成洽談'],['adopted','採用'],['flyer','放文宣']];
+  $('weeklyKpis').innerHTML = items.map(function(it){
+    var k=it[0], d=(last[k]||0)-(ref[k]||0);
+    var col = d>0?'var(--good)':(d<0?'var(--bad)':'var(--muted)');
+    var txt = sameDay ? '—' : (d>0?'▲ +'+d : (d<0?'▼ '+Math.abs(d) : '+0'));
+    return '<div class="kpi"><div class="v" style="color:'+col+'">'+txt+'</div>'+
+           '<div class="l">'+it[1]+'</div>'+
+           '<div class="c muted">目前 '+(last[k]||0)+'</div></div>';
+  }).join('');
 }
 
 // ── 里民 LINE 好友數(每日由 LINE API 自動寫入 bd_li_oa_followers) ──
