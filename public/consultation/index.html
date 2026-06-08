@@ -7108,8 +7108,8 @@ function renderMonthlyCaseDetail(lawyerId, year, period, monthsA, statsConsults)
     const amt = amtVal > 0 ? '$' + Math.round(amtVal).toLocaleString() : '—';
     return `<tr>
       <td style="white-space:nowrap;">${dateTxt}</td>
-      <td style="white-space:nowrap;padding-right:28px;">${name}</td>
-      <td style="color:var(--text-muted);font-size:0.85rem;padding-right:28px;">${type}</td>
+      <td style="word-break:break-word;">${name}</td>
+      <td style="color:var(--text-muted);font-size:0.85rem;word-break:break-word;">${type}</td>
       <td style="white-space:nowrap;">${signBadge}</td>
       <td class="num collected-only" style="white-space:nowrap;">${amt}</td>
     </tr>`;
@@ -7117,12 +7117,19 @@ function renderMonthlyCaseDetail(lawyerId, year, period, monthsA, statsConsults)
 
   box.innerHTML = header + `
     <div style="overflow-x:auto;">
-      <table class="detail-table" style="width:auto;">
+      <table class="detail-table" style="table-layout:fixed;width:100%;min-width:640px;">
+        <colgroup>
+          <col style="width:64px;">
+          <col style="width:190px;">
+          <col>
+          <col style="width:88px;">
+          <col style="width:120px;">
+        </colgroup>
         <thead>
           <tr>
             <th style="white-space:nowrap;">日期</th>
-            <th style="white-space:nowrap;padding-right:28px;">當事人</th>
-            <th style="padding-right:28px;">案型</th>
+            <th>當事人</th>
+            <th>案型</th>
             <th style="white-space:nowrap;">成案</th>
             <th class="num collected-only" style="white-space:nowrap;">收款金額</th>
           </tr>
