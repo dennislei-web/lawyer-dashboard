@@ -385,6 +385,9 @@
       background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:6px;
       padding:7px 11px; font-size:0.88rem; font-family:inherit; width:100%; }
     .mt-modal .form-row textarea { min-height:70px; resize:vertical; }
+    .mt-modal .owner-checks { display:flex; flex-wrap:wrap; gap:6px 14px; }
+    .mt-modal .owner-check { display:inline-flex; align-items:center; gap:5px; font-size:0.85rem; color:var(--text); cursor:pointer; white-space:nowrap; }
+    .mt-modal .owner-check input { width:auto; margin:0; }
     .mt-modal .form-actions { display:flex; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:14px; }
     .mt-modal .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600;
       border:none; border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
@@ -2191,7 +2194,7 @@ function renderActionTable() {
   var f = state.mt.filters;
   var rows = state.mt.actions.filter(function(a) {
     if (!f.showDone && ['done','dropped'].indexOf(a.status) >= 0) return false;
-    if (f.owner && a.owner !== f.owner) return false;
+    if (f.owner && (a.owner||'').indexOf(f.owner) < 0) return false;
     if (f.kr === 'org' && a.kr_code) return false;
     if (f.kr && f.kr !== 'org' && a.kr_code !== f.kr) return false;
     if (f.category && a.category !== f.category) return false;
@@ -2490,7 +2493,7 @@ function showActionModal(actionId) {
     '<div class="form-row"><label>類別 *</label><select id="afCat">' + CATEGORIES.map(function(c){return '<option '+(c===a.category?'selected':'')+'>'+c+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>對應 KR</label><select id="afKr"><option value="">— 純營運</option>' +
       Object.keys(KR_LABEL).map(function(k){return '<option value="'+k+'" '+(k===a.kr_code?'selected':'')+'>'+KR_LABEL[k]+'</option>';}).join('') + '</select></div>' +
-    '<div class="form-row"><label>Owner *</label><select id="afOwner">' + OWNER_CHOICES.map(function(o){return '<option '+(o===a.owner?'selected':'')+'>'+o+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-row"><label>Owner *</label><div id="afOwner" class="owner-checks">' + OWNER_CHOICES.map(function(o){var on=(a.owner||'').split(/[、,]/).map(function(s){return s.trim();}).indexOf(o)>=0;return '<label class="owner-check"><input type="checkbox" value="'+o+'" '+(on?'checked':'')+'>'+o+'</label>';}).join('') + '</div></div>' +
     '<div class="form-row"><label>狀態</label><select id="afStatus">' + Object.keys(STATUS_LABEL).map(function(s){return '<option value="'+s+'" '+(s===a.status?'selected':'')+'>'+STATUS_LABEL[s]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>類型</label><select id="afRecur">' +
       '<option value="oneoff" '+((a.recur_type||'oneoff')==='oneoff'?'selected':'')+'>一次性（做完即結案）</option>' +
@@ -2513,7 +2516,7 @@ function showActionModal(actionId) {
       title: document.getElementById('afTitle').value.trim(),
       category: document.getElementById('afCat').value,
       kr_code: document.getElementById('afKr').value || null,
-      owner: document.getElementById('afOwner').value,
+      owner: Array.prototype.slice.call(document.querySelectorAll('#afOwner input:checked')).map(function(c){return c.value;}).join('、'),
       status: document.getElementById('afStatus').value,
       recur_type: document.getElementById('afRecur').value,
       source_meeting_id: document.getElementById('afMeeting').value || null,
@@ -2523,6 +2526,7 @@ function showActionModal(actionId) {
       notes: document.getElementById('afNotes').value || null
     };
     if (!payload.title) { alert('請填標題'); return; }
+    if (!payload.owner) { alert('請至少勾選一位 Owner'); return; }
     try {
       var r;
       if (isNew) { r = await sb.from('meeting_action_items').insert(payload); }
