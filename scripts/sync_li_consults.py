@@ -79,11 +79,13 @@ def compute_monthly():
     c_ch = col_index(hdr, "進線管道")
     c_mon = col_index(hdr, "轉線月份")
     c_yr = col_index(hdr, "轉線年份")
-    if min(c_ch, c_mon, c_yr) < 0:
-        raise SystemExit(f"找不到必要欄位：進線管道={c_ch} 轉線月份={c_mon} 轉線年份={c_yr}")
+    c_att = col_index(hdr, "是否出席諮詢", "出席諮詢")   # Q 欄
+    if min(c_ch, c_mon, c_yr, c_att) < 0:
+        raise SystemExit(f"找不到必要欄位：進線管道={c_ch} 轉線月份={c_mon} 轉線年份={c_yr} 是否出席={c_att}")
 
     rows = get_values(f"{TAB}!A3:BG")
-    counts = Counter()
+    booked = Counter()    # 約成（進線管道=里民服務全部）
+    attended = Counter()  # 實際出席（Q 欄=是）
     skipped = 0
     for r in rows:
         ch = (r[c_ch] if len(r) > c_ch else "") or ""
@@ -96,8 +98,10 @@ def compute_monthly():
         except (ValueError, TypeError):
             skipped += 1
             continue
-        counts[key] += 1
-    return counts, len(rows), skipped
+        booked[key] += 1
+        if ((r[c_att] if len(r) > c_att else "") or "").strip() == "是":
+            attended[key] += 1
+    return booked, attended, len(rows), skipped
 
 
 def supa_upsert(rows):
@@ -115,14 +119,15 @@ def supa_upsert(rows):
 
 
 def main():
-    counts, total, skipped = compute_monthly()
-    print(f"總表掃描 {total} 列；里民約成諮詢 {sum(counts.values())} 場，分佈：")
-    for mo in sorted(counts):
-        print(f"  {mo}: {counts[mo]}")
+    booked, attended, total, skipped = compute_monthly()
+    print(f"總表掃描 {total} 列；里民約成 {sum(booked.values())} 場 / 實際出席 {sum(attended.values())} 場，分佈：")
+    for mo in sorted(booked):
+        print(f"  {mo}: 約成 {booked[mo]} / 出席 {attended.get(mo,0)}")
     if skipped:
         print(f"（{skipped} 筆里民列缺轉線年/月，未計入）", file=sys.stderr)
 
-    payload = [{"month": mo, "sessions": n, "source": "sheet"} for mo, n in sorted(counts.items())]
+    payload = [{"month": mo, "sessions": n, "attended": attended.get(mo, 0), "source": "sheet"}
+               for mo, n in sorted(booked.items())]
     supa_upsert(payload)
     print(f"已 upsert {len(payload)} 個月份到 {TABLE}")
 

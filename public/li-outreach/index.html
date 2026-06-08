@@ -132,8 +132,13 @@
     <div class="card" id="consultCard">
       <div class="row" style="align-items:flex-start">
         <div>
-          <h3 style="margin-bottom:6px">約成諮詢場次 <span class="hint">里民方案實際約成的法律諮詢（來源：法律010總表）</span></h3>
-          <div><span id="csTotal" style="font-size:1.8rem;font-weight:700"></span> <span class="muted" style="font-size:.85rem">場（累計）</span></div>
+          <h3 style="margin-bottom:6px">約成諮詢場次 <span class="hint">進線管道＝里民服務（來源：法律010總表）</span></h3>
+          <div>
+            <span id="csTotal" style="font-size:1.8rem;font-weight:700"></span> <span class="muted" style="font-size:.85rem">場約成</span>
+            <span style="margin:0 8px;color:var(--muted)">·</span>
+            <span id="csAtt" style="font-size:1.8rem;font-weight:700;color:var(--good)"></span> <span class="muted" style="font-size:.85rem">場實際出席</span>
+            <span id="csRate" class="muted" style="font-size:.85rem"></span>
+          </div>
           <div class="muted" id="csUpdated" style="font-size:.78rem;margin-top:3px"></div>
         </div>
       </div>
@@ -260,17 +265,22 @@ async function loadConsults(){
 function renderConsults(rows){
   if(!rows.length){ $('csTotal').textContent='—'; $('csUpdated').textContent='尚無資料'; $('consultTable').innerHTML=''; return; }
   var total = rows.reduce(function(s,x){ return s+(x.sessions||0); }, 0);
+  var att   = rows.reduce(function(s,x){ return s+(x.attended||0); }, 0);
   var last  = rows[rows.length-1];
   $('csTotal').textContent = total;
+  $('csAtt').textContent = att;
+  $('csRate').textContent = total ? '（出席率 '+Math.round(att/total*100)+'%）' : '';
   $('csUpdated').textContent = '最後更新 '+last.month+(last.source==='sheet'?'（自動）':'（手動）');
   var mx = Math.max.apply(null, rows.map(function(x){ return x.sessions||0; })) || 1;
   var body = rows.slice().reverse().map(function(x){
-    var w = Math.round((x.sessions||0)/mx*100);
+    var w = Math.round((x.sessions||0)/mx*100), wa = Math.round((x.attended||0)/mx*100);
     return '<tr><td>'+x.month+'</td>'+
            '<td style="text-align:right;font-weight:600">'+(x.sessions||0)+'</td>'+
-           '<td style="width:60%"><div style="background:rgba(79,142,247,.2);border-radius:4px"><div style="width:'+w+'%;min-width:'+(x.sessions?'8px':'0')+';height:10px;background:#4f8ef7;border-radius:4px"></div></div></td></tr>';
+           '<td style="text-align:right;font-weight:600;color:var(--good)">'+(x.attended||0)+'</td>'+
+           '<td style="width:55%"><div style="position:relative;background:rgba(79,142,247,.18);border-radius:4px;width:'+w+'%;min-width:'+(x.sessions?'8px':'0')+';height:12px">'+
+             '<div style="position:absolute;left:0;top:0;width:'+(x.sessions?Math.round((x.attended||0)/x.sessions*100):0)+'%;height:12px;background:var(--good);border-radius:4px"></div></div></td></tr>';
   }).join('');
-  $('consultTable').innerHTML = '<thead><tr><th>月份</th><th style="text-align:right">場次</th><th></th></tr></thead><tbody>'+body+'</tbody>';
+  $('consultTable').innerHTML = '<thead><tr><th>月份</th><th style="text-align:right">約成</th><th style="text-align:right">出席</th><th></th></tr></thead><tbody>'+body+'</tbody>';
 }
 
 // ── 本週進度（每日由 sync_li_outreach.py 寫入 bd_li_outreach_snapshots，每位負責人一列）──
