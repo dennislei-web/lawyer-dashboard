@@ -7010,11 +7010,12 @@ function renderDetailMonthly(lawyerId) {
     rangeNote = `比較範圍：${yearA} ${parseInt(monthlyPeriod)}月 vs ${yearB} ${parseInt(monthlyPeriod)}月`;
   }
 
-  // 案件層級明細：依 yearA + 期間，切換年度下拉或期間 chip 時即更新
-  renderMonthlyCaseDetail(lawyerId, yearA, monthlyPeriod, monthsA);
-
   const tA = aggregateStats(statsA);
   const tB = aggregateStats(statsB);
+
+  // 案件層級明細：依 yearA + 期間，切換年度下拉或期間 chip 時即更新
+  // 帶入月度彙總諮詢數，當案件明細筆數與彙總不一致時提示（當月明細可能尚未同步完整）
+  renderMonthlyCaseDetail(lawyerId, yearA, monthlyPeriod, monthsA, tA.consult_count);
 
   if (statsB.length === 0) {
     content.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">${rangeNote}</div>`
@@ -7048,7 +7049,7 @@ function renderDetailMonthly(lawyerId) {
 }
 
 // 個人月度比較 — 當期（yearA）案件層級明細：當事人 / 成案與否 / 收款金額
-function renderMonthlyCaseDetail(lawyerId, year, period, monthsA) {
+function renderMonthlyCaseDetail(lawyerId, year, period, monthsA, statsConsults) {
   const box = document.getElementById('detailMonthlyCaseDetail');
   if (!box) return;
 
@@ -7077,10 +7078,17 @@ function renderMonthlyCaseDetail(lawyerId, year, period, monthsA) {
   const signedN = cases.filter(c => c.is_signed).length;
   const totalCollected = cases.reduce((s, c) => s + (Number(c.collected) || 0), 0);
 
+  // 案件明細(consultation_cases) 與 月度彙總(monthly_stats) 為兩條同步管線，
+  // 當月可能尚未同步完整 → 筆數不一致時提示，避免使用者誤以為資料出錯
+  const expected = Number(statsConsults) || 0;
+  const mismatchNote = (expected && expected !== cases.length)
+    ? `<span style="color:var(--orange);"> · ⚠ 月度彙總計 ${expected} 筆（當月明細可能尚未同步完整）</span>`
+    : '';
+
   const header = `
     <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
       <div style="font-weight:600;">${periodLabel} 諮詢明細</div>
-      <div style="font-size:0.8rem;color:var(--text-muted);">共 ${cases.length} 筆 · 成案 ${signedN} 筆<span class="collected-only"> · 收款 $${Math.round(totalCollected).toLocaleString()}</span></div>
+      <div style="font-size:0.8rem;color:var(--text-muted);">共 ${cases.length} 筆 · 成案 ${signedN} 筆<span class="collected-only"> · 收款 $${Math.round(totalCollected).toLocaleString()}</span>${mismatchNote}</div>
     </div>`;
 
   if (cases.length === 0) {
@@ -7095,7 +7103,9 @@ function renderMonthlyCaseDetail(lawyerId, year, period, monthsA) {
     const signBadge = c.is_signed
       ? '<span class="text-green">✓ 成案</span>'
       : '<span style="color:var(--text-muted);">未成案</span>';
-    const amt = c.is_signed ? '$' + Math.round(Number(c.collected) || 0).toLocaleString() : '—';
+    // 收款金額顯示每件實收（含未成案的諮詢費），使各列加總＝表頭收款合計
+    const amtVal = Number(c.collected) || 0;
+    const amt = amtVal > 0 ? '$' + Math.round(amtVal).toLocaleString() : '—';
     return `<tr>
       <td style="white-space:nowrap;">${dateTxt}</td>
       <td style="white-space:nowrap;padding-right:28px;">${name}</td>
