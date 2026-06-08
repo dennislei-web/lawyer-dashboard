@@ -52,3 +52,12 @@ jobs:
         run: |
           cd scripts
           python sync_li_oa_followers.py
+
+      - name: Run sync_li_consults (里民約成諮詢場次)
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd scripts
+          python sync_li_consults.py
