@@ -7097,24 +7097,24 @@ function renderMonthlyCaseDetail(lawyerId, year, period, monthsA) {
       : '<span style="color:var(--text-muted);">未成案</span>';
     const amt = c.is_signed ? '$' + Math.round(Number(c.collected) || 0).toLocaleString() : '—';
     return `<tr>
-      <td>${dateTxt}</td>
-      <td>${name}</td>
-      <td style="color:var(--text-muted);font-size:0.85rem;">${type}</td>
-      <td>${signBadge}</td>
-      <td class="num collected-only">${amt}</td>
+      <td style="white-space:nowrap;">${dateTxt}</td>
+      <td style="white-space:nowrap;padding-right:28px;">${name}</td>
+      <td style="color:var(--text-muted);font-size:0.85rem;padding-right:28px;">${type}</td>
+      <td style="white-space:nowrap;">${signBadge}</td>
+      <td class="num collected-only" style="white-space:nowrap;">${amt}</td>
     </tr>`;
   }).join('');
 
   box.innerHTML = header + `
     <div style="overflow-x:auto;">
-      <table class="detail-table">
+      <table class="detail-table" style="width:auto;">
         <thead>
           <tr>
-            <th>日期</th>
-            <th>當事人</th>
-            <th>案型</th>
-            <th>成案</th>
-            <th class="num collected-only">收款金額</th>
+            <th style="white-space:nowrap;">日期</th>
+            <th style="white-space:nowrap;padding-right:28px;">當事人</th>
+            <th style="padding-right:28px;">案型</th>
+            <th style="white-space:nowrap;">成案</th>
+            <th class="num collected-only" style="white-space:nowrap;">收款金額</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
