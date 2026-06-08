@@ -130,7 +130,7 @@
     </div>
 
     <div class="card">
-      <h3>負責人進度 <span class="hint">每位同仁的漏斗（里長數 → 拜訪 → 完成洽談 → 採用 → 放文宣）</span></h3>
+      <h3>負責人進度 <span class="hint">每位同仁的漏斗（里長數 → 拜訪 → 完成洽談 → 採用 → 放文宣）</span><span class="hint" id="ownerWkNote"></span></h3>
       <div style="overflow:auto"><table id="ownerTable"></table></div>
     </div>
 
@@ -239,11 +239,51 @@ async function loadData(){
   loadWeekly();
 }
 
-// ── 本週進度（每日由 sync_li_outreach.py 寫入 bd_li_outreach_snapshots）──
+// ── 本週進度（每日由 sync_li_outreach.py 寫入 bd_li_outreach_snapshots，每位負責人一列）──
+var WEEKLY_OWNER = null;   // {owner:{n,v,t,a,f}} 本週增量
+var WEEKLY_REF = null;     // {last, ref, sameDay}
 async function loadWeekly(){
-  var r = await sb.from('bd_li_outreach_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(400);
+  var r = await sb.from('bd_li_outreach_snapshots').select('*').order('snapshot_date',{ascending:true}).limit(4000);
   if(r.error){ $('weeklyCard').style.display='none'; return; }
-  renderWeekly(r.data || []);
+  var rows = r.data || [];
+  // 依日期加總成全所歷史
+  var byDate = {};
+  rows.forEach(function(s){
+    var d = byDate[s.snapshot_date] || (byDate[s.snapshot_date]={snapshot_date:s.snapshot_date,total:0,visited:0,talked:0,adopted:0,flyer:0});
+    d.total+=s.total||0; d.visited+=s.visited||0; d.talked+=s.talked||0; d.adopted+=s.adopted||0; d.flyer+=s.flyer||0;
+  });
+  var firmHist = Object.keys(byDate).sort().map(function(k){ return byDate[k]; });
+  renderWeekly(firmHist);
+  buildWeeklyOwner(rows, firmHist);
+  renderOwners(applyFilters());  // 補上每人本週增量
+}
+// 算各負責人「最新日 vs 參考日」的增量
+function buildWeeklyOwner(rows, firmHist){
+  WEEKLY_OWNER = null; WEEKLY_REF = null;
+  if(!firmHist.length) return;
+  var last = firmHist[firmHist.length-1], ref = weeklyRef(firmHist);
+  WEEKLY_REF = { last:last.snapshot_date, ref:ref.snapshot_date, sameDay: ref.snapshot_date===last.snapshot_date };
+  var at = {};  // date -> owner -> row
+  rows.forEach(function(s){ (at[s.snapshot_date] = at[s.snapshot_date]||{})[s.owner]=s; });
+  var L = at[last.snapshot_date]||{}, R = at[ref.snapshot_date]||{};
+  var owners = {};
+  Object.keys(L).forEach(function(o){owners[o]=1;});
+  Object.keys(R).forEach(function(o){owners[o]=1;});
+  WEEKLY_OWNER = {};
+  Object.keys(owners).forEach(function(o){
+    var a=L[o]||{}, b=R[o]||{};
+    WEEKLY_OWNER[o] = {
+      n:(a.total||0)-(b.total||0), v:(a.visited||0)-(b.visited||0),
+      t:(a.talked||0)-(b.talked||0), a:(a.adopted||0)-(b.adopted||0), f:(a.flyer||0)-(b.flyer||0)
+    };
+  });
+}
+// 本週增量小字（只顯示非零；資料未滿一週不顯示）
+function wd(d){
+  if(d==null || (WEEKLY_REF && WEEKLY_REF.sameDay)) return '';
+  if(d>0) return ' <span style="color:var(--good);font-size:.72rem">+'+d+'</span>';
+  if(d<0) return ' <span style="color:var(--bad);font-size:.72rem">'+d+'</span>';
+  return '';
 }
 // 參考點：取「不晚於最新日 -7 天」的最新一筆；還沒滿一週就用最早一筆
 function weeklyRef(hist){
@@ -398,13 +438,17 @@ function renderOwners(rows){
   var arr = Object.keys(by).map(function(k){ return Object.assign({owner:k}, by[k]); })
                   .sort(function(a,b){ return b.a-a.a; });
   var maxN = Math.max.apply(null, arr.map(function(x){return x.n;}).concat([1]));
+  var note = $('ownerWkNote');
+  if(note) note.textContent = (WEEKLY_REF && !WEEKLY_REF.sameDay)
+    ? '· 綠色小字＝本週增量（vs '+WEEKLY_REF.ref+'）' : '';
   var head = '<tr><th>負責人</th><th class="num">里長數</th><th class="num">有拜訪</th>'+
              '<th class="num">完成洽談</th><th class="num">採用</th><th class="num">放文宣</th><th>規模</th></tr>';
   var body = arr.map(function(x){
+    var wk = (WEEKLY_OWNER && WEEKLY_OWNER[x.owner]) || {};
     return '<tr><td><b>'+x.owner+'</b></td>'+
-      '<td class="num">'+x.n+'</td><td class="num">'+x.v+'</td>'+
-      '<td class="num">'+x.t+'</td><td class="num">'+x.a+'</td>'+
-      '<td class="num">'+x.f+'</td>'+
+      '<td class="num">'+x.n+wd(wk.n)+'</td><td class="num">'+x.v+wd(wk.v)+'</td>'+
+      '<td class="num">'+x.t+wd(wk.t)+'</td><td class="num">'+x.a+wd(wk.a)+'</td>'+
+      '<td class="num">'+x.f+wd(wk.f)+'</td>'+
       '<td><span class="bar" style="width:'+Math.round(x.n/maxN*120)+'px"></span></td></tr>';
   }).join('');
   $('ownerTable').innerHTML = head+body;

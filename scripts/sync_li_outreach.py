@@ -246,18 +246,25 @@ SNAP_TABLE = "bd_li_outreach_snapshots"
 
 
 def supa_write_snapshot(rows):
-    """記一筆當天的 5 個 KPI 總數 → 每週進度的資料點（upsert，同一天覆蓋）。
-    口徑與前端一致：有拜訪 = visit1_date 有值；其餘為對應 bool。"""
-    snap = {
-        "snapshot_date": (datetime.now(timezone.utc) + timedelta(hours=8)).date().isoformat(),
-        "total":   len(rows),
-        "visited": sum(1 for r in rows if clean(r.get("visit1_date"))),
-        "talked":  sum(1 for r in rows if r.get("talked")),
-        "adopted": sum(1 for r in rows if r.get("adopted")),
-        "flyer":   sum(1 for r in rows if r.get("flyer_placed")),
-    }
-    url = f"{SUPABASE_URL}/rest/v1/{SNAP_TABLE}?on_conflict=snapshot_date"
-    data = json.dumps([snap], ensure_ascii=False).encode("utf-8")
+    """記當天「每位負責人」的 5 個 KPI 數字 → 每週進度的資料點（upsert，同日同人覆蓋）。
+    全所量 = 當天各人加總。口徑與前端一致：有拜訪 = visit1_date 有值；其餘為對應 bool。"""
+    today = (datetime.now(timezone.utc) + timedelta(hours=8)).date().isoformat()
+    agg = {}  # owner -> dict
+    for r in rows:
+        o = clean(r.get("owner")) or "—"
+        a = agg.setdefault(o, {"total": 0, "visited": 0, "talked": 0, "adopted": 0, "flyer": 0})
+        a["total"] += 1
+        if clean(r.get("visit1_date")):
+            a["visited"] += 1
+        if r.get("talked"):
+            a["talked"] += 1
+        if r.get("adopted"):
+            a["adopted"] += 1
+        if r.get("flyer_placed"):
+            a["flyer"] += 1
+    snaps = [dict(snapshot_date=today, owner=o, **a) for o, a in agg.items()]
+    url = f"{SUPABASE_URL}/rest/v1/{SNAP_TABLE}?on_conflict=snapshot_date,owner"
+    data = json.dumps(snaps, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST", headers={
         "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
@@ -266,9 +273,8 @@ def supa_write_snapshot(rows):
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             r.read()
-        print(f"  snapshot {snap['snapshot_date']}: "
-              f"total={snap['total']} visited={snap['visited']} talked={snap['talked']} "
-              f"adopted={snap['adopted']} flyer={snap['flyer']}")
+        tot = sum(a["total"] for a in agg.values())
+        print(f"  snapshot {today}: {len(snaps)} 位負責人 · total={tot}")
     except urllib.error.HTTPError as e:
         print(f"  ERR snapshot: {e.code} {e.read().decode('utf-8')[:400]}", file=sys.stderr)
 
