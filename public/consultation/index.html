@@ -1971,7 +1971,7 @@
       <div class="year-filter-bar" id="monthlyPeriodBar" style="margin-bottom:12px;">
         <span class="filter-label">期間</span>
       </div>
-      <div id="detailMonthlyContent"></div>
+      <div id="detailMonthlyCompareContent"></div>
     </div>
 
     <!-- 成案金額區間分析 (from quality detail) -->
@@ -6938,7 +6938,7 @@ function renderDetailYoy(lawyerId) {
 let monthlyPeriod = 'ytd';  // 'ytd'（同期，已完成月份）或 'MM'（個別月份）
 
 function renderDetailMonthly(lawyerId) {
-  const content = document.getElementById('detailMonthlyContent');
+  const content = document.getElementById('detailMonthlyCompareContent');
   const bar     = document.getElementById('monthlyPeriodBar');
   const selectA = document.getElementById('monYearA');
   const selectB = document.getElementById('monYearB');
