@@ -129,6 +129,17 @@
       <div class="muted" id="oaSparkCap" style="font-size:.72rem;margin-top:6px"></div>
     </div>
 
+    <div class="card" id="consultCard">
+      <div class="row" style="align-items:flex-start">
+        <div>
+          <h3 style="margin-bottom:6px">約成諮詢場次 <span class="hint">里民方案實際約成的法律諮詢（來源：法律010總表）</span></h3>
+          <div><span id="csTotal" style="font-size:1.8rem;font-weight:700"></span> <span class="muted" style="font-size:.85rem">場（累計）</span></div>
+          <div class="muted" id="csUpdated" style="font-size:.78rem;margin-top:3px"></div>
+        </div>
+      </div>
+      <div style="overflow:auto;margin-top:12px"><table id="consultTable"></table></div>
+    </div>
+
     <div class="card">
       <h3>負責人進度 <span class="hint">每位同仁的漏斗（里長數 → 拜訪 → 完成洽談 → 採用 → 放文宣）</span><span class="hint" id="ownerWkNote"></span></h3>
       <div style="overflow:auto"><table id="ownerTable"></table></div>
@@ -236,7 +247,30 @@ async function loadData(){
   buildFilterOptions();
   render();
   loadFollowers();
+  loadConsults();
   loadWeekly();
+}
+
+// ── 約成諮詢場次（每月，來源：法律010總表「里民方案」→ bd_li_consults）──
+async function loadConsults(){
+  var r = await sb.from('bd_li_consults').select('*').order('month',{ascending:true}).limit(120);
+  if(r.error){ $('consultCard').style.display='none'; return; }
+  renderConsults(r.data || []);
+}
+function renderConsults(rows){
+  if(!rows.length){ $('csTotal').textContent='—'; $('csUpdated').textContent='尚無資料'; $('consultTable').innerHTML=''; return; }
+  var total = rows.reduce(function(s,x){ return s+(x.sessions||0); }, 0);
+  var last  = rows[rows.length-1];
+  $('csTotal').textContent = total;
+  $('csUpdated').textContent = '最後更新 '+last.month+(last.source==='sheet'?'（自動）':'（手動）');
+  var mx = Math.max.apply(null, rows.map(function(x){ return x.sessions||0; })) || 1;
+  var body = rows.slice().reverse().map(function(x){
+    var w = Math.round((x.sessions||0)/mx*100);
+    return '<tr><td>'+x.month+'</td>'+
+           '<td style="text-align:right;font-weight:600">'+(x.sessions||0)+'</td>'+
+           '<td style="width:60%"><div style="background:rgba(79,142,247,.2);border-radius:4px"><div style="width:'+w+'%;min-width:'+(x.sessions?'8px':'0')+';height:10px;background:#4f8ef7;border-radius:4px"></div></div></td></tr>';
+  }).join('');
+  $('consultTable').innerHTML = '<thead><tr><th>月份</th><th style="text-align:right">場次</th><th></th></tr></thead><tbody>'+body+'</tbody>';
 }
 
 // ── 本週進度（每日由 sync_li_outreach.py 寫入 bd_li_outreach_snapshots，每位負責人一列）──
