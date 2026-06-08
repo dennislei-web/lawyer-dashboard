@@ -2108,7 +2108,7 @@ function updateMtCounts() {
   var open = state.mt.actions.filter(function(a){ return ['pending','in_progress','blocked'].indexOf(a.status) >= 0; });
   var ongoing = open.filter(function(a){ return a.recur_type === 'ongoing'; });
   setText('mtPageCount', open.length);
-  setText('mtOpenCount', open.length);
+  setText('mtOpenCount', open.length - ongoing.length); // Open Actions 只算一次性，ongoing 移到持續關注 tab
   setText('mtOngoingCount', ongoing.length);
 }
 function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
@@ -2158,8 +2158,6 @@ function renderOpenActions(container) {
       '<option value="org">非 OKR (純營運)</option></select>' +
     '<label>類別</label><select id="mtFCat"><option value="">全部</option>' +
       CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('') + '</select>' +
-    '<label>類型</label><select id="mtFRecur"><option value="">全部</option>' +
-      '<option value="oneoff">一次性</option><option value="ongoing">持續關注</option></select>' +
     '<label><input type="checkbox" id="mtFDone" style="margin-right:4px;">含已結案</label>' +
     '<div class="spacer"></div>' +
     '<input id="mtFSearch" placeholder="🔍 搜尋..." style="width:180px;">' +
@@ -2170,17 +2168,15 @@ function renderOpenActions(container) {
   document.getElementById('mtFOwner').value = state.mt.filters.owner;
   document.getElementById('mtFKr').value = state.mt.filters.kr;
   document.getElementById('mtFCat').value = state.mt.filters.category;
-  document.getElementById('mtFRecur').value = state.mt.filters.recur;
   document.getElementById('mtFDone').checked = state.mt.filters.showDone;
   document.getElementById('mtFSearch').value = state.mt.filters.search;
 
-  ['mtFOwner','mtFKr','mtFCat','mtFRecur','mtFSearch','mtFDone'].forEach(function(id) {
+  ['mtFOwner','mtFKr','mtFCat','mtFSearch','mtFDone'].forEach(function(id) {
     var el = document.getElementById(id);
     el.addEventListener(id === 'mtFSearch' ? 'input' : 'change', function() {
       state.mt.filters.owner = document.getElementById('mtFOwner').value;
       state.mt.filters.kr    = document.getElementById('mtFKr').value;
       state.mt.filters.category = document.getElementById('mtFCat').value;
-      state.mt.filters.recur = document.getElementById('mtFRecur').value;
       state.mt.filters.search = document.getElementById('mtFSearch').value;
       state.mt.filters.showDone = document.getElementById('mtFDone').checked;
       renderActionTable();
@@ -2203,6 +2199,7 @@ function renderActionTable() {
   if (!wrap) return;
   var f = state.mt.filters;
   var rows = state.mt.actions.filter(function(a) {
+    if ((a.recur_type || 'oneoff') === 'ongoing') return false; // 持續關注項目只在「持續關注」tab 顯示
     if (!f.showDone && ['done','dropped'].indexOf(a.status) >= 0) return false;
     if (f.owner && (a.owner||'').indexOf(f.owner) < 0) return false;
     if (f.kr === 'org' && a.kr_code) return false;
@@ -2239,7 +2236,7 @@ function renderActionTable() {
   });
   var todayISO = new Date().toISOString().slice(0,10);
   var COLS = [
-    { key:'title', label:'行動項目', width:'36%' }, { key:'recur_type', label:'類型' },
+    { key:'title', label:'行動項目', width:'36%' },
     { key:'category', label:'類別' }, { key:'kr_code', label:'KR' }, { key:'owner', label:'Owner' },
     { key:'status', label:'狀態' }, { key:'carry_count', label:'Carry' }, { key:'next_review_date', label:'下次 Review' }
   ];
@@ -2259,7 +2256,6 @@ function renderActionTable() {
         (a.attachment_path ? ' <a href="#" class="action-link" onclick="event.stopPropagation();openActionAttachment(\''+escHtml(a.attachment_path)+'\');return false;" title="'+escHtml(a.attachment_name||'附件')+'">📎 附件</a>' : '') +
         (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
       '</td>' +
-      '<td>' + (function(){ var rt = a.recur_type || 'oneoff'; return '<span class="badge-recur '+rt+'">'+(rt==='ongoing'?'♻ 持續':'✓ 一次性')+'</span>'; })() + '</td>' +
       '<td>' + (a.category ? '<span class="badge-kr org">'+escHtml(a.category)+'</span>' : '') + '</td>' +
       '<td>' + (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">非 OKR</span>') + '</td>' +
       '<td class="col-owner">' + escHtml(a.owner || '—') + '</td>' +
