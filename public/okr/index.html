@@ -388,6 +388,14 @@
     .mt-modal .owner-checks { display:flex; flex-wrap:wrap; gap:6px 14px; }
     .mt-modal .owner-check { display:inline-flex; align-items:center; gap:5px; font-size:0.85rem; color:var(--text); cursor:pointer; white-space:nowrap; }
     .mt-modal .owner-check input { width:auto; margin:0; }
+    .mt-modal .attach-wrap { display:flex; flex-direction:column; gap:6px; }
+    .mt-modal .attach-cur { display:flex; align-items:center; gap:10px; }
+    .mt-modal .attach-cur a { color:var(--gold); text-decoration:none; font-size:0.85rem; }
+    .mt-modal .attach-rm { background:none; border:1px solid var(--border); color:var(--red); border-radius:6px; padding:2px 8px; font-size:0.75rem; cursor:pointer; }
+    .mt-modal .attach-removed { color:var(--red); font-size:0.82rem; }
+    .mt-modal .attach-hint { font-size:0.72rem; color:var(--text-muted); }
+    .mt-modal .attach-msg { font-size:0.78rem; }
+    .mt-modal .attach-wrap input[type="file"] { font-size:0.8rem; }
     .mt-modal .form-actions { display:flex; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:14px; }
     .mt-modal .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600;
       border:none; border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
@@ -2075,6 +2083,8 @@ state.mt = {
 };
 var KR_LABEL = { kr1:'KR1 諮詢營收', kr2:'KR2 諮詢轉化', kr3:'KR3 法顧', kr4:'KR4 合署', kr5:'KR5 法0', kr6:'KR6 成本', kr7:'KR7 AI' };
 var STATUS_LABEL = { pending:'Pending', in_progress:'In Progress', blocked:'Blocked', done:'Done', dropped:'Dropped' };
+var ACTION_BUCKET = 'action-attachments';
+var ACTION_FILE_MAX = 6 * 1024 * 1024; // 6 MB
 var CATEGORIES = ['法律010','工程','合署','客戶關係','法顧','人資','財務','其他'];
 var OWNER_CHOICES = ['雷皓明','何泓儒','吳泰儀','黃杰','偉志','飛宇','思蓓','其他'];
 var MEETING_TYPE_LABEL = { op_weekly:'營運週會', shareholder:'股東會', monthly_all:'月會', partner_consult:'合署/北所諮詢', one_on_one:'1-on-1', other:'其他' };
@@ -2246,6 +2256,7 @@ function renderActionTable() {
     html += '<tr class="action-row" data-id="' + a.id + '">' +
       '<td class="col-title">' + escHtml(a.title) +
         (a.link_url ? ' <a href="'+escHtml(a.link_url)+'" target="_blank" rel="noopener" class="action-link" onclick="event.stopPropagation()" title="開啟連結">🔗 開啟</a>' : '') +
+        (a.attachment_path ? ' <a href="#" class="action-link" onclick="event.stopPropagation();openActionAttachment(\''+escHtml(a.attachment_path)+'\');return false;" title="'+escHtml(a.attachment_name||'附件')+'">📎 附件</a>' : '') +
         (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
       '</td>' +
       '<td>' + (function(){ var rt = a.recur_type || 'oneoff'; return '<span class="badge-recur '+rt+'">'+(rt==='ongoing'?'♻ 持續':'✓ 一次性')+'</span>'; })() + '</td>' +
@@ -2480,6 +2491,14 @@ function renderMeetingList(container) {
   container.appendChild(grid);
 }
 
+// 開啟 Action 附件（私有 bucket → 60 秒簽名 URL）
+async function openActionAttachment(path) {
+  if (!sb || !path) return;
+  var signed = await sb.storage.from(ACTION_BUCKET).createSignedUrl(path, 60);
+  if (signed.error || !signed.data) { alert('取得附件失敗：' + (signed.error ? signed.error.message : '')); return; }
+  window.open(signed.data.signedUrl, '_blank');
+}
+
 // ─── Modal: action create / edit ───
 function showActionModal(actionId) {
   var a = actionId ? state.mt.actions.find(function(x){return x.id === actionId;}) : null;
@@ -2502,6 +2521,11 @@ function showActionModal(actionId) {
       state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===a.source_meeting_id?'selected':'')+'>'+m.meeting_date+' '+MEETING_TYPE_LABEL[m.meeting_type]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>下次 Review</label><input type="date" id="afReview" value="'+(a.next_review_date||'')+'"></div>' +
     '<div class="form-row"><label>連結</label><input id="afLink" value="'+escHtml(a.link_url||'')+'" placeholder="貼上儀表板/文件網址，會在項目旁顯示 🔗 開啟"></div>' +
+    '<div class="form-row"><label>附件</label><div class="attach-wrap">' +
+      (a.attachment_path ? '<div id="afCurAttach" class="attach-cur"><a href="#" id="afViewAttach">📎 '+escHtml(a.attachment_name||'附件')+'</a><button type="button" id="afRmAttach" class="attach-rm">移除</button></div>' : '') +
+      '<input type="file" id="afFile"><div class="attach-hint">任意檔型，上限 6MB' + (a.attachment_path ? '；選新檔會取代舊附件' : '') + '</div>' +
+      '<div id="afAttachMsg" class="attach-msg"></div>' +
+    '</div></div>' +
     '<div class="form-row tall"><label>最新進度</label><textarea id="afResolution" placeholder="一句話最新狀況">'+escHtml(a.latest_resolution||'')+'</textarea></div>' +
     '<div class="form-row tall"><label>備註</label><textarea id="afNotes" placeholder="脈絡、相關連結...">'+escHtml(a.notes||'')+'</textarea></div>' +
     '<div class="form-actions">' +
@@ -2511,6 +2535,19 @@ function showActionModal(actionId) {
     '</div>';
   openModal(html);
   document.getElementById('afCancel').addEventListener('click', closeModal);
+
+  // 附件：原始路徑 / 移除旗標 / 檢視 + 移除按鈕
+  var origAttachPath = a.attachment_path || null;
+  var removeAttach = false;
+  var viewBtn = document.getElementById('afViewAttach');
+  if (viewBtn) viewBtn.addEventListener('click', function(e) { e.preventDefault(); openActionAttachment(origAttachPath); });
+  var rmBtn = document.getElementById('afRmAttach');
+  if (rmBtn) rmBtn.addEventListener('click', function() {
+    removeAttach = true;
+    var cur = document.getElementById('afCurAttach');
+    if (cur) cur.innerHTML = '<span class="attach-removed">附件將於儲存時移除</span>';
+  });
+
   document.getElementById('afSave').addEventListener('click', async function() {
     var payload = {
       title: document.getElementById('afTitle').value.trim(),
@@ -2527,22 +2564,55 @@ function showActionModal(actionId) {
     };
     if (!payload.title) { alert('請填標題'); return; }
     if (!payload.owner) { alert('請至少勾選一位 Owner'); return; }
+
+    // 預設沿用原附件，除非被移除
+    payload.attachment_path = removeAttach ? null : origAttachPath;
+    payload.attachment_name = removeAttach ? null : (a.attachment_name || null);
+
+    var saveBtn = this;
+    var msg = document.getElementById('afAttachMsg');
+    var fileInput = document.getElementById('afFile');
+    var newFile = fileInput && fileInput.files && fileInput.files[0];
+    if (newFile && newFile.size > ACTION_FILE_MAX) { alert('檔案太大（上限 6MB）'); return; }
+
+    saveBtn.disabled = true;
     try {
+      // 1. 若有選新檔，先上傳到 Storage
+      if (newFile) {
+        if (msg) msg.innerHTML = '<span style="color:var(--text-muted);">上傳附件中…</span>';
+        var dot = newFile.name.lastIndexOf('.');
+        var ext = dot >= 0 ? newFile.name.slice(dot) : '';
+        var newPath = crypto.randomUUID() + ext;
+        var up = await sb.storage.from(ACTION_BUCKET).upload(newPath, newFile, { upsert:false, contentType: newFile.type || undefined });
+        if (up.error) { if (msg) msg.innerHTML = '<span style="color:var(--red);">附件上傳失敗：'+escHtml(up.error.message||'')+'</span>'; saveBtn.disabled=false; return; }
+        payload.attachment_path = newPath;
+        payload.attachment_name = newFile.name;
+      }
+      // 2. 寫入資料庫
       var r;
       if (isNew) { r = await sb.from('meeting_action_items').insert(payload); }
       else       { r = await sb.from('meeting_action_items').update(payload).eq('id', actionId); }
       if (r.error) throw r.error;
+      // 3. 舊附件若被取代或移除，清掉 Storage 物件（best-effort）
+      if (origAttachPath && origAttachPath !== payload.attachment_path) {
+        var sd = await sb.storage.from(ACTION_BUCKET).remove([origAttachPath]);
+        if (sd.error) console.warn('[action] 刪除舊附件失敗（紀錄已更新）:', sd.error);
+      }
       closeModal();
       await loadMeetingTracker();
       renderMeetingTracker();
       injectKrActionsIntoCards();
-    } catch (ex) { alert('儲存失敗：' + (ex.message || ex)); }
+    } catch (ex) { alert('儲存失敗：' + (ex.message || ex)); saveBtn.disabled = false; }
   });
   if (!isNew) {
     document.getElementById('afDelete').addEventListener('click', async function() {
       if (!confirm('確定刪除？這會一併刪除所有 follow-up 紀錄。')) return;
       var r = await sb.from('meeting_action_items').delete().eq('id', actionId);
       if (r.error) { alert('刪除失敗：' + r.error.message); return; }
+      if (a.attachment_path) {
+        var sd = await sb.storage.from(ACTION_BUCKET).remove([a.attachment_path]);
+        if (sd.error) console.warn('[action] 刪除附件失敗（紀錄已刪）:', sd.error);
+      }
       closeModal();
       await loadMeetingTracker();
       renderMeetingTracker();
