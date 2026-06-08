@@ -1972,6 +1972,7 @@
         <span class="filter-label">期間</span>
       </div>
       <div id="detailMonthlyCompareContent"></div>
+      <div id="detailMonthlyCaseDetail" style="margin-top:18px;"></div>
     </div>
 
     <!-- 成案金額區間分析 (from quality detail) -->
@@ -6955,6 +6956,8 @@ function renderDetailMonthly(lawyerId) {
     selectA.innerHTML = '';
     selectB.innerHTML = '';
     Array.from(bar.querySelectorAll('.year-btn')).forEach(b => b.remove());
+    const detailBox = document.getElementById('detailMonthlyCaseDetail');
+    if (detailBox) detailBox.innerHTML = '';
     return;
   }
 
@@ -7007,6 +7010,9 @@ function renderDetailMonthly(lawyerId) {
     rangeNote = `比較範圍：${yearA} ${parseInt(monthlyPeriod)}月 vs ${yearB} ${parseInt(monthlyPeriod)}月`;
   }
 
+  // 案件層級明細：依 yearA + 期間，切換年度下拉或期間 chip 時即更新
+  renderMonthlyCaseDetail(lawyerId, yearA, monthlyPeriod, monthsA);
+
   const tA = aggregateStats(statsA);
   const tB = aggregateStats(statsB);
 
@@ -7039,6 +7045,81 @@ function renderDetailMonthly(lawyerId) {
       </table>
     </div>
   `;
+}
+
+// 個人月度比較 — 當期（yearA）案件層級明細：當事人 / 成案與否 / 收款金額
+function renderMonthlyCaseDetail(lawyerId, year, period, monthsA) {
+  const box = document.getElementById('detailMonthlyCaseDetail');
+  if (!box) return;
+
+  let inPeriod, periodLabel;
+  if (period === 'ytd') {
+    const monthsSet = new Set(monthsA);
+    inPeriod = (mm) => monthsSet.has(mm);
+    const lo = monthsA.length ? parseInt(monthsA[0]) : '?';
+    const hi = monthsA.length ? parseInt(monthsA[monthsA.length - 1]) : '?';
+    periodLabel = `${year} ${lo}~${hi} 月`;
+  } else {
+    inPeriod = (mm) => mm === period;
+    periodLabel = `${year} ${parseInt(period)}月`;
+  }
+
+  // allCases 在背景載入，未就緒時給提示
+  if (casesLoadState !== 'loaded') {
+    box.innerHTML = `<div style="font-size:0.85rem;color:var(--text-muted);">${casesLoadState === 'error' ? '案件明細載入失敗' : '案件明細載入中…'}</div>`;
+    return;
+  }
+
+  const cases = allCases
+    .filter(c => c.lawyer_id === lawyerId && c.case_date && c.case_date.startsWith(year) && inPeriod(c.case_date.slice(5, 7)))
+    .sort((a, b) => (a.case_date || '').localeCompare(b.case_date || ''));
+
+  const signedN = cases.filter(c => c.is_signed).length;
+  const totalCollected = cases.reduce((s, c) => s + (Number(c.collected) || 0), 0);
+
+  const header = `
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="font-weight:600;">${periodLabel} 諮詢明細</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);">共 ${cases.length} 筆 · 成案 ${signedN} 筆<span class="collected-only"> · 收款 $${Math.round(totalCollected).toLocaleString()}</span></div>
+    </div>`;
+
+  if (cases.length === 0) {
+    box.innerHTML = header + '<div class="empty-state">此期間無諮詢案件</div>';
+    return;
+  }
+
+  const rows = cases.map(c => {
+    const dateTxt = c.case_date ? c.case_date.slice(5).replace('-', '/') : '—';
+    const name    = c.client_name || '—';
+    const type    = c.case_type || '';
+    const signBadge = c.is_signed
+      ? '<span class="text-green">✓ 成案</span>'
+      : '<span style="color:var(--text-muted);">未成案</span>';
+    const amt = c.is_signed ? '$' + Math.round(Number(c.collected) || 0).toLocaleString() : '—';
+    return `<tr>
+      <td>${dateTxt}</td>
+      <td>${name}</td>
+      <td style="color:var(--text-muted);font-size:0.85rem;">${type}</td>
+      <td>${signBadge}</td>
+      <td class="num collected-only">${amt}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML = header + `
+    <div style="overflow-x:auto;">
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>當事人</th>
+            <th>案型</th>
+            <th>成案</th>
+            <th class="num collected-only">收款金額</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 // ===================== UPLOAD (admin only) =====================
