@@ -1,10 +1,11 @@
 name: 每日更新營收對帳
 
 on:
-  # 每天台灣時間中午 12 點和深夜 12 點自動執行
+  # 每天台灣時間中午 12 點和深夜 12 點自動執行（近 3 個月 hot window）
   schedule:
-    - cron: '0 4 * * *'   # 台灣中午 12:00 (UTC 04:00)
-    - cron: '0 16 * * *'  # 台灣深夜 00:00 (UTC 16:00)
+    - cron: '0 4 * * *'    # 台灣中午 12:00 (UTC 04:00)
+    - cron: '0 16 * * *'   # 台灣深夜 00:00 (UTC 16:00)
+    - cron: '0 20 8 * *'   # 每月 8 號台灣 04:00 月結定版：深掃近 6 個月，鎖定落出 hot window 前的補登/修正
   # 手動觸發
   workflow_dispatch:
     inputs:
@@ -35,8 +36,10 @@ jobs:
             echo "ARGS=--month ${{ github.event.inputs.month }}" >> $GITHUB_OUTPUT
           elif [ -n "${{ github.event.inputs.months }}" ]; then
             echo "ARGS=--months ${{ github.event.inputs.months }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 20 8 * *" ]; then
+            echo "ARGS=--months 6" >> $GITHUB_OUTPUT   # 每月深掃定版
           else
-            echo "ARGS=--months 2" >> $GITHUB_OUTPUT
+            echo "ARGS=--months 3" >> $GITHUB_OUTPUT   # 每日 hot window
           fi
 
       - name: 爬取 CRM 對帳資訊 → revenue_records

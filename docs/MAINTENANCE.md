@@ -26,7 +26,7 @@
 |---|---|---|---|---|
 | 1 | `update-stats.yml` | GitHub Actions | `daily_update.py`（諮詢統計 + 案件） | 12:00、00:00 |
 | 2 | `update-cases.yml` | GitHub Actions | `scrape_case_lists.py recent`；週日跑 `refresh-open` | 每日 03:30；週日 04:00 |
-| 3 | `update-revenue.yml` | GitHub Actions | `scrape_reconciliation.py` + `scrape_advisor_transactions.py` | 12:00、00:00 |
+| 3 | `update-revenue.yml` | GitHub Actions | `scrape_reconciliation.py` + `scrape_advisor_transactions.py`（每日 `--months 3` hot window；每月 8 號 `--months 6` 深掃定版） | 12:00、00:00；每月 8 號 04:00 |
 | 4 | `sync-010.yml` | GitHub Actions | `sync_010.py`（法律010總表 → Supabase） | 09:00 |
 | 5 | `consult_funnel_sync` | Supabase Edge Function（pg_cron） | LINE Messaging API → `consult_oa_funnel_daily` | 09:00 |
 | 6 | `advisor_sync.gs` | 「法顧成案清單」Sheet 的 Apps Script | 3 分頁 → `advisor_cases` / `advisor_inbound` / `cold_call_visits` | 每日 02:00 |
