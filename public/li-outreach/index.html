@@ -119,11 +119,6 @@
           <div><span id="oaNow" style="font-size:1.8rem;font-weight:700"></span> <span id="oaDelta" style="font-size:.85rem"></span></div>
           <div class="muted" id="oaUpdated" style="font-size:.78rem;margin-top:3px"></div>
         </div>
-        <form id="oaForm" class="row" style="gap:6px">
-          <input type="date" id="oaDate" style="width:auto;margin:0">
-          <input type="number" id="oaVal" placeholder="好友數" min="0" style="width:110px;margin:0">
-          <button class="btn" id="oaSave" type="submit" style="width:auto;margin:0;padding:9px 16px">更新</button>
-        </form>
       </div>
       <div style="height:200px;margin-top:14px"><canvas id="oaChart"></canvas></div>
       <div class="muted" id="oaSparkCap" style="font-size:.72rem;margin-top:6px"></div>
@@ -238,15 +233,13 @@ async function loadData(){
   loadFollowers();
 }
 
-// ── 里民 LINE 好友數(手動填；之後可接 LINE API 自動寫同一張表) ──
-function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// ── 里民 LINE 好友數(每日由 LINE API 自動寫入 bd_li_oa_followers) ──
 async function loadFollowers(){
   var r = await sb.from('bd_li_oa_followers').select('*').order('date',{ascending:true}).limit(400);
   if(r.error){ $('oaCard').style.display='none'; return; }
   renderFollowers(r.data || []);
 }
 function renderFollowers(hist){
-  if(!$('oaDate').value) $('oaDate').value = todayStr();
   if(!hist.length){ $('oaNow').textContent='—'; $('oaUpdated').textContent='尚無資料，填入今天的好友數開始追蹤'; return; }
   var last=hist[hist.length-1], prev=hist.length>1?hist[hist.length-2]:null;
   $('oaNow').textContent = Number(last.followers).toLocaleString();
@@ -343,17 +336,6 @@ $('fSearch').addEventListener('input', render);
 $('fReset').addEventListener('click', function(){
   ['fOwner','fTier','fStage','fMonth'].forEach(function(id){ $(id).value=''; });
   $('fSearch').value=''; render();
-});
-
-$('oaForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  var date=$('oaDate').value, val=parseInt($('oaVal').value,10);
-  if(!date || isNaN(val)){ alert('請填日期與好友數'); return; }
-  var btn=$('oaSave'); btn.disabled=true; btn.textContent='…';
-  var r = await sb.from('bd_li_oa_followers').upsert({date:date, followers:val, source:'manual'}, {onConflict:'date'});
-  btn.disabled=false; btn.textContent='更新';
-  if(r.error){ alert('更新失敗：'+r.error.message); return; }
-  $('oaVal').value=''; await loadFollowers();
 });
 
 function kpi(v,l,c){
