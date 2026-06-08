@@ -30,9 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180  # refresh-open ~10 分；full 實測 >90 分鐘還沒跑完，給 3 小時 buffer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
