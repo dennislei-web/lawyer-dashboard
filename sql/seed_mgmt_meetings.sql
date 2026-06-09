@@ -1,0 +1,42 @@
+-- 主管會議（mgmt_weekly）種子資料 — 可重複執行（只影響 mgmt_weekly）
+begin;
+delete from action_followups where meeting_id in (select id from meetings where meeting_type='mgmt_weekly');
+delete from meeting_action_items where source_meeting_id in (select id from meetings where meeting_type='mgmt_weekly');
+delete from meetings where meeting_type='mgmt_weekly';
+
+insert into meetings (meeting_date, meeting_type, title, attendees, summary) values
+('2026-01-06','mgmt_weekly','主管會議',array['桑羽','杰峰','琬琪','泓儒','泰儀','皓明','黃杰','光星','湘閔','郁萱','又仁'],'啟動知識庫管理×TaiLexi AI；桑羽提案簡化結案流程表；喆律 Rebranding 用戶訪談規劃；品牌案件類型／特殊諮詢分類討論。'),
+('2026-01-13','mgmt_weekly','主管會議',array['桑羽','杰峰','琬琪','泓儒','泰儀','皓明','黃杰','光星','又仁'],'S3 檔案盤點：累積約 16 萬筆文件、129,607 個案件附件、43% 案件有上傳檔案；春酒 3/14 台中萊特薇庭、3/13 主管活動日。'),
+('2026-01-20','mgmt_weekly','主管會議',array['桑羽','杰峰','琬琪','泓儒','泰儀','皓明','黃杰','光星','又仁','湘閔','郁萱'],'主管活動日出席統計；延續知識庫索引與品牌案型討論。'),
+('2026-01-27','mgmt_weekly','主管會議',array['桑羽','杰峰','琬琪','泓儒','泰儀','皓明','黃杰','光星','又仁','湘閔','郁萱'],'延續向量搜尋索引規劃與結案流程表簡化討論。'),
+('2026-02-03','mgmt_weekly','主管會議',array['杰峰','琬琪','泓儒','泰儀','黃杰','光星','又仁'],'部分出席；延續既有追蹤事項。'),
+('2026-02-10','mgmt_weekly','主管會議',array['杰峰','琬琪','泓儒','泰儀','黃杰','光星','又仁','桑羽','皓明','湘閔','郁萱'],'延續知識庫與 Rebranding 進度追蹤。'),
+('2026-02-24','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','黃杰','又仁','桑羽','皓明','湘閔','郁萱'],'主管活動日 3/13 細節確認。'),
+('2026-03-03','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','又仁','桑羽','皓明','湘閔','泓儒'],'主管活動日定案：卡爾登飯店（台中館）＋小樹屋，10:00-18:00。'),
+('2026-03-10','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','又仁','皓明','泓儒','黃杰'],'主管活動日場地與住宿安排細節。'),
+('2026-03-16','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','又仁','皓明','桑羽','湘閔'],'知識庫 netlify demo 上線連結分享。'),
+('2026-03-24','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','皓明','桑羽','泓儒','黃杰'],'人資假勤紀律宣導；教育訓練：3/27 AI 特助線上講座、4/16 薩爾文 AI 陪跑課。'),
+('2026-04-07','mgmt_weekly','主管會議',array['杰峰','琬琪','泰儀','皓明','桑羽','泓儒','黃杰','郁萱','湘閔','又仁','光星'],'薪資結構年度調薪定案（35K/40K 級距、資深律師自案 7:3）；績效獎金規則（Q3-4 僅無續委任獎金者）。'),
+('2026-04-14','mgmt_weekly','主管會議',array['琬琪','泰儀','皓明','桑羽','泓儒','黃杰','郁萱','湘閔','又仁'],'續委任獎金 2026Q1 開始計算；薪資調整月會說明方式。'),
+('2026-04-21','mgmt_weekly','主管會議',array['琬琪','泰儀','桑羽','黃杰','郁萱','湘閔','又仁','杰峰'],'人資 EIP 考勤系統 demo；系統許願清單；教育訓練回饋分享。'),
+('2026-04-28','mgmt_weekly','主管會議',array['琬琪','泰儀','桑羽','黃杰','郁萱','又仁','杰峰','泓儒','皓明'],'人資 EIP 5/1 上線懶人包；續委任與諮詢獎金重複計算釐清；開新案時機各所慣例彙整。'),
+('2026-05-12','mgmt_weekly','主管會議',array['琬琪','桑羽','郁萱','又仁','杰峰','皓明','湘閔'],'EIP 問題清單（補打卡、密碼、簽核顯示）；開新案各所慣例細化；續委任重複計算（飛宇確認）。'),
+('2026-05-19','mgmt_weekly','主管會議',array['琬琪','桑羽','郁萱','又仁','杰峰','湘閔','泰儀','黃杰','光星'],'開新案慣例南所補充；續委任獎金收斂；EIP 問題追蹤。'),
+('2026-06-02','mgmt_weekly','主管會議',array['琬琪','郁萱','又仁','杰峰','湘閔','黃杰','光星','泓儒','皓明'],'EIP／續委任獎金規則收斂；各所卷宗管理與空間調整；既有追蹤事項滾動更新。');
+
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'每週與主管律師確認續委任狀況','委後/客戶',null,'各所','in_progress','ongoing',6,'2026-06-16','每週固定追蹤；委後轉客戶關係回報表單同步宣導。','常態週追蹤事項',null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'委後轉客戶關係回報表單填寫宣導','委後/客戶',null,'各所','in_progress','ongoing',5,'2026-06-16','請主管律師宣導律師填表，避免遺漏（過往多用私訊處理）。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'提醒同仁每週一前完成系統 keyin 以利討論','系統/工程',null,'各所','in_progress','ongoing',4,'2026-06-16','每週一主管會議前需完成系統資料。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'續委任與諮詢獎金重複計算釐清','獎金制度',null,'飛宇、何泓儒','in_progress','oneoff',3,'2026-06-16','與飛宇確認：續委任若新開系統，案件會誤計入諮詢律師諮詢獎金 → 計算錯誤。過往不追回、向後處理；2026Q1 仍照舊，待釐清後處理。','一審/離婚協議書已委任後再委二審會同時有諮詢＋續委任',null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-05-12';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'開新案／開新系統時機各所慣例統一','系統/工程',null,'各所','pending','oneoff',2,'2026-06-16','已彙整北一/北二/桃/中/南慣例；竹所、雄所待補。','判準：審級、是否有新案號、關聯性',null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-04-28';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'人資 EIP 考勤系統問題修正','人資差勤',null,'吳泰儀、人資','in_progress','oneoff',2,'2026-06-16','補打卡只能上下班一起、補打卡加班、手機密碼無法重設、簽核需二次確認、出勤時間顯示異常。','5/1 上線、5/6 完整使用',null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-04-21';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'人資 EIP 主管許願清單','人資差勤',null,'人資','pending','oneoff',1,'2026-06-16','主管希望能看到哪位同仁尚未打卡等。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-04-21';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'結案流程表簡化是否入系統','系統/工程',null,'雷皓明、何泓儒','blocked','oneoff',3,'2026-06-16','桑羽提議流程過繁；雷與泓儒評估後將加入系統，於法顧系統調整後接續建置。','四類結案流程表',null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'官網改版（首頁＋最新消息頁）','品牌/官網',null,'何泓儒','in_progress','oneoff',2,'2026-06-16','前端頁面工程進行中，首頁改版、新增最新消息頁與表單。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'喆律 Rebranding 用戶訪談＋品牌偏好測試','品牌/官網',null,'何泓儒','pending','oneoff',1,'2026-06-16','用戶訪談 3-5 位當事人（含自然人與法人）＋品牌形象偏好測試。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'知識庫向量搜尋方案（TaiLexi AI）','知識庫/AI',null,'雷皓明、何泓儒','in_progress','oneoff',3,'2026-06-16','S3 約 16 萬筆文件；剔除不需索引類型（結案流程表、LINE 截圖、被證、開庭通知書）；已產 OCR 報告與 netlify demo。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'委前接聽預約諮詢流程統一＋分所轉案流程修改','委前進線',null,'雷皓明、黃杰','pending','oneoff',2,'2026-06-16','各所接聽流程、Google Map 帶動來電、轉接委前網路電話代表號；111/1/12 分所轉案公告更新。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'品牌案件類型／特殊狀況諮詢分類','委前進線',null,'何泓儒','pending','oneoff',1,'2026-06-16','85010／金貝殼／吉他案型表；侵害配偶權相關歸屬。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'各所卷宗管理／新增卷櫃與空間調整','行政/空間',null,'各所','pending','oneoff',1,'2026-06-16','各所卷宗管理方式、新增卷櫃及辦公室空間調整。',null,null from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-01-06';
+insert into meeting_action_items (source_meeting_id,title,category,kr_code,owner,status,recur_type,carry_count,next_review_date,latest_resolution,notes,closed_at) select id,'薪資結構年度調薪月會說明','獎金制度',null,'吳泰儀、雷皓明','done','oneoff',1,'2026-04-30','35K 以下調至 35K、40K 以下 +5%、40K 以上 +3%；資深律師自案 7:3、所負擔稅務；月會以財務+薪資全面調整一起說明。',null,now() from meetings where meeting_type='mgmt_weekly' and meeting_date='2026-04-07';
+commit;

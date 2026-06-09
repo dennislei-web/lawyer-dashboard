@@ -2097,9 +2097,12 @@ async function loadMeetingTracker() {
       sb.from('meeting_action_items').select('*').order('carry_count', { ascending:false }).order('title'),
       sb.from('action_followups').select('*').order('followup_date', { ascending:false })
     ]);
-    state.mt.meetings  = r[0].data || [];
-    state.mt.actions   = r[1].data || [];
-    state.mt.followups = r[2].data || [];
+    // 排除「主管會議」系列（mgmt_weekly）— 那條線在獨立的「主管會議」頁管理
+    var meetings = (r[0].data || []).filter(function(m){ return m.meeting_type !== 'mgmt_weekly'; });
+    var mgmtIds = {}; (r[0].data || []).forEach(function(m){ if (m.meeting_type === 'mgmt_weekly') mgmtIds[m.id] = true; });
+    state.mt.meetings  = meetings;
+    state.mt.actions   = (r[1].data || []).filter(function(a){ return !mgmtIds[a.source_meeting_id]; });
+    state.mt.followups = (r[2].data || []).filter(function(f){ return !mgmtIds[f.meeting_id]; });
     updateMtCounts();
   } catch (ex) { console.error('loadMeetingTracker', ex); }
 }
