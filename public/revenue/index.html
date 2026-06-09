@@ -1935,7 +1935,29 @@ async function loadRecords(filters) {
   return all2;
 }
 function sumBy(recs, type) { return recs.filter(function(r){return r.transaction_type===type}).reduce(function(s,r){return s+Number(r.amount||0)},0); }
-function isPartner(r) { return r.group_name && r.group_name.indexOf('合署') !== -1; }
+// 時間感知合署判斷：record_date 早於該合署 group「最早轉合署成員」的生效日 → 視為所內。
+// 理由：律師轉合署時一次帶走的在辦案件，其轉前已收的委任費仍屬所內業績（規則見帶走案件結算）。
+// 認不出 group 成員（名單外/異體字）時 fallback 維持合署，不誤判。
+var _groupSinceCache = {};
+function _groupPartnerSince(groupName) {
+  if (_groupSinceCache.hasOwnProperty(groupName)) return _groupSinceCache[groupName];
+  var minSince = null;
+  var names = (typeof PARTNER_LAWYERS !== 'undefined') ? PARTNER_LAWYERS : [];
+  for (var i = 0; i < names.length; i++) {
+    if (groupName.indexOf(names[i]) !== -1) {
+      var s = _partnerSinceDates[names[i]];
+      if (s && (minSince === null || s < minSince)) minSince = s;
+    }
+  }
+  _groupSinceCache[groupName] = minSince;
+  return minSince;
+}
+function isPartner(r) {
+  if (!r.group_name || r.group_name.indexOf('合署') === -1) return false;
+  var since = _groupPartnerSince(r.group_name);
+  if (!since || !r.record_date) return true;     // 認不出成員或無日期 → 維持合署
+  return new Date(r.record_date) >= since;        // 轉前收款 → 非合署（歸所內）
+}
 function splitSources(src) {
   if (!src) return ['未分類'];
   return src.split(/[,，、]\s*/).map(function(s){return s.trim()}).filter(Boolean);
