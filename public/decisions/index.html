@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>喆律法律事務所 - 歷次決議</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/view-as.js"></script>
+  <style>
+    :root {
+      --bg-main:#020b18; --bg-card:#0a1628; --bg-row:#111b2e; --bg-hover:#16253d;
+      --border:#1e3050; --border-light:#243a5e;
+      --gold:#c9a84c; --gold-light:#e8c97a;
+      --text:#e0e0e0; --text-muted:#8899aa;
+      --blue:#4f8ef7; --blue-dim:rgba(79,142,247,0.15);
+      --green:#4caf82; --green-dim:rgba(76,175,130,0.15);
+      --red:#e05c5c; --red-dim:rgba(224,92,92,0.15);
+      --orange:#e0954a; --orange-dim:rgba(224,149,74,0.15);
+      --purple:#a87cff; --purple-dim:rgba(168,124,255,0.15);
+      --header-bg:rgba(10,22,40,0.95);
+      --login-shadow:rgba(0,0,0,0.5);
+      --tab-active-bg:rgba(201,168,76,0.12);
+      --tab-active-border:rgba(201,168,76,0.2);
+      --tab-active-color:var(--gold-light);
+      --ghost-bg:rgba(255,255,255,0.07);
+      --ghost-hover-bg:rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg-main:#f5f6fa; --bg-card:#ffffff; --bg-row:#f0f2f5; --bg-hover:#e8eaf0;
+      --border:#d0d5dd; --border-light:#e0e4eb;
+      --gold:#a3842a; --gold-light:#8b6f1e;
+      --text:#1a1a2e; --text-muted:#6b7280;
+      --blue:#2563eb; --blue-dim:rgba(37,99,235,0.1);
+      --green:#15803d; --green-dim:rgba(21,128,61,0.12);
+      --red:#dc2626; --red-dim:rgba(220,38,38,0.1);
+      --orange:#d97706; --orange-dim:rgba(217,119,6,0.1);
+      --purple:#7c3aed; --purple-dim:rgba(124,58,237,0.1);
+      --header-bg:rgba(255,255,255,0.95);
+      --login-shadow:rgba(0,0,0,0.12);
+      --tab-active-bg:rgba(37,99,235,0.1);
+      --tab-active-border:rgba(37,99,235,0.25);
+      --tab-active-color:#2563eb;
+      --ghost-bg:rgba(0,0,0,0.04);
+      --ghost-hover-bg:rgba(0,0,0,0.08);
+    }
+    .embed-mode .header { display:none !important; }
+    .embed-mode #loginPage { display:none !important; }
+    .embed-mode #dashboard { display:block !important; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;
+      background:var(--bg-main); color:var(--text); min-height:100vh; font-size:14px;
+    }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--gold); }
+
+    /* LOGIN */
+    #loginPage {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background:radial-gradient(ellipse at 20% 50%,rgba(79,142,247,0.08) 0%,transparent 60%),
+                 radial-gradient(ellipse at 80% 20%,rgba(201,168,76,0.06) 0%,transparent 50%),
+                 var(--bg-main);
+    }
+    .login-card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:44px 40px; width:100%; max-width:420px; box-shadow:0 24px 64px var(--login-shadow); }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .firm-name { font-size:1.6rem; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+    .subtitle { margin-top:6px; font-size:0.85rem; color:var(--text-muted); letter-spacing:1px; }
+    .login-divider { height:1px; background:linear-gradient(to right,transparent,var(--border-light),transparent); margin-bottom:28px; }
+    .form-group { margin-bottom:18px; }
+    .form-group label { display:block; font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+    .form-group input { width:100%; padding:12px 16px; background:var(--bg-row); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:0.95rem; }
+    .form-group input:focus { outline:none; border-color:var(--gold); }
+    .btn-login { width:100%; padding:13px; background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:700; font-size:0.95rem; border:none; border-radius:8px; cursor:pointer; margin-top:8px; }
+    .btn-login:hover { opacity:0.9; }
+    .btn-login:disabled { opacity:0.5; cursor:not-allowed; }
+    .login-error { color:var(--red); font-size:0.85rem; margin-top:12px; text-align:center; display:none; }
+
+    /* HEADER */
+    .header { position:sticky; top:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; background:var(--header-bg); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+    .header-left { display:flex; align-items:center; gap:16px; }
+    .header-brand { font-size:1.1rem; font-weight:700; color:var(--gold-light); letter-spacing:1px; }
+    .header-subtitle { font-size:0.78rem; color:var(--text-muted); }
+    .header-right { display:flex; align-items:center; gap:12px; }
+    .btn-icon { background:var(--ghost-bg); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); cursor:pointer; padding:6px 10px; font-size:0.85rem; }
+    .btn-icon:hover { background:var(--ghost-hover-bg); color:var(--text); }
+    .user-badge { font-size:0.8rem; color:var(--text-muted); padding:4px 10px; background:var(--ghost-bg); border-radius:6px; }
+    #noAccessPage { display:none; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:20px; gap:18px; }
+
+    /* MAIN */
+    .main { padding:20px 24px; max-width:1480px; margin:0 auto; }
+
+    /* FILTER BAR */
+    .filter-bar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:18px; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; }
+    .filter-bar label { font-size:0.8rem; color:var(--text-muted); }
+    .filter-bar select, .filter-bar button {
+      background:var(--bg-row); color:var(--text); border:1px solid var(--border); border-radius:6px;
+      padding:6px 10px; font-size:0.85rem; cursor:pointer;
+    }
+    .filter-bar button.btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600; border:none; }
+    .filter-bar button.btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+    .filter-spacer { flex:1; }
+
+    /* HERO */
+    .hero-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .hero-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; }
+    .hero-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+    .hero-card.kr3::before { background:var(--blue); }
+    .hero-card.kr5::before { background:var(--purple); }
+    .hero-card.kr4::before { background:var(--orange); }
+    .hero-card.kr6::before { background:var(--green); }
+    .hero-title { font-size:0.78rem; color:var(--text-muted); margin-bottom:4px; }
+    .hero-value { font-size:1.55rem; font-weight:700; color:var(--text); }
+    .hero-target { font-size:0.78rem; color:var(--text-muted); margin-top:2px; }
+    .hero-bar { margin-top:8px; height:6px; background:var(--bg-row); border-radius:3px; overflow:hidden; }
+    .hero-bar > div { height:100%; transition:width 0.4s; background:var(--gold); }
+    .hero-card.kr3 .hero-bar > div { background:var(--blue); }
+    .hero-card.kr5 .hero-bar > div { background:var(--purple); }
+    .hero-card.kr4 .hero-bar > div { background:var(--orange); }
+    .hero-card.kr6 .hero-bar > div { background:var(--green); }
+    .hero-pct { font-size:0.78rem; color:var(--text); margin-top:6px; display:flex; justify-content:space-between; }
+    .hero-pct .est { color:var(--text-muted); }
+    .hero-pct .pct.bad { color:var(--red); }
+    .hero-pct .pct.warn { color:var(--orange); }
+    .hero-pct .pct.good { color:var(--green); }
+
+    /* WARNING ALERT */
+    .alert-card { background:var(--red-dim); border:1px solid var(--red); border-radius:10px; padding:12px 16px; margin-bottom:18px; display:none; }
+    .alert-card.show { display:block; }
+    .alert-title { font-size:0.85rem; font-weight:600; color:var(--red); margin-bottom:6px; }
+    .alert-list { font-size:0.82rem; color:var(--text); display:flex; flex-wrap:wrap; gap:6px 14px; }
+    .alert-list span { display:inline-block; }
+
+    /* KR GRID */
+    .kr-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+    .kr-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .kr-card.full { grid-column:1 / -1; }
+    .kr-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+    .kr-head h3 { font-size:0.95rem; color:var(--gold-light); font-weight:600; }
+    .kr-head .owner { font-size:0.75rem; color:var(--text-muted); padding:2px 8px; background:var(--ghost-bg); border-radius:10px; white-space:nowrap; }
+    .kr-deeplink { font-size:0.75rem; color:var(--blue); cursor:pointer; background:none; border:none; padding:0; text-decoration:underline; }
+    .kr-deeplink:hover { color:var(--gold); }
+
+    .kr-metric-row { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:10px; }
+    .kr-metric { background:var(--bg-row); border:1px solid var(--border-light); border-radius:8px; padding:10px 12px; }
+    .kr-metric .label { font-size:0.72rem; color:var(--text-muted); margin-bottom:4px; }
+    .kr-metric .value { font-size:1.15rem; font-weight:700; color:var(--text); }
+    .kr-metric .value .unit { font-size:0.75rem; color:var(--text-muted); margin-left:2px; }
+    .kr-metric .target-line { font-size:0.72rem; color:var(--text-muted); margin-top:2px; }
+    .kr-metric .pct { font-size:0.72rem; margin-top:2px; font-weight:600; }
+    .pct.good { color:var(--green); } .pct.warn { color:var(--orange); } .pct.bad { color:var(--red); }
+
+    .kr-progress { display:flex; align-items:center; gap:10px; margin:6px 0 12px; }
+    .kr-progress .bar { flex:1; height:8px; background:var(--bg-row); border-radius:4px; overflow:hidden; border:1px solid var(--border-light); }
+    .kr-progress .bar > div { height:100%; background:var(--gold); transition:width 0.3s; }
+    .kr-progress .bar > div.bad { background:var(--red); }
+    .kr-progress .bar > div.warn { background:var(--orange); }
+    .kr-progress .bar > div.good { background:var(--green); }
+    .kr-progress .num { font-size:0.78rem; color:var(--text-muted); white-space:nowrap; }
+
+    .kr-chart-wrap { position:relative; height:160px; margin-top:8px; }
+    .kr-chart-wrap.tall { height:200px; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; }
+    .badge.green { background:var(--green-dim); color:var(--green); }
+    .badge.red { background:var(--red-dim); color:var(--red); }
+    .badge.orange { background:var(--orange-dim); color:var(--orange); }
+    .badge.blue { background:var(--blue-dim); color:var(--blue); }
+    .badge.gray { background:var(--ghost-bg); color:var(--text-muted); }
+
+    /* MILESTONE TABLE */
+    .ms-table { width:100%; font-size:0.83rem; margin-top:8px; }
+    .ms-table th { text-align:left; padding:6px 8px; color:var(--text-muted); font-weight:500; font-size:0.75rem; border-bottom:1px solid var(--border); }
+    .ms-table td { padding:6px 8px; border-bottom:1px solid var(--border-light); }
+    .ms-table tr:last-child td { border-bottom:none; }
+    .ms-table .status-cell { width:90px; }
+    .ms-table .date-cell { width:100px; color:var(--text-muted); white-space:nowrap; }
+
+    /* EDIT MODE */
+    .edit-input { background:var(--bg-row); border:1px solid var(--gold); color:var(--text); border-radius:4px; padding:2px 6px; font-size:0.85rem; width:80px; text-align:right; }
+    .edit-input:focus { outline:none; border-color:var(--gold-light); box-shadow:0 0 0 2px rgba(201,168,76,0.2); }
+    .edit-input.text { width:100%; text-align:left; }
+    .edit-input.date { width:120px; }
+    .edit-input.select { width:100px; }
+    .edit-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; margin-top:8px; }
+    .edit-grid .month-input { display:flex; flex-direction:column; gap:2px; }
+    .edit-grid .month-input label { font-size:0.65rem; color:var(--text-muted); text-align:center; }
+    .edit-grid .month-input input { width:100%; }
+    .edit-bar { display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--gold-light); color:#0a0a0a; border-radius:8px; margin-bottom:14px; font-weight:600; font-size:0.85rem; }
+    [data-theme="light"] .edit-bar { background:var(--gold); color:#fff; }
+    .edit-bar button { background:rgba(255,255,255,0.85); border:none; border-radius:5px; padding:5px 12px; font-weight:600; cursor:pointer; color:#0a0a0a; }
+    .edit-bar button:hover { background:#fff; }
+    .edit-bar button.ghost { background:transparent; color:#0a0a0a; border:1px solid rgba(0,0,0,0.3); }
+    .edit-bar button.ghost:hover { background:rgba(0,0,0,0.08); }
+    .edit-bar .pending-badge { background:var(--red); color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; }
+
+    .manual-grid { display:grid; grid-template-columns:repeat(13, 1fr); gap:3px; font-size:0.72rem; }
+    .manual-grid .label-col { font-size:0.72rem; color:var(--text-muted); padding:4px; }
+    .manual-grid input { width:100%; padding:4px; font-size:0.78rem; background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:4px; text-align:right; }
+    .manual-grid input:focus { outline:none; border-color:var(--gold); }
+    .manual-grid .month-h { font-size:0.7rem; text-align:center; color:var(--text-muted); padding:2px 0; }
+
+    /* hint banners */
+    .info-hint { background:var(--blue-dim); border:1px solid var(--blue); border-radius:6px; padding:8px 12px; font-size:0.78rem; color:var(--text); margin:8px 0; }
+    .info-hint b { color:var(--blue); }
+
+    /* RWD */
+    @media (max-width: 1100px) {
+      .hero-grid { grid-template-columns:repeat(3, 1fr); }
+      .kr-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width: 720px) {
+      .hero-grid { grid-template-columns:repeat(2, 1fr); }
+      .main { padding:14px; }
+      .kr-metric-row { grid-template-columns:1fr; }
+      .manual-grid { grid-template-columns:80px repeat(12, 1fr); font-size:0.65rem; }
+    }
+
+    .small-note { font-size:0.72rem; color:var(--text-muted); margin-top:6px; }
+    .loading-text { padding:60px 20px; text-align:center; color:var(--text-muted); }
+
+    /* ═══ MEETING TRACKER ═══ */
+    .page-tabs { display:flex; gap:4px; padding:0 0 0 4px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+    .page-tabs button { background:transparent; border:none; color:var(--text-muted); cursor:pointer;
+      padding:10px 18px; font-size:0.9rem; font-weight:500; border-bottom:2px solid transparent;
+      white-space:nowrap; font-family:inherit; margin-bottom:-1px; }
+    .page-tabs button:hover { color:var(--text); }
+    .page-tabs button.active { color:var(--gold-light); border-bottom-color:var(--gold); }
+    .page-tabs button .count { background:var(--ghost-bg); border-radius:8px; padding:1px 6px; font-size:0.7rem; margin-left:6px; }
+    .page-tabs button.active .count { background:rgba(201,168,76,0.2); color:var(--gold-light); }
+
+    .mt-subtabs { display:flex; gap:2px; margin-bottom:14px; }
+    .mt-subtabs button { background:var(--ghost-bg); color:var(--text-muted); border:1px solid var(--border);
+      border-radius:6px; padding:6px 12px; font-size:0.83rem; cursor:pointer; font-family:inherit;
+      margin-right:4px; }
+    .mt-subtabs button:hover { background:var(--bg-hover); color:var(--text); }
+    .mt-subtabs button.active { background:var(--gold); color:#0a0a0a; border-color:var(--gold); font-weight:600; }
+
+    .mt-filter-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 14px;
+      background:var(--bg-card); border:1px solid var(--border); border-radius:10px; margin-bottom:14px; }
+    .mt-filter-row label { font-size:0.75rem; color:var(--text-muted); }
+    .mt-filter-row select, .mt-filter-row input {
+      background:var(--bg-row); color:var(--text); border:1px solid var(--border); border-radius:6px;
+      padding:5px 10px; font-size:0.83rem; font-family:inherit; }
+    .mt-filter-row .spacer { flex:1; }
+    .mt-filter-row button.primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a;
+      font-weight:600; border:none; border-radius:6px; padding:6px 14px; font-size:0.83rem; cursor:pointer; }
+
+    .action-table { width:100%; background:var(--bg-card); border:1px solid var(--border);
+      border-radius:10px; overflow:hidden; border-collapse:collapse; }
+    .action-table th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;
+      color:var(--text-muted); font-weight:500; text-align:left; padding:10px 12px;
+      border-bottom:1px solid var(--border); background:var(--bg-row); }
+    .action-table th.sortable { cursor:pointer; user-select:none; }
+    .action-table th.sortable:hover { color:var(--text); }
+    .action-table th.active { color:var(--gold); }
+    .action-table th .arr { font-size:0.65rem; }
+    .action-table td { padding:11px 12px; border-bottom:1px solid var(--border-light); font-size:0.85rem; vertical-align:top; }
+    .action-table tr:last-child td { border-bottom:none; }
+    .action-table tr.action-row:hover { background:var(--bg-hover); }
+    .action-table .col-title { font-weight:500; color:var(--text); }
+    .action-link { font-size:0.72rem; color:var(--blue); text-decoration:none; white-space:nowrap; margin-left:4px; }
+    .action-link:hover { color:var(--gold); text-decoration:underline; }
+    .action-table .col-title .resolution { display:block; font-size:0.74rem; color:var(--text-muted);
+      margin-top:4px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.4; }
+    .action-table .col-owner { white-space:nowrap; }
+    .action-table .col-due { white-space:nowrap; color:var(--text-muted); font-size:0.78rem; }
+    .action-table .col-due.overdue { color:var(--red); font-weight:600; }
+    .action-table .col-actions { white-space:nowrap; text-align:right; }
+
+    .badge-status { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+    .badge-status.pending     { background:var(--blue-dim);   color:var(--blue); }
+    .badge-status.in_progress { background:var(--orange-dim); color:var(--orange); }
+    .badge-status.blocked     { background:var(--red-dim);    color:var(--red); }
+    .badge-status.done        { background:var(--green-dim);  color:var(--green); }
+    .badge-status.dropped     { background:var(--ghost-bg);   color:var(--text-muted); }
+
+    .badge-recur { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+    .badge-recur.ongoing { background:rgba(56,189,248,0.15); color:var(--blue); }
+    .badge-recur.oneoff  { background:var(--ghost-bg); color:var(--text-muted); }
+
+    .badge-kr { display:inline-block; padding:2px 7px; border-radius:10px; font-size:0.7rem; font-weight:600; }
+    .badge-kr.kr1 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
+    .badge-kr.kr2 { background:rgba(201,168,76,0.15); color:var(--gold-light); }
+    .badge-kr.kr3 { background:var(--blue-dim); color:var(--blue); }
+    .badge-kr.kr4 { background:var(--orange-dim); color:var(--orange); }
+    .badge-kr.kr5 { background:var(--purple-dim); color:var(--purple); }
+    .badge-kr.kr6 { background:var(--green-dim); color:var(--green); }
+    .badge-kr.kr7 { background:var(--purple-dim); color:var(--purple); }
+    .badge-kr.org { background:var(--ghost-bg); color:var(--text-muted); }
+
+    .carry-badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:10px;
+      font-size:0.7rem; font-weight:700; }
+    .carry-badge.lv0 { background:var(--ghost-bg); color:var(--text-muted); }
+    .carry-badge.lv1 { background:rgba(255,255,255,0.08); color:var(--text); }
+    .carry-badge.lv2 { background:var(--orange-dim); color:var(--orange); }
+    .carry-badge.lv3 { background:var(--red-dim); color:var(--red); animation:mt-pulse 2s infinite; }
+    @keyframes mt-pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+    .btn-mini { background:var(--ghost-bg); color:var(--text); border:1px solid var(--border);
+      border-radius:5px; padding:3px 8px; font-size:0.72rem; cursor:pointer; font-family:inherit;
+      margin-left:3px; }
+    .btn-mini:hover { background:var(--bg-hover); }
+    .btn-mini.green { color:var(--green); border-color:var(--green); }
+    .btn-mini.orange { color:var(--orange); border-color:var(--orange); }
+    .btn-mini.red { color:var(--red); border-color:var(--red); }
+    .btn-mini.blue { color:var(--blue); border-color:var(--blue); }
+
+    /* Carry board */
+    .carry-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:14px; }
+    .carry-card { background:var(--bg-card); border:1px solid var(--red); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; }
+    .carry-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red); }
+    .carry-card.lv2 { border-color:var(--orange); }
+    .carry-card.lv2::before { background:var(--orange); }
+    .carry-card.ongoing { border-color:var(--blue); }
+    .carry-card.ongoing::before { background:var(--blue); }
+    .card-dash-link { display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+      margin:10px 0 2px; padding:11px 14px; border-radius:9px; font-size:0.9rem; font-weight:700;
+      text-decoration:none; cursor:pointer; box-sizing:border-box; transition:filter .15s, transform .05s; }
+    .card-dash-link.has-link { background:var(--gold); color:#0a0a0a; border:1px solid var(--gold); }
+    .card-dash-link.has-link:hover { filter:brightness(1.08); }
+    .card-dash-link.has-link:active { transform:translateY(1px); }
+    .card-dash-link.empty { background:transparent; color:var(--text-muted); border:1px dashed var(--border);
+      font-weight:500; }
+    .card-dash-link.empty:hover { color:var(--text); border-color:var(--text-muted); }
+    .carry-card.ongoing.lv2 { border-color:var(--orange); }
+    .carry-card.ongoing.lv2::before { background:var(--orange); }
+    .carry-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
+    .carry-card-head .title { font-size:0.95rem; font-weight:600; color:var(--text); }
+    .carry-card-meta { font-size:0.74rem; color:var(--text-muted); display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+    .carry-timeline { font-size:0.78rem; color:var(--text-muted); margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+    .carry-timeline .row { padding:3px 0; display:flex; gap:8px; }
+    .carry-timeline .row .date { color:var(--text-muted); font-family:monospace; min-width:50px; }
+    .carry-timeline .row .what { color:var(--text); }
+    .carry-card-foot { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+
+    /* Meeting list / timeline */
+    .timeline-grid { display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:flex-start; }
+    @media (max-width:900px) { .timeline-grid { grid-template-columns:1fr; } }
+    .meeting-list { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .meeting-list h4 { padding:10px 14px; font-size:0.78rem; color:var(--text-muted); border-bottom:1px solid var(--border);
+      background:var(--bg-row); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; }
+    .meeting-list .m-item { padding:11px 14px; border-bottom:1px solid var(--border-light); cursor:pointer; }
+    .meeting-list .m-item:last-child { border-bottom:none; }
+    .meeting-list .m-item:hover { background:var(--bg-hover); }
+    .meeting-list .m-item.on { background:var(--bg-hover); border-left:3px solid var(--gold); padding-left:11px; }
+    .meeting-list .m-item .date { font-size:0.85rem; color:var(--text); font-weight:600; }
+    .meeting-list .m-item .meta { font-size:0.72rem; color:var(--text-muted); margin-top:3px; }
+    .meeting-detail { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+    .meeting-detail h3 { font-size:1rem; color:var(--gold-light); margin-bottom:4px; }
+    .meeting-detail .meta-line { font-size:0.78rem; color:var(--text-muted); margin-bottom:14px; display:flex; gap:14px; flex-wrap:wrap; }
+    .meeting-detail .meta-line a { color:var(--blue); text-decoration:none; }
+    .meeting-detail .group-label { font-size:0.76rem; color:var(--text-muted); margin-top:14px; margin-bottom:6px;
+      text-transform:uppercase; letter-spacing:0.5px; font-weight:500; }
+    .meeting-detail .item-row { display:flex; gap:8px; padding:8px 10px; background:var(--bg-row);
+      border-radius:6px; margin-bottom:5px; font-size:0.83rem; align-items:center; }
+    .meeting-detail .item-row .text { flex:1; }
+
+    /* KR card embedded actions block */
+    .kr-actions-block { margin-top:14px; padding-top:14px; border-top:1px dashed var(--border); }
+    .kr-actions-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .kr-actions-head h4 { font-size:0.85rem; color:var(--text); font-weight:600; }
+    .kr-actions-head .stat { font-size:0.74rem; color:var(--text-muted); }
+    .kr-actions-head .stat a { color:var(--blue); text-decoration:none; cursor:pointer; }
+    .kr-action-row { display:grid; grid-template-columns:1fr auto auto auto; gap:10px; align-items:center;
+      padding:8px 10px; border-radius:6px; font-size:0.83rem; }
+    .kr-action-row:nth-child(odd) { background:var(--bg-row); }
+    .kr-action-row .ka-title { color:var(--text); }
+    .kr-action-row .ka-title .resolution { display:block; font-size:0.72rem; color:var(--text-muted); margin-top:3px; }
+    .kr-action-row .ka-owner { color:var(--text-muted); font-size:0.75rem; }
+
+    /* Modal */
+    .mt-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+    .mt-modal-backdrop.show { display:flex; }
+    .mt-modal { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px 22px;
+      max-width:680px; width:100%; max-height:90vh; overflow:auto; }
+    .mt-modal h3 { font-size:1rem; color:var(--gold-light); margin-bottom:14px; }
+    .mt-modal .form-row { display:grid; grid-template-columns:130px 1fr; gap:12px; margin-bottom:12px; align-items:center; }
+    .mt-modal .form-row.tall { align-items:flex-start; }
+    .mt-modal .form-row label { font-size:0.83rem; color:var(--text-muted); }
+    .mt-modal .form-row input, .mt-modal .form-row select, .mt-modal .form-row textarea {
+      background:var(--bg-row); border:1px solid var(--border); color:var(--text); border-radius:6px;
+      padding:7px 11px; font-size:0.88rem; font-family:inherit; width:100%; }
+    .mt-modal .form-row textarea { min-height:70px; resize:vertical; }
+    .mt-modal .owner-checks { display:flex; flex-wrap:wrap; gap:6px 14px; }
+    .mt-modal .owner-check { display:inline-flex; align-items:center; gap:5px; font-size:0.85rem; color:var(--text); cursor:pointer; white-space:nowrap; }
+    .mt-modal .owner-check input { width:auto; margin:0; }
+    .mt-modal .attach-wrap { display:flex; flex-direction:column; gap:6px; }
+    .mt-modal .attach-cur { display:flex; align-items:center; gap:10px; }
+    .mt-modal .attach-cur a { color:var(--gold); text-decoration:none; font-size:0.85rem; }
+    .mt-modal .attach-rm { background:none; border:1px solid var(--border); color:var(--red); border-radius:6px; padding:2px 8px; font-size:0.75rem; cursor:pointer; }
+    .mt-modal .attach-removed { color:var(--red); font-size:0.82rem; }
+    .mt-modal .attach-hint { font-size:0.72rem; color:var(--text-muted); }
+    .mt-modal .attach-msg { font-size:0.78rem; }
+    .mt-modal .attach-wrap input[type="file"] { font-size:0.8rem; }
+    .mt-modal .form-actions { display:flex; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:14px; }
+    .mt-modal .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600;
+      border:none; border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
+    .mt-modal .btn-ghost { background:var(--ghost-bg); color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
+
+    .mt-note { background:var(--blue-dim); border-left:3px solid var(--blue); padding:10px 14px; border-radius:6px;
+      font-size:0.82rem; color:var(--text); margin:12px 0; line-height:1.5; }
+    .mt-note b { color:var(--blue); }
+    .mt-note.warn { background:var(--orange-dim); border-color:var(--orange); }
+    .mt-note.warn b { color:var(--orange); }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="firm-name">喆律法律事務所</div>
+      <div class="subtitle">歷次決議</div>
+    </div>
+    <div class="login-divider"></div>
+    <form id="loginForm">
+      <div class="form-group"><label>Email</label><input type="email" id="loginEmail" required autocomplete="email"></div>
+      <div class="form-group"><label>密碼</label><input type="password" id="loginPassword" required autocomplete="current-password"></div>
+      <button type="submit" class="btn-login" id="loginBtn">登入</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+</div>
+
+<!-- NO ACCESS -->
+<div id="noAccessPage">
+  <div style="text-align:center;">
+    <div style="font-size:1.4rem; color:var(--gold-light); margin-bottom:8px;">歷次決議</div>
+    <div>此頁面僅限 admin 存取</div>
+    <div style="color:var(--text-muted); margin-top:6px;" id="noAccessUser"></div>
+  </div>
+  <button class="btn-icon" id="noAccessLogout">登出</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-brand">喆律法律事務所</span>
+      <span class="header-subtitle">歷次決議 · 主管會議做成的最後決定</span>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
+      <button class="btn-icon" id="logoutBtn">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="mt-filter-row" id="decFilter">
+      <label>年度</label><select id="dcYear"><option value="">全部</option><option value="115">115（2026）</option><option value="114">114（2025）</option></select>
+      <label>類別</label><select id="dcCat"><option value="">全部</option></select>
+      <div class="spacer"></div>
+      <input id="dcSearch" placeholder="🔍 搜尋決議..." style="width:200px;">
+      <button class="primary" id="dcAdd">➕ 新增決議</button>
+    </div>
+    <div class="mt-note"><b>這頁是什麼：</b>把歷次主管會議「<b>做成的最後決定</b>」彙整成一份可查詢的決議錄（與「主管會議」頁的待辦追蹤分開）。點任一筆可編輯。</div>
+    <div id="dec-content"><div class="loading-text">載入中⋯</div></div>
+  </div>
+</div>
+
+<div class="mt-modal-backdrop" id="mtModalBackdrop"><div class="mt-modal" id="mtModalContent"></div></div>
+
+<script>
+var SUPABASE_URL = 'https://zpbkeyhxyykbvownrngf.supabase.co';
+var SUPABASE_ANON_KEY = 'sb_publishable_NvTWZM6IGgc_Jn8iCXFvaA_QnvJsstM';
+var sb, currentUser, currentLawyer;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) { sb = null; }
+
+var isEmbed = new URLSearchParams(location.search).get('embed') === '1';
+if (isEmbed) document.documentElement.classList.add('embed-mode');
+function rerenderCharts() {}
+
+(function() { var t = localStorage.getItem('theme'); if (t === 'light') document.documentElement.setAttribute('data-theme','light'); })();
+window.addEventListener('message', function(e) {
+  if (e && e.data && e.data.type === 'theme' && e.data.value) {
+    document.documentElement.setAttribute('data-theme', e.data.value === 'light' ? 'light' : '');
+  }
+});
+document.getElementById('themeToggle').addEventListener('click', function() {
+  var next = document.documentElement.getAttribute('data-theme') === 'light' ? '' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next === 'light' ? 'light' : 'dark');
+  try { window.parent.postMessage({ type:'theme', value: next === 'light' ? 'light' : 'dark' }, '*'); } catch(e) {}
+});
+
+// AUTH
+function showLogin() { document.getElementById('loginPage').style.display='flex'; document.getElementById('dashboard').style.display='none'; document.getElementById('noAccessPage').style.display='none'; }
+function showNoAccess() { document.getElementById('loginPage').style.display='none'; document.getElementById('dashboard').style.display='none'; var p=document.getElementById('noAccessPage'); p.style.display='flex'; document.getElementById('noAccessUser').textContent = currentLawyer ? currentLawyer.name : ''; }
+async function showDashboard() {
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('noAccessPage').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('userBadge').textContent = currentLawyer ? currentLawyer.name : (currentUser && currentUser.email) || '';
+  await loadDecisions();
+  renderDecisions();
+}
+async function loadUserProfile() { if (!sb || !currentUser) return; var r = await sb.from('lawyers').select('*').eq('auth_user_id', currentUser.id).single(); if (r.data) currentLawyer = window.ViewAs ? window.ViewAs.apply(r.data) : r.data; }
+async function checkSession() { if (!sb) return showLogin(); var s = await sb.auth.getSession(); if (s.data.session) { currentUser = s.data.session.user; await loadUserProfile(); if (!currentLawyer || currentLawyer.role !== 'admin') return showNoAccess(); showDashboard(); } else showLogin(); }
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn=document.getElementById('loginBtn'), err=document.getElementById('loginError');
+  err.style.display='none'; btn.disabled=true; btn.textContent='登入中...';
+  try {
+    var r = await sb.auth.signInWithPassword({ email:document.getElementById('loginEmail').value.trim(), password:document.getElementById('loginPassword').value });
+    if (r.error) throw r.error;
+    currentUser=r.data.user; await loadUserProfile();
+    if (!currentLawyer || currentLawyer.role!=='admin') return showNoAccess();
+    showDashboard();
+  } catch(ex) { err.textContent='登入失敗：'+(ex.message||'請確認帳號密碼'); err.style.display='block'; }
+  finally { btn.disabled=false; btn.textContent='登入'; }
+});
+document.getElementById('logoutBtn').addEventListener('click', async function() { if (sb) await sb.auth.signOut(); currentUser=null; currentLawyer=null; showLogin(); });
+document.getElementById('noAccessLogout').addEventListener('click', async function() { if (sb) await sb.auth.signOut(); location.reload(); });
+
+// ═══ DECISIONS ═══
+var CATEGORIES = ['系統/工程','獎金制度','人資差勤','委前進線','委後/客戶','品牌/官網','知識庫/AI','法顧','行政/空間','其他'];
+var state = { dec: { rows:[], meetings:[], filters:{ year:'', category:'', search:'' } } };
+function escHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+async function loadDecisions() {
+  if (!sb) return;
+  try {
+    var r = await Promise.all([
+      sb.from('meeting_decisions').select('*').order('fiscal_year',{ascending:false}).order('decided_date',{ascending:false}).order('sort_order'),
+      sb.from('meetings').select('id,meeting_date,meeting_type').eq('meeting_type','mgmt_weekly').order('meeting_date',{ascending:false})
+    ]);
+    state.dec.rows = r[0].data || [];
+    state.dec.meetings = r[1].data || [];
+  } catch(ex){ console.error('loadDecisions', ex); }
+  // populate category filter
+  var sel = document.getElementById('dcCat');
+  if (sel && sel.options.length <= 1) CATEGORIES.forEach(function(c){ var o=document.createElement('option'); o.textContent=c; sel.appendChild(o); });
+}
+
+(function bindDecFilters(){
+  ['dcYear','dcCat','dcSearch'].forEach(function(id){
+    var el=document.getElementById(id);
+    el.addEventListener(id==='dcSearch'?'input':'change', function(){
+      state.dec.filters.year = document.getElementById('dcYear').value;
+      state.dec.filters.category = document.getElementById('dcCat').value;
+      state.dec.filters.search = document.getElementById('dcSearch').value;
+      renderDecisions();
+    });
+  });
+  document.getElementById('dcAdd').addEventListener('click', function(){ showDecisionModal(null); });
+})();
+
+function renderDecisions() {
+  var c = document.getElementById('dec-content');
+  var f = state.dec.filters;
+  var rows = state.dec.rows.filter(function(d){
+    if (f.year && String(d.fiscal_year) !== f.year) return false;
+    if (f.category && d.category !== f.category) return false;
+    if (f.search) { var s=f.search.toLowerCase(); if ((d.title||'').toLowerCase().indexOf(s)<0 && (d.detail||'').toLowerCase().indexOf(s)<0 && (d.owner||'').toLowerCase().indexOf(s)<0) return false; }
+    return true;
+  });
+  if (rows.length === 0) { c.innerHTML = '<div class="loading-text">沒有符合條件的決議</div>'; return; }
+  // group by fiscal_year
+  var groups = {};
+  rows.forEach(function(d){ (groups[d.fiscal_year]=groups[d.fiscal_year]||[]).push(d); });
+  var years = Object.keys(groups).sort(function(a,b){ return b-a; });
+  var html = '';
+  years.forEach(function(y){
+    html += '<div class="group-label" style="font-size:0.9rem; color:var(--gold-light); margin:18px 0 8px;">📅 '+y+' 年（共 '+groups[y].length+' 項決議）</div>';
+    html += '<table class="action-table"><thead><tr>' +
+      '<th style="width:96px;">決定日期</th><th style="width:120px;">類別</th><th>決議內容</th><th style="width:140px;">Owner</th><th></th></tr></thead><tbody>';
+    groups[y].forEach(function(d){
+      html += '<tr class="action-row" data-id="'+d.id+'">' +
+        '<td class="col-due">'+(d.decided_date||'—')+'</td>' +
+        '<td>'+(d.category?'<span class="badge-kr org">'+escHtml(d.category)+'</span>':'')+'</td>' +
+        '<td class="col-title">'+escHtml(d.title)+(d.detail?'<span class="resolution">'+escHtml(d.detail)+'</span>':'')+'</td>' +
+        '<td class="col-owner">'+escHtml(d.owner||'—')+'</td>' +
+        '<td class="col-actions"><button class="btn-mini blue" data-act="edit">📝</button></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  c.innerHTML = html;
+  c.querySelectorAll('tr.action-row').forEach(function(tr){ tr.addEventListener('click', function(){ showDecisionModal(tr.dataset.id); }); });
+}
+
+function rocFromDate(iso){ if(!iso) return ''; var y=parseInt(iso.slice(0,4),10); return isNaN(y)?'':(y-1911); }
+
+function showDecisionModal(id) {
+  var d = id ? state.dec.rows.find(function(x){return x.id===id;}) : null;
+  var isNew = !d;
+  if (!d) d = { decided_date:new Date().toISOString().slice(0,10), category:'其他', title:'', detail:'', owner:'', source_meeting_id:'' };
+  var html = '<h3>'+(isNew?'➕ 新增決議':'📝 編輯決議')+'</h3>' +
+    '<div class="form-row"><label>決定日期 *</label><input type="date" id="dfDate" value="'+(d.decided_date||'')+'"></div>' +
+    '<div class="form-row"><label>類別 *</label><select id="dfCat">'+CATEGORIES.map(function(c){return '<option '+(c===d.category?'selected':'')+'>'+c+'</option>';}).join('')+'</select></div>' +
+    '<div class="form-row tall"><label>決議 *</label><input id="dfTitle" value="'+escHtml(d.title)+'" placeholder="一句話的最後決定"></div>' +
+    '<div class="form-row tall"><label>細節</label><textarea id="dfDetail" placeholder="決議內容、適用範圍、生效日...">'+escHtml(d.detail||'')+'</textarea></div>' +
+    '<div class="form-row"><label>Owner</label><input id="dfOwner" value="'+escHtml(d.owner||'')+'" placeholder="頓號分隔，例：雷皓明、黃杰"></div>' +
+    '<div class="form-row"><label>來源會議</label><select id="dfMeeting"><option value="">—（自動依日期對應）</option>' +
+      state.dec.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===d.source_meeting_id?'selected':'')+'>'+m.meeting_date+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-actions">' +
+      '<button class="btn-primary" id="dfSave">儲存</button>' +
+      '<button class="btn-ghost" id="dfCancel">取消</button>' +
+      (isNew?'':'<button class="btn-ghost" id="dfDelete" style="margin-left:auto; color:var(--red);">🗑 刪除</button>') +
+    '</div>';
+  openModal(html);
+  document.getElementById('dfCancel').addEventListener('click', closeModal);
+  document.getElementById('dfSave').addEventListener('click', async function() {
+    var date = document.getElementById('dfDate').value;
+    var srcSel = document.getElementById('dfMeeting').value;
+    var src = srcSel || (state.dec.meetings.find(function(m){return m.meeting_date===date;})||{}).id || null;
+    var payload = {
+      decided_date: date || null,
+      fiscal_year: rocFromDate(date) || null,
+      category: document.getElementById('dfCat').value,
+      title: document.getElementById('dfTitle').value.trim(),
+      detail: document.getElementById('dfDetail').value || null,
+      owner: document.getElementById('dfOwner').value.trim() || null,
+      source_meeting_id: src
+    };
+    if (!payload.title) { alert('請填決議內容'); return; }
+    if (!payload.decided_date) { alert('請填決定日期'); return; }
+    try {
+      var r;
+      if (isNew) r = await sb.from('meeting_decisions').insert(payload);
+      else       r = await sb.from('meeting_decisions').update(payload).eq('id', id);
+      if (r.error) throw r.error;
+      closeModal(); await loadDecisions(); renderDecisions();
+    } catch(ex){ alert('儲存失敗：'+(ex.message||ex)); }
+  });
+  if (!isNew) {
+    document.getElementById('dfDelete').addEventListener('click', async function() {
+      if (!confirm('確定刪除此決議？')) return;
+      var r = await sb.from('meeting_decisions').delete().eq('id', id);
+      if (r.error) { alert('刪除失敗：'+r.error.message); return; }
+      closeModal(); await loadDecisions(); renderDecisions();
+    });
+  }
+}
+
+function openModal(html){ document.getElementById('mtModalContent').innerHTML=html; document.getElementById('mtModalBackdrop').classList.add('show'); }
+function closeModal(){ document.getElementById('mtModalBackdrop').classList.remove('show'); document.getElementById('mtModalContent').innerHTML=''; }
+
+// INIT
+checkSession();
+</script>
+</body>
+</html>
