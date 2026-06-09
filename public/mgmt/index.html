@@ -457,6 +457,7 @@
         <button class="active" data-sub="open">📋 Open Actions <span class="count" id="mtOpenCount"></span></button>
         <button data-sub="ongoing">♻ 持續關注 <span class="count" id="mtOngoingCount"></span></button>
         <button data-sub="meetings">📅 會議列表</button>
+        <button data-sub="decisions">📌 歷次決議 <span class="count" id="mtDecCount"></span></button>
         <button data-sub="add" style="margin-left:auto;">➕ 新增 Action</button>
         <button data-sub="addmeeting">📝 新增會議</button>
       </div>
@@ -561,7 +562,8 @@ var state = { mt: {
   meetings: [], actions: [], followups: [],
   selectedMeetingId: null,
   filters: { owner:'', category:'', search:'', showDone:false },
-  sort: { key:'carry_count', dir:'desc' }
+  sort: { key:'carry_count', dir:'desc' },
+  dec: { rows:[], filters:{ year:'', category:'', search:'' } }
 } };
 
 // ═══ MEETING TRACKER ═══
@@ -583,7 +585,8 @@ async function loadMeetingTracker() {
     var r = await Promise.all([
       sb.from('meetings').select('*').eq('meeting_type', MEETING_TYPE).order('meeting_date', { ascending:false }),
       sb.from('meeting_action_items').select('*').order('carry_count', { ascending:false }).order('title'),
-      sb.from('action_followups').select('*').order('followup_date', { ascending:false })
+      sb.from('action_followups').select('*').order('followup_date', { ascending:false }),
+      sb.from('meeting_decisions').select('*').order('fiscal_year', { ascending:false }).order('decided_date', { ascending:false }).order('sort_order')
     ]);
     var meetings = r[0].data || [];
     var ids = {}; meetings.forEach(function(m){ ids[m.id] = true; });
@@ -591,6 +594,7 @@ async function loadMeetingTracker() {
     // 只保留屬於本系列（主管會議）會議的 action / followup
     state.mt.actions   = (r[1].data || []).filter(function(a){ return a.source_meeting_id && ids[a.source_meeting_id]; });
     state.mt.followups = (r[2].data || []).filter(function(f){ return f.meeting_id && ids[f.meeting_id]; });
+    state.mt.dec.rows  = r[3].data || [];
     updateMtCounts();
   } catch (ex) { console.error('loadMeetingTracker', ex); }
 }
@@ -600,6 +604,7 @@ function updateMtCounts() {
   var ongoing = open.filter(function(a){ return a.recur_type === 'ongoing'; });
   setText('mtOpenCount', open.length - ongoing.length);
   setText('mtOngoingCount', ongoing.length);
+  setText('mtDecCount', state.mt.dec.rows.length);
 }
 
 // ─── Subtab switching ───
@@ -624,6 +629,7 @@ function renderMeetingTracker() {
   if (sub === 'open')    renderOpenActions(c);
   else if (sub === 'ongoing') renderOngoingBoard(c);
   else if (sub === 'meetings') renderMeetingList(c);
+  else if (sub === 'decisions') renderDecisionsView(c);
 }
 
 // ─── Open Actions table ───
@@ -1083,6 +1089,127 @@ function showMeetingModal(meetingId) {
       closeModal();
       await loadMeetingTracker();
       renderMeetingTracker();
+    });
+  }
+}
+
+// ─── 歷次決議（做成的最後決定）───
+function rocFromDate(iso){ if(!iso) return ''; var y=parseInt(iso.slice(0,4),10); return isNaN(y)?'':(y-1911); }
+
+function renderDecisionsView(container) {
+  var f = state.mt.dec.filters;
+  var bar = document.createElement('div'); bar.className = 'mt-filter-row';
+  bar.innerHTML =
+    '<label>年度</label><select id="dcYear"><option value="">全部</option><option value="115">115（2026）</option><option value="114">114（2025）</option></select>' +
+    '<label>類別</label><select id="dcCat"><option value="">全部</option>' + CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('') + '</select>' +
+    '<div class="spacer"></div>' +
+    '<input id="dcSearch" placeholder="🔍 搜尋決議..." style="width:200px;">' +
+    '<button class="primary" id="dcAdd">➕ 新增決議</button>';
+  container.appendChild(bar);
+  document.getElementById('dcYear').value = f.year;
+  document.getElementById('dcCat').value = f.category;
+  document.getElementById('dcSearch').value = f.search;
+  ['dcYear','dcCat','dcSearch'].forEach(function(id){
+    var el=document.getElementById(id);
+    el.addEventListener(id==='dcSearch'?'input':'change', function(){
+      f.year = document.getElementById('dcYear').value;
+      f.category = document.getElementById('dcCat').value;
+      f.search = document.getElementById('dcSearch').value;
+      renderDecisionTables();
+    });
+  });
+  document.getElementById('dcAdd').addEventListener('click', function(){ showDecisionModal(null); });
+
+  var note = document.createElement('div'); note.className = 'mt-note';
+  note.innerHTML = '<b>這頁是什麼：</b>把歷次主管會議「<b>做成的最後決定</b>」彙整成一份可查詢的決議錄（與待辦追蹤分開）。點任一筆可編輯。';
+  container.appendChild(note);
+
+  var wrap = document.createElement('div'); wrap.id = 'dcTableWrap';
+  container.appendChild(wrap);
+  renderDecisionTables();
+}
+
+function renderDecisionTables() {
+  var wrap = document.getElementById('dcTableWrap'); if (!wrap) return;
+  var f = state.mt.dec.filters;
+  var rows = state.mt.dec.rows.filter(function(d){
+    if (f.year && String(d.fiscal_year) !== f.year) return false;
+    if (f.category && d.category !== f.category) return false;
+    if (f.search) { var s=f.search.toLowerCase(); if ((d.title||'').toLowerCase().indexOf(s)<0 && (d.detail||'').toLowerCase().indexOf(s)<0 && (d.owner||'').toLowerCase().indexOf(s)<0) return false; }
+    return true;
+  });
+  if (rows.length === 0) { wrap.innerHTML = '<div class="loading-text">沒有符合條件的決議</div>'; return; }
+  var groups = {};
+  rows.forEach(function(d){ (groups[d.fiscal_year]=groups[d.fiscal_year]||[]).push(d); });
+  var years = Object.keys(groups).sort(function(a,b){ return b-a; });
+  var html = '';
+  years.forEach(function(y){
+    html += '<div class="group-label" style="font-size:0.9rem; color:var(--gold-light); margin:18px 0 8px;">📅 '+y+' 年（共 '+groups[y].length+' 項決議）</div>';
+    html += '<table class="action-table"><thead><tr>' +
+      '<th style="width:96px;">決定日期</th><th style="width:120px;">類別</th><th>決議內容</th><th style="width:140px;">Owner</th><th></th></tr></thead><tbody>';
+    groups[y].forEach(function(d){
+      html += '<tr class="action-row" data-id="'+d.id+'">' +
+        '<td class="col-due">'+(d.decided_date||'—')+'</td>' +
+        '<td>'+(d.category?'<span class="badge-kr org">'+escHtml(d.category)+'</span>':'')+'</td>' +
+        '<td class="col-title">'+escHtml(d.title)+(d.detail?'<span class="resolution">'+escHtml(d.detail)+'</span>':'')+'</td>' +
+        '<td class="col-owner">'+escHtml(d.owner||'—')+'</td>' +
+        '<td class="col-actions"><button class="btn-mini blue" data-act="edit">📝</button></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('tr.action-row').forEach(function(tr){ tr.addEventListener('click', function(){ showDecisionModal(tr.dataset.id); }); });
+}
+
+function showDecisionModal(id) {
+  var d = id ? state.mt.dec.rows.find(function(x){return x.id===id;}) : null;
+  var isNew = !d;
+  if (!d) d = { decided_date:new Date().toISOString().slice(0,10), category:'其他', title:'', detail:'', owner:'', source_meeting_id:'' };
+  var html = '<h3>'+(isNew?'➕ 新增決議':'📝 編輯決議')+'</h3>' +
+    '<div class="form-row"><label>決定日期 *</label><input type="date" id="dfDate" value="'+(d.decided_date||'')+'"></div>' +
+    '<div class="form-row"><label>類別 *</label><select id="dfCat">'+CATEGORIES.map(function(c){return '<option '+(c===d.category?'selected':'')+'>'+c+'</option>';}).join('')+'</select></div>' +
+    '<div class="form-row tall"><label>決議 *</label><input id="dfTitle" value="'+escHtml(d.title)+'" placeholder="一句話的最後決定"></div>' +
+    '<div class="form-row tall"><label>細節</label><textarea id="dfDetail" placeholder="決議內容、適用範圍、生效日...">'+escHtml(d.detail||'')+'</textarea></div>' +
+    '<div class="form-row"><label>Owner</label><input id="dfOwner" value="'+escHtml(d.owner||'')+'" placeholder="頓號分隔，例：雷皓明、黃杰"></div>' +
+    '<div class="form-row"><label>來源會議</label><select id="dfMeeting"><option value="">—（自動依日期對應）</option>' +
+      state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===d.source_meeting_id?'selected':'')+'>'+m.meeting_date+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-actions">' +
+      '<button class="btn-primary" id="dfSave">儲存</button>' +
+      '<button class="btn-ghost" id="dfCancel">取消</button>' +
+      (isNew?'':'<button class="btn-ghost" id="dfDelete" style="margin-left:auto; color:var(--red);">🗑 刪除</button>') +
+    '</div>';
+  openModal(html);
+  document.getElementById('dfCancel').addEventListener('click', closeModal);
+  document.getElementById('dfSave').addEventListener('click', async function() {
+    var date = document.getElementById('dfDate').value;
+    var srcSel = document.getElementById('dfMeeting').value;
+    var src = srcSel || (state.mt.meetings.find(function(m){return m.meeting_date===date;})||{}).id || null;
+    var payload = {
+      decided_date: date || null,
+      fiscal_year: rocFromDate(date) || null,
+      category: document.getElementById('dfCat').value,
+      title: document.getElementById('dfTitle').value.trim(),
+      detail: document.getElementById('dfDetail').value || null,
+      owner: document.getElementById('dfOwner').value.trim() || null,
+      source_meeting_id: src
+    };
+    if (!payload.title) { alert('請填決議內容'); return; }
+    if (!payload.decided_date) { alert('請填決定日期'); return; }
+    try {
+      var r;
+      if (isNew) r = await sb.from('meeting_decisions').insert(payload);
+      else       r = await sb.from('meeting_decisions').update(payload).eq('id', id);
+      if (r.error) throw r.error;
+      closeModal(); await loadMeetingTracker(); renderMeetingTracker();
+    } catch(ex){ alert('儲存失敗：'+(ex.message||ex)); }
+  });
+  if (!isNew) {
+    document.getElementById('dfDelete').addEventListener('click', async function() {
+      if (!confirm('確定刪除此決議？')) return;
+      var r = await sb.from('meeting_decisions').delete().eq('id', id);
+      if (r.error) { alert('刪除失敗：'+r.error.message); return; }
+      closeModal(); await loadMeetingTracker(); renderMeetingTracker();
     });
   }
 }
