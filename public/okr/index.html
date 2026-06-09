@@ -6,6 +6,7 @@
   <title>喆律法律事務所 - OKR 追蹤</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../shared/view-as.js"></script>
+  <script src="../shared/partner-since.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
@@ -780,7 +781,7 @@ async function loadAll() {
     revenueRecords.forEach(function(r) {
       var m = parseInt(String(r.record_date||'').slice(5,7), 10);
       if (m < 1 || m > 12) return;
-      var isP = r.group_name && r.group_name.indexOf('合署') !== -1;
+      var isP = isPartnerRecord(r);  // 時間感知：轉前收款歸所內（與 revenue 頁一致）
       if (isP) monthCounts.partner[m]++;
       else if (r.transaction_type === 'PaymentTransaction') monthCounts.paid[m]++;
       else if (r.transaction_type === 'RefundTransaction') monthCounts.refund[m]++;
@@ -853,7 +854,7 @@ function aggregateRevenue(records, advisorCases, advisorTransactions) {
     var m = parseInt(String(r.record_date).slice(5,7), 10);
     if (m < 1 || m > 12) return;
     var amt = Number(r.amount || 0);
-    var isPartner = r.group_name && r.group_name.indexOf('合署') !== -1;
+    var isPartner = isPartnerRecord(r);  // 時間感知：轉前帶走案的委任費歸所內、不灌進 KR4 合署營收
     // 律師優先：合署承接的案件整筆歸 KR4 不計入法顧 reconcile（業務指示）
     var isAdvisor = !isPartner && r.client_name && (advisorClients[r.client_name] || advisorClients[normalizeClientName(r.client_name)]);
     var bucket = isPartner ? partnerByMonth[m] : (isAdvisor ? advisorRevByMonth[m] : byMonth[m]);

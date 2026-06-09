@@ -33,16 +33,16 @@ out["lawyers"]["李家泓"]={"since":"2026-06-01","basis":"委任費","cases":ca
     "轉合署委任費合計":tot_fee_zhuan,"帶走金額合計(轉合署)":round(tot_fee_zhuan*0.6),
     "代庭案數":daiting,"note":"代庭金額=5000*實際開庭次，需另計；交接/交回案留所內"}
 
-# 吳柏慶: 客戶名稱,案件性質,給付比例,客戶已付款金額,諮詢費,應付金額  (只有已付款，無委任費)
-ws=wb['吳柏慶']; cases=[]; tot_paid=0
+# 吳柏慶: 客戶名稱,案件性質,給付比例,委任費(表頭誤寫"客戶已付款金額",實為委任費全額),諮詢費,應付金額
+ws=wb['吳柏慶']; cases=[]; tot_fee=0
 for r in ws.iter_rows(min_row=2,values_only=True):
     if not r or r[0] in (None,'合計') or num(r[4]) is None: continue
-    paid=num(r[4])
-    cases.append({"當事人":r[0],"已付款":paid,"type":"喆律轉案","帶走金額(已付款基準)":round(paid*0.6)})
-    tot_paid+=paid
-out["lawyers"]["吳柏慶"]={"since":"2026-03-01","basis":"已付款(待補委任費)","cases":cases,
-    "已付款合計":tot_paid,"帶走金額合計(已付款基準)":sum(c["帶走金額(已付款基準)"] for c in cases),
-    "TODO":"統一口徑需用委任費*0.6；此表只有已付款。未付款部分後續收到再補給律師。需補各案委任費。"}
+    fee=num(r[4])
+    cases.append({"當事人":r[0],"委任費":fee,"type":"喆律轉案","帶走金額":round(fee*0.6)})
+    tot_fee+=fee
+out["lawyers"]["吳柏慶"]={"since":"2026-03-01","basis":"委任費","cases":cases,
+    "委任費合計":tot_fee,"帶走金額合計":sum(c["帶走金額"] for c in cases),
+    "note":"原表頭誤寫『客戶已付款金額』，實為委任費全額"}
 
 open("scripts/partners/carryover_cases.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,indent=2))
 for n,d in out["lawyers"].items():
