@@ -456,8 +456,8 @@
       <div class="mt-subtabs" id="mtSubtabs">
         <button class="active" data-sub="open">📋 Open Actions <span class="count" id="mtOpenCount"></span></button>
         <button data-sub="ongoing">♻ 持續關注 <span class="count" id="mtOngoingCount"></span></button>
-        <button data-sub="meetings">📅 會議列表</button>
         <button data-sub="decisions">📌 歷次決議 <span class="count" id="mtDecCount"></span></button>
+        <button data-sub="meetings">📅 會議列表</button>
         <button data-sub="add" style="margin-left:auto;">➕ 新增 Action</button>
         <button data-sub="addmeeting">📝 新增會議</button>
       </div>
@@ -849,12 +849,25 @@ function renderOngoingBoard(container) {
 
 // ─── Meeting list / timeline ───
 function renderMeetingList(container) {
-  var meetings = state.mt.meetings.slice();
-  if (!state.mt.selectedMeetingId && meetings.length > 0) state.mt.selectedMeetingId = meetings[0].id;
+  var all = state.mt.meetings.slice();
+  // 可選年度（西元年）由新到舊
+  var years = [];
+  all.forEach(function(m){ var y=(m.meeting_date||'').slice(0,4); if (y && years.indexOf(y)<0) years.push(y); });
+  years.sort(function(a,b){ return b - a; });
+  if (!state.mt.meetingYear || years.indexOf(state.mt.meetingYear) < 0) state.mt.meetingYear = years[0] || '';
+  var meetings = all.filter(function(m){ return (m.meeting_date||'').slice(0,4) === state.mt.meetingYear; });
+  if (!meetings.find(function(m){ return m.id === state.mt.selectedMeetingId; }))
+    state.mt.selectedMeetingId = meetings.length ? meetings[0].id : null;
 
   var grid = document.createElement('div'); grid.className = 'timeline-grid';
   var list = document.createElement('div'); list.className = 'meeting-list';
-  var html = '<h4>📅 主管會議紀錄</h4>';
+  var yearOpts = years.map(function(y){
+    var cnt = all.filter(function(m){ return (m.meeting_date||'').slice(0,4) === y; }).length;
+    return '<option value="'+y+'" '+(y===state.mt.meetingYear?'selected':'')+'>'+(parseInt(y,10)-1911)+' 年（'+y+'）｜'+cnt+' 場</option>';
+  }).join('');
+  var html = '<div style="padding:9px 12px; border-bottom:1px solid var(--border); background:var(--bg-row); display:flex; align-items:center; gap:8px;">' +
+    '<span style="font-size:0.74rem; color:var(--text-muted); letter-spacing:0.5px; white-space:nowrap;">📅 年度</span>' +
+    '<select id="mtYearSel" style="flex:1; background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:0.82rem; font-family:inherit;">'+yearOpts+'</select></div>';
   meetings.forEach(function(m) {
     var fups = state.mt.followups.filter(function(f){return f.meeting_id === m.id;});
     var newCount = state.mt.actions.filter(function(a){return a.source_meeting_id === m.id;}).length;
@@ -862,12 +875,14 @@ function renderMeetingList(container) {
     var doneCount = fups.filter(function(f){return f.status_after === 'done';}).length;
     var on = (m.id === state.mt.selectedMeetingId) ? ' on' : '';
     html += '<div class="m-item'+on+'" data-id="'+m.id+'">' +
-      '<div class="date">'+m.meeting_date+'</div>' +
+      '<div class="date">'+m.meeting_date+(m.title && m.title!=='主管會議' ? ' <span style="font-size:0.72rem; color:var(--text-muted);">'+escHtml(m.title)+'</span>' : '')+'</div>' +
       '<div class="meta">'+(MEETING_TYPE_LABEL[m.meeting_type]||m.meeting_type)+' ｜ +'+newCount+' 新 / '+carryCount+' carry / '+doneCount+' 結</div>' +
       '</div>';
   });
   html += '<div class="m-item" id="mtAddMeeting"><div class="date" style="color:var(--blue);">+ 新增會議</div></div>';
   list.innerHTML = html;
+  var ysel = list.querySelector('#mtYearSel');
+  if (ysel) ysel.addEventListener('change', function(){ state.mt.meetingYear = this.value; state.mt.selectedMeetingId = null; renderMeetingList(container); });
   list.querySelectorAll('.m-item[data-id]').forEach(function(it) {
     it.addEventListener('click', function() { state.mt.selectedMeetingId = it.dataset.id; renderMeetingList(container); });
   });
