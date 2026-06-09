@@ -1,0 +1,38 @@
+{
+  "_doc": "合署律師唯一名冊 (single source of truth)。新增/異動合署律師一律先改這裡，再用 add-partner-lawyer skill propagate 到各硬編碼點，最後跑 audit_partner_roster.py 驗證無漏。欄位說明見 _schema。",
+  "_schema": {
+    "name": "律師姓名 (CRM/官網一致)",
+    "cohort": "judicial=司法官合署 | senior=資深轉合署 | consult=諮詢律師型(顯皓型) | cohort_staff=合署受雇人員 | special=特殊分租",
+    "since": "合署生效日 YYYY-MM-01 (轉合署當月1號)",
+    "office": "所屬辦公室 (台北所/台中所/桃園所/新竹所/台南所/高雄所)",
+    "website_class": "官網標題分類: 合夥 | 顧問 | 資深合署 | 無(不在官網合署 set，如受雇/分租)",
+    "firm_split": "true=喆律對其收入抽成、需 DB partner_terms + revenue_records.firm_amount 拆帳; false=走 Excel 分潤線或不抽成",
+    "excel_profit_share": "true=分潤走 partners cohort Excel 分潤表 (需上傳 Drive)",
+    "excel_ready": "true=分潤 Excel 已上傳 Drive、可加進 cohort 分潤儀表板; false=尚未、cohort 站點先不要加 (避免 partners sync 抓不到資料)",
+    "color": "partners cohort 儀表板顏色 hex (同 cohort 內不可重複)"
+  },
+  "lawyers": [
+    { "name": "孫少輔", "cohort": "judicial", "since": "2023-11-01", "office": "台北所", "website_class": "合夥",   "firm_split": false, "excel_profit_share": true, "color": "#6aa9ff" },
+    { "name": "許致維", "cohort": "judicial", "since": "2024-04-01", "office": "台北所", "website_class": "顧問",   "firm_split": false, "excel_profit_share": true, "color": "#ff6b6b" },
+    { "name": "劉明潔", "cohort": "judicial", "since": "2025-07-01", "office": "台北所", "website_class": "顧問",   "firm_split": false, "excel_profit_share": true, "color": "#5dd39e" },
+    { "name": "方心瑜", "cohort": "judicial", "since": "2025-10-01", "office": "台北所", "website_class": "顧問",   "firm_split": false, "excel_profit_share": true, "color": "#f2b84b" },
+
+    { "name": "陳璽仲", "cohort": "senior", "since": "2024-09-01", "office": "台中所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#b58bff" },
+    { "name": "許煜婕", "cohort": "senior", "since": "2024-11-01", "office": "台中所", "website_class": "資深合署", "firm_split": true,  "excel_profit_share": true, "color": "#ff6b6b" },
+    { "name": "蕭予馨", "cohort": "senior", "since": "2025-01-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#4ecdc4" },
+    { "name": "徐棠娜", "cohort": "senior", "since": "2025-02-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#6aa9ff" },
+    { "name": "林昀",   "cohort": "senior", "since": "2025-03-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#5dd39e" },
+    { "name": "李昭萱", "cohort": "senior", "since": "2025-06-01", "office": "台中所", "website_class": "資深合署", "firm_split": true,  "excel_profit_share": true, "color": "#f2b84b" },
+    { "name": "柯雪莉", "cohort": "senior", "since": "2025-09-01", "office": "台北所", "website_class": "顧問",   "firm_split": true,  "excel_profit_share": true, "color": "#ec407a" },
+    { "name": "吳柏慶", "cohort": "senior", "since": "2026-03-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#ff9f43" },
+    { "name": "蘇萱",   "cohort": "senior", "since": "2026-05-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "excel_ready": false, "color": "#00b8d4" },
+    { "name": "李家泓", "cohort": "senior", "since": "2026-05-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "excel_ready": false, "color": "#9ccc65" },
+
+    { "name": "黃顯皓", "cohort": "consult", "since": "2025-10-01", "office": "台北所", "website_class": "顧問",   "firm_split": true,  "excel_profit_share": true, "color": "#26c6da" },
+
+    { "name": "黃世欣", "cohort": "special", "since": "2020-01-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": false, "color": null },
+    { "name": "劉誠夫", "cohort": "cohort_staff", "since": "2023-11-01", "office": "台北所", "website_class": "無", "firm_split": false, "excel_profit_share": false, "color": null },
+    { "name": "陳俊瑋", "cohort": "cohort_staff", "since": "2023-11-01", "office": "台北所", "website_class": "無", "firm_split": false, "excel_profit_share": false, "color": null },
+    { "name": "曾秉浩", "cohort": "cohort_staff", "since": "2023-11-01", "office": "台北所", "website_class": "無", "firm_split": false, "excel_profit_share": false, "color": null }
+  ]
+}
