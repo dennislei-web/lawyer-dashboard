@@ -324,8 +324,11 @@ var SOURCES = {
 function updateSourceLink(route) {
   var el = document.getElementById('sourceLink');
   if (!el) return;
+  // 原始檔連結只給管理員看（部門主管即使有頁面權限也不顯示）
+  // 用 currentLawyer：admin 切「視角」成其他人時，會跟著當前視角隱藏，方便 QA
+  var isAdmin = currentLawyer && currentLawyer.role === 'admin';
   var src = SOURCES[route];
-  if (src) {
+  if (src && isAdmin) {
     el.href = src.url; el.title = src.title; el.style.display = '';
   } else {
     el.style.display = 'none'; el.removeAttribute('href');
