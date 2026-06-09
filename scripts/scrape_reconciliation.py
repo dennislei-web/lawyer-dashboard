@@ -55,35 +55,11 @@ CRM_LOGIN_URL = f"{CRM_BASE_URL}/users/sign_in"
 CRM_USERNAME = os.environ.get("CRM_USERNAME", "")
 CRM_PASSWORD = os.environ.get("CRM_PASSWORD", "")
 
-# 所有部門 group IDs（從 CRM URL 取得）
-ALL_GROUPS = (
-    "c18b5155-310f-42e9-aa19-106db89f2a60,"
-    "b22f2cb8-9b55-46f3-84a5-2adf7053c52e,"
-    "9faee83e-e9ca-429b-88f9-bd2d13fc14e0,"
-    "4dcfa60a-ac67-442c-ab44-9f0aded75499,"
-    "19d4dc43-dcb1-4234-9a5e-c0ea8a72d9aa,"
-    "7f459997-0d2b-4c64-86be-b543d584ef85,"
-    "ccc4bc42-0328-4b51-8a8c-cce2082f5079,"
-    "c498a0c0-37a2-4201-b4de-5af339381a1e,"
-    "22e9be67-1cc5-42d8-b8f4-4decbbf4c0ee,"
-    "e24da6f6-920a-4e2a-ac02-bde282986ad8,"
-    "8aa327ba-2abc-4700-9fce-47bb13208ec4,"
-    "3f83d3f6-7610-49b5-a060-62adeaa1898b,"
-    "b24a4b91-c058-469a-9233-f2589c5910ab,"
-    "31df98a0-5032-4072-9ff7-1c47a3dd8126,"
-    "5ae8cf10-5596-4bd0-9e24-9e69af595d76,"
-    "4abe1b81-2bcb-47c1-befe-93dc7d18ba63,"
-    "2ca446d6-ca35-490b-8cb3-9b414c419652,"
-    "87cb66bf-a2eb-446a-8dc3-8a0b29d044b6,"
-    "9a08e3f7-6b4e-475c-9bbd-aaafb8456109,"
-    "a219eac6-f564-4e92-8ebb-00d850aae218,"
-    "7d471d9b-6eef-4f9c-8dd0-afbe5152ed46,"
-    "4a4b7b07-bb4b-404c-9f26-f57096a03733,"
-    "57c50abc-58dd-452b-9910-1f8378070548,"
-    "bd4f2954-2b9b-4e2c-be70-25cac26e2731,"
-    "99452c6f-f5ed-439c-b0c4-dbb0545a6644,"
-    "nil"
-)
+# 部門 group：不再 hardcode group IDs。
+# 原本寫死一份 group 清單，每當 CRM 新增部門（如律師轉合署 → 新 group），
+# 清單就漏掉，該部門案件整批抓不到（曾漏 北所合署蘇萱/李家泓 = 數十萬）。
+# 對帳 endpoint 省略 groups 參數時會回傳「所有部門」，與 CRM 對帳頁總額口徑一致，
+# 且未來新部門自動納入，免維護。
 
 
 # ═══════════════════════════════════════════════════════════
@@ -131,10 +107,10 @@ def crm_login(email, password):
 def scrape_reconciliation(session, start_date, end_date):
     """爬取對帳頁面，回傳交易記錄列表。"""
     url = f"{CRM_BASE_URL}/dashboard/finance/reconciliation"
+    # 不帶 groups 參數 = 抓所有部門（含未來新增的合署 group），與 CRM 對帳頁總額一致
     params = {
         "start_date": start_date,
         "end_date": end_date,
-        "groups": ALL_GROUPS,
     }
 
     print(f"   爬取 {start_date} ~ {end_date} ...")
