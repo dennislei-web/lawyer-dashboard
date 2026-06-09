@@ -285,7 +285,7 @@ SENIOR_COLORS = {
     '吳柏慶': '#ff9f43',
     '柯雪莉': '#ec407a',
 }
-SENIOR_TIERS = ['諮詢', '諮詢成案', '喆律轉案', '法律010轉案', '自案', '成案獎金', '其他', '其他-自案']
+SENIOR_TIERS = ['諮詢', '諮詢成案', '喆律轉案', '法律010轉案', '自案', '成案獎金', '其他', '其他-自案', '帶走']
 # 預設規則顯示（合約細節表提供）
 SENIOR_DEFAULT_CONTRACT = {
     '諮詢':         '0/100',
@@ -296,6 +296,7 @@ SENIOR_DEFAULT_CONTRACT = {
     '成案獎金':     '0/5',
     '其他':         '—',
     '其他-自案':    '—',
+    '帶走':         '0/100',  # 轉合署一次性帶走：帶走金額=委任費×60%全歸律師；委任費本體已歸所內，喆律側0
 }
 
 def build_senior_cohort():
@@ -411,6 +412,30 @@ def build_senior_cohort():
         if lawyer not in LAWYERS: continue
         monthly[lawyer][year][month]['zhelu_total'] = num(r['zhelu_total'])
         monthly[lawyer][year][month]['lawyer_total'] = num(r['lawyer_total'])
+
+    # ── 一次性帶走案件結算（轉合署當月一次性合署業績）──
+    # 帶走金額 = 委任費×60% = 律師收入；喆律側 = 0（委任費本體已歸所內，避免雙算）。
+    # 資料源：scripts/partners/carryover_cases.json（用 build_carryover.py 從帶走 Excel 產生）
+    _carry_path = Path(__file__).parent / 'carryover_cases.json'
+    if _carry_path.exists():
+        _carry = json.loads(_carry_path.read_text(encoding='utf-8'))
+        for _name, _info in _carry.get('lawyers', {}).items():
+            if _name not in LAWYERS:
+                continue
+            _amt = num(_info.get('帶走金額合計') or _info.get('帶走金額合計(轉合署)') or 0)
+            if not _amt:
+                continue
+            _since = str(_info.get('since', ''))  # 'YYYY-MM-01'（西元）
+            try:
+                _y = str(int(_since[:4]) - 1911)   # → 民國年
+                _mo = str(int(_since[5:7]))
+            except Exception:
+                continue
+            mm = monthly[_name][_y][_mo]
+            mm['commission_A'] += _amt      # 承辦案件金額（計入其帶走業績）
+            mm['lawyer_total'] += _amt      # 律師收入 +帶走金額
+            mm['tier']['帶走(律師)'] += _amt
+            print(f"   ↳ 帶走注入 {_name} {_y}/{_mo}: 律師 +{_amt:,.0f}（喆律 0）")
 
     # settlement totals — cash basis（律師當月實際撥給喆律 = B，對 Excel 合署合作收入）
     def _opt_num(v):

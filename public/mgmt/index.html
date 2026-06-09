@@ -1113,9 +1113,16 @@ function rocFromDate(iso){ if(!iso) return ''; var y=parseInt(iso.slice(0,4),10)
 
 function renderDecisionsView(container) {
   var f = state.mt.dec.filters;
+  // 年度選項依資料動態產生（民國年由新到舊）
+  var fys = [];
+  state.mt.dec.rows.forEach(function(d){ if (d.fiscal_year != null && fys.indexOf(d.fiscal_year) < 0) fys.push(d.fiscal_year); });
+  fys.sort(function(a,b){ return b - a; });
+  var yearOpts = '<option value="">全部</option>' + fys.map(function(y){
+    return '<option value="'+y+'">'+y+'（'+(parseInt(y,10)+1911)+'）</option>';
+  }).join('');
   var bar = document.createElement('div'); bar.className = 'mt-filter-row';
   bar.innerHTML =
-    '<label>年度</label><select id="dcYear"><option value="">全部</option><option value="115">115（2026）</option><option value="114">114（2025）</option></select>' +
+    '<label>年度</label><select id="dcYear">'+yearOpts+'</select>' +
     '<label>類別</label><select id="dcCat"><option value="">全部</option>' + CATEGORIES.map(function(c){return '<option>'+c+'</option>';}).join('') + '</select>' +
     '<div class="spacer"></div>' +
     '<input id="dcSearch" placeholder="🔍 搜尋決議..." style="width:200px;">' +
