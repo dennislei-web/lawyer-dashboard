@@ -26,7 +26,7 @@
     { "name": "柯雪莉", "cohort": "senior", "since": "2025-09-01", "office": "台北所", "website_class": "顧問",   "firm_split": true,  "excel_profit_share": true, "color": "#ec407a" },
     { "name": "吳柏慶", "cohort": "senior", "since": "2026-03-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "color": "#ff9f43" },
     { "name": "蘇萱",   "cohort": "senior", "since": "2026-05-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "excel_ready": false, "color": "#00b8d4" },
-    { "name": "李家泓", "cohort": "senior", "since": "2026-05-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "excel_ready": false, "color": "#9ccc65" },
+    { "name": "李家泓", "cohort": "senior", "since": "2026-06-01", "office": "台北所", "website_class": "資深合署", "firm_split": false, "excel_profit_share": true, "excel_ready": false, "color": "#9ccc65" },
 
     { "name": "黃顯皓", "cohort": "consult", "since": "2025-10-01", "office": "台北所", "website_class": "顧問",   "firm_split": true,  "excel_profit_share": true, "color": "#26c6da" },
 
