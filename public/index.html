@@ -243,6 +243,7 @@
     </div>
     <div class="header-right">
       <span class="user-badge" id="userBadge"></span>
+      <a id="sourceLink" class="btn-icon" target="_blank" rel="noopener" title="開啟此頁的雲端原始檔" style="display:none;text-decoration:none">🔗 原始檔</a>
       <button class="btn-icon" id="themeToggle" title="切換主題">&#x1f313;</button>
       <button class="btn-icon" id="changePwdBtn" title="修改密碼">修改密碼</button>
       <button class="btn-icon" id="logoutBtn" title="登出">登出</button>
@@ -313,6 +314,24 @@ var ROUTES = {
   maintenance:  BASE + '/maintenance/?embed=1'  + CACHE_BUST,
 };
 
+// 各頁對應的雲端原始檔（人工維護的 Sheet / Drive）；沒列在這的路由不顯示原始檔按鈕
+var SOURCES = {
+  law010:   { url: 'https://docs.google.com/spreadsheets/d/1bGmKAFdCKZdfuag4tbGB7WeRxqBGFyJsvwDgbBpcZb4/edit', title: '法律010 轉案總表（Google Sheet）' },
+  partners: { url: 'https://drive.google.com/drive/folders/1f9h24a3C6X1HMYmUil4kEU_S9b3dgGiy', title: '合署律師 115+ 財務資料夾（Google Drive）' },
+  funnel:   { url: 'https://docs.google.com/spreadsheets/d/1aQO1tc1rpzg9DsWQTW4YQg56Hp5vdz8w2clzlUDU5YY/edit', title: '委前各項數據追蹤表單（Google Sheet）' },
+};
+
+function updateSourceLink(route) {
+  var el = document.getElementById('sourceLink');
+  if (!el) return;
+  var src = SOURCES[route];
+  if (src) {
+    el.href = src.url; el.title = src.title; el.style.display = '';
+  } else {
+    el.style.display = 'none'; el.removeAttribute('href');
+  }
+}
+
 function getRouteFromHash() {
   var m = (window.location.hash || '').match(/^#\/([a-z]+)/);
   var r = m ? m[1] : 'consultation';
@@ -334,6 +353,9 @@ function switchRoute(route) {
   document.querySelectorAll('.nav-link').forEach(function(l) {
     l.classList.toggle('active', l.getAttribute('data-route') === route);
   });
+
+  // 更新頂列「原始檔」按鈕（隨頁切換；無原始檔的頁自動隱藏）
+  updateSourceLink(route);
 
   // show/hide iframes（首次訪問才設 src）
   document.querySelectorAll('.route-frame').forEach(function(f) {
