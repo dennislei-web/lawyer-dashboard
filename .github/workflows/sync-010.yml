@@ -1,9 +1,11 @@
 name: Sync 法律 010 from Google Sheet
 
 on:
-  # 每天台灣 09:00 (UTC 01:00) 自動同步
+  # 排程目標台灣凌晨 02:23 (UTC 18:23)；GH Actions 排程常延遲 1-4 小時，
+  # 實際落在台灣 03:00-06:00 — 重點是避開同仁白天編輯總表的時段
+  # （2026-06-10 同步撞上編輯中的 sheet 洗掉資料，詳見 sync_010.py guarded_clean_reload）
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '23 18 * * *'
   # 也允許手動 / Edge Function 觸發
   workflow_dispatch:
 
