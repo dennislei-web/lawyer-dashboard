@@ -267,6 +267,8 @@
     .action-link:hover { color:var(--gold); text-decoration:underline; }
     .action-table .col-title .resolution { display:block; font-size:0.74rem; color:var(--text-muted);
       margin-top:4px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.4; }
+    .resolution .prog-line { display:block; }
+    .resolution .prog-line.done { text-decoration:line-through; opacity:0.65; }
     .action-table .col-owner { white-space:nowrap; }
     .action-table .col-due { white-space:nowrap; color:var(--text-muted); font-size:0.78rem; }
     .action-table .col-due.overdue { color:var(--red); font-weight:600; }
@@ -327,6 +329,9 @@
     .card-dash-link.empty { background:transparent; color:var(--text-muted); border:1px dashed var(--border);
       font-weight:500; }
     .card-dash-link.empty:hover { color:var(--text); border-color:var(--text-muted); }
+    .card-dash-link.secondary { background:transparent; color:var(--gold); border:1px solid var(--gold);
+      font-weight:600; font-size:0.82rem; padding:8px 14px; margin:6px 0 2px; }
+    .card-dash-link.secondary:hover { background:rgba(255,255,255,0.05); }
     .carry-card.ongoing.lv2 { border-color:var(--orange); }
     .carry-card.ongoing.lv2::before { background:var(--orange); }
     .carry-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
@@ -397,6 +402,17 @@
     .mt-modal .attach-hint { font-size:0.72rem; color:var(--text-muted); }
     .mt-modal .attach-msg { font-size:0.78rem; }
     .mt-modal .attach-wrap input[type="file"] { font-size:0.8rem; }
+    .mt-modal .multi-list { display:flex; flex-direction:column; gap:6px; }
+    .mt-modal .multi-row { display:flex; align-items:center; gap:7px; }
+    .mt-modal .multi-row input[type="text"] { flex:1; min-width:0; }
+    .mt-modal .multi-row input[type="checkbox"] { width:auto; margin:0; flex:none; cursor:pointer; }
+    .mt-modal .multi-row .row-rm { flex:none; background:none; border:1px solid var(--border); color:var(--red);
+      border-radius:6px; padding:3px 9px; font-size:0.78rem; cursor:pointer; }
+    .mt-modal .multi-list .row-add { align-self:flex-start; background:none; border:1px dashed var(--border);
+      color:var(--blue); border-radius:6px; padding:3px 10px; font-size:0.78rem; cursor:pointer; }
+    .mt-modal .multi-list .row-add:hover { border-color:var(--blue); }
+    .mt-modal .multi-row input[type="text"]:disabled,
+    .mt-modal .prog-row.done input[type="text"] { text-decoration:line-through; color:var(--text-muted); }
     .mt-modal .form-actions { display:flex; gap:10px; padding-top:12px; border-top:1px solid var(--border); margin-top:14px; }
     .mt-modal .btn-primary { background:linear-gradient(135deg,var(--gold),#b8942e); color:#0a0a0a; font-weight:600;
       border:none; border-radius:6px; padding:8px 18px; font-size:0.88rem; cursor:pointer; }
@@ -2256,9 +2272,9 @@ function renderActionTable() {
     var overdueCls = (a.next_review_date && a.next_review_date < todayISO && ['done','dropped'].indexOf(a.status) < 0) ? ' overdue' : '';
     html += '<tr class="action-row" data-id="' + a.id + '">' +
       '<td class="col-title">' + escHtml(a.title) +
-        (a.link_url ? ' <a href="'+escHtml(a.link_url)+'" target="_blank" rel="noopener" class="action-link" onclick="event.stopPropagation()" title="開啟連結">🔗 開啟</a>' : '') +
+        linkIconsHtml(a.link_url) +
         (a.attachment_path ? ' <a href="#" class="action-link" onclick="event.stopPropagation();openActionAttachment(\''+escHtml(a.attachment_path)+'\');return false;" title="'+escHtml(a.attachment_name||'附件')+'">📎 附件</a>' : '') +
-        (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') +
+        progressHtml(a.latest_resolution) +
       '</td>' +
       '<td>' + (a.category ? '<span class="badge-kr org">'+escHtml(a.category)+'</span>' : '') + '</td>' +
       '<td>' + (a.kr_code ? '<span class="badge-kr '+a.kr_code+'">'+(KR_LABEL[a.kr_code]||a.kr_code).replace(/ .*/,'')+'</span>' : '<span class="badge-kr org">非 OKR</span>') + '</td>' +
@@ -2304,6 +2320,49 @@ function renderActionTable() {
 
 function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 
+// ─── 多連結 / 進度清單（沿用既有 text 欄位，換行分隔，向下相容舊資料）───
+// link_url：一行一個 URL
+function parseLinks(s) {
+  return String(s || '').split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+}
+// latest_resolution：一行一條，"[x] " 開頭=已完成、"[ ] " 開頭=未完成；無前綴的舊資料視為未完成
+function parseProgress(s) {
+  return String(s || '').split('\n').map(function(line) {
+    var t = line.trim();
+    if (!t) return null;
+    if (/^\[x\]\s*/i.test(t)) return { done:true,  text:t.replace(/^\[x\]\s*/i, '') };
+    return { done:false, text:t.replace(/^\[\s?\]\s*/, '') };
+  }).filter(Boolean);
+}
+function serializeProgress(items) {
+  var lines = items.filter(function(it){ return it.text; })
+    .map(function(it){ return (it.done ? '[x] ' : '[ ] ') + it.text; });
+  return lines.length ? lines.join('\n') : null;
+}
+function appendProgressLine(existing, text, done) {
+  var items = parseProgress(existing);
+  items.push({ done:!!done, text:text });
+  return serializeProgress(items);
+}
+// 表格列裡的進度清單 HTML（✅/⬜ 一行一條）
+function progressHtml(s) {
+  var items = parseProgress(s);
+  if (!items.length) return '';
+  return '<span class="resolution">' + items.map(function(it) {
+    return '<span class="prog-line' + (it.done ? ' done' : '') + '">' + (it.done ? '✅' : '⬜') + ' ' + escHtml(it.text) + '</span>';
+  }).join('') + '</span>';
+}
+// 表格列裡的多連結圖示 HTML
+function linkIconsHtml(s) {
+  var links = parseLinks(s);
+  return links.map(function(u, i) {
+    return ' <a href="' + escHtml(u) + '" target="_blank" rel="noopener" class="action-link" onclick="event.stopPropagation()" title="' + escHtml(u) + '">🔗 開啟' + (links.length > 1 ? ' ' + (i + 1) : '') + '</a>';
+  }).join('');
+}
+function linkHost(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return '連結'; }
+}
+
 // ─── Quick action handlers (button clicks on table rows) ───
 async function handleQuickAction(actionId, kind) {
   var a = state.mt.actions.find(function(x){return x.id === actionId;});
@@ -2326,7 +2385,7 @@ async function handleQuickAction(actionId, kind) {
   var latestMeeting = state.mt.meetings[0];
   var updates = {
     status: newStatus,
-    latest_resolution: msg || a.latest_resolution,
+    latest_resolution: msg ? appendProgressLine(a.latest_resolution, msg, newStatus === 'done') : a.latest_resolution,
     carry_count: (kind === 'carry') ? (a.carry_count + 1) : a.carry_count,
     closed_at: (newStatus === 'done' || newStatus === 'dropped') ? new Date().toISOString() : null
   };
@@ -2385,9 +2444,15 @@ function renderOngoingBoard(container) {
         '<span>首見 '+sourceDate+'</span>' +
         '<span><span class="badge-status '+a.status+'">'+STATUS_LABEL[a.status]+'</span></span>' +
       '</div>' +
-      (a.link_url
-        ? '<a class="card-dash-link has-link" href="'+escHtml(a.link_url)+'" target="_blank" rel="noopener">📊 看數據儀表板 →</a>'
-        : '<button class="card-dash-link empty" data-act="edit">🔗 設定數據連結</button>') +
+      (function() {
+        var links = parseLinks(a.link_url);
+        if (!links.length) return '<button class="card-dash-link empty" data-act="edit">🔗 設定數據連結</button>';
+        return links.map(function(u, i) {
+          return i === 0
+            ? '<a class="card-dash-link has-link" href="'+escHtml(u)+'" target="_blank" rel="noopener">📊 看數據儀表板 →</a>'
+            : '<a class="card-dash-link secondary" href="'+escHtml(u)+'" target="_blank" rel="noopener">🔗 '+escHtml(linkHost(u))+' →</a>';
+        }).join('');
+      })() +
       '<div class="carry-timeline">' +
         '<div class="row"><span class="date">'+(sourceDate||'').slice(5)+'</span><span class="what">新增 — '+escHtml((sourceMeeting&&sourceMeeting.title)||'')+'</span></div>' +
         fups.map(function(f) {
@@ -2520,13 +2585,27 @@ function showActionModal(actionId) {
     '<div class="form-row"><label>來源會議</label><select id="afMeeting"><option value="">—</option>' +
       state.mt.meetings.map(function(m){return '<option value="'+m.id+'" '+(m.id===a.source_meeting_id?'selected':'')+'>'+m.meeting_date+' '+MEETING_TYPE_LABEL[m.meeting_type]+'</option>';}).join('') + '</select></div>' +
     '<div class="form-row"><label>下次 Review</label><input type="date" id="afReview" value="'+(a.next_review_date||'')+'"></div>' +
-    '<div class="form-row"><label>連結</label><input id="afLink" value="'+escHtml(a.link_url||'')+'" placeholder="貼上儀表板/文件網址，會在項目旁顯示 🔗 開啟"></div>' +
+    '<div class="form-row"><label>連結</label><div class="multi-list" id="afLinks">' +
+      (parseLinks(a.link_url).length ? parseLinks(a.link_url) : ['']).map(function(u) {
+        return '<div class="multi-row link-row"><input type="text" value="'+escHtml(u)+'" placeholder="貼上儀表板/文件網址，會在項目旁顯示 🔗 開啟"><button type="button" class="row-rm" title="移除這個連結">✕</button></div>';
+      }).join('') +
+      '<button type="button" class="row-add" id="afAddLink">＋ 新增連結</button>' +
+    '</div></div>' +
     '<div class="form-row"><label>附件</label><div class="attach-wrap">' +
       (a.attachment_path ? '<div id="afCurAttach" class="attach-cur"><a href="#" id="afViewAttach">📎 '+escHtml(a.attachment_name||'附件')+'</a><button type="button" id="afRmAttach" class="attach-rm">移除</button></div>' : '') +
       '<input type="file" id="afFile"><div class="attach-hint">任意檔型，上限 6MB' + (a.attachment_path ? '；選新檔會取代舊附件' : '') + '</div>' +
       '<div id="afAttachMsg" class="attach-msg"></div>' +
     '</div></div>' +
-    '<div class="form-row tall"><label>最新進度</label><textarea id="afResolution" placeholder="一句話最新狀況">'+escHtml(a.latest_resolution||'')+'</textarea></div>' +
+    '<div class="form-row tall"><label>最新進度</label><div class="multi-list" id="afProg">' +
+      (function() {
+        var items = parseProgress(a.latest_resolution);
+        if (!items.length) items = [{ done:false, text:'' }];
+        return items.map(function(it) {
+          return '<div class="multi-row prog-row'+(it.done?' done':'')+'"><input type="checkbox" title="完成與否" '+(it.done?'checked':'')+'><input type="text" value="'+escHtml(it.text)+'" placeholder="一句話敘述"><button type="button" class="row-rm" title="移除這條">✕</button></div>';
+        }).join('');
+      })() +
+      '<button type="button" class="row-add" id="afAddProg">＋ 新增一條</button>' +
+    '</div></div>' +
     '<div class="form-row tall"><label>備註</label><textarea id="afNotes" placeholder="脈絡、相關連結...">'+escHtml(a.notes||'')+'</textarea></div>' +
     '<div class="form-actions">' +
       '<button class="btn-primary" id="afSave">儲存</button>' +
@@ -2535,6 +2614,26 @@ function showActionModal(actionId) {
     '</div>';
   openModal(html);
   document.getElementById('afCancel').addEventListener('click', closeModal);
+
+  // 連結 / 最新進度：動態多列（新增、移除、勾完成）
+  function bindMultiList(listId, addBtnId, rowHtml) {
+    var list = document.getElementById(listId);
+    document.getElementById(addBtnId).addEventListener('click', function() {
+      this.insertAdjacentHTML('beforebegin', rowHtml);
+      var rows = list.querySelectorAll('.multi-row');
+      rows[rows.length - 1].querySelector('input[type="text"]').focus();
+    });
+    list.addEventListener('click', function(ev) {
+      if (ev.target.classList.contains('row-rm')) ev.target.closest('.multi-row').remove();
+    });
+    list.addEventListener('change', function(ev) {
+      if (ev.target.type === 'checkbox') ev.target.closest('.multi-row').classList.toggle('done', ev.target.checked);
+    });
+  }
+  bindMultiList('afLinks', 'afAddLink',
+    '<div class="multi-row link-row"><input type="text" value="" placeholder="貼上儀表板/文件網址"><button type="button" class="row-rm" title="移除這個連結">✕</button></div>');
+  bindMultiList('afProg', 'afAddProg',
+    '<div class="multi-row prog-row"><input type="checkbox" title="完成與否"><input type="text" value="" placeholder="一句話敘述"><button type="button" class="row-rm" title="移除這條">✕</button></div>');
 
   // 附件：原始路徑 / 移除旗標 / 檢視 + 移除按鈕
   var origAttachPath = a.attachment_path || null;
@@ -2558,8 +2657,13 @@ function showActionModal(actionId) {
       recur_type: document.getElementById('afRecur').value,
       source_meeting_id: document.getElementById('afMeeting').value || null,
       next_review_date: document.getElementById('afReview').value || null,
-      link_url: document.getElementById('afLink').value.trim() || null,
-      latest_resolution: document.getElementById('afResolution').value || null,
+      link_url: Array.prototype.slice.call(document.querySelectorAll('#afLinks .link-row input[type="text"]'))
+        .map(function(i){ return i.value.trim(); }).filter(Boolean).join('\n') || null,
+      latest_resolution: serializeProgress(Array.prototype.slice.call(document.querySelectorAll('#afProg .prog-row'))
+        .map(function(row) {
+          return { done: row.querySelector('input[type="checkbox"]').checked,
+                   text: row.querySelector('input[type="text"]').value.trim() };
+        })),
       notes: document.getElementById('afNotes').value || null
     };
     if (!payload.title) { alert('請填標題'); return; }
@@ -2720,7 +2824,7 @@ function injectKrActionsIntoCards() {
       var row = document.createElement('div'); row.className = 'kr-action-row';
       row.dataset.id = a.id;
       row.innerHTML = '<div class="ka-title">' + escHtml(a.title) +
-        (a.latest_resolution ? '<span class="resolution">' + escHtml(a.latest_resolution) + '</span>' : '') + '</div>' +
+        progressHtml(a.latest_resolution) + '</div>' +
         '<span class="badge-status ' + a.status + '">' + STATUS_LABEL[a.status] + '</span>' +
         '<span class="carry-badge ' + carryLv + '">↻' + a.carry_count + '</span>' +
         '<span class="ka-owner">' + escHtml(a.owner || '') + '</span>';
