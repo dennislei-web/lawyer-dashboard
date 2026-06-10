@@ -584,7 +584,7 @@ var state = { mt: {
 // ═══ MEETING TRACKER ═══
 var MEETING_TYPE = 'mgmt_weekly';
 var MEETING_TYPE_LABEL = { mgmt_weekly:'主管會議', op_weekly:'營運週會', shareholder:'股東會', monthly_all:'月會', partner_consult:'合署/北所諮詢', one_on_one:'1-on-1', other:'其他' };
-var STATUS_LABEL = { pending:'Pending', in_progress:'In Progress', blocked:'Blocked', done:'Done', dropped:'Dropped' };
+var STATUS_LABEL = { pending:'待處理', in_progress:'進行中', blocked:'卡住', done:'已結案', dropped:'已放棄' };
 var ACTION_BUCKET = 'action-attachments';
 var ACTION_FILE_MAX = 6 * 1024 * 1024; // 6 MB
 var CATEGORIES = ['系統/工程','獎金制度','人資差勤','委前進線','委後/客戶','品牌/官網','知識庫/AI','法顧','行政/空間','其他'];
@@ -894,7 +894,7 @@ function renderOngoingBoard(container) {
       '<div class="carry-timeline">' +
         '<div class="row"><span class="date">'+(sourceDate||'').slice(5)+'</span><span class="what">新增 — '+escHtml((sourceMeeting&&sourceMeeting.title)||'')+'</span></div>' +
         fups.map(function(f) {
-          return '<div class="row"><span class="date">'+f.followup_date.slice(5)+'</span><span class="what">'+escHtml(f.resolution || (f.status_before+' → '+f.status_after))+'</span></div>';
+          return '<div class="row"><span class="date">'+f.followup_date.slice(5)+'</span><span class="what">'+escHtml(f.resolution || ((STATUS_LABEL[f.status_before]||f.status_before)+' → '+(STATUS_LABEL[f.status_after]||f.status_after)))+'</span></div>';
         }).join('') +
       '</div>' +
       '<div class="carry-card-foot">' +
@@ -982,7 +982,7 @@ function renderMeetingList(container) {
         if (!a) return;
         dh += '<div class="item-row">' +
           '<span class="badge-kr org">'+escHtml(a.category||'')+'</span>' +
-          '<span class="text">'+escHtml(a.title)+' — '+(f.status_before||'?')+' → '+(f.status_after||'?')+
+          '<span class="text">'+escHtml(a.title)+' — '+(STATUS_LABEL[f.status_before]||f.status_before||'?')+' → '+(STATUS_LABEL[f.status_after]||f.status_after||'?')+
             (f.resolution ? '<br><span style="font-size:0.75rem;color:var(--text-muted);">'+escHtml(f.resolution)+'</span>' : '')+'</span>' +
           '</div>';
       });
