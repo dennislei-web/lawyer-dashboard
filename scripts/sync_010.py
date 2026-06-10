@@ -179,6 +179,44 @@ def supabase_delete_all(table, key_col="case_key"):
     print(f"  deleted all rows from {table}")
 
 
+def supabase_count(table):
+    """現有筆數（PostgREST exact count，HEAD 不抓資料）。"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}?select=case_key"
+    req = urllib.request.Request(url, method="HEAD", headers={
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Prefer": "count=exact",
+        "Range": "0-0",
+    })
+    with urllib.request.urlopen(req, timeout=60) as r:
+        cr = r.headers.get("Content-Range", "")
+    try:
+        return int(cr.split("/")[-1])
+    except ValueError:
+        return 0
+
+
+def guarded_clean_reload(table, rows, force=False, tolerance=0.9):
+    """先清表再重灌，但有防呆：
+
+    清表重灌的前提是「這次抓到的就是整張總表」。若 sync 撞上同仁正在
+    編輯 sheet（剪下重貼、整理列），中段 chunk 會暫時讀到空列 →
+    parse 出來的筆數遠少於實際 → 照灌會把好幾千列洗掉（2026-06-10 實際發生，
+    5 月十幾位律師整批消失）。所以：抓到的筆數 < 現有筆數 × tolerance 就中止，
+    保留現有資料，exit 2 讓 Actions 顯示失敗。--force-reload 可跳過。
+    """
+    existing = supabase_count(table)
+    if not force and existing > 0 and len(rows) < existing * tolerance:
+        print(f"\n✗ ABORT: {table} 抓到 {len(rows)} 列 < 現有 {existing} 列的 {tolerance:.0%}。"
+              f"\n  疑似 sync 撞上 sheet 編輯中（讀到半空快照）。保留現有資料不清表。"
+              f"\n  確認 sheet 完整後重跑；確定要縮表用 --force-reload。", file=sys.stderr)
+        sys.exit(2)
+    print(f"\nclean reload {table}... (現有 {existing} → 新 {len(rows)})")
+    supabase_delete_all(table)
+    print(f"upserting {len(rows)} {table} rows...")
+    supabase_upsert(table, rows)
+
+
 def supabase_rpc(fn, params=None):
     url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
     data = json.dumps(params or {}).encode("utf-8")
@@ -406,6 +444,8 @@ def fetch_lawyer_target():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-pull", action="store_true", help="skip sheet fetch, only rebuild + reconcile")
+    ap.add_argument("--force-reload", action="store_true",
+                    help="跳過筆數防呆，允許重灌比現有少很多的快照")
     ap.add_argument("--year-from", type=int, default=2021)
     ap.add_argument("--year-to", type=int, default=2030)
     ap.add_argument("--reconcile-year", type=int, default=2026)
@@ -416,20 +456,14 @@ def main():
         # 1. Pull 總表 → 先清表再重灌（避免 sheet_row 位移造成快照累積）
         z = fetch_zonghyu()
         if z:
-            print(f"\nclean reload raw_010_case...")
-            supabase_delete_all("raw_010_case")
-            print(f"upserting {len(z)} raw_010_case rows...")
-            supabase_upsert("raw_010_case", z)
+            guarded_clean_reload("raw_010_case", z, force=args.force_reload)
         else:
             print("\n⚠ fetch_zonghyu 回傳空，跳過清表（保留現有資料）", file=sys.stderr)
 
         # 2. Pull 分期付款 → 同樣先清表再重灌
         i = fetch_installment()
         if i:
-            print(f"\nclean reload raw_010_installment_case...")
-            supabase_delete_all("raw_010_installment_case")
-            print(f"upserting {len(i)} raw_010_installment_case rows...")
-            supabase_upsert("raw_010_installment_case", i)
+            guarded_clean_reload("raw_010_installment_case", i, force=args.force_reload)
         else:
             print("\n⚠ fetch_installment 回傳空，跳過清表（保留現有資料）", file=sys.stderr)
 
