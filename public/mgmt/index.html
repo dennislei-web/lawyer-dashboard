@@ -267,6 +267,8 @@
       margin-top:4px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.4; }
     .resolution .prog-line { display:block; }
     .resolution .prog-line.done { text-decoration:line-through; opacity:0.65; }
+    .carry-card .resolution { display:block; font-size:0.74rem; color:var(--text-muted);
+      margin:2px 0 8px; padding-left:10px; border-left:2px solid var(--border-light); line-height:1.5; }
     .action-table .col-owner { white-space:nowrap; }
     .action-table .col-due { white-space:nowrap; color:var(--text-muted); font-size:0.78rem; }
     .action-table .col-due.overdue { color:var(--red); font-weight:600; }
@@ -891,6 +893,7 @@ function renderOngoingBoard(container) {
             : '<a class="card-dash-link secondary" href="'+escHtml(u)+'" target="_blank" rel="noopener">🔗 '+escHtml(linkHost(u))+' →</a>';
         }).join('');
       })() +
+      progressHtml(a.latest_resolution) +
       '<div class="carry-timeline">' +
         '<div class="row"><span class="date">'+(sourceDate||'').slice(5)+'</span><span class="what">新增 — '+escHtml((sourceMeeting&&sourceMeeting.title)||'')+'</span></div>' +
         fups.map(function(f) {
