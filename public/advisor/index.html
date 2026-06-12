@@ -1057,7 +1057,7 @@ async function init() {
       sb.from('advisor_channel_mapping').select('*'),
       sb.from('advisor_company_categories').select('*'),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1),
-      sb.from('advisor_transactions').select('record_date,amount,client_name,is_void').order('record_date'),
+      sb.from('advisor_transactions').select('record_date,amount,client_name,client_vat,is_void,point,total_point,contract_end_date,payment_method,notes').order('record_date'),
       sb.from('advisor_service_cases').select('*').order('created_at', { ascending: false }),
       sb.from('advisor_hour_entries').select('case_id,hours,entry_kind')
     ]);
@@ -1073,6 +1073,29 @@ async function init() {
     (cc.data || []).forEach(c => { STATE.companyCategories[c.company_name] = c; });
     STATE.lastSync = log.data?.[0] || null;
     STATE.deposits = dep.data || [];
+    // CRM 儲值點數對照（點數單位 = 分鐘，60 點 = 1 小時）
+    // purchasedMin = Σpoint（歷次儲值）；balanceMin = 最新一筆 total_point（當前剩餘快照）
+    STATE.crmPoints = {};
+    STATE.crmPointsByVat = {};
+    STATE.deposits.forEach(t => {
+      if (t.is_void) return;
+      const key = normalizeClientName(t.client_name || '');
+      if (!key) return;
+      let rec = STATE.crmPoints[key];
+      if (!rec) {
+        rec = { purchasedMin: 0, balanceMin: null, balanceDate: null, contractEnd: null, lastDate: null, entries: [] };
+        STATE.crmPoints[key] = rec;
+      }
+      rec.purchasedMin += (+t.point || 0);
+      rec.entries.push(t);
+      if (t.total_point != null && (!rec.balanceDate || t.record_date >= rec.balanceDate)) {
+        rec.balanceMin = +t.total_point;
+        rec.balanceDate = t.record_date;
+      }
+      if (t.contract_end_date && (!rec.contractEnd || t.contract_end_date > rec.contractEnd)) rec.contractEnd = t.contract_end_date;
+      if (!rec.lastDate || t.record_date > rec.lastDate) rec.lastDate = t.record_date;
+      if (t.client_vat) STATE.crmPointsByVat[t.client_vat] = rec;
+    });
     STATE.service = svc.data || [];
     STATE.svcHours = {};
     (hrs.data || []).forEach(x => {
@@ -2587,26 +2610,57 @@ function svcDaysInStage(c) {
   if (!base) return null;
   return Math.floor((Date.now() - new Date(base).getTime()) / 864e5);
 }
+// 依名稱（normalize 後）或統編找 CRM 儲值紀錄
+function svcCrmFor(c) {
+  if (!c) return null;
+  const key = normalizeClientName(c.client_name || '');
+  let m = (key && STATE.crmPoints && STATE.crmPoints[key]) || null;
+  if (!m && c.client_vat && STATE.crmPointsByVat) m = STATE.crmPointsByVat[c.client_vat] || null;
+  return m;
+}
+// 時數狀態：CRM 點數優先（60 點 = 1 小時，已耗 = 已購 − 剩餘）；無 CRM 對照 fallback 手動時數帳
 function svcHoursStatus(c) {
-  const used = STATE.svcHours[c.id] || 0;
-  if (!c.purchased_hours || +c.purchased_hours <= 0) return { label: '—', cls: '', used };
-  const ratio = used / +c.purchased_hours;
-  if (ratio >= 1)   return { label: '已超過',   cls: 'b6', used };
-  if (ratio >= 0.8) return { label: '即將超過', cls: 'b4', used };
-  return { label: '正常', cls: 'b2', used };
+  const crm = svcCrmFor(c);
+  let used, purchased, remaining, src;
+  if (crm && crm.purchasedMin > 0 && crm.balanceMin != null) {
+    purchased = crm.purchasedMin / 60;
+    remaining = crm.balanceMin / 60;
+    used = purchased - remaining;
+    src = 'crm';
+  } else {
+    used = STATE.svcHours[c.id] || 0;
+    purchased = c.purchased_hours != null ? +c.purchased_hours : null;
+    remaining = purchased != null ? purchased - used : null;
+    src = 'manual';
+  }
+  if (!purchased || purchased <= 0) return { label: '—', cls: '', used, purchased, remaining, src };
+  const ratio = used / purchased;
+  if (ratio >= 1)   return { label: '已超過',   cls: 'b6', used, purchased, remaining, src };
+  if (ratio >= 0.8) return { label: '即將超過', cls: 'b4', used, purchased, remaining, src };
+  return { label: '正常', cls: 'b2', used, purchased, remaining, src };
+}
+// 合約迄日：案件欄位優先，無則 fallback CRM contract_end_date
+function svcEffectiveContractEnd(c) {
+  if (c.contract_end) return { date: c.contract_end, src: 'case' };
+  const crm = svcCrmFor(c);
+  if (crm && crm.contractEnd) return { date: crm.contractEnd, src: 'crm' };
+  return null;
 }
 function svcContractDays(c) {
-  if (!c.contract_end) return null;
-  return Math.ceil((new Date(c.contract_end).getTime() - Date.now()) / 864e5);
+  const eff = svcEffectiveContractEnd(c);
+  if (!eff) return null;
+  return Math.ceil((new Date(eff.date).getTime() - Date.now()) / 864e5);
 }
 function svcContractCell(c) {
-  const d = svcContractDays(c);
-  if (d == null) return '<span class="text-muted">—</span>';
-  if (d < 0)   return `${c.contract_end} <span class="badge b6">已到期 ${-d} 天</span>`;
-  if (d <= 30) return `${c.contract_end} <span class="badge b6">剩 ${d} 天</span>`;
-  if (d <= 60) return `${c.contract_end} <span class="badge b4">剩 ${d} 天</span>`;
-  if (d <= 90) return `${c.contract_end} <span class="badge bgold">剩 ${d} 天</span>`;
-  return c.contract_end;
+  const eff = svcEffectiveContractEnd(c);
+  if (!eff) return '<span class="text-muted">—</span>';
+  const d = Math.ceil((new Date(eff.date).getTime() - Date.now()) / 864e5);
+  const mark = eff.src === 'crm' ? ' <span class="text-muted" title="取自 CRM 儲值紀錄（案件未填合約迄日）" style="cursor:help;">⚡</span>' : '';
+  if (d < 0)   return `${eff.date}${mark} <span class="badge b6">已到期 ${-d} 天</span>`;
+  if (d <= 30) return `${eff.date}${mark} <span class="badge b6">剩 ${d} 天</span>`;
+  if (d <= 60) return `${eff.date}${mark} <span class="badge b4">剩 ${d} 天</span>`;
+  if (d <= 90) return `${eff.date}${mark} <span class="badge bgold">剩 ${d} 天</span>`;
+  return eff.date + mark;
 }
 
 function setupServiceFilters() {
@@ -2694,7 +2748,7 @@ function renderService() {
       <td>${escapeHtml(c.handling_lawyer || '—')}</td>
       <td>${escapeHtml(c.salesperson || '—')}</td>
       <td>${svcContractCell(c)}</td>
-      <td class="text-right">${hs.used.toFixed(1)} / ${c.purchased_hours != null ? (+c.purchased_hours).toFixed(1) : '—'}</td>
+      <td class="text-right" ${hs.src === 'crm' ? 'title="取自 CRM 儲值點數（60 點 = 1 小時）" style="cursor:help;"' : ''}>${hs.used != null ? hs.used.toFixed(1) : '0'} / ${hs.purchased != null ? hs.purchased.toFixed(1) : '—'}${hs.src === 'crm' ? ' <span class="text-muted">⚡</span>' : ''}</td>
       <td>${hs.label === '—' ? '<span class="text-muted">—</span>' : `<span class="badge ${hs.cls}">${hs.label}</span>`}</td>
       <td>${tags.join(' ') || '<span class="text-muted">—</span>'}</td>
     </tr>`;
@@ -2930,6 +2984,66 @@ async function svcCopyTemplate(id) {
   }
 }
 
+// ---------- CRM 儲值點數對照（Phase 2：advisor_transactions 自動對照） ----------
+function svcCrmSectionHtml(c) {
+  const crm = svcCrmFor(c);
+  if (!crm) {
+    return `<details class="svc-fold">
+      <summary><span>CRM 儲值點數</span><span class="svc-hgroup-prog">無對照</span></summary>
+      <div class="svc-fold-body"><div class="text-muted" style="font-size:0.8rem;">
+        依客戶名稱 / 統編在 CRM 法顧對帳（advisor_transactions）找不到儲值紀錄。<br>
+        北所等用試算表記時數的客戶，請改用下方「時數紀錄」手動輸入。
+      </div></div>
+    </details>`;
+  }
+  const purchased = crm.purchasedMin / 60;
+  const remaining = crm.balanceMin != null ? crm.balanceMin / 60 : null;
+  const used = remaining != null ? purchased - remaining : null;
+  const rows = crm.entries.slice(-6).reverse().map(t => `
+    <tr>
+      <td>${t.record_date}</td>
+      <td class="text-right">${fmtMoney(t.amount)}</td>
+      <td class="text-right">${(+t.point || 0) > 0 ? '+' + ((+t.point) / 60).toFixed(1) + ' hr' : '—'}</td>
+      <td>${escapeHtml(t.payment_method || '—')}</td>
+      <td class="text-muted" style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml((t.notes || '').slice(0, 40))}</td>
+    </tr>`).join('');
+  return `<details class="svc-fold" open>
+    <summary><span>CRM 儲值點數</span>
+      <span class="svc-hgroup-prog">剩 ${remaining != null ? remaining.toFixed(1) : '?'} / 購 ${purchased.toFixed(1)} 小時</span>
+    </summary>
+    <div class="svc-fold-body">
+      <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:0.85rem;margin-bottom:10px;">
+        <span>已購：<strong class="text-gold">${purchased.toFixed(1)} 小時</strong>（${fmtNum(crm.purchasedMin)} 點）</span>
+        <span>已耗：<strong>${used != null ? used.toFixed(1) : '—'} 小時</strong></span>
+        <span>剩餘：<strong class="${remaining != null && purchased > 0 && remaining / purchased < 0.2 ? 'text-red' : 'text-green'}">${remaining != null ? remaining.toFixed(1) : '—'} 小時</strong></span>
+        ${crm.contractEnd ? `<span>CRM 合約迄日：<strong>${crm.contractEnd}</strong></span>` : ''}
+        <span class="text-muted">最近異動 ${crm.lastDate || '—'}</span>
+      </div>
+      <div class="svc-hint">點數單位為分鐘（60 點 = 1 小時），剩餘為 CRM 當前快照。資料每日自 CRM 同步，僅供對照、不可在此編輯。</div>
+      <button class="btn-sm" style="margin-top:10px;" onclick="svcApplyCrm()">⬇ 帶入「合約迄日 / 已購時數」到基本資料</button>
+      <div style="overflow-x:auto;margin-top:10px;">
+        <table style="font-size:0.78rem;">
+          <thead><tr><th>日期</th><th class="text-right">金額</th><th class="text-right">儲值</th><th>方式</th><th>備註</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </details>`;
+}
+
+function svcApplyCrm() {
+  if (!SVC_EDITING) return;
+  const crm = svcCrmFor(SVC_EDITING);
+  if (!crm) return;
+  const endEl = document.getElementById('svc_contract_end');
+  const hrEl = document.getElementById('svc_purchased_hours');
+  if (endEl && crm.contractEnd) endEl.value = crm.contractEnd;
+  if (hrEl && crm.purchasedMin > 0) hrEl.value = (crm.purchasedMin / 60).toFixed(1);
+  const fold = document.getElementById('svcFoldBasic');
+  if (fold) fold.open = true;
+  document.getElementById('svcSaveMsg').textContent = '已帶入，記得按「儲存」';
+}
+
 function svcEventsSkeleton() {
   return `
     <details class="svc-fold">
@@ -3008,7 +3122,7 @@ function openServiceModal(id) {
     </details>
     <div class="svc-section-title">開案交接（依 SOP 四關卡）<span id="svcCheckProg" class="text-muted" style="font-weight:400;"></span></div>
     ${svcHandoverSectionHtml(h)}
-    ${c ? svcEventsSkeleton() : '<div class="text-muted" style="margin-top:14px;font-size:0.8rem;">儲存後即可新增跟追歷程與時數紀錄。</div>'}`;
+    ${c ? svcCrmSectionHtml(c) + svcEventsSkeleton() : '<div class="text-muted" style="margin-top:14px;font-size:0.8rem;">儲存後即可新增跟追歷程、時數紀錄與 CRM 點數對照。</div>'}`;
   svcUpdateCheckProg();
   const basicSum = document.getElementById('svcBasicSummary');
   if (basicSum) basicSum.textContent = c
@@ -3250,6 +3364,7 @@ window.svcUpdateCheckProg = svcUpdateCheckProg;
 window.gotoServiceCreate  = gotoServiceCreate;
 window.svcShowTemplate    = svcShowTemplate;
 window.svcCopyTemplate    = svcCopyTemplate;
+window.svcApplyCrm        = svcApplyCrm;
 
 // ============ START ============
 checkAuth();
