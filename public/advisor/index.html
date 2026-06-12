@@ -250,6 +250,12 @@
     .svc-check:hover { background: var(--bg-hover); }
     .svc-check input { margin-top: 2px; accent-color: var(--gold); cursor: pointer; }
     .svc-check.done { color: var(--text-muted); text-decoration: line-through; }
+    .svc-hgroup { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: var(--bg-main); }
+    .svc-hgroup-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .svc-hgroup-title { font-size: 0.85rem; font-weight: 700; }
+    .svc-hgroup-prog { font-size: 0.75rem; color: var(--text-muted); }
+    .svc-hint { font-size: 0.75rem; color: var(--text-muted); background: var(--bg-row); border-left: 3px solid var(--gold); padding: 6px 10px; border-radius: 4px; margin-top: 10px; line-height: 1.6; }
+    .svc-tpl-out { display: none; width: 100%; margin-top: 8px; padding: 10px; background: var(--bg-row); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.78rem; font-family: inherit; line-height: 1.6; box-sizing: border-box; resize: vertical; }
     .svc-timeline { border-left: 2px solid var(--border); margin-left: 6px; padding-left: 16px; }
     .svc-event { position: relative; padding-bottom: 14px; }
     .svc-event::before { content: ''; position: absolute; left: -21px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
@@ -708,6 +714,7 @@
               <thead><tr>
                 <th>階段</th><th>當事人</th><th>業務</th><th>委任項目</th>
                 <th class="text-right">委任費</th><th class="text-right">交接進度</th>
+                <th>下一步（依 SOP）</th>
                 <th class="text-right">階段停留</th><th>指定律師</th>
               </tr></thead>
               <tbody></tbody>
@@ -2440,22 +2447,87 @@ const HANDOVER_STAGES = ['已簽約','收款確認','交接中','已分案'];
 const ACTIVE_STAGES   = ['服務中','續約評估'];
 const CLOSED_STAGES   = ['已續約','已流失'];
 
-// 開案交接 checklist（依《法顧部門服務SOP》「簽約付款及後續」+「系統填寫開案注意事項」）
-const HANDOVER_ITEMS = [
-  { key: 'contract_signed',  label: '委任契約已簽回（線上簽 / 紙本）' },
-  { key: 'payment_received', label: '款項已收齊（水單 / 末五碼確認）' },
-  { key: 'receipt_stamp',    label: '收據已繕打、印花稅已處理' },
-  { key: 'conflict_check',   label: '利衝已建檔' },
-  { key: 'opposing_entered', label: '對造名稱已鍵入系統（防利衝）' },
-  { key: 'designated_noted', label: '指定律師已於契約註記（無指定亦勾）' },
-  { key: 'line_group',       label: '委後 LINE 已建立（訴訟須全體當事人加入）' },
-  { key: 'materials',        label: '接案前期 LINE / email、事實證據已彙整' },
-  { key: 'cloud_folder',     label: '雲端資料夾已開設' },
-  { key: 'system_case',      label: '系統開案完成（服務項目 / 時數表）' },
-  { key: 'physical_file',    label: '紙本卷 / 印章已處理' },
-  { key: 'group_notified',   label: '開案交接群已通知工讀生' },
-  { key: 'manager_handoff',  label: '已交承辦主管分案' }
+// 開案交接：依《法顧部門服務SOP》拆四關卡（簽約 → 收款 → 交接準備/系統開案 → 分案）
+// 每關卡 = 檢核項（checks，存 boolean）+ 結構化欄位（fields，存字串），全部存在 handover JSONB
+const HANDOVER_GROUPS = [
+  { key: 'sign', stage: '已簽約', title: '① 簽約',
+    checks: [
+      { key: 'contract_signed',  label: '委任契約已簽回（線上簽 / 紙本）' },
+      { key: 'designated_noted', label: '指定律師已於契約註記（無指定亦勾）' },
+      { key: 'conflict_check',   label: '利衝已建檔' },
+      { key: 'opposing_entered', label: '對造名稱已鍵入系統（防利衝）' }
+    ],
+    fields: [
+      { key: 'f_contract_version', label: '契約版本', type: 'select',
+        options: ['事務所版本','顧問律師版本','合署律師版本'] },
+      { key: 'f_sign_method', label: '簽約方式', type: 'select',
+        options: ['線上簽（Dottedsign 點點簽）','紙本','僅電子檔・待補簽'] }
+    ],
+    hint: 'SOP：線上簽用點點簽（簽名 / 印章 / 日期三處標示）；原則郵寄或以契約分享連結提供。有指定律師務必於契約中註記。' },
+  { key: 'pay', stage: '收款確認', title: '② 收款',
+    checks: [
+      { key: 'payment_received', label: '款項已收齊（水單 / 末五碼確認）' },
+      { key: 'payment_reported', label: '款項回報表單已確認入帳' },
+      { key: 'receipt_stamp',    label: '收據已繕打、印花稅已處理' }
+    ],
+    fields: [
+      { key: 'f_payment_method', label: '付款方式（決定印花稅）', type: 'select',
+        options: ['匯款','現金','刷卡','票據（匯票 / 本票 / 支票）','系統儲值'] },
+      { key: 'f_receipt_case', label: '收據案由', type: 'text', placeholder: '如：法律顧問' }
+    ],
+    hint: 'SOP 印花稅：現金 / 匯款 / 刷卡 → 收據須貼印花稅；票據付款 → 免貼，但收據應載明票據名稱及號碼。' },
+  { key: 'handoff', stage: '交接中', title: '③ 交接準備・系統開案',
+    checks: [
+      { key: 'materials',       label: '接案前期 LINE / email、事實證據已彙整' },
+      { key: 'line_group',      label: '委後 LINE 已建立（訴訟須全體當事人加入）' },
+      { key: 'cloud_folder',    label: '雲端資料夾已開設' },
+      { key: 'system_case',     label: '系統開案完成（服務項目 / 時數表）' },
+      { key: 'minutes_filed',   label: '會議記錄已存放系統' },
+      { key: 'recording_filed', label: '會議錄音檔已存放雲端' },
+      { key: 'physical_file',   label: '紙本卷 / 印章已處理' },
+      { key: 'group_notified',  label: '開案交接群已通知工讀生（例稿見下方）' }
+    ],
+    fields: [
+      { key: 'f_consult_date',  label: '諮詢日期', type: 'date' },
+      { key: 'f_consult_lawyer',label: '諮詢律師', type: 'text' },
+      { key: 'f_intake_person', label: '接案人員', type: 'text' },
+      { key: 'f_case_no',       label: '系統案件編號', type: 'text' },
+      { key: 'f_jurisdiction',  label: '案件管轄及事由', type: 'text', placeholder: '如：OO地院' },
+      { key: '_urgent',         label: '特殊緊急情況', type: 'text', placeholder: '無 / 說明' },
+      { key: 'f_court_dates',   label: '已定期間之會議 / 調解 / 庭期', type: 'text', placeholder: '如：法院命文到十日內補正答辯狀' },
+      { key: 'f_deadline',      label: '已知案件時效或屆日', type: 'text', placeholder: '如：上訴屆日' },
+      { key: 'f_contact_time',  label: '建議聯繫時間', type: 'text' },
+      { key: 'f_personality',   label: '當事人個性、情緒', type: 'text' },
+      { key: 'f_referral',      label: '是否為人脈介紹', type: 'text', placeholder: '否 / 介紹人' },
+      { key: 'f_related_cases', label: '相牽連案件（舊案編號 / 法院案號）', type: 'text', placeholder: '無' },
+      { key: 'f_new_or_old',    label: '新客 / 舊客', type: 'select', options: ['新客','舊客'] },
+      { key: 'f_urgency',       label: '急件 / 非急件', type: 'select', options: ['急件','非急件'] },
+      { key: '_cloud',          label: '雲端資料夾連結', type: 'text' },
+      { key: 'f_seal',          label: '印章', type: 'text', placeholder: '有 / 無 / 請OO所刻章' },
+      { key: 'f_paper',         label: '紙本卷（所在與開卷所別）', type: 'text', placeholder: '如：紙本資料在雄所，請雄所協助開卷' },
+      { key: 'f_originals',     label: '正本資料處理（是否複印 / 歸還）', type: 'text' },
+      { key: 'f_paper_items',   label: '紙本資料清單', type: 'text', full: true, placeholder: '如：委任契約書*1、當事人基本資料表*2、介紹人名片*1' },
+      { key: 'f_payment_note',  label: '款項移轉時之狀況', type: 'text', placeholder: '已收齊委任費' }
+    ],
+    templates: [
+      { id: 'sysnote', label: '📋 產生「系統開案注意事項」' },
+      { id: 'report',  label: '📋 產生「開案群組回報」例稿' }
+    ] },
+  { key: 'assign', stage: '已分案', title: '④ 分案',
+    checks: [
+      { key: 'manager_handoff', label: '已交承辦主管分案（例稿見下方）' },
+      { key: 'lawyer_greeted',  label: '承辦律師已向當事人打招呼（有指定律師者以其名義）' },
+      { key: 'branch_notified', label: '轉分所案件已通知該分所工讀生（非轉所亦勾）' }
+    ],
+    fields: [
+      { key: 'f_main_contact', label: '主要聯絡人', type: 'text', placeholder: '當事人本人 / 親友OOO' }
+    ],
+    templates: [
+      { id: 'assign', label: '📋 產生「交接承辦主管分案」例稿' }
+    ] }
 ];
+// 攤平檢核項（進度計算用）
+const HANDOVER_ITEMS = HANDOVER_GROUPS.flatMap(g => g.checks);
 const SVC_EVENT_TYPES = { note:'備註', call:'通話', meeting:'會議', hours:'時數', renewal:'續約', stage_change:'階段' };
 
 function svcStageBadge(stage) {
@@ -2465,6 +2537,23 @@ function svcStageBadge(stage) {
 function svcHandoverProgress(c) {
   const h = c.handover || {};
   return { done: HANDOVER_ITEMS.filter(it => h[it.key]).length, total: HANDOVER_ITEMS.length };
+}
+// 四關卡分解進度（tooltip / modal 標頭用）
+function svcGroupBreakdown(h) {
+  return HANDOVER_GROUPS.map(g => {
+    const done = g.checks.filter(it => h[it.key]).length;
+    return { key: g.key, title: g.title, done, total: g.checks.length };
+  });
+}
+// 下一步：照關卡順序找第一個未勾的檢核項
+function svcNextAction(c) {
+  const h = c.handover || {};
+  for (const g of HANDOVER_GROUPS) {
+    for (const it of g.checks) {
+      if (!h[it.key]) return { group: g.title, label: it.label };
+    }
+  }
+  return null;
 }
 // 階段停留天數：用 updated_at 當 proxy（任何編輯都會重置；Phase 1 夠用）
 function svcDaysInStage(c) {
@@ -2546,17 +2635,24 @@ function renderService() {
   document.querySelector('#tableSvcHandover tbody').innerHTML = ha.map(c => {
     const prog = svcHandoverProgress(c);
     const days = svcDaysInStage(c);
+    const breakdown = svcGroupBreakdown(c.handover || {})
+      .map(b => `${b.title}：${b.done}/${b.total}`).join('　');
+    const next = svcNextAction(c);
+    const nextCell = next
+      ? `<span class="badge bmuted" style="margin-right:4px;">${next.group}</span><span style="font-size:0.78rem;">${escapeHtml(next.label.length > 18 ? next.label.slice(0, 18) + '…' : next.label)}</span>`
+      : '<span class="text-green" style="font-size:0.78rem;">✓ 交接完成</span>';
     return `<tr class="svc-row-click" onclick="openServiceModal('${c.id}')">
       <td>${svcStageBadge(c.stage)}</td>
       <td>${escapeHtml(c.client_name)}</td>
       <td>${escapeHtml(c.salesperson || '—')}</td>
       <td>${escapeHtml(c.case_type || '—')}</td>
       <td class="text-right text-gold">${c.fee_amount != null ? fmtMoney(c.fee_amount) : '—'}</td>
-      <td class="text-right ${prog.done === prog.total ? 'text-green' : ''}">${prog.done} / ${prog.total}</td>
+      <td class="text-right ${prog.done === prog.total ? 'text-green' : ''}" title="${escapeHtml(breakdown)}">${prog.done} / ${prog.total}</td>
+      <td>${nextCell}</td>
       <td class="text-right ${(days || 0) > 3 ? 'text-red' : ''}">${days != null ? days + ' 天' : '—'}</td>
       <td>${escapeHtml(c.designated_lawyer || '—')}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="empty">目前沒有交接中的案件 — 點右上「＋ 新增委後案件」把已簽約案件接進來</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="empty">目前沒有交接中的案件 — 點右上「＋ 新增委後案件」把已簽約案件接進來</td></tr>';
 
   // 表 B：服務中（依合約迄日排序，無迄日排最後）
   const ac = fs.filter(c => ACTIVE_STAGES.includes(c.stage))
@@ -2626,6 +2722,140 @@ function svcApplyPrefill(idxStr) {
   set('svc_note', p.case_summary);
 }
 
+// ---------- 開案交接四關卡 UI ----------
+function svcHFieldHtml(f, h) {
+  const raw = h[f.key] == null ? '' : String(h[f.key]);
+  const val = escapeHtml(raw);
+  const cls = f.full ? 'svc-field full' : 'svc-field';
+  if (f.type === 'select') {
+    return `<div class="${cls}"><label>${f.label}</label>
+      <select id="svc_h_${f.key}" data-hfield="${f.key}">
+        <option value=""${raw === '' ? ' selected' : ''}>—</option>
+        ${f.options.map(o => `<option value="${escapeHtml(o)}"${raw === o ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+      </select></div>`;
+  }
+  return `<div class="${cls}"><label>${f.label}</label>
+    <input id="svc_h_${f.key}" data-hfield="${f.key}" type="${f.type === 'date' ? 'date' : 'text'}"
+           value="${val}" placeholder="${escapeHtml(f.placeholder || '')}"></div>`;
+}
+
+function svcHandoverSectionHtml(h) {
+  return HANDOVER_GROUPS.map(g => `
+    <div class="svc-hgroup" data-hgroup="${g.key}">
+      <div class="svc-hgroup-head">
+        ${svcStageBadge(g.stage)}
+        <span class="svc-hgroup-title">${g.title}</span>
+        <span class="svc-hgroup-prog" data-gprog="${g.key}"></span>
+      </div>
+      <div class="svc-checklist">
+        ${g.checks.map(it => `
+          <label class="svc-check ${h[it.key] ? 'done' : ''}">
+            <input type="checkbox" data-hkey="${it.key}" ${h[it.key] ? 'checked' : ''}
+                   onchange="this.closest('.svc-check').classList.toggle('done', this.checked);svcUpdateCheckProg();">
+            <span>${it.label}</span>
+          </label>`).join('')}
+      </div>
+      ${g.fields && g.fields.length ? `<div class="svc-grid" style="margin-top:10px;">${g.fields.map(f => svcHFieldHtml(f, h)).join('')}</div>` : ''}
+      ${g.hint ? `<div class="svc-hint">${g.hint}</div>` : ''}
+      ${(g.templates || []).map(t => `
+        <div style="margin-top:10px;">
+          <button class="btn-sm" onclick="svcShowTemplate('${t.id}')">${t.label}</button>
+          <textarea class="svc-tpl-out" id="svcTpl_${t.id}" rows="10" readonly onclick="this.select()"></textarea>
+          <button class="btn-sm" id="svcTplCopy_${t.id}" style="display:none;margin-top:6px;" onclick="svcCopyTemplate('${t.id}')">📄 複製</button>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ---------- 例稿產生器（讀 modal 當前輸入值，存檔前也能產生） ----------
+function svcMV(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function svcHV(key) { return svcMV('svc_h_' + key); }
+function svcHChecked(key) {
+  const el = document.querySelector(`#svcModalBody [data-hkey="${key}"]`);
+  return !!(el && el.checked);
+}
+const svcOr = (v, fallback) => v || fallback;
+
+function svcBuildTemplate(id) {
+  const client = svcOr(svcMV('svc_client_name'), 'OOO');
+  if (id === 'report') {
+    // SOP「開案群組回報」例稿（北所案件）
+    const urgency = svcOr(svcHV('f_urgency'), '非急件');
+    return `您們好，當事人${client}已委已付
+▲新客/舊客：${svcOr(svcHV('f_new_or_old'), '新客')}
+▲本件：${urgency}${svcHV('_urgent') ? `（${svcHV('_urgent')}）` : ''}
+▲已知庭期/會議日期及種類：${svcOr(svcHV('f_court_dates'), '無')}
+▲已知時效或屆日：${svcOr(svcHV('f_deadline'), '無')}
+▲其他注意事項：${svcOr(svcMV('svc_note'), '無')}
+▲系統及紙本卷相關：${svcOr(svcHV('f_paper'), '開新卷/系統')}
+▲契約是/否簽回：${svcHChecked('contract_signed') ? '已簽回' : '僅有電子檔'}`;
+  }
+  if (id === 'sysnote') {
+    // SOP「系統填寫開案注意事項」
+    const lineCh = svcMV('svc_line_channel');
+    return `諮詢日期：${svcHV('f_consult_date')}
+諮詢律師：${svcHV('f_consult_lawyer')}
+接案人員：${svcOr(svcHV('f_intake_person'), svcMV('svc_salesperson'))}
+當事人姓名及系統案件編號：${client}${svcHV('f_case_no') ? ' / ' + svcHV('f_case_no') : ''}
+委任項目（案由）：${svcMV('svc_case_type')}
+聯繫管道及名稱：${svcOr(svcHV('f_main_contact'), '當事人本人')}${lineCh ? `（${lineCh}）` : ''}
+案件管轄及事由：${svcOr(svcHV('f_jurisdiction'), '無')}
+特殊緊急情況：${svcOr(svcHV('_urgent'), '無')}
+已定期間之會議、調解或庭期：${svcOr(svcHV('f_court_dates'), '無')}
+已知案件時效或屆日：${svcOr(svcHV('f_deadline'), '無')}
+其他特殊需求：
+　建議聯繫時間：${svcOr(svcHV('f_contact_time'), '—')}
+　當事人個性、情緒：${svcOr(svcHV('f_personality'), '—')}
+　是否為人脈介紹：${svcOr(svcHV('f_referral'), '否')}
+相牽連案件（舊案系統編號或相關法院案號）：${svcOr(svcHV('f_related_cases'), '無')}
+行政事項：
+　雲端資料夾（承辦案件）：${svcOr(svcHV('_cloud'), '—')}
+　會議記錄：${svcHChecked('minutes_filed') ? '有，已存放系統。' : '無'}
+　會議錄音檔：${svcHChecked('recording_filed') ? '有，已存放雲端。' : '無'}
+　印章：${svcOr(svcHV('f_seal'), '無')}
+　紙本卷：${svcOr(svcHV('f_paper'), '—')}
+　紙本資料：${svcOr(svcHV('f_paper_items'), '—')}
+　款項移轉時之狀況：${svcOr(svcHV('f_payment_note'), '已收齊委任費')}
+當事人提供資料（正本是否複印 / 歸還）：${svcOr(svcHV('f_originals'), '—')}
+其他應注意追蹤事項：${svcOr(svcMV('svc_note'), '無')}`;
+  }
+  if (id === 'assign') {
+    // SOP「交接給承辦主管分案」例稿
+    const lawyer = svcOr(svcMV('svc_handling_lawyer'), 'ＯＯ');
+    return `${lawyer}律師好：
+當事人【${client}】委任${svcOr(svcMV('svc_case_type'), '（委任契約書內容）')}，交接事項、當事人目前已提供之資料等，已上傳案件系統，提供相關連結及聯繫方式，再請律師協助分案，謝謝。
+案件系統：${svcOr(svcHV('f_case_no'), '—')}
+雲端連結：${svcOr(svcHV('_cloud'), '—')}
+當事人聯繫方式：手機：${svcOr(svcMV('svc_client_phone'), '—')}
+主要聯絡人：${svcOr(svcHV('f_main_contact'), '當事人本人')}
+LINE@：${svcOr(svcMV('svc_line_channel'), '—')}`;
+  }
+  return '';
+}
+
+function svcShowTemplate(id) {
+  const out = document.getElementById('svcTpl_' + id);
+  if (!out) return;
+  out.value = svcBuildTemplate(id);
+  out.style.display = 'block';
+  out.rows = Math.min(20, out.value.split('\n').length + 1);
+  const copyBtn = document.getElementById('svcTplCopy_' + id);
+  if (copyBtn) copyBtn.style.display = '';
+}
+
+async function svcCopyTemplate(id) {
+  const out = document.getElementById('svcTpl_' + id);
+  if (!out || !out.value) return;
+  const btn = document.getElementById('svcTplCopy_' + id);
+  try {
+    await navigator.clipboard.writeText(out.value);
+    if (btn) { btn.textContent = '✓ 已複製'; setTimeout(() => { btn.textContent = '📄 複製'; }, 1500); }
+  } catch (e) {
+    out.select();
+    document.execCommand('copy');
+    if (btn) { btn.textContent = '✓ 已複製'; setTimeout(() => { btn.textContent = '📄 複製'; }, 1500); }
+  }
+}
+
 function svcEventsSkeleton() {
   return `
     <div class="svc-section-title">跟追歷程</div>
@@ -2690,19 +2920,8 @@ function openServiceModal(id) {
       </div>
       <div class="svc-field full"><label>備註</label><textarea id="svc_note" rows="2">${txt(v.note)}</textarea></div>
     </div>
-    <div class="svc-section-title">開案交接 Checklist（依 SOP）<span id="svcCheckProg" class="text-muted" style="font-weight:400;"></span></div>
-    <div class="svc-checklist">
-      ${HANDOVER_ITEMS.map(it => `
-        <label class="svc-check ${h[it.key] ? 'done' : ''}">
-          <input type="checkbox" data-hkey="${it.key}" ${h[it.key] ? 'checked' : ''}
-                 onchange="this.closest('.svc-check').classList.toggle('done', this.checked);svcUpdateCheckProg();">
-          <span>${it.label}</span>
-        </label>`).join('')}
-    </div>
-    <div class="svc-grid" style="margin-top:10px;">
-      <div class="svc-field"><label>急迫事項 / 已知庭期 / 時效屆日</label><input id="svc_h_urgent" value="${txt(h._urgent)}"></div>
-      <div class="svc-field"><label>雲端資料夾連結</label><input id="svc_h_cloud" value="${txt(h._cloud)}"></div>
-    </div>
+    <div class="svc-section-title">開案交接（依 SOP 四關卡）<span id="svcCheckProg" class="text-muted" style="font-weight:400;"></span></div>
+    ${svcHandoverSectionHtml(h)}
     ${c ? svcEventsSkeleton() : '<div class="text-muted" style="margin-top:14px;font-size:0.8rem;">儲存後即可新增跟追歷程與時數紀錄。</div>'}`;
   svcUpdateCheckProg();
   document.getElementById('svcDeleteBtn').style.display = c ? '' : 'none';
@@ -2722,6 +2941,14 @@ function svcUpdateCheckProg() {
   const boxes = document.querySelectorAll('#svcModalBody [data-hkey]');
   const done = [...boxes].filter(b => b.checked).length;
   el.textContent = `　${done} / ${boxes.length}`;
+  // 各關卡分項進度
+  HANDOVER_GROUPS.forEach(g => {
+    const span = document.querySelector(`[data-gprog="${g.key}"]`);
+    if (!span) return;
+    const gDone = g.checks.filter(it => svcHChecked(it.key)).length;
+    span.textContent = `${gDone} / ${g.checks.length}`;
+    span.style.color = gDone === g.checks.length ? 'var(--green)' : '';
+  });
 }
 
 async function loadServiceDetail(caseId) {
@@ -2782,8 +3009,7 @@ async function saveServiceCase() {
   if (!clientName) { alert('「當事人 / 公司」必填'); return; }
   const handover = {};
   document.querySelectorAll('#svcModalBody [data-hkey]').forEach(cb => { handover[cb.dataset.hkey] = cb.checked; });
-  handover._urgent = get('svc_h_urgent');
-  handover._cloud  = get('svc_h_cloud');
+  document.querySelectorAll('#svcModalBody [data-hfield]').forEach(inp => { handover[inp.dataset.hfield] = inp.value.trim(); });
   const stage = document.getElementById('svcStageSelect').value;
   const payload = {
     client_name: clientName,
@@ -2923,6 +3149,8 @@ window.addServiceHour     = addServiceHour;
 window.svcApplyPrefill    = svcApplyPrefill;
 window.svcUpdateCheckProg = svcUpdateCheckProg;
 window.gotoServiceCreate  = gotoServiceCreate;
+window.svcShowTemplate    = svcShowTemplate;
+window.svcCopyTemplate    = svcCopyTemplate;
 
 // ============ START ============
 checkAuth();
