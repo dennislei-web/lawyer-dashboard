@@ -696,6 +696,18 @@
           <button class="btn-gold" style="margin-left:auto;padding:6px 16px;" onclick="openServiceModal(null)">＋ 新增委後案件</button>
         </div>
 
+        <!-- 常用連結（取自《法顧部門服務SOP》） -->
+        <div class="sync-info" style="gap:8px;">
+          <span class="text-muted" style="font-size:0.75rem;">常用連結：</span>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://docs.google.com/spreadsheets/d/1GGOw3nd-XPoTccvlcNaoqF5kOaI3G4jmrqvMmZ6CSwM/edit">📊 法顧成案清單＋輪值表</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://docs.google.com/spreadsheets/d/1iASaJPwN97_E7bLVbSr4yEjKYnoylWUEAVbG99YPyVg/edit">✅ 每日待辦</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://docs.google.com/spreadsheets/d/1unsiWUAFVcK1jLtMLrOp-u4vLkXn4UO7LwYoU0jujco/edit">📜 法顧證書製作</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/1-d2NefnINxbqalk05C3vR6-ffcG2JYTF">📁 法顧部門雲端</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.dottedsign.com/zh-tw/tasks">✍️ 點點簽 Dottedsign</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://worldwideunionpsyc.wixsite.com/wwupc">🧠 心理師轉介</a>
+          <a class="btn-sm" style="text-decoration:none;" target="_blank" rel="noopener" href="https://docs.google.com/document/d/12mcSBWDUezvZSqtLHj93SgOlEOdfmYEz91exnzskwSI/edit">📖 SOP 原文</a>
+        </div>
+
         <div class="kpi-row k5">
           <div class="kpi-card gold"><div class="kpi-label">服務中客戶</div><div class="kpi-value gold" id="kpiSvcActive">—</div><div class="kpi-sub">含續約評估</div></div>
           <div class="kpi-card orange"><div class="kpi-label">交接管線</div><div class="kpi-value orange" id="kpiSvcHandover">—</div><div class="kpi-sub" id="kpiSvcHandoverSub">—</div></div>
@@ -2463,7 +2475,12 @@ const HANDOVER_GROUPS = [
       { key: 'f_sign_method', label: '簽約方式', type: 'select',
         options: ['線上簽（Dottedsign 點點簽）','紙本','僅電子檔・待補簽'] }
     ],
-    hint: 'SOP：線上簽用點點簽（簽名 / 印章 / 日期三處標示）；原則郵寄或以契約分享連結提供。有指定律師務必於契約中註記。' },
+    hint: 'SOP 點點簽操作：右上＋號 → 邀請他人簽署 → 拖入契約檔 → 輸入客戶姓名與 Email → 放置簽名（刻印章＋頁尾簽名處）與日期（最末處）→ 下一步送出、副本給自己。原則郵寄、或契約右上角三點分享連結。有指定律師務必於契約中註記。',
+    templates: [
+      { id: 'dotted_notify', label: '📋 點點簽「通知信」例稿' },
+      { id: 'sent_notice',   label: '📋 已傳送委任契約・通知當事人' },
+      { id: 'sign_guide',    label: '📋 線上簽署教學' }
+    ] },
   { key: 'pay', stage: '收款確認', title: '② 收款',
     checks: [
       { key: 'payment_received', label: '款項已收齊（水單 / 末五碼確認）' },
@@ -2473,9 +2490,13 @@ const HANDOVER_GROUPS = [
     fields: [
       { key: 'f_payment_method', label: '付款方式（決定印花稅）', type: 'select',
         options: ['匯款','現金','刷卡','票據（匯票 / 本票 / 支票）','系統儲值'] },
-      { key: 'f_receipt_case', label: '收據案由', type: 'text', placeholder: '如：法律顧問' }
+      { key: 'f_receipt_case', label: '收據案由', type: 'text', placeholder: '如：法律顧問' },
+      { key: 'f_discount', label: '折抵諮詢費（元）', type: 'text', placeholder: '如：3000（無則留空）' }
     ],
-    hint: 'SOP 印花稅：現金 / 匯款 / 刷卡 → 收據須貼印花稅；票據付款 → 免貼，但收據應載明票據名稱及號碼。' },
+    hint: 'SOP 印花稅：現金 / 匯款 / 刷卡 → 收據須貼印花稅；票據付款 → 免貼，但收據應載明票據名稱及號碼。',
+    templates: [
+      { id: 'payment_msg', label: '📋 收款通知（玉山匯款資訊）例稿' }
+    ] },
   { key: 'handoff', stage: '交接中', title: '③ 交接準備・系統開案',
     checks: [
       { key: 'materials',       label: '接案前期 LINE / email、事實證據已彙整' },
@@ -2510,8 +2531,9 @@ const HANDOVER_GROUPS = [
       { key: 'f_payment_note',  label: '款項移轉時之狀況', type: 'text', placeholder: '已收齊委任費' }
     ],
     templates: [
-      { id: 'sysnote', label: '📋 產生「系統開案注意事項」' },
-      { id: 'report',  label: '📋 產生「開案群組回報」例稿' }
+      { id: 'sysnote',     label: '📋 產生「系統開案注意事項」' },
+      { id: 'report',      label: '📋 產生「開案群組回報」例稿' },
+      { id: 'line_invite', label: '📋 加入委後 LINE@ 罐頭訊息' }
     ] },
   { key: 'assign', stage: '已分案', title: '④ 分案',
     checks: [
@@ -2777,6 +2799,52 @@ const svcOr = (v, fallback) => v || fallback;
 
 function svcBuildTemplate(id) {
   const client = svcOr(svcMV('svc_client_name'), 'OOO');
+  if (id === 'dotted_notify') {
+    // SOP：點點簽內「通知信」填寫處例稿
+    return `您好，
+1.再麻煩您協助簽署標示（共3處）所示部分，謝謝。
+2.全部簽署完畢、按完「下一步」後，系統會自動回傳契約給我們。
+3.若對於契約有任何疑問，我們都可以再電話討論/說明條款內容。`;
+  }
+  if (id === 'sent_notice') {
+    // SOP：已傳送委任契約、通知當事人
+    return `您好，剛才已經寄發線上簽約內容，再麻煩您有空時，協助過目委任契約及於標示處簽署，非常謝謝您。`;
+  }
+  if (id === 'sign_guide') {
+    // SOP：簽署教學
+    return `線上簽署流程如下：
+
+1.登入email信箱，點選連結，確認後線上簽署，並點選「完成」。
+
+2.簽署好的契約就會自動回傳給我們，並備份到您的信箱。謝謝您。`;
+  }
+  if (id === 'payment_msg') {
+    // SOP：收款例稿（喆律・玉山匯款資訊）
+    const fee = svcMV('svc_fee_amount');
+    const feeStr = fee ? Number(fee).toLocaleString('zh-TW') : 'OOO';
+    const disc = svcHV('f_discount');
+    const discLine = disc ? `，已幫您折抵諮詢費${Number(disc) ? Number(disc).toLocaleString('zh-TW') : disc}元` : '';
+    return `服務費用為${feeStr}元${discLine}。
+
+以下是匯款資訊，再麻煩您幫忙轉帳，謝謝。
+
+費用: $${feeStr}
+
+銀行: 玉山銀行(808)中崙分行
+
+戶名: 喆律法律事務所
+
+帳號: 0912-940-020962
+
+轉帳後請提供您的匯款水單或帳號末五碼，以利確認。`;
+  }
+  if (id === 'line_invite') {
+    // SOP：加入委後（法顧委後）罐頭訊息
+    const lineCh = svcOr(svcMV('svc_line_channel'), '【法顧 LINE@ 連結】');
+    return `您好，未來這個預約的帳號，以後不會再使用，麻煩您加入諮詢後的當事人專屬Line@（後續相關問題我們會在新的這個帳號回覆您），可直接按這個網址加入
+【法顧】${lineCh}
+麻煩您加入後，在新的帳號幫我們丟一個訊息、告知您的全名，系統才會顯示您是哪位當事人。感謝您的配合～如若造成不便，敬請見諒！`;
+  }
   if (id === 'report') {
     // SOP「開案群組回報」例稿（北所案件）
     const urgency = svcOr(svcHV('f_urgency'), '非急件');
