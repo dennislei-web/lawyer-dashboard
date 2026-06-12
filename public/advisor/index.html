@@ -435,6 +435,7 @@
       <button class="tab-btn active" data-tab="overview">總覽</button>
       <button class="tab-btn" data-tab="pending">跟進中案件</button>
       <button class="tab-btn" data-tab="service">委後服務</button>
+      <button class="tab-btn" data-tab="monthly">每月例行</button>
       <button class="tab-btn" data-tab="people">業務 / 律師</button>
       <button class="tab-btn" data-tab="clients">客戶 360</button>
     </div>
@@ -767,6 +768,77 @@
         </div>
       </div>
 
+      <!-- ===== TAB: 每月例行（法顧行政 SOP 月結 + 服務品質追蹤） ===== -->
+      <div class="page" id="page-monthly">
+        <div class="kpi-row">
+          <div class="kpi-card gold"><div class="kpi-label" id="kpiMonClosedLabel">上月成案</div><div class="kpi-value gold" id="kpiMonClosed">—</div><div class="kpi-sub" id="kpiMonClosedSub">—</div></div>
+          <div class="kpi-card blue"><div class="kpi-label">本月報告進度</div><div class="kpi-value blue" id="kpiMonReport">—</div><div class="kpi-sub">服務中客戶已寄 / 應寄</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">超過 14 天無互動</div><div class="kpi-value orange" id="kpiMonStale">—</div><div class="kpi-sub">服務中客戶（依跟追歷程）</div></div>
+          <div class="kpi-card red"><div class="kpi-label">時數預警</div><div class="kpi-value red" id="kpiMonHours">—</div><div class="kpi-sub">即將超過 / 即將用罄 / 已超過</div></div>
+        </div>
+
+        <div class="table-card" style="padding:14px 20px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span class="table-title">📋 雙週會議摘要</span>
+            <span class="text-muted" style="font-size:0.78rem;">SOP：黃律師雙週法顧會議 — 服務項目、時數消耗、客戶特殊狀況</span>
+            <button class="btn-sm" style="margin-left:auto;" onclick="monShowBrief()">產生摘要</button>
+            <button class="btn-sm" id="monBriefCopy" style="display:none;" onclick="monCopyBrief()">📄 複製</button>
+          </div>
+          <textarea class="svc-tpl-out" id="monBriefOut" rows="14" readonly onclick="this.select()"></textarea>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">上月業績歸戶（業務人別）</div>
+            <div class="table-actions">
+              <select class="filter-select" id="monMonthSel" onchange="renderMonthly()"></select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableMonSales">
+              <thead><tr>
+                <th>業務</th><th class="text-right">成案數</th><th class="text-right">總付款金額</th><th class="text-right">平均單筆</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">每月報告 / 時數表 勾稽</div>
+            <div class="table-actions">
+              <label style="display:flex;gap:6px;align-items:center;font-size:0.78rem;color:var(--text-muted);cursor:pointer;">
+                <input type="checkbox" id="monReportTagOnly" onchange="renderMonthly()" style="accent-color:var(--gold);">只看「每月報告」標籤客戶
+              </label>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableMonReport">
+              <thead><tr>
+                <th>客戶</th><th>承辦律師</th><th>業務</th><th>時數狀態</th><th>最近一次報告</th><th>本月</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">互動健康（回覆 SLA）</div>
+            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">依跟追歷程最近一筆排序・橘 &gt; 14 天・紅 &gt; 30 天</span></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableMonSla">
+              <thead><tr>
+                <th>客戶</th><th>業務</th><th>承辦律師</th><th class="text-right">距上次互動</th><th>最近互動</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== TAB: 業務 / 律師 ===== -->
       <div class="page" id="page-people">
         <div class="filter-bar">
@@ -1050,7 +1122,7 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, pn, ps, cm, cc, log, dep, svc, hrs] = await Promise.all([
+    const [cs, pn, ps, cm, cc, log, dep, svc, hrs, evs] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
@@ -1059,7 +1131,8 @@ async function init() {
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1),
       sb.from('advisor_transactions').select('record_date,amount,client_name,client_vat,is_void,point,total_point,contract_end_date,payment_method,notes').order('record_date'),
       sb.from('advisor_service_cases').select('*').order('created_at', { ascending: false }),
-      sb.from('advisor_hour_entries').select('case_id,hours,entry_kind')
+      sb.from('advisor_hour_entries').select('case_id,hours,entry_kind'),
+      sb.from('advisor_case_events').select('case_id,event_type,content,created_at')
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
@@ -1097,6 +1170,7 @@ async function init() {
       if (t.client_vat) STATE.crmPointsByVat[t.client_vat] = rec;
     });
     STATE.service = svc.data || [];
+    STATE.svcEvents = evs.data || [];
     STATE.svcHours = {};
     (hrs.data || []).forEach(x => {
       if (x.entry_kind === 'work') STATE.svcHours[x.case_id] = (STATE.svcHours[x.case_id] || 0) + (+x.hours || 0);
@@ -1300,6 +1374,7 @@ function renderAll() {
   renderOverview();
   renderPending();
   renderService();
+  renderMonthly();
   renderPeople();
   renderClients();
 }
@@ -2577,7 +2652,7 @@ const HANDOVER_GROUPS = [
 ];
 // 攤平檢核項（進度計算用）
 const HANDOVER_ITEMS = HANDOVER_GROUPS.flatMap(g => g.checks);
-const SVC_EVENT_TYPES = { note:'備註', call:'通話', meeting:'會議', hours:'時數', renewal:'續約', stage_change:'階段' };
+const SVC_EVENT_TYPES = { note:'備註', call:'通話', meeting:'會議', hours:'時數', renewal:'續約', stage_change:'階段', monthly_report:'每月報告' };
 
 function svcStageBadge(stage) {
   const cls = SERVICE_STAGE_CLS[stage] || 'bmuted';
@@ -2706,7 +2781,7 @@ function renderService() {
   const active = all.filter(c => ACTIVE_STAGES.includes(c.stage));
   const handover = all.filter(c => HANDOVER_STAGES.includes(c.stage));
   const handoverStuck = handover.filter(c => (svcDaysInStage(c) || 0) > 3);
-  const hourWarn = active.filter(c => ['即將超過','已超過'].includes(svcHoursStatus(c).label));
+  const hourWarn = active.filter(c => ['即將超過','已超過','即將用罄'].includes(svcHoursStatus(c).label));
   const expiring = active.filter(c => { const d = svcContractDays(c); return d != null && d >= 0 && d <= 60; });
   const renewed = all.filter(c => c.stage === '已續約').length;
   const lost = all.filter(c => c.stage === '已流失').length;
@@ -3274,10 +3349,11 @@ async function saveServiceCase() {
       SVC_EDITING = data;
       document.getElementById('svcModalTitle').textContent = data.client_name;
       if (oldStage !== stage) {
-        await sb.from('advisor_case_events').insert({
+        const { data: evRow } = await sb.from('advisor_case_events').insert({
           case_id: data.id, author_id: STATE.me?.id || null, author_name: STATE.me?.name || null,
           event_type: 'stage_change', content: `階段變更：${oldStage} → ${stage}`
-        });
+        }).select().single();
+        if (evRow) STATE.svcEvents.push(evRow);
         loadServiceDetail(data.id);
       }
       document.getElementById('svcSaveMsg').textContent = '✓ 已儲存';
@@ -3329,8 +3405,10 @@ async function addServiceEvent() {
     }).select().single();
     if (error) throw error;
     SVC_DETAIL.events.unshift(data);
+    STATE.svcEvents.push(data);
     input.value = '';
     renderServiceTimeline();
+    renderMonthly();
   } catch (e) {
     alert('新增失敗：' + (e.message || e));
   }
@@ -3363,6 +3441,188 @@ async function addServiceHour() {
   }
 }
 
+// ============ TAB: 每月例行（Phase 3：行政 SOP 月結 + 服務品質） ============
+const MON_INTERACTION_TYPES = ['note','call','meeting','renewal','monthly_report','hours'];
+
+function monEventMaps() {
+  const lastEvent = {};        // case_id → 最近一筆互動事件（排除 stage_change）
+  const lastReport = {};       // case_id → 最近一筆 monthly_report
+  const reportThisMonth = {};  // case_id → 本月已寄
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  (STATE.svcEvents || []).forEach(e => {
+    if (MON_INTERACTION_TYPES.includes(e.event_type)) {
+      if (!lastEvent[e.case_id] || e.created_at > lastEvent[e.case_id].created_at) lastEvent[e.case_id] = e;
+    }
+    if (e.event_type === 'monthly_report') {
+      if (!lastReport[e.case_id] || e.created_at > lastReport[e.case_id].created_at) lastReport[e.case_id] = e;
+      if ((e.created_at || '').slice(0, 7) === thisMonth) reportThisMonth[e.case_id] = true;
+    }
+  });
+  return { lastEvent, lastReport, reportThisMonth };
+}
+
+function monDaysSince(iso) {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 864e5);
+}
+
+function renderMonthly() {
+  if (!document.getElementById('page-monthly')) return;
+  // 月份選擇器（近 6 個月，預設上月）
+  const sel = document.getElementById('monMonthSel');
+  if (!sel.options.length) {
+    const now = new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      sel.insertAdjacentHTML('beforeend', `<option value="${key}">${d.getFullYear()} 年 ${d.getMonth() + 1} 月</option>`);
+    }
+  }
+  const selMonth = sel.value;
+
+  // ── 區塊 A：上月業績歸戶（行政 SOP：已成案歸上月 + 金額核算 + 業務人別） ──
+  const monthCases = STATE.cases.filter(c => c.paid_at && c.paid_at.slice(0, 7) === selMonth);
+  const bySales = {};
+  monthCases.forEach(c => {
+    const s = c.salesperson || '未填';
+    if (!bySales[s]) bySales[s] = { count: 0, amount: 0 };
+    bySales[s].count++; bySales[s].amount += (+c.amount_paid || 0);
+  });
+  const salesArr = Object.entries(bySales).map(([k, v]) => ({ name: k, ...v })).sort((a, b) => b.amount - a.amount);
+  const totalAmount = monthCases.reduce((s, c) => s + (+c.amount_paid || 0), 0);
+  document.querySelector('#tableMonSales tbody').innerHTML = salesArr.map(s => `
+    <tr><td>${escapeHtml(s.name)}</td>
+      <td class="text-right">${fmtNum(s.count)}</td>
+      <td class="text-right text-gold">${fmtMoney(s.amount)}</td>
+      <td class="text-right">${fmtMoneyShort(s.amount / (s.count || 1))}</td>
+    </tr>`).join('') +
+    (monthCases.length ? `<tr style="font-weight:700;"><td>合計</td><td class="text-right">${fmtNum(monthCases.length)}</td><td class="text-right text-gold">${fmtMoney(totalAmount)}</td><td class="text-right">${fmtMoneyShort(totalAmount / (monthCases.length || 1))}</td></tr>` : '') ||
+    '<tr><td colspan="4" class="empty">該月份無成案</td></tr>';
+
+  const mLabel = `${+selMonth.slice(5, 7)} 月成案`;
+  document.getElementById('kpiMonClosedLabel').textContent = mLabel;
+  document.getElementById('kpiMonClosed').textContent = fmtNum(monthCases.length);
+  document.getElementById('kpiMonClosedSub').textContent = `總額 ${fmtMoneyShort(totalAmount)}`;
+
+  // ── 區塊 B：每月報告勾稽 + 區塊 C：互動健康 ──
+  const { lastEvent, lastReport, reportThisMonth } = monEventMaps();
+  const tagOnly = document.getElementById('monReportTagOnly').checked;
+  const active = STATE.service.filter(c => ACTIVE_STAGES.includes(c.stage));
+  const targets = tagOnly ? active.filter(c => c.monthly_report) : active;
+
+  const doneCount = targets.filter(c => reportThisMonth[c.id]).length;
+  document.getElementById('kpiMonReport').textContent = `${fmtNum(doneCount)} / ${fmtNum(targets.length)}`;
+
+  document.querySelector('#tableMonReport tbody').innerHTML = targets
+    .slice().sort((a, b) => (reportThisMonth[a.id] ? 1 : 0) - (reportThisMonth[b.id] ? 1 : 0) || a.client_name.localeCompare(b.client_name, 'zh-Hant'))
+    .map(c => {
+      const hs = svcHoursStatus(c);
+      const lr = lastReport[c.id];
+      const done = reportThisMonth[c.id];
+      return `<tr>
+        <td class="svc-row-click" onclick="openServiceModal('${c.id}')">${escapeHtml(c.client_name)}${c.monthly_report ? ' <span class="badge b5">每月報告</span>' : ''}</td>
+        <td>${escapeHtml(c.handling_lawyer || '—')}</td>
+        <td>${escapeHtml(c.salesperson || '—')}</td>
+        <td>${hs.label === '—' ? '<span class="text-muted">—</span>' : `<span class="badge ${hs.cls}">${hs.label}</span>`}</td>
+        <td class="text-muted" style="font-size:0.78rem;">${lr ? new Date(lr.created_at).toLocaleDateString('zh-TW') : '從未'}</td>
+        <td>${done
+          ? '<span class="text-green">✓ 已寄</span>'
+          : `<button class="btn-sm" onclick="monMarkReport('${c.id}')">標記已寄</button>`}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">無服務中客戶</td></tr>';
+
+  // 互動健康：從未互動排最前、再依天數遞減
+  const slaRows = active.map(c => {
+    const ev = lastEvent[c.id];
+    return { c, ev, days: ev ? monDaysSince(ev.created_at) : null };
+  }).sort((a, b) => (b.days == null ? 1e9 : b.days) - (a.days == null ? 1e9 : a.days));
+  const staleCount = slaRows.filter(r => r.days == null || r.days > 14).length;
+  document.getElementById('kpiMonStale').textContent = fmtNum(staleCount);
+  const hourWarnCount = active.filter(c => ['即將超過','已超過','即將用罄'].includes(svcHoursStatus(c).label)).length;
+  document.getElementById('kpiMonHours').textContent = fmtNum(hourWarnCount);
+
+  document.querySelector('#tableMonSla tbody').innerHTML = slaRows.slice(0, 200).map(({ c, ev, days }) => {
+    return `<tr>
+      <td class="svc-row-click" onclick="openServiceModal('${c.id}')">${escapeHtml(c.client_name)}</td>
+      <td>${escapeHtml(c.salesperson || '—')}</td>
+      <td>${escapeHtml(c.handling_lawyer || '—')}</td>
+      <td class="text-right ${days == null || days > 30 ? 'text-red' : (days > 14 ? 'text-gold' : 'text-green')}">${days == null ? '尚無紀錄' : days + ' 天'}</td>
+      <td class="text-muted" style="font-size:0.78rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ev ? `${SVC_EVENT_TYPES[ev.event_type] || ev.event_type}・${escapeHtml((ev.content || '').replace(/\s+/g, ' ').slice(0, 50))}` : '建議透過案件詳情補上跟追紀錄'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty">無服務中客戶</td></tr>';
+}
+
+async function monMarkReport(caseId) {
+  const now = new Date();
+  const content = `已寄送 ${now.getFullYear()} 年 ${now.getMonth() + 1} 月時數表 / 每月報告`;
+  try {
+    const { data, error } = await sb.from('advisor_case_events').insert({
+      case_id: caseId, author_id: STATE.me?.id || null, author_name: STATE.me?.name || null,
+      event_type: 'monthly_report', content
+    }).select().single();
+    if (error) throw error;
+    STATE.svcEvents.push(data);
+    renderMonthly();
+  } catch (e) {
+    alert('標記失敗：' + (e.message || e));
+  }
+}
+
+// 雙週會議摘要（SOP：黃律師雙週法顧會議 — 服務項目、時數消耗、客戶特殊狀況）
+function monBuildBrief() {
+  const active = STATE.service.filter(c => ACTIVE_STAGES.includes(c.stage));
+  const { lastEvent, reportThisMonth } = monEventMaps();
+  const fmtHs = c => {
+    const hs = svcHoursStatus(c);
+    return hs.remaining != null ? `剩 ${hs.remaining.toFixed(1)} 小時（${hs.label}）` : hs.label;
+  };
+  const warn = active.filter(c => ['即將超過','已超過','即將用罄'].includes(svcHoursStatus(c).label));
+  const expiring = active.filter(c => { const d = svcContractDays(c); return d != null && d <= 60; })
+    .sort((a, b) => svcContractDays(a) - svcContractDays(b));
+  const switching = active.filter(c => c.switch_lawyer);
+  const tagged = active.filter(c => c.monthly_report);
+  const reportTargets = tagged.length ? tagged : active;
+  const unreported = reportTargets.filter(c => !reportThisMonth[c.id]);
+  const stale = active.map(c => ({ c, days: lastEvent[c.id] ? monDaysSince(lastEvent[c.id].created_at) : null }))
+    .filter(x => x.days != null && x.days > 30).sort((a, b) => b.days - a.days);
+  const li = (arr, fn, max) => arr.slice(0, max || 15).map(x => '　- ' + fn(x)).join('\n') + (arr.length > (max || 15) ? `\n　…共 ${arr.length} 家` : '');
+  const today = new Date().toLocaleDateString('zh-TW');
+  return `法顧雙週會議摘要（${today} 自動產生）
+
+■ 時數預警：${warn.length} 家
+${warn.length ? li(warn, c => `${c.client_name}（${c.handling_lawyer || '未填律師'}）：${fmtHs(c)}`) : '　- 無'}
+
+■ 60 天內合約到期 / 已到期：${expiring.length} 家
+${expiring.length ? li(expiring, c => { const d = svcContractDays(c); const eff = svcEffectiveContractEnd(c); return `${c.client_name}：${eff ? eff.date : '?'}（${d < 0 ? '已到期 ' + (-d) + ' 天' : '剩 ' + d + ' 天'}）`; }) : '　- 無'}
+
+■ 「換律師」標籤客戶：${switching.length} 家
+${switching.length ? li(switching, c => `${c.client_name}（現任：${c.handling_lawyer || '未填'}）`) : '　- 無'}
+
+■ 本月尚未寄送時數表 / 每月報告：${unreported.length} / ${reportTargets.length} 家${tagged.length ? '（每月報告標籤客戶）' : ''}
+${unreported.length ? li(unreported, c => `${c.client_name}（${c.salesperson || '未填業務'}）`, 20) : '　- 已全數寄送'}
+
+■ 超過 30 天無互動紀錄：${stale.length} 家
+${stale.length ? li(stale, x => `${x.c.client_name}：${x.days} 天`, 10) : '　- 無'}`;
+}
+
+function monShowBrief() {
+  const out = document.getElementById('monBriefOut');
+  out.value = monBuildBrief();
+  out.style.display = 'block';
+  out.rows = Math.min(28, out.value.split('\n').length + 1);
+  document.getElementById('monBriefCopy').style.display = '';
+}
+
+async function monCopyBrief() {
+  const out = document.getElementById('monBriefOut');
+  if (!out.value) return;
+  const btn = document.getElementById('monBriefCopy');
+  try { await navigator.clipboard.writeText(out.value); }
+  catch (e) { out.select(); document.execCommand('copy'); }
+  btn.textContent = '✓ 已複製';
+  setTimeout(() => { btn.textContent = '📄 複製'; }, 1500);
+}
+
 // 跟進中案件 →「轉入委後」捷徑：切到委後服務 tab 並開新增 modal
 function gotoServiceCreate() {
   document.querySelector('.tab-btn[data-tab="service"]').click();
@@ -3381,6 +3641,10 @@ window.gotoServiceCreate  = gotoServiceCreate;
 window.svcShowTemplate    = svcShowTemplate;
 window.svcCopyTemplate    = svcCopyTemplate;
 window.svcApplyCrm        = svcApplyCrm;
+window.renderMonthly      = renderMonthly;
+window.monMarkReport      = monMarkReport;
+window.monShowBrief       = monShowBrief;
+window.monCopyBrief       = monCopyBrief;
 
 // ============ START ============
 checkAuth();
