@@ -3091,7 +3091,7 @@ function openServiceModal(id) {
   const txt = x => escapeHtml(x == null ? '' : x);
   document.getElementById('svcModalBody').innerHTML = `
     ${c ? '' : `<div class="svc-grid" style="margin-bottom:10px;">${svcPrefillOptions()}</div>`}
-    <details class="svc-fold" id="svcFoldBasic" ${c ? '' : 'open'}>
+    <details class="svc-fold" id="svcFoldBasic">
       <summary><span>基本資料</span><span class="svc-hgroup-prog" id="svcBasicSummary"></span></summary>
       <div class="svc-fold-body">
     <div class="svc-grid">
