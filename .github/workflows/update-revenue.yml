@@ -57,3 +57,10 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CRM_USERNAME: ${{ secrets.CRM_USERNAME }}
           CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
+
+      - name: 法顧委後案件保險網 → advisor_service_cases
+        # CRM 新法顧儲值客戶自動建案 + 既有案件空欄位回填（只填 NULL，不蓋使用者編輯）
+        run: python scripts/sync_advisor_service_cases.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

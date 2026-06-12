@@ -2619,25 +2619,36 @@ function svcCrmFor(c) {
   return m;
 }
 // 時數狀態：CRM 點數優先（60 點 = 1 小時，已耗 = 已購 − 剩餘）；無 CRM 對照 fallback 手動時數帳
+// 注意：CRM 爬蟲只涵蓋近期儲值，歷史儲值可能沒抓到 → Σpoint 低估、已耗會算成負數，
+//       此時「剩餘」（total_point 快照）仍可信，改以剩餘為判斷基準
 function svcHoursStatus(c) {
   const crm = svcCrmFor(c);
-  let used, purchased, remaining, src;
-  if (crm && crm.purchasedMin > 0 && crm.balanceMin != null) {
-    purchased = crm.purchasedMin / 60;
+  let used, purchased, remaining, src, partial = false;
+  if (crm && crm.balanceMin != null) {
     remaining = crm.balanceMin / 60;
-    used = purchased - remaining;
+    purchased = crm.purchasedMin > 0 ? crm.purchasedMin / 60 : null;
+    if (purchased != null && purchased >= remaining) {
+      used = purchased - remaining;
+    } else {
+      used = null; purchased = null; partial = true;  // 歷史儲值未涵蓋，已購不可信
+    }
     src = 'crm';
-  } else {
-    used = STATE.svcHours[c.id] || 0;
-    purchased = c.purchased_hours != null ? +c.purchased_hours : null;
-    remaining = purchased != null ? purchased - used : null;
-    src = 'manual';
+    let label, cls;
+    if (remaining <= 0)                                        { label = '已超過';   cls = 'b6'; }
+    else if (purchased && used / purchased >= 0.8)             { label = '即將超過'; cls = 'b4'; }
+    else if (remaining <= 3)                                   { label = '即將用罄'; cls = 'b4'; }
+    else                                                       { label = '正常';     cls = 'b2'; }
+    return { label, cls, used, purchased, remaining, src, partial };
   }
-  if (!purchased || purchased <= 0) return { label: '—', cls: '', used, purchased, remaining, src };
+  used = STATE.svcHours[c.id] || 0;
+  purchased = c.purchased_hours != null ? +c.purchased_hours : null;
+  remaining = purchased != null ? purchased - used : null;
+  src = 'manual';
+  if (!purchased || purchased <= 0) return { label: '—', cls: '', used, purchased, remaining, src, partial };
   const ratio = used / purchased;
-  if (ratio >= 1)   return { label: '已超過',   cls: 'b6', used, purchased, remaining, src };
-  if (ratio >= 0.8) return { label: '即將超過', cls: 'b4', used, purchased, remaining, src };
-  return { label: '正常', cls: 'b2', used, purchased, remaining, src };
+  if (ratio >= 1)   return { label: '已超過',   cls: 'b6', used, purchased, remaining, src, partial };
+  if (ratio >= 0.8) return { label: '即將超過', cls: 'b4', used, purchased, remaining, src, partial };
+  return { label: '正常', cls: 'b2', used, purchased, remaining, src, partial };
 }
 // 合約迄日：案件欄位優先，無則 fallback CRM contract_end_date
 function svcEffectiveContractEnd(c) {
@@ -2748,7 +2759,11 @@ function renderService() {
       <td>${escapeHtml(c.handling_lawyer || '—')}</td>
       <td>${escapeHtml(c.salesperson || '—')}</td>
       <td>${svcContractCell(c)}</td>
-      <td class="text-right" ${hs.src === 'crm' ? 'title="取自 CRM 儲值點數（60 點 = 1 小時）" style="cursor:help;"' : ''}>${hs.used != null ? hs.used.toFixed(1) : '0'} / ${hs.purchased != null ? hs.purchased.toFixed(1) : '—'}${hs.src === 'crm' ? ' <span class="text-muted">⚡</span>' : ''}</td>
+      <td class="text-right" ${hs.src === 'crm' ? `title="取自 CRM 儲值點數（60 點 = 1 小時）${hs.partial ? '；歷史儲值未涵蓋，僅顯示剩餘' : ''}" style="cursor:help;"` : ''}>${
+        hs.partial
+          ? `剩 ${hs.remaining.toFixed(1)}`
+          : `${hs.used != null ? hs.used.toFixed(1) : '0'} / ${hs.purchased != null ? hs.purchased.toFixed(1) : '—'}`
+      }${hs.src === 'crm' ? ' <span class="text-muted">⚡</span>' : ''}</td>
       <td>${hs.label === '—' ? '<span class="text-muted">—</span>' : `<span class="badge ${hs.cls}">${hs.label}</span>`}</td>
       <td>${tags.join(' ') || '<span class="text-muted">—</span>'}</td>
     </tr>`;
@@ -2998,7 +3013,8 @@ function svcCrmSectionHtml(c) {
   }
   const purchased = crm.purchasedMin / 60;
   const remaining = crm.balanceMin != null ? crm.balanceMin / 60 : null;
-  const used = remaining != null ? purchased - remaining : null;
+  const partial = remaining != null && purchased < remaining;  // 歷史儲值未涵蓋
+  const used = (remaining != null && !partial) ? purchased - remaining : null;
   const rows = crm.entries.slice(-6).reverse().map(t => `
     <tr>
       <td>${t.record_date}</td>
@@ -3009,13 +3025,13 @@ function svcCrmSectionHtml(c) {
     </tr>`).join('');
   return `<details class="svc-fold" open>
     <summary><span>CRM 儲值點數</span>
-      <span class="svc-hgroup-prog">剩 ${remaining != null ? remaining.toFixed(1) : '?'} / 購 ${purchased.toFixed(1)} 小時</span>
+      <span class="svc-hgroup-prog">剩 ${remaining != null ? remaining.toFixed(1) : '?'}${partial ? '' : ' / 購 ' + purchased.toFixed(1)} 小時</span>
     </summary>
     <div class="svc-fold-body">
       <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:0.85rem;margin-bottom:10px;">
-        <span>已購：<strong class="text-gold">${purchased.toFixed(1)} 小時</strong>（${fmtNum(crm.purchasedMin)} 點）</span>
-        <span>已耗：<strong>${used != null ? used.toFixed(1) : '—'} 小時</strong></span>
-        <span>剩餘：<strong class="${remaining != null && purchased > 0 && remaining / purchased < 0.2 ? 'text-red' : 'text-green'}">${remaining != null ? remaining.toFixed(1) : '—'} 小時</strong></span>
+        <span>已購：<strong class="text-gold">${partial ? '—' : purchased.toFixed(1) + ' 小時'}</strong>${partial ? '<span class="text-muted">（歷史儲值未涵蓋）</span>' : `（${fmtNum(crm.purchasedMin)} 點）`}</span>
+        <span>已耗：<strong>${used != null ? used.toFixed(1) + ' 小時' : '—'}</strong></span>
+        <span>剩餘：<strong class="${remaining != null && ((!partial && purchased > 0 && remaining / purchased < 0.2) || remaining <= 3) ? 'text-red' : 'text-green'}">${remaining != null ? remaining.toFixed(1) : '—'} 小時</strong></span>
         ${crm.contractEnd ? `<span>CRM 合約迄日：<strong>${crm.contractEnd}</strong></span>` : ''}
         <span class="text-muted">最近異動 ${crm.lastDate || '—'}</span>
       </div>
