@@ -229,6 +229,40 @@
     .badge.b4 { background: var(--orange-dim); color: var(--orange); }
     .badge.b5 { background: var(--teal-dim); color: var(--teal); }
     .badge.b6 { background: var(--red-dim); color: var(--red); }
+    .badge.bgold { background: rgba(201,168,76,0.15); color: var(--gold-light); }
+    .badge.bmuted { background: var(--ghost-bg); color: var(--text-muted); }
+
+    /* 委後服務 */
+    .svc-row-click { cursor: pointer; }
+    .notes-modal.svc-modal { width: min(880px, 94vw); max-height: 90vh; }
+    .svc-section-title { font-size: 0.8rem; font-weight: 600; color: var(--gold-light); margin: 18px 0 10px; letter-spacing: 0.5px; }
+    .svc-section-title:first-child { margin-top: 0; }
+    .svc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
+    .svc-field label { display: block; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; }
+    .svc-field input, .svc-field select, .svc-field textarea {
+      width: 100%; padding: 7px 10px; background: var(--bg-row); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.85rem; box-sizing: border-box; font-family: inherit;
+    }
+    .svc-field input:focus, .svc-field select:focus, .svc-field textarea:focus { outline: none; border-color: var(--gold); }
+    .svc-field.full { grid-column: 1 / -1; }
+    .svc-checklist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 14px; }
+    .svc-check { display: flex; align-items: flex-start; gap: 8px; font-size: 0.83rem; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+    .svc-check:hover { background: var(--bg-hover); }
+    .svc-check input { margin-top: 2px; accent-color: var(--gold); cursor: pointer; }
+    .svc-check.done { color: var(--text-muted); text-decoration: line-through; }
+    .svc-timeline { border-left: 2px solid var(--border); margin-left: 6px; padding-left: 16px; }
+    .svc-event { position: relative; padding-bottom: 14px; }
+    .svc-event::before { content: ''; position: absolute; left: -21px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+    .svc-event-meta { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 2px; }
+    .svc-event-content { font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; }
+    .svc-add-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+    .svc-add-row input, .svc-add-row select { padding: 7px 10px; background: var(--bg-row); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.83rem; font-family: inherit; }
+    .btn-gold { padding: 8px 18px; background: linear-gradient(135deg, var(--gold), #b8942e); color: #0a0a0a; font-weight: 700; font-size: 0.85rem; border: none; border-radius: 8px; cursor: pointer; }
+    .btn-gold:hover { opacity: 0.9; }
+    .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { padding: 6px 14px; background: transparent; border: 1px solid var(--red); color: var(--red); border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
+    .btn-danger:hover { background: var(--red-dim); }
+    @media (max-width: 640px) { .svc-grid, .svc-checklist { grid-template-columns: 1fr; } }
 
     .notes-cell { cursor: pointer; }
     .notes-cell:hover { color: var(--gold-light); text-decoration: underline; }
@@ -390,6 +424,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="overview">總覽</button>
       <button class="tab-btn" data-tab="pending">跟進中案件</button>
+      <button class="tab-btn" data-tab="service">委後服務</button>
       <button class="tab-btn" data-tab="people">業務 / 律師</button>
       <button class="tab-btn" data-tab="clients">客戶 360</button>
     </div>
@@ -619,7 +654,10 @@
           </div>
           <div class="table-header">
             <div class="table-title">案件清單（依「距上次行動」遞減排序）</div>
-            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">紅 = 逾期 &gt; 14 天</span></div>
+            <div class="table-actions">
+              <span class="text-muted" style="font-size:0.78rem;">紅 = 逾期 &gt; 14 天</span>
+              <button class="btn-sm" onclick="gotoServiceCreate()" title="已簽約的案件轉入委後服務追蹤">→ 轉入委後</button>
+            </div>
           </div>
           <div style="overflow-x:auto;">
             <table id="tablePending">
@@ -635,6 +673,70 @@
                 <th class="sortable" data-sort="last_contact_text">最近聯繫 <span class="sort-arrow"></span></th>
                 <th>LINE 對話</th>
                 <th>備註</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: 委後服務（簽約後：開案交接 → 服務 → 續約，依《法顧部門服務SOP》） ===== -->
+      <div class="page" id="page-service">
+        <div class="filter-bar">
+          <span class="filter-label">業務：</span>
+          <select class="filter-select" id="serviceSalesFilter"><option value="">全部</option></select>
+          <span class="filter-label" style="margin-left:8px;">階段：</span>
+          <select class="filter-select" id="serviceStageFilter"><option value="">全部</option></select>
+          <button class="btn-gold" style="margin-left:auto;padding:6px 16px;" onclick="openServiceModal(null)">＋ 新增委後案件</button>
+        </div>
+
+        <div class="kpi-row k5">
+          <div class="kpi-card gold"><div class="kpi-label">服務中客戶</div><div class="kpi-value gold" id="kpiSvcActive">—</div><div class="kpi-sub">含續約評估</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">交接管線</div><div class="kpi-value orange" id="kpiSvcHandover">—</div><div class="kpi-sub" id="kpiSvcHandoverSub">—</div></div>
+          <div class="kpi-card red"><div class="kpi-label">時數預警</div><div class="kpi-value red" id="kpiSvcHours">—</div><div class="kpi-sub">即將超過 / 已超過</div></div>
+          <div class="kpi-card blue"><div class="kpi-label">60 天內到期</div><div class="kpi-value blue" id="kpiSvcExpiring">—</div><div class="kpi-sub">合約迄日</div></div>
+          <div class="kpi-card green"><div class="kpi-label">累計續約率</div><div class="kpi-value green" id="kpiSvcRenewal">—</div><div class="kpi-sub" id="kpiSvcRenewalSub">—</div></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">交接管線（已簽約 → 已分案）</div>
+            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">紅 = 階段停留 &gt; 3 天（SOP：三天內回覆）・點列開詳情</span></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableSvcHandover">
+              <thead><tr>
+                <th>階段</th><th>當事人</th><th>業務</th><th>委任項目</th>
+                <th class="text-right">委任費</th><th class="text-right">交接進度</th>
+                <th class="text-right">階段停留</th><th>指定律師</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">服務中客戶（含續約評估）</div>
+            <div class="table-actions"><span class="text-muted" style="font-size:0.78rem;">依合約迄日排序</span></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="tableSvcActive">
+              <thead><tr>
+                <th>階段</th><th>當事人</th><th>承辦律師</th><th>業務</th>
+                <th>合約迄日</th><th class="text-right">時數（耗 / 購）</th><th>時數狀態</th><th>標籤</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header"><div class="table-title">已結束（已續約 / 已流失）</div></div>
+          <div style="overflow-x:auto;">
+            <table id="tableSvcClosed">
+              <thead><tr>
+                <th>階段</th><th>當事人</th><th>業務</th><th class="text-right">委任費</th><th>合約迄日</th><th>備註</th>
               </tr></thead>
               <tbody></tbody>
             </table>
@@ -816,6 +918,7 @@ async function showDashboard(user) {
   loginPage.style.display = 'none';
   dashboard.style.display = 'block';
   const roleLabel = isAdmin ? 'admin' : '部門主管';
+  STATE.me = profile ? { id: profile.id, name: profile.name, role: profile.role } : null;
   document.getElementById('userBadge').textContent = (profile?.name || user.email) + '（' + roleLabel + '）';
   if (isAdmin) document.getElementById('navLinkAdmin').style.display = '';
   init();
@@ -886,6 +989,7 @@ const fmtMoneyShort = n => {
 
 let STATE = {
   cases: [], pending: [], pendingState: {}, channelMapping: {}, companyCategories: {}, lastSync: null,
+  service: [], svcHours: {}, svcSales: '', svcStage: '', me: null,
   selectedYear: null, selectedMonth: 'all', selectedOffice: '',
   pendingSales: '',
   pendingRange: 'all',   // 'all' | 1 | 3 | 6（月份）
@@ -923,14 +1027,16 @@ function parseSalespeople(s) {
 async function init() {
   showSyncLoading();
   try {
-    const [cs, pn, ps, cm, cc, log, dep] = await Promise.all([
+    const [cs, pn, ps, cm, cc, log, dep, svc, hrs] = await Promise.all([
       sb.from('advisor_cases').select('*').order('paid_at', { ascending: true }),
       sb.from('advisor_pending_cases').select('*').order('days_since_last_action', { ascending: false, nullsFirst: false }),
       sb.from('advisor_pending_state').select('*'),
       sb.from('advisor_channel_mapping').select('*'),
       sb.from('advisor_company_categories').select('*'),
       sb.from('advisor_sync_log').select('*').order('started_at', { ascending: false }).limit(1),
-      sb.from('advisor_transactions').select('record_date,amount,client_name,is_void').order('record_date')
+      sb.from('advisor_transactions').select('record_date,amount,client_name,is_void').order('record_date'),
+      sb.from('advisor_service_cases').select('*').order('created_at', { ascending: false }),
+      sb.from('advisor_hour_entries').select('case_id,hours,entry_kind')
     ]);
     if (cs.error) throw cs.error;
     STATE.cases = cs.data || [];
@@ -944,6 +1050,19 @@ async function init() {
     (cc.data || []).forEach(c => { STATE.companyCategories[c.company_name] = c; });
     STATE.lastSync = log.data?.[0] || null;
     STATE.deposits = dep.data || [];
+    STATE.service = svc.data || [];
+    STATE.svcHours = {};
+    (hrs.data || []).forEach(x => {
+      if (x.entry_kind === 'work') STATE.svcHours[x.case_id] = (STATE.svcHours[x.case_id] || 0) + (+x.hours || 0);
+    });
+    // embed 模式不會走 showDashboard，這裡補抓自己的 lawyers row（跟追歷程/建檔人需要）
+    if (!STATE.me) {
+      const { data: au } = await sb.auth.getUser();
+      if (au && au.user) {
+        const { data: meRow } = await sb.from('lawyers').select('id,name,role').eq('auth_user_id', au.user.id).maybeSingle();
+        STATE.me = meRow || null;
+      }
+    }
 
     // 法顧客戶集合 = advisor_cases.client_name 「業務 sheet 認列為法顧」
     // 不從 advisor_transactions 撈：CRM 儲值有但 sheet 沒登的客戶不計入法顧 reconcile（業務指示）
@@ -974,6 +1093,7 @@ async function init() {
     setupYearFilter();
     setupOfficeFilter();
     setupPendingFilters();
+    setupServiceFilters();
     bindFilters();
     renderAll();
     renderSyncStatus();
@@ -1133,6 +1253,7 @@ function filterCases(opts) {
 function renderAll() {
   renderOverview();
   renderPending();
+  renderService();
   renderPeople();
   renderClients();
 }
@@ -2309,6 +2430,500 @@ window.startEditAdvisorLineChat   = startEditAdvisorLineChat;
 window.saveAdvisorLineChatFromInput = saveAdvisorLineChatFromInput;
 window.cancelEditAdvisorLineChat  = cancelEditAdvisorLineChat;
 
+// ============ TAB: 委後服務（advisor_service_cases，儀表板原生資料，可編輯） ============
+const SERVICE_STAGES = ['已簽約','收款確認','交接中','已分案','服務中','續約評估','已續約','已流失'];
+const SERVICE_STAGE_CLS = {
+  '已簽約':'b1','收款確認':'b5','交接中':'b4','已分案':'b3',
+  '服務中':'b2','續約評估':'bgold','已續約':'b2','已流失':'b6'
+};
+const HANDOVER_STAGES = ['已簽約','收款確認','交接中','已分案'];
+const ACTIVE_STAGES   = ['服務中','續約評估'];
+const CLOSED_STAGES   = ['已續約','已流失'];
+
+// 開案交接 checklist（依《法顧部門服務SOP》「簽約付款及後續」+「系統填寫開案注意事項」）
+const HANDOVER_ITEMS = [
+  { key: 'contract_signed',  label: '委任契約已簽回（線上簽 / 紙本）' },
+  { key: 'payment_received', label: '款項已收齊（水單 / 末五碼確認）' },
+  { key: 'receipt_stamp',    label: '收據已繕打、印花稅已處理' },
+  { key: 'conflict_check',   label: '利衝已建檔' },
+  { key: 'opposing_entered', label: '對造名稱已鍵入系統（防利衝）' },
+  { key: 'designated_noted', label: '指定律師已於契約註記（無指定亦勾）' },
+  { key: 'line_group',       label: '委後 LINE 已建立（訴訟須全體當事人加入）' },
+  { key: 'materials',        label: '接案前期 LINE / email、事實證據已彙整' },
+  { key: 'cloud_folder',     label: '雲端資料夾已開設' },
+  { key: 'system_case',      label: '系統開案完成（服務項目 / 時數表）' },
+  { key: 'physical_file',    label: '紙本卷 / 印章已處理' },
+  { key: 'group_notified',   label: '開案交接群已通知工讀生' },
+  { key: 'manager_handoff',  label: '已交承辦主管分案' }
+];
+const SVC_EVENT_TYPES = { note:'備註', call:'通話', meeting:'會議', hours:'時數', renewal:'續約', stage_change:'階段' };
+
+function svcStageBadge(stage) {
+  const cls = SERVICE_STAGE_CLS[stage] || 'bmuted';
+  return `<span class="badge ${cls}">${escapeHtml(stage || '—')}</span>`;
+}
+function svcHandoverProgress(c) {
+  const h = c.handover || {};
+  return { done: HANDOVER_ITEMS.filter(it => h[it.key]).length, total: HANDOVER_ITEMS.length };
+}
+// 階段停留天數：用 updated_at 當 proxy（任何編輯都會重置；Phase 1 夠用）
+function svcDaysInStage(c) {
+  const base = c.updated_at || c.created_at;
+  if (!base) return null;
+  return Math.floor((Date.now() - new Date(base).getTime()) / 864e5);
+}
+function svcHoursStatus(c) {
+  const used = STATE.svcHours[c.id] || 0;
+  if (!c.purchased_hours || +c.purchased_hours <= 0) return { label: '—', cls: '', used };
+  const ratio = used / +c.purchased_hours;
+  if (ratio >= 1)   return { label: '已超過',   cls: 'b6', used };
+  if (ratio >= 0.8) return { label: '即將超過', cls: 'b4', used };
+  return { label: '正常', cls: 'b2', used };
+}
+function svcContractDays(c) {
+  if (!c.contract_end) return null;
+  return Math.ceil((new Date(c.contract_end).getTime() - Date.now()) / 864e5);
+}
+function svcContractCell(c) {
+  const d = svcContractDays(c);
+  if (d == null) return '<span class="text-muted">—</span>';
+  if (d < 0)   return `${c.contract_end} <span class="badge b6">已到期 ${-d} 天</span>`;
+  if (d <= 30) return `${c.contract_end} <span class="badge b6">剩 ${d} 天</span>`;
+  if (d <= 60) return `${c.contract_end} <span class="badge b4">剩 ${d} 天</span>`;
+  if (d <= 90) return `${c.contract_end} <span class="badge bgold">剩 ${d} 天</span>`;
+  return c.contract_end;
+}
+
+function setupServiceFilters() {
+  const sel = document.getElementById('serviceSalesFilter');
+  if (!sel) return;
+  const set = new Set();
+  STATE.service.forEach(c => parseSalespeople(c.salesperson).forEach(n => set.add(n)));
+  const sales = [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  sel.innerHTML = '<option value="">全部</option>' + sales.map(s =>
+    `<option value="${escapeHtml(s)}" ${s === STATE.svcSales ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  sel.onchange = e => { STATE.svcSales = e.target.value; renderService(); };
+  const stSel = document.getElementById('serviceStageFilter');
+  stSel.innerHTML = '<option value="">全部</option>' + SERVICE_STAGES.map(s =>
+    `<option value="${s}" ${s === STATE.svcStage ? 'selected' : ''}>${s}</option>`).join('');
+  stSel.onchange = e => { STATE.svcStage = e.target.value; renderService(); };
+}
+
+function filterService() {
+  return STATE.service.filter(c => {
+    if (STATE.svcSales && !parseSalespeople(c.salesperson).includes(STATE.svcSales)) return false;
+    if (STATE.svcStage && c.stage !== STATE.svcStage) return false;
+    return true;
+  });
+}
+
+function renderService() {
+  if (!document.getElementById('page-service')) return;
+  const all = STATE.service;
+  const fs = filterService();
+
+  // KPI 用大盤（不受 filter），表格才套 filter
+  const active = all.filter(c => ACTIVE_STAGES.includes(c.stage));
+  const handover = all.filter(c => HANDOVER_STAGES.includes(c.stage));
+  const handoverStuck = handover.filter(c => (svcDaysInStage(c) || 0) > 3);
+  const hourWarn = active.filter(c => ['即將超過','已超過'].includes(svcHoursStatus(c).label));
+  const expiring = active.filter(c => { const d = svcContractDays(c); return d != null && d >= 0 && d <= 60; });
+  const renewed = all.filter(c => c.stage === '已續約').length;
+  const lost = all.filter(c => c.stage === '已流失').length;
+  document.getElementById('kpiSvcActive').textContent = fmtNum(active.length);
+  document.getElementById('kpiSvcHandover').textContent = fmtNum(handover.length);
+  document.getElementById('kpiSvcHandoverSub').textContent = `停留 > 3 天：${fmtNum(handoverStuck.length)} 件`;
+  document.getElementById('kpiSvcHours').textContent = fmtNum(hourWarn.length);
+  document.getElementById('kpiSvcExpiring').textContent = fmtNum(expiring.length);
+  document.getElementById('kpiSvcRenewal').textContent =
+    (renewed + lost) > 0 ? ((renewed / (renewed + lost)) * 100).toFixed(1) + '%' : '—';
+  document.getElementById('kpiSvcRenewalSub').textContent = `已續約 ${fmtNum(renewed)} / 流失 ${fmtNum(lost)}`;
+
+  // 表 A：交接管線
+  const ha = fs.filter(c => HANDOVER_STAGES.includes(c.stage))
+    .sort((a, b) => SERVICE_STAGES.indexOf(a.stage) - SERVICE_STAGES.indexOf(b.stage)
+      || new Date(a.created_at) - new Date(b.created_at));
+  document.querySelector('#tableSvcHandover tbody').innerHTML = ha.map(c => {
+    const prog = svcHandoverProgress(c);
+    const days = svcDaysInStage(c);
+    return `<tr class="svc-row-click" onclick="openServiceModal('${c.id}')">
+      <td>${svcStageBadge(c.stage)}</td>
+      <td>${escapeHtml(c.client_name)}</td>
+      <td>${escapeHtml(c.salesperson || '—')}</td>
+      <td>${escapeHtml(c.case_type || '—')}</td>
+      <td class="text-right text-gold">${c.fee_amount != null ? fmtMoney(c.fee_amount) : '—'}</td>
+      <td class="text-right ${prog.done === prog.total ? 'text-green' : ''}">${prog.done} / ${prog.total}</td>
+      <td class="text-right ${(days || 0) > 3 ? 'text-red' : ''}">${days != null ? days + ' 天' : '—'}</td>
+      <td>${escapeHtml(c.designated_lawyer || '—')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">目前沒有交接中的案件 — 點右上「＋ 新增委後案件」把已簽約案件接進來</td></tr>';
+
+  // 表 B：服務中（依合約迄日排序，無迄日排最後）
+  const ac = fs.filter(c => ACTIVE_STAGES.includes(c.stage))
+    .sort((a, b) => (a.contract_end || '9999') < (b.contract_end || '9999') ? -1 : 1);
+  document.querySelector('#tableSvcActive tbody').innerHTML = ac.map(c => {
+    const hs = svcHoursStatus(c);
+    const tags = [];
+    if (c.monthly_report) tags.push('<span class="badge b5">每月報告</span>');
+    if (c.switch_lawyer) tags.push('<span class="badge b4">換律師</span>');
+    return `<tr class="svc-row-click" onclick="openServiceModal('${c.id}')">
+      <td>${svcStageBadge(c.stage)}</td>
+      <td>${escapeHtml(c.client_name)}</td>
+      <td>${escapeHtml(c.handling_lawyer || '—')}</td>
+      <td>${escapeHtml(c.salesperson || '—')}</td>
+      <td>${svcContractCell(c)}</td>
+      <td class="text-right">${hs.used.toFixed(1)} / ${c.purchased_hours != null ? (+c.purchased_hours).toFixed(1) : '—'}</td>
+      <td>${hs.label === '—' ? '<span class="text-muted">—</span>' : `<span class="badge ${hs.cls}">${hs.label}</span>`}</td>
+      <td>${tags.join(' ') || '<span class="text-muted">—</span>'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">無資料</td></tr>';
+
+  // 表 C：已結束
+  const cl = fs.filter(c => CLOSED_STAGES.includes(c.stage))
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  document.querySelector('#tableSvcClosed tbody').innerHTML = cl.map(c => `
+    <tr class="svc-row-click" onclick="openServiceModal('${c.id}')">
+      <td>${svcStageBadge(c.stage)}</td>
+      <td>${escapeHtml(c.client_name)}</td>
+      <td>${escapeHtml(c.salesperson || '—')}</td>
+      <td class="text-right">${c.fee_amount != null ? fmtMoney(c.fee_amount) : '—'}</td>
+      <td>${escapeHtml(c.contract_end || '—')}</td>
+      <td class="text-muted" style="font-size:0.78rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml((c.note || '').replace(/\s+/g, ' ').slice(0, 60))}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">無資料</td></tr>';
+}
+
+// ---------- 案件詳情 Modal ----------
+let SVC_EDITING = null;                 // 編輯中的案件（null = 新增模式）
+let SVC_DETAIL = { events: [], hours: [] };
+let SVC_PREFILL_LIST = [];
+let SVC_PREFILL_PENDING_ID = null;
+
+function svcPrefillOptions() {
+  const existing = new Set(STATE.service.map(c => c.client_name));
+  SVC_PREFILL_LIST = STATE.pending.filter(p =>
+    p.current_stage === '已成案' && p.client_name && !existing.has(p.client_name));
+  if (!SVC_PREFILL_LIST.length) return '';
+  return `<div class="svc-field full">
+    <label>從「跟進中案件」已成案帶入（選填）</label>
+    <select id="svcPrefillSelect" onchange="svcApplyPrefill(this.value)">
+      <option value="">— 不帶入 —</option>
+      ${SVC_PREFILL_LIST.map((p, i) =>
+        `<option value="${i}">${escapeHtml(p.client_name)}（${escapeHtml(p.salesperson || '?')}）</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+function svcApplyPrefill(idxStr) {
+  SVC_PREFILL_PENDING_ID = null;
+  if (idxStr === '') return;
+  const p = SVC_PREFILL_LIST[+idxStr];
+  if (!p) return;
+  SVC_PREFILL_PENDING_ID = p.id || null;
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  set('svc_client_name', p.client_name);
+  set('svc_salesperson', p.salesperson);
+  set('svc_source', mapChannel(p.channel));
+  set('svc_note', p.case_summary);
+}
+
+function svcEventsSkeleton() {
+  return `
+    <div class="svc-section-title">跟追歷程</div>
+    <div class="svc-add-row">
+      <select id="svcEvtType" style="width:90px;">
+        <option value="note">備註</option><option value="call">通話</option>
+        <option value="meeting">會議</option><option value="renewal">續約</option>
+      </select>
+      <input id="svcEvtContent" placeholder="承剛剛電話討論…（SOP：通話 / 會議後留痕）" style="flex:1;min-width:200px;"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addServiceEvent();}">
+      <button class="btn-sm" onclick="addServiceEvent()">＋ 新增</button>
+    </div>
+    <div class="svc-timeline" id="svcTimeline" style="margin-top:12px;"><div class="text-muted" style="font-size:0.8rem;">載入中…</div></div>
+    <div class="svc-section-title">時數紀錄 <span class="text-muted" id="svcHoursSum" style="font-weight:400;"></span></div>
+    <div class="svc-add-row">
+      <input id="svcHrDate" type="date" style="width:140px;">
+      <input id="svcHrHours" type="number" min="0" step="0.1" placeholder="時數" style="width:80px;">
+      <select id="svcHrKind" style="width:90px;"><option value="work">工作</option><option value="quote">報價</option></select>
+      <input id="svcHrLawyer" placeholder="律師" style="width:100px;">
+      <input id="svcHrDesc" placeholder="工作事項（寫得讓客戶覺得有價值）" style="flex:1;min-width:160px;">
+      <button class="btn-sm" onclick="addServiceHour()">＋ 記錄</button>
+    </div>
+    <div id="svcHoursList" style="margin-top:10px;"></div>`;
+}
+
+function openServiceModal(id) {
+  const c = id ? STATE.service.find(x => x.id === id) : null;
+  SVC_EDITING = c || null;
+  SVC_DETAIL = { events: [], hours: [] };
+  SVC_PREFILL_PENDING_ID = null;
+  const v = c || {};
+  const h = (c && c.handover) || {};
+  document.getElementById('svcModalTitle').textContent = c ? c.client_name : '新增委後案件';
+  const stSel = document.getElementById('svcStageSelect');
+  stSel.innerHTML = SERVICE_STAGES.map(s =>
+    `<option value="${s}" ${s === (v.stage || '已簽約') ? 'selected' : ''}>${s}</option>`).join('');
+  const txt = x => escapeHtml(x == null ? '' : x);
+  document.getElementById('svcModalBody').innerHTML = `
+    ${c ? '' : `<div class="svc-grid" style="margin-bottom:10px;">${svcPrefillOptions()}</div>`}
+    <div class="svc-section-title">基本資料</div>
+    <div class="svc-grid">
+      <div class="svc-field"><label>當事人 / 公司 *</label><input id="svc_client_name" value="${txt(v.client_name)}"></div>
+      <div class="svc-field"><label>統一編號</label><input id="svc_client_vat" value="${txt(v.client_vat)}"></div>
+      <div class="svc-field"><label>聯絡電話</label><input id="svc_client_phone" value="${txt(v.client_phone)}"></div>
+      <div class="svc-field"><label>對造名稱（防利衝）</label><input id="svc_opposing_party" value="${txt(v.opposing_party)}"></div>
+      <div class="svc-field"><label>委任項目</label><input id="svc_case_type" list="svcCaseTypes" value="${txt(v.case_type)}"></div>
+      <div class="svc-field"><label>來源</label><input id="svc_source" value="${txt(v.source)}"></div>
+      <div class="svc-field"><label>負責業務</label><input id="svc_salesperson" value="${txt(v.salesperson)}"></div>
+      <div class="svc-field"><label>承辦所別</label><input id="svc_office" value="${txt(v.office)}"></div>
+      <div class="svc-field"><label>指定律師</label><input id="svc_designated_lawyer" value="${txt(v.designated_lawyer)}"></div>
+      <div class="svc-field"><label>承辦律師</label><input id="svc_handling_lawyer" value="${txt(v.handling_lawyer)}"></div>
+      <div class="svc-field"><label>委任費（NT$）</label><input id="svc_fee_amount" type="number" min="0" step="1" value="${v.fee_amount != null ? v.fee_amount : ''}"></div>
+      <div class="svc-field"><label>委後 LINE@ 連結</label><input id="svc_line_channel" value="${txt(v.line_channel)}"></div>
+      <div class="svc-field"><label>合約起日</label><input id="svc_contract_start" type="date" value="${txt(v.contract_start)}"></div>
+      <div class="svc-field"><label>合約迄日</label><input id="svc_contract_end" type="date" value="${txt(v.contract_end)}"></div>
+      <div class="svc-field"><label>已購時數 / 點數</label><input id="svc_purchased_hours" type="number" min="0" step="0.5" value="${v.purchased_hours != null ? v.purchased_hours : ''}"></div>
+      <div class="svc-field"><label>黏著度標籤</label>
+        <div style="display:flex;gap:14px;padding-top:6px;">
+          <label style="display:flex;gap:6px;align-items:center;font-size:0.83rem;cursor:pointer;"><input type="checkbox" id="svc_monthly_report" ${v.monthly_report ? 'checked' : ''} style="accent-color:var(--gold);">每月報告</label>
+          <label style="display:flex;gap:6px;align-items:center;font-size:0.83rem;cursor:pointer;"><input type="checkbox" id="svc_switch_lawyer" ${v.switch_lawyer ? 'checked' : ''} style="accent-color:var(--gold);">換律師</label>
+        </div>
+      </div>
+      <div class="svc-field full"><label>備註</label><textarea id="svc_note" rows="2">${txt(v.note)}</textarea></div>
+    </div>
+    <div class="svc-section-title">開案交接 Checklist（依 SOP）<span id="svcCheckProg" class="text-muted" style="font-weight:400;"></span></div>
+    <div class="svc-checklist">
+      ${HANDOVER_ITEMS.map(it => `
+        <label class="svc-check ${h[it.key] ? 'done' : ''}">
+          <input type="checkbox" data-hkey="${it.key}" ${h[it.key] ? 'checked' : ''}
+                 onchange="this.closest('.svc-check').classList.toggle('done', this.checked);svcUpdateCheckProg();">
+          <span>${it.label}</span>
+        </label>`).join('')}
+    </div>
+    <div class="svc-grid" style="margin-top:10px;">
+      <div class="svc-field"><label>急迫事項 / 已知庭期 / 時效屆日</label><input id="svc_h_urgent" value="${txt(h._urgent)}"></div>
+      <div class="svc-field"><label>雲端資料夾連結</label><input id="svc_h_cloud" value="${txt(h._cloud)}"></div>
+    </div>
+    ${c ? svcEventsSkeleton() : '<div class="text-muted" style="margin-top:14px;font-size:0.8rem;">儲存後即可新增跟追歷程與時數紀錄。</div>'}`;
+  svcUpdateCheckProg();
+  document.getElementById('svcDeleteBtn').style.display = c ? '' : 'none';
+  document.getElementById('svcSaveMsg').textContent = '';
+  document.getElementById('svcModalMask').classList.add('show');
+  if (c) loadServiceDetail(c.id);
+}
+
+function closeServiceModal() {
+  document.getElementById('svcModalMask').classList.remove('show');
+  SVC_EDITING = null;
+}
+
+function svcUpdateCheckProg() {
+  const el = document.getElementById('svcCheckProg');
+  if (!el) return;
+  const boxes = document.querySelectorAll('#svcModalBody [data-hkey]');
+  const done = [...boxes].filter(b => b.checked).length;
+  el.textContent = `　${done} / ${boxes.length}`;
+}
+
+async function loadServiceDetail(caseId) {
+  const [ev, hr] = await Promise.all([
+    sb.from('advisor_case_events').select('*').eq('case_id', caseId).order('created_at', { ascending: false }),
+    sb.from('advisor_hour_entries').select('*').eq('case_id', caseId).order('work_date', { ascending: false })
+  ]);
+  if (!SVC_EDITING || SVC_EDITING.id !== caseId) return;  // modal 已切走
+  SVC_DETAIL = { events: ev.data || [], hours: hr.data || [] };
+  renderServiceTimeline();
+  renderServiceHours();
+}
+
+function renderServiceTimeline() {
+  const el = document.getElementById('svcTimeline');
+  if (!el) return;
+  if (!SVC_DETAIL.events.length) {
+    el.innerHTML = '<div class="text-muted" style="font-size:0.8rem;">尚無紀錄</div>';
+    return;
+  }
+  el.innerHTML = SVC_DETAIL.events.map(e => `
+    <div class="svc-event">
+      <div class="svc-event-meta">${new Date(e.created_at).toLocaleString('zh-TW')}・${SVC_EVENT_TYPES[e.event_type] || e.event_type}・${escapeHtml(e.author_name || '—')}</div>
+      <div class="svc-event-content">${linkify(e.content)}</div>
+    </div>`).join('');
+}
+
+function renderServiceHours() {
+  const el = document.getElementById('svcHoursList');
+  if (!el) return;
+  const sum = SVC_DETAIL.hours.filter(x => x.entry_kind === 'work').reduce((s, x) => s + (+x.hours || 0), 0);
+  const sumEl = document.getElementById('svcHoursSum');
+  if (sumEl) {
+    const purchased = SVC_EDITING && SVC_EDITING.purchased_hours != null
+      ? ` / 已購 ${(+SVC_EDITING.purchased_hours).toFixed(1)}` : '';
+    sumEl.textContent = `（工作時數合計 ${sum.toFixed(1)}${purchased}）`;
+  }
+  if (!SVC_DETAIL.hours.length) {
+    el.innerHTML = '<div class="text-muted" style="font-size:0.8rem;">尚無時數紀錄</div>';
+    return;
+  }
+  el.innerHTML = `<table style="font-size:0.8rem;"><thead><tr>
+      <th>日期</th><th class="text-right">時數</th><th>類別</th><th>律師</th><th>工作事項</th>
+    </tr></thead><tbody>` +
+    SVC_DETAIL.hours.map(x => `<tr>
+      <td>${x.work_date}</td>
+      <td class="text-right">${(+x.hours).toFixed(1)}</td>
+      <td>${x.entry_kind === 'quote' ? '<span class="badge b4">報價</span>' : '<span class="badge b2">工作</span>'}</td>
+      <td>${escapeHtml(x.lawyer_name || '—')}</td>
+      <td>${escapeHtml(x.description || '—')}</td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+async function saveServiceCase() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const numOrNull = id => { const s = get(id); return s === '' ? null : +s; };
+  const clientName = get('svc_client_name');
+  if (!clientName) { alert('「當事人 / 公司」必填'); return; }
+  const handover = {};
+  document.querySelectorAll('#svcModalBody [data-hkey]').forEach(cb => { handover[cb.dataset.hkey] = cb.checked; });
+  handover._urgent = get('svc_h_urgent');
+  handover._cloud  = get('svc_h_cloud');
+  const stage = document.getElementById('svcStageSelect').value;
+  const payload = {
+    client_name: clientName,
+    client_vat: get('svc_client_vat') || null,
+    client_phone: get('svc_client_phone') || null,
+    opposing_party: get('svc_opposing_party') || null,
+    case_type: get('svc_case_type') || null,
+    source: get('svc_source') || null,
+    salesperson: get('svc_salesperson') || null,
+    office: get('svc_office') || null,
+    designated_lawyer: get('svc_designated_lawyer') || null,
+    handling_lawyer: get('svc_handling_lawyer') || null,
+    fee_amount: numOrNull('svc_fee_amount'),
+    line_channel: get('svc_line_channel') || null,
+    contract_start: get('svc_contract_start') || null,
+    contract_end: get('svc_contract_end') || null,
+    purchased_hours: numOrNull('svc_purchased_hours'),
+    monthly_report: document.getElementById('svc_monthly_report').checked,
+    switch_lawyer: document.getElementById('svc_switch_lawyer').checked,
+    note: get('svc_note') || null,
+    stage, handover
+  };
+  const btn = document.getElementById('svcSaveBtn');
+  btn.disabled = true; btn.textContent = '儲存中…';
+  try {
+    if (SVC_EDITING) {
+      const oldStage = SVC_EDITING.stage;
+      const { data, error } = await sb.from('advisor_service_cases')
+        .update(payload).eq('id', SVC_EDITING.id).select().single();
+      if (error) throw error;
+      const i = STATE.service.findIndex(x => x.id === data.id);
+      if (i > -1) STATE.service[i] = data;
+      SVC_EDITING = data;
+      document.getElementById('svcModalTitle').textContent = data.client_name;
+      if (oldStage !== stage) {
+        await sb.from('advisor_case_events').insert({
+          case_id: data.id, author_id: STATE.me?.id || null, author_name: STATE.me?.name || null,
+          event_type: 'stage_change', content: `階段變更：${oldStage} → ${stage}`
+        });
+        loadServiceDetail(data.id);
+      }
+      document.getElementById('svcSaveMsg').textContent = '✓ 已儲存';
+      setTimeout(() => { const m = document.getElementById('svcSaveMsg'); if (m) m.textContent = ''; }, 2000);
+    } else {
+      payload.pending_case_id = SVC_PREFILL_PENDING_ID;
+      payload.created_by = STATE.me?.id || null;
+      const { data, error } = await sb.from('advisor_service_cases')
+        .insert(payload).select().single();
+      if (error) throw error;
+      STATE.service.unshift(data);
+      openServiceModal(data.id);  // 重開以顯示歷程 / 時數區塊
+      document.getElementById('svcSaveMsg').textContent = '✓ 已建立';
+    }
+    setupServiceFilters();
+    renderService();
+  } catch (e) {
+    alert('儲存失敗：' + (e.message || e));
+    console.error('saveServiceCase error:', e);
+  } finally {
+    btn.disabled = false; btn.textContent = '儲存';
+  }
+}
+
+async function deleteServiceCase() {
+  if (!SVC_EDITING) return;
+  if (!confirm(`確定刪除「${SVC_EDITING.client_name}」？\n跟追歷程與時數紀錄會一併刪除，無法復原。`)) return;
+  try {
+    const { error } = await sb.from('advisor_service_cases').delete().eq('id', SVC_EDITING.id);
+    if (error) throw error;
+    STATE.service = STATE.service.filter(x => x.id !== SVC_EDITING.id);
+    closeServiceModal();
+    setupServiceFilters();
+    renderService();
+  } catch (e) {
+    alert('刪除失敗：' + (e.message || e) + '\n（僅 manager / admin 可刪除）');
+  }
+}
+
+async function addServiceEvent() {
+  if (!SVC_EDITING) return;
+  const input = document.getElementById('svcEvtContent');
+  const content = (input.value || '').trim();
+  if (!content) { input.focus(); return; }
+  try {
+    const { data, error } = await sb.from('advisor_case_events').insert({
+      case_id: SVC_EDITING.id, author_id: STATE.me?.id || null, author_name: STATE.me?.name || null,
+      event_type: document.getElementById('svcEvtType').value, content
+    }).select().single();
+    if (error) throw error;
+    SVC_DETAIL.events.unshift(data);
+    input.value = '';
+    renderServiceTimeline();
+  } catch (e) {
+    alert('新增失敗：' + (e.message || e));
+  }
+}
+
+async function addServiceHour() {
+  if (!SVC_EDITING) return;
+  const workDate = document.getElementById('svcHrDate').value;
+  const hours = +document.getElementById('svcHrHours').value;
+  if (!workDate || !hours || hours <= 0) { alert('請填日期與時數'); return; }
+  try {
+    const { data, error } = await sb.from('advisor_hour_entries').insert({
+      case_id: SVC_EDITING.id, work_date: workDate, hours,
+      entry_kind: document.getElementById('svcHrKind').value,
+      lawyer_name: document.getElementById('svcHrLawyer').value.trim() || null,
+      description: document.getElementById('svcHrDesc').value.trim() || null,
+      created_by: STATE.me?.id || null
+    }).select().single();
+    if (error) throw error;
+    SVC_DETAIL.hours.unshift(data);
+    if (data.entry_kind === 'work') {
+      STATE.svcHours[SVC_EDITING.id] = (STATE.svcHours[SVC_EDITING.id] || 0) + (+data.hours || 0);
+    }
+    document.getElementById('svcHrHours').value = '';
+    document.getElementById('svcHrDesc').value = '';
+    renderServiceHours();
+    renderService();
+  } catch (e) {
+    alert('新增失敗：' + (e.message || e));
+  }
+}
+
+// 跟進中案件 →「轉入委後」捷徑：切到委後服務 tab 並開新增 modal
+function gotoServiceCreate() {
+  document.querySelector('.tab-btn[data-tab="service"]').click();
+  openServiceModal(null);
+}
+
+window.openServiceModal   = openServiceModal;
+window.closeServiceModal  = closeServiceModal;
+window.saveServiceCase    = saveServiceCase;
+window.deleteServiceCase  = deleteServiceCase;
+window.addServiceEvent    = addServiceEvent;
+window.addServiceHour     = addServiceHour;
+window.svcApplyPrefill    = svcApplyPrefill;
+window.svcUpdateCheckProg = svcUpdateCheckProg;
+window.gotoServiceCreate  = gotoServiceCreate;
+
 // ============ START ============
 checkAuth();
 </script>
@@ -2323,5 +2938,29 @@ checkAuth();
     <div class="notes-modal-body" id="notesModalBody"></div>
   </div>
 </div>
+
+<!-- 委後案件詳情 Modal -->
+<div class="notes-modal-mask" id="svcModalMask" onclick="if(event.target===this)closeServiceModal()">
+  <div class="notes-modal svc-modal">
+    <div class="notes-modal-header">
+      <div class="notes-modal-title" id="svcModalTitle">委後案件</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <select class="filter-select" id="svcStageSelect" title="案件階段"></select>
+        <button class="notes-modal-close" onclick="closeServiceModal()" aria-label="關閉">×</button>
+      </div>
+    </div>
+    <div class="notes-modal-body" id="svcModalBody" style="white-space:normal;"></div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;">
+      <button class="btn-danger" id="svcDeleteBtn" onclick="deleteServiceCase()">刪除案件</button>
+      <span id="svcSaveMsg" style="font-size:0.8rem;color:var(--green);margin-left:auto;"></span>
+      <button class="btn-gold" id="svcSaveBtn" onclick="saveServiceCase()">儲存</button>
+    </div>
+  </div>
+</div>
+<datalist id="svcCaseTypes">
+  <option value="法律顧問"><option value="合約審閱"><option value="民事"><option value="刑事">
+  <option value="家事"><option value="行政"><option value="勞資"><option value="商務">
+  <option value="智財"><option value="其他">
+</datalist>
 </body>
 </html>
