@@ -250,10 +250,14 @@
     .svc-check:hover { background: var(--bg-hover); }
     .svc-check input { margin-top: 2px; accent-color: var(--gold); cursor: pointer; }
     .svc-check.done { color: var(--text-muted); text-decoration: line-through; }
-    .svc-hgroup { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: var(--bg-main); }
-    .svc-hgroup-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-    .svc-hgroup-title { font-size: 0.85rem; font-weight: 700; }
-    .svc-hgroup-prog { font-size: 0.75rem; color: var(--text-muted); }
+    details.svc-fold { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; background: var(--bg-main); }
+    details.svc-fold > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-size: 0.88rem; font-weight: 700; user-select: none; flex-wrap: wrap; }
+    details.svc-fold > summary::-webkit-details-marker { display: none; }
+    details.svc-fold > summary::before { content: '▸'; color: var(--gold-light); transition: transform 0.15s; flex-shrink: 0; }
+    details.svc-fold[open] > summary::before { transform: rotate(90deg); }
+    details.svc-fold > summary:hover { background: var(--bg-hover); border-radius: 10px; }
+    .svc-fold-body { padding: 0 14px 14px; }
+    .svc-hgroup-prog { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
     .svc-hint { font-size: 0.75rem; color: var(--text-muted); background: var(--bg-row); border-left: 3px solid var(--gold); padding: 6px 10px; border-radius: 4px; margin-top: 10px; line-height: 1.6; }
     .svc-tpl-out { display: none; width: 100%; margin-top: 8px; padding: 10px; background: var(--bg-row); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.78rem; font-family: inherit; line-height: 1.6; box-sizing: border-box; resize: vertical; }
     .svc-timeline { border-left: 2px solid var(--border); margin-left: 6px; padding-left: 16px; }
@@ -2763,29 +2767,31 @@ function svcHFieldHtml(f, h) {
 
 function svcHandoverSectionHtml(h) {
   return HANDOVER_GROUPS.map(g => `
-    <div class="svc-hgroup" data-hgroup="${g.key}">
-      <div class="svc-hgroup-head">
+    <details class="svc-fold" data-hgroup="${g.key}">
+      <summary>
         ${svcStageBadge(g.stage)}
-        <span class="svc-hgroup-title">${g.title}</span>
+        <span>${g.title}</span>
         <span class="svc-hgroup-prog" data-gprog="${g.key}"></span>
+      </summary>
+      <div class="svc-fold-body">
+        <div class="svc-checklist">
+          ${g.checks.map(it => `
+            <label class="svc-check ${h[it.key] ? 'done' : ''}">
+              <input type="checkbox" data-hkey="${it.key}" ${h[it.key] ? 'checked' : ''}
+                     onchange="this.closest('.svc-check').classList.toggle('done', this.checked);svcUpdateCheckProg();">
+              <span>${it.label}</span>
+            </label>`).join('')}
+        </div>
+        ${g.fields && g.fields.length ? `<div class="svc-grid" style="margin-top:10px;">${g.fields.map(f => svcHFieldHtml(f, h)).join('')}</div>` : ''}
+        ${g.hint ? `<div class="svc-hint">${g.hint}</div>` : ''}
+        ${(g.templates || []).map(t => `
+          <div style="margin-top:10px;">
+            <button class="btn-sm" onclick="svcShowTemplate('${t.id}')">${t.label}</button>
+            <textarea class="svc-tpl-out" id="svcTpl_${t.id}" rows="10" readonly onclick="this.select()"></textarea>
+            <button class="btn-sm" id="svcTplCopy_${t.id}" style="display:none;margin-top:6px;" onclick="svcCopyTemplate('${t.id}')">📄 複製</button>
+          </div>`).join('')}
       </div>
-      <div class="svc-checklist">
-        ${g.checks.map(it => `
-          <label class="svc-check ${h[it.key] ? 'done' : ''}">
-            <input type="checkbox" data-hkey="${it.key}" ${h[it.key] ? 'checked' : ''}
-                   onchange="this.closest('.svc-check').classList.toggle('done', this.checked);svcUpdateCheckProg();">
-            <span>${it.label}</span>
-          </label>`).join('')}
-      </div>
-      ${g.fields && g.fields.length ? `<div class="svc-grid" style="margin-top:10px;">${g.fields.map(f => svcHFieldHtml(f, h)).join('')}</div>` : ''}
-      ${g.hint ? `<div class="svc-hint">${g.hint}</div>` : ''}
-      ${(g.templates || []).map(t => `
-        <div style="margin-top:10px;">
-          <button class="btn-sm" onclick="svcShowTemplate('${t.id}')">${t.label}</button>
-          <textarea class="svc-tpl-out" id="svcTpl_${t.id}" rows="10" readonly onclick="this.select()"></textarea>
-          <button class="btn-sm" id="svcTplCopy_${t.id}" style="display:none;margin-top:6px;" onclick="svcCopyTemplate('${t.id}')">📄 複製</button>
-        </div>`).join('')}
-    </div>`).join('');
+    </details>`).join('');
 }
 
 // ---------- 例稿產生器（讀 modal 當前輸入值，存檔前也能產生） ----------
@@ -2926,27 +2932,35 @@ async function svcCopyTemplate(id) {
 
 function svcEventsSkeleton() {
   return `
-    <div class="svc-section-title">跟追歷程</div>
-    <div class="svc-add-row">
-      <select id="svcEvtType" style="width:90px;">
-        <option value="note">備註</option><option value="call">通話</option>
-        <option value="meeting">會議</option><option value="renewal">續約</option>
-      </select>
-      <input id="svcEvtContent" placeholder="承剛剛電話討論…（SOP：通話 / 會議後留痕）" style="flex:1;min-width:200px;"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();addServiceEvent();}">
-      <button class="btn-sm" onclick="addServiceEvent()">＋ 新增</button>
-    </div>
-    <div class="svc-timeline" id="svcTimeline" style="margin-top:12px;"><div class="text-muted" style="font-size:0.8rem;">載入中…</div></div>
-    <div class="svc-section-title">時數紀錄 <span class="text-muted" id="svcHoursSum" style="font-weight:400;"></span></div>
-    <div class="svc-add-row">
-      <input id="svcHrDate" type="date" style="width:140px;">
-      <input id="svcHrHours" type="number" min="0" step="0.1" placeholder="時數" style="width:80px;">
-      <select id="svcHrKind" style="width:90px;"><option value="work">工作</option><option value="quote">報價</option></select>
-      <input id="svcHrLawyer" placeholder="律師" style="width:100px;">
-      <input id="svcHrDesc" placeholder="工作事項（寫得讓客戶覺得有價值）" style="flex:1;min-width:160px;">
-      <button class="btn-sm" onclick="addServiceHour()">＋ 記錄</button>
-    </div>
-    <div id="svcHoursList" style="margin-top:10px;"></div>`;
+    <details class="svc-fold">
+      <summary><span>跟追歷程</span><span class="svc-hgroup-prog" id="svcEvtCount"></span></summary>
+      <div class="svc-fold-body">
+        <div class="svc-add-row">
+          <select id="svcEvtType" style="width:90px;">
+            <option value="note">備註</option><option value="call">通話</option>
+            <option value="meeting">會議</option><option value="renewal">續約</option>
+          </select>
+          <input id="svcEvtContent" placeholder="承剛剛電話討論…（SOP：通話 / 會議後留痕）" style="flex:1;min-width:200px;"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();addServiceEvent();}">
+          <button class="btn-sm" onclick="addServiceEvent()">＋ 新增</button>
+        </div>
+        <div class="svc-timeline" id="svcTimeline" style="margin-top:12px;"><div class="text-muted" style="font-size:0.8rem;">載入中…</div></div>
+      </div>
+    </details>
+    <details class="svc-fold">
+      <summary><span>時數紀錄</span><span class="svc-hgroup-prog" id="svcHoursSum"></span></summary>
+      <div class="svc-fold-body">
+        <div class="svc-add-row">
+          <input id="svcHrDate" type="date" style="width:140px;">
+          <input id="svcHrHours" type="number" min="0" step="0.1" placeholder="時數" style="width:80px;">
+          <select id="svcHrKind" style="width:90px;"><option value="work">工作</option><option value="quote">報價</option></select>
+          <input id="svcHrLawyer" placeholder="律師" style="width:100px;">
+          <input id="svcHrDesc" placeholder="工作事項（寫得讓客戶覺得有價值）" style="flex:1;min-width:160px;">
+          <button class="btn-sm" onclick="addServiceHour()">＋ 記錄</button>
+        </div>
+        <div id="svcHoursList" style="margin-top:10px;"></div>
+      </div>
+    </details>`;
 }
 
 function openServiceModal(id) {
@@ -2963,7 +2977,9 @@ function openServiceModal(id) {
   const txt = x => escapeHtml(x == null ? '' : x);
   document.getElementById('svcModalBody').innerHTML = `
     ${c ? '' : `<div class="svc-grid" style="margin-bottom:10px;">${svcPrefillOptions()}</div>`}
-    <div class="svc-section-title">基本資料</div>
+    <details class="svc-fold" id="svcFoldBasic" ${c ? '' : 'open'}>
+      <summary><span>基本資料</span><span class="svc-hgroup-prog" id="svcBasicSummary"></span></summary>
+      <div class="svc-fold-body">
     <div class="svc-grid">
       <div class="svc-field"><label>當事人 / 公司 *</label><input id="svc_client_name" value="${txt(v.client_name)}"></div>
       <div class="svc-field"><label>統一編號</label><input id="svc_client_vat" value="${txt(v.client_vat)}"></div>
@@ -2988,10 +3004,16 @@ function openServiceModal(id) {
       </div>
       <div class="svc-field full"><label>備註</label><textarea id="svc_note" rows="2">${txt(v.note)}</textarea></div>
     </div>
+      </div>
+    </details>
     <div class="svc-section-title">開案交接（依 SOP 四關卡）<span id="svcCheckProg" class="text-muted" style="font-weight:400;"></span></div>
     ${svcHandoverSectionHtml(h)}
     ${c ? svcEventsSkeleton() : '<div class="text-muted" style="margin-top:14px;font-size:0.8rem;">儲存後即可新增跟追歷程與時數紀錄。</div>'}`;
   svcUpdateCheckProg();
+  const basicSum = document.getElementById('svcBasicSummary');
+  if (basicSum) basicSum.textContent = c
+    ? [c.case_type, c.salesperson, c.fee_amount != null ? fmtMoney(c.fee_amount) : null].filter(Boolean).join('・')
+    : '（請填當事人等基本欄位）';
   document.getElementById('svcDeleteBtn').style.display = c ? '' : 'none';
   document.getElementById('svcSaveMsg').textContent = '';
   document.getElementById('svcModalMask').classList.add('show');
@@ -3033,6 +3055,8 @@ async function loadServiceDetail(caseId) {
 function renderServiceTimeline() {
   const el = document.getElementById('svcTimeline');
   if (!el) return;
+  const cnt = document.getElementById('svcEvtCount');
+  if (cnt) cnt.textContent = SVC_DETAIL.events.length ? `${SVC_DETAIL.events.length} 筆` : '';
   if (!SVC_DETAIL.events.length) {
     el.innerHTML = '<div class="text-muted" style="font-size:0.8rem;">尚無紀錄</div>';
     return;
@@ -3074,7 +3098,14 @@ async function saveServiceCase() {
   const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const numOrNull = id => { const s = get(id); return s === '' ? null : +s; };
   const clientName = get('svc_client_name');
-  if (!clientName) { alert('「當事人 / 公司」必填'); return; }
+  if (!clientName) {
+    const fold = document.getElementById('svcFoldBasic');
+    if (fold) fold.open = true;
+    alert('「當事人 / 公司」必填');
+    const inp = document.getElementById('svc_client_name');
+    if (inp) inp.focus();
+    return;
+  }
   const handover = {};
   document.querySelectorAll('#svcModalBody [data-hkey]').forEach(cb => { handover[cb.dataset.hkey] = cb.checked; });
   document.querySelectorAll('#svcModalBody [data-hfield]').forEach(inp => { handover[inp.dataset.hfield] = inp.value.trim(); });
